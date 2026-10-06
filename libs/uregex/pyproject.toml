@@ -3,7 +3,7 @@ name = "mojo-uregex"
 version = "0.1.0"
 description = "Unicode-aware backtracking regex engine for Mojo: \\p{L} classes, lookahead, case-insensitive groups, PCRE alternation semantics — built for LLM tokenizers"
 requires-python = ">=3.10,<3.15"
-dependencies = ["max[all]==26.5.0"]
+dependencies = ["max[all]==26.6.0"]
 
 [dependency-groups]
 dev = ["regex>=2024.11"]
