@@ -6,12 +6,13 @@ from max.gpu.sync import barrier
 from layout import TileTensor, row_major, stack_allocation
 from layout.tensor_core import mma
 from std.utils import StaticTuple
+from std.sys import get_defined_int
 
 comptime f16 = DType.float16
 comptime f32 = DType.float32
 comptime D = 128
-comptime BM = 64
-comptime BN = 32
+comptime BM = get_defined_int["VATTN_BM", 64]()
+comptime BN = get_defined_int["VATTN_BN", 32]()
 comptime WAVES = BM // 16
 comptime THREADS = WAVES * WARP_SIZE
 comptime KS = D + 8

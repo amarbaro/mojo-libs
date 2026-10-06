@@ -56,7 +56,8 @@ def main() raises:
     with open(dir + "/o_mojo.bin", "w") as f:
         f.write_bytes(Span(out))
     if iters > 0:
-        launch(ctx, q, k, v, o, L, H, scale_log2)
+        for _ in range(2):
+            launch(ctx, q, k, v, o, L, H, scale_log2)
         ctx.synchronize()
         var t = perf_counter_ns()
         for _ in range(iters):

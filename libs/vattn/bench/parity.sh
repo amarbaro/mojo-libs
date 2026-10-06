@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 fails=()
 for d in "$@"; do
   read -r L H < <(python3 -c "import json;m=json.load(open('$d/meta.json'));print(m['L'],m['H'])")
-  if ! .work/run_vattn "$d" "$L" "$H" 0 > "$d/run.log" 2>&1; then
+  if ! "${BIN:-.work/run_vattn}" "$d" "$L" "$H" 0 > "$d/run.log" 2>&1; then
     echo "FAIL run $d: see $d/run.log"; fails+=("$d"); continue
   fi
   python3 tools/vattn-ref.py check "$d" || fails+=("$d")
