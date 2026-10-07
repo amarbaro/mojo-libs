@@ -11,6 +11,8 @@ comptime N_REPEAT = 6
 comptime N_LOOK = 7
 comptime N_BOL = 8
 comptime N_EOL = 9
+comptime N_WORDB = 10
+comptime N_GROUP = 11
 
 
 struct Node(Copyable, Movable):
@@ -38,11 +40,17 @@ struct Ast(Copyable, Movable):
     var nodes: List[Node]
     var classes: List[CharClass]
     var root: Int
+    var groups: Int
+    var names: List[String]
+    """Group names by index (index 0 unused); "" for unnamed groups."""
 
     def __init__(out self):
         self.nodes = List[Node]()
         self.classes = List[CharClass]()
         self.root = -1
+        self.groups = 0
+        self.names = List[String]()
+        self.names.append("")
 
     def add(mut self, var n: Node) -> Int:
         self.nodes.append(n^)
@@ -50,8 +58,10 @@ struct Ast(Copyable, Movable):
 
     def nullable(self, i: Int) -> Bool:
         var n = self.nodes[i].copy()
-        if n.kind == N_EMPTY or n.kind == N_LOOK or n.kind == N_BOL or n.kind == N_EOL:
+        if n.kind == N_EMPTY or n.kind == N_LOOK or n.kind == N_BOL or n.kind == N_EOL or n.kind == N_WORDB:
             return True
+        if n.kind == N_GROUP:
+            return self.nullable(n.kids[0])
         if n.kind == N_LIT or n.kind == N_CLASS or n.kind == N_ANY:
             return False
         if n.kind == N_CAT:
@@ -65,6 +75,34 @@ struct Ast(Copyable, Movable):
                     return True
             return False
         return n.lo == 0 or self.nullable(n.kids[0])
+
+    def width(self, i: Int) -> Int:
+        """Match length in codepoints if every match has the same length, else -1."""
+        ref n = self.nodes[i]
+        if n.kind == N_LIT or n.kind == N_CLASS or n.kind == N_ANY:
+            return 1
+        if n.kind == N_GROUP:
+            return self.width(n.kids[0])
+        if n.kind == N_CAT:
+            var w = 0
+            for k in n.kids:
+                var kw = self.width(k)
+                if kw < 0:
+                    return -1
+                w += kw
+            return w
+        if n.kind == N_ALT:
+            var w = self.width(n.kids[0])
+            for k in n.kids:
+                if self.width(k) != w:
+                    return -1
+            return w
+        if n.kind == N_REPEAT:
+            var kw = self.width(n.kids[0])
+            if n.lo != n.hi or kw < 0:
+                return -1
+            return n.lo * kw
+        return 0
 
 
 struct Parser:
@@ -167,13 +205,15 @@ struct Parser:
             else:
                 return a
             self.i += 1
-            if self.peek() == 63 or self.peek() == 43:
-                raise Error("uregex: lazy/possessive quantifiers are not supported")
+            if self.peek() == 43:
+                raise Error("uregex: possessive quantifiers are not supported")
+            var lazy = self.eat(63)
             if hi == -1 and self.ast.nullable(a):
                 raise Error("uregex: unbounded repeat of a nullable expression is not supported")
             var n = Node(N_REPEAT)
             n.lo = lo
             n.hi = hi
+            n.neg = lazy
             n.kids.append(a)
             a = self.ast.add(n^)
 
@@ -184,6 +224,8 @@ struct Parser:
             var saved_ci = self.ci
             var neg = False
             var look = False
+            var behind = False
+            var group = -1
             if self.eat(63):
                 var f = self.peek()
                 if f == 58:
@@ -192,18 +234,51 @@ struct Parser:
                     self.i += 1
                     look = True
                     neg = f == 33
+                elif f == 60 and self.i + 1 < len(self.p) and (self.p[self.i + 1] == 61 or self.p[self.i + 1] == 33):
+                    neg = self.p[self.i + 1] == 33
+                    self.i += 2
+                    look = True
+                    behind = True
+                elif f == 80 or f == 60:
+                    self.i += 1
+                    if f == 80:
+                        self.expect(60)
+                    var name = String("")
+                    while self.peek() != 62 and self.peek() != -1:
+                        name += String(Codepoint.from_u32(UInt32(self.peek())).value())
+                        self.i += 1
+                    self.expect(62)
+                    if name.byte_length() == 0 or name in self.ast.names:
+                        raise Error("uregex: bad or duplicate group name at " + String(self.i))
+                    self.ast.groups += 1
+                    group = self.ast.groups
+                    self.ast.names.append(name)
                 elif f == 105:
                     self.i += 1
                     self.expect(58)
                     self.ci = True
                 else:
                     raise Error("uregex: unsupported group syntax at " + String(self.i))
+            else:
+                self.ast.groups += 1
+                group = self.ast.groups
+                self.ast.names.append("")
             var inner = self.alternation()
             self.expect(41)
             self.ci = saved_ci
             if look:
                 var n = Node(N_LOOK)
                 n.neg = neg
+                if behind:
+                    n.lo = 1
+                    n.hi = self.ast.width(inner)
+                    if n.hi < 0:
+                        raise Error("uregex: lookbehind must have a fixed length")
+                n.kids.append(inner)
+                return self.ast.add(n^)
+            if group > 0:
+                var n = Node(N_GROUP)
+                n.cp = group
                 n.kids.append(inner)
                 return self.ast.add(n^)
             return inner
@@ -321,7 +396,14 @@ struct Parser:
             cc.negate = c < 97
             return self.class_node(cc^)
         if c == 98 or c == 66:
-            raise Error("uregex: word boundaries are not supported")
+            var cc = CharClass()
+            cc.add_ranges(escape_class("w"))
+            cc.normalize()
+            self.ast.classes.append(cc^)
+            var n = Node(N_WORDB)
+            n.cls = len(self.ast.classes) - 1
+            n.neg = c == 66
+            return self.ast.add(n^)
         return self.lit(self.simple_escape(c))
 
     def char_class(mut self) raises -> Int:

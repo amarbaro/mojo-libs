@@ -18,7 +18,25 @@ def main() raises:
     for t in texts:
         var text = String(t)
         var line = String("")
-        if bytes_mode:
+        if pat.groups() > 0:
+            # byte offset -> codepoint index
+            var cpi = List[Int](length=text.byte_length() + 1, fill=0)
+            var k = 0
+            var b = 0
+            for c in text.codepoints():
+                cpi[b] = k
+                b += c.utf8_byte_length()
+                k += 1
+            cpi[b] = k
+            for row in pat.findall_groups(text):
+                var cells = List[String]()
+                for m in row:
+                    if m.start < 0 or bytes_mode:
+                        cells.append(String(m.start) + "," + String(m.end))
+                    else:
+                        cells.append(String(cpi[m.start]) + "," + String(cpi[m.end]))
+                line += "|".join(cells) + " "
+        elif bytes_mode:
             for m in pat.findall_spans(text):
                 line += String(m.start) + "," + String(m.end) + " "
         else:

@@ -48,11 +48,41 @@ def test_codepoint_offsets() raises:
 
 def test_rejects_unsupported() raises:
     with assert_raises():
-        _ = Pattern(r"a*?")
+        _ = Pattern(r"a*+")
     with assert_raises():
         _ = Pattern(r"(?:a?)*")
     with assert_raises():
-        _ = Pattern(r"\bword\b")
+        _ = Pattern(r"(?<=a+)b")
+    with assert_raises():
+        _ = Pattern(r"(?P<n>a)(?P<n>b)")
+
+
+def test_lazy() raises:
+    assert_equal(findall(r"<.+?>", "<a><b>")[0], "<a>")
+    assert_equal(findall(r"a{2,4}?", "aaaaa")[0], "aa")
+
+
+def test_word_boundary() raises:
+    var r = findall(r"\bcat\b", "cat concat cat_ cat.")
+    assert_equal(len(r), 2)
+    assert_equal(len(findall(r"\Bé", "éé é")), 1)
+
+
+def test_lookbehind() raises:
+    var r = findall(r"(?<=\$)\d+|(?<!\w)x", "$12 3 x ax")
+    assert_equal(len(r), 2)
+    assert_equal(r[0], "12")
+
+
+def test_groups() raises:
+    var p = Pattern(r"(?P<word>\p{L}+)(\d)?")
+    assert_equal(p.groups(), 2)
+    assert_equal(p.group_index("word"), 1)
+    var rows = p.findall_groups("é1 b")
+    assert_equal(len(rows), 2)
+    assert_equal(rows[0][1].end, 2)
+    assert_equal(rows[0][2].start, 2)
+    assert_equal(rows[1][2].start, -1)
 
 
 def main() raises:

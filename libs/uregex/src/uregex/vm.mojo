@@ -1,6 +1,7 @@
 # Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 from .parser import (
     Ast, Node, N_EMPTY, N_LIT, N_CLASS, N_ANY, N_CAT, N_ALT, N_REPEAT, N_LOOK, N_BOL, N_EOL,
+    N_WORDB, N_GROUP,
 )
 from .classes import CharClass, CaseMap
 
@@ -14,6 +15,9 @@ comptime I_LOOK = 6
 comptime I_LOOK_END = 7
 comptime I_BOL = 8
 comptime I_EOL = 9
+comptime I_WORDB = 10
+comptime I_SAVE = 11
+comptime I_LOOKB = 12
 
 
 @fieldwise_init
@@ -29,6 +33,10 @@ struct Program(Copyable, Movable):
     var code: List[Inst]
     var classes: List[CharClass]
     var cases: CaseMap
+    var groups: Int
+    var names: List[String]
+    var full: Bool
+    """Uses groups, lookbehind or word boundaries: needs exec[True]."""
     var has_first: Bool
     """True when every match starts with a char in the first set below."""
     var first_lo: UInt64
@@ -41,6 +49,9 @@ struct Program(Copyable, Movable):
         for ref c in self.classes:
             c.build_ascii()
         self.cases = CaseMap()
+        self.groups = ast.groups
+        self.full = False
+        self.names = ast.names.copy()
         self.has_first = False
         self.first_lo = 0
         self.first_hi = 0
@@ -48,6 +59,10 @@ struct Program(Copyable, Movable):
         self.emit_node(ast, ast.root)
         self.code.append(Inst(UInt8(I_MATCH), False, False, 0, 0))
         self.build_first()
+        self.full = self.groups > 0
+        for ref i in self.code:
+            if Int(i.op) == I_LOOKB or Int(i.op) == I_WORDB:
+                self.full = True
 
     def add_first(mut self, cp: Int):
         if cp < 64:
@@ -86,9 +101,9 @@ struct Program(Copyable, Movable):
             elif op == I_SPLIT:
                 work.append(a)
                 work.append(Int(self.code[pc].b))
-            elif op == I_JMP or op == I_LOOK:
+            elif op == I_JMP or op == I_LOOK or op == I_LOOKB:
                 work.append(a)
-            elif op == I_BOL or op == I_EOL:
+            elif op == I_BOL or op == I_EOL or op == I_WORDB or op == I_SAVE:
                 work.append(pc + 1)
             else:
                 return
@@ -141,26 +156,35 @@ struct Program(Copyable, Movable):
         elif n.kind == N_REPEAT:
             for _ in range(n.lo):
                 self.emit_node(ast, n.kids[0])
+            # SPLIT tries `a` first: the body when greedy, the exit when lazy.
             if n.hi == -1:
                 var split = self.emit(I_SPLIT)
-                self.code[split].a = Int32(split + 1)
                 self.emit_node(ast, n.kids[0])
                 _ = self.emit(I_JMP, split)
-                self.code[split].b = Int32(len(self.code))
+                self.set_split(split, split + 1, len(self.code), n.neg)
             else:
                 var splits = List[Int]()
                 for _ in range(n.hi - n.lo):
-                    var split = self.emit(I_SPLIT)
-                    self.code[split].a = Int32(split + 1)
-                    splits.append(split)
+                    splits.append(self.emit(I_SPLIT))
                     self.emit_node(ast, n.kids[0])
                 for sp in splits:
-                    self.code[sp].b = Int32(len(self.code))
+                    self.set_split(sp, sp + 1, len(self.code), n.neg)
         elif n.kind == N_LOOK:
-            var look = self.emit(I_LOOK, 0, 0, False, n.neg)
+            # I_LOOKB: b is the lookbehind width in codepoints.
+            var look = self.emit(I_LOOKB if n.lo == 1 else I_LOOK, 0, n.hi, False, n.neg)
             self.emit_node(ast, n.kids[0])
             _ = self.emit(I_LOOK_END)
             self.code[look].a = Int32(len(self.code))
+        elif n.kind == N_WORDB:
+            _ = self.emit(I_WORDB, n.cls, 0, False, n.neg)
+        elif n.kind == N_GROUP:
+            _ = self.emit(I_SAVE, 2 * n.cp)
+            self.emit_node(ast, n.kids[0])
+            _ = self.emit(I_SAVE, 2 * n.cp + 1)
+
+    def set_split(mut self, split: Int, body: Int, exit: Int, lazy: Bool):
+        self.code[split].a = Int32(exit if lazy else body)
+        self.code[split].b = Int32(body if lazy else exit)
 
     def char_eq(self, a: Int, b: Int, ci: Bool) -> Bool:
         if a == b:
@@ -176,8 +200,50 @@ struct Program(Copyable, Movable):
             return False
         return self.classes[cls].contains(self.cases.fold(cp)) or self.classes[cls].contains(self.cases.up(cp))
 
-    def exec(self, text: Span[Byte, _], mut stack: List[Int32], start_pc: Int, start_pos: Int, sub: Bool) -> Int:
-        """Backtracking run. `stack` is caller-owned scratch, left as it was found on return."""
+    @no_inline
+    def rare_op(self, text: Span[Byte, _], mut stack: List[Int32], mut slots: List[Int32], pc: Int, pos: Int) -> Int:
+        """Lookbehind, word boundary and capture save, kept out of the hot loop. Next pc, or -1 to backtrack."""
+        ref ins = self.code[pc]
+        var op = Int(ins.op)
+        var n = len(text)
+        if op == I_LOOKB:
+            var mark = len(stack)
+            var r = -1
+            var from_pos = pos
+            for _ in range(Int(ins.b)):
+                if from_pos == 0:
+                    from_pos = -1
+                    break
+                from_pos = cp_start_before(text, from_pos)
+            if from_pos >= 0:
+                r = self.exec[True](text, stack, slots, pc + 1, from_pos, True)
+                if r >= 0 and r != pos:
+                    undo_to(stack, slots, mark)
+                    r = -1
+            if (r >= 0) == ins.neg:
+                if r >= 0:
+                    undo_to(stack, slots, mark)
+                return -1
+            return Int(ins.a)
+        if op == I_WORDB:
+            var before = pos > 0 and self.classes[Int(ins.a)].contains(decode_utf8(text, cp_start_before(text, pos))[0])
+            var after = pos < n and self.classes[Int(ins.a)].contains(decode_utf8(text, pos)[0])
+            return pc + 1 if (before != after) != ins.neg else -1
+        # I_SAVE
+        var slot = Int(ins.a)
+        stack.append(Int32(-1 - slot))
+        stack.append(slots[slot])
+        slots[slot] = Int32(pos)
+        return pc + 1
+
+    def exec[full: Bool](
+        self, text: Span[Byte, _], mut stack: List[Int32], mut slots: List[Int32], start_pc: Int, start_pos: Int, sub: Bool
+    ) -> Int:
+        """Backtracking run. `stack` is caller-owned scratch. Pairs on it are (pc, pos) choice points, or
+        (-1 - slot, old value) entries that restore a capture slot when popped. Returns the end position
+        or -1. A failed run restores `slots` and `stack`; a successful lookaround run leaves only its
+        restore entries on `stack`, so outer backtracking still undoes its captures.
+        `full=False` (no groups, lookbehind or word boundary) compiles all of that out of the loop."""
         var n = len(text)
         var base = len(stack)
         var pc = start_pc
@@ -193,7 +259,10 @@ struct Program(Copyable, Movable):
                 ok = False
             elif op == I_LOOK_END:
                 if sub:
-                    stack.shrink(base)
+                    comptime if full:
+                        keep_restores(stack, base)
+                    else:
+                        stack.shrink(base)
                     return pos
                 pc += 1
                 continue
@@ -240,16 +309,74 @@ struct Program(Copyable, Movable):
                 stack.append(Int32(pos))
                 pc = Int(ins.a)
             elif op == I_LOOK:
-                var r = self.exec(text, stack, pc + 1, pos, True)
+                var mark = len(stack)
+                var r = self.exec[full](text, stack, slots, pc + 1, pos, True)
                 if (r >= 0) == ins.neg:
+                    comptime if full:
+                        if r >= 0:
+                            undo_to(stack, slots, mark)
                     ok = False
                 else:
                     pc = Int(ins.a)
+            else:
+                comptime if full:
+                    var next = self.rare_op(text, stack, slots, pc, pos)
+                    if next < 0:
+                        ok = False
+                    else:
+                        pc = next
             if not ok:
                 if len(stack) == base:
                     return -1
                 pos = Int(stack.pop())
                 pc = Int(stack.pop())
+                comptime if full:
+                    if pc < 0:
+                        var to = unwind(stack, slots, pc, pos, base)
+                        if to < 0:
+                            return -1
+                        pc = Int(stack.pop())
+                        pos = to
+
+
+@no_inline
+def unwind(mut stack: List[Int32], mut slots: List[Int32], pc: Int, pos: Int, base: Int) -> Int:
+    """Apply the restore entry (pc, pos) just popped and any below it down to the next choice point.
+    Returns that choice point's pos with its pc left on top of `stack`, or -1 at `base`."""
+    slots[-1 - pc] = Int32(pos)
+    while len(stack) > base:
+        var v = stack.pop()
+        if stack[len(stack) - 1] >= 0:
+            return Int(v)
+        slots[-1 - Int(stack.pop())] = v
+    return -1
+
+
+def keep_restores(mut stack: List[Int32], base: Int):
+    """Drop the choice points above `base`, keep the capture-restore entries in order."""
+    var w = base
+    for r in range(base, len(stack), 2):
+        if stack[r] < 0:
+            stack[w] = stack[r]
+            stack[w + 1] = stack[r + 1]
+            w += 2
+    stack.shrink(w)
+
+
+def undo_to(mut stack: List[Int32], mut slots: List[Int32], mark: Int):
+    while len(stack) > mark:
+        var v = stack.pop()
+        var p = Int(stack.pop())
+        if p < 0:
+            slots[-1 - p] = v
+
+
+@always_inline
+def cp_start_before(text: Span[Byte, _], pos: Int) -> Int:
+    var q = pos - 1
+    while q > 0 and (text[q] & 0xC0) == 0x80:
+        q -= 1
+    return q
 
 
 @always_inline

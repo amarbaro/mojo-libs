@@ -39,6 +39,12 @@ FEATURE_PATTERNS = {
     "dot": r"a.b",
     "anchors": r"^\s*|\s*$",
     "cjk_range": r"[぀-ヿ]+|[^぀-ヿ\s]+",
+    "lazy": r"a+?b|\s*?\n|x{1,3}?y?|[^,]*?,",
+    "lazy_tok": r"\p{L}+?(?=\s)|\d{2,4}?",
+    "wordb": r"\b\w+\b|\B.",
+    "behind": r"(?<=a)b+|(?<![xy\d])\p{N}|(?<=ab|cd)é",
+    "groups": r"(\p{L}+)(\s)?|(?P<num>\d)+|((a)|b)*c|(?=(x))x",
+    "groups_look": r"(?!(a)b)\w(c)?|(?<=(é))\S",
     "ci_u17": "(?i:\U00016EA0+|\uA7CE|[\U00016EBB-\U00016EBD]x)",
 }
 ALPHABET = ("abcXYZ 'sT\t\n\r" + "éÉßİıǅ" + "一二三あアㇰ" + "0123٣٤" + "!?.,-_$€" + "😀é́̀"
@@ -50,10 +56,12 @@ def rand_text(rng, k):
 
 
 def oracle(pat, text, bytes_mode):
-    if bytes_mode:
-        b = lambda i: len(text[:i].encode())
-        return [f"{b(m.start())},{b(m.end())}" for m in regex.finditer(pat, text)]
-    return [f"{m.start()},{m.end()}" for m in regex.finditer(pat, text)]
+    b = (lambda i: len(text[:i].encode()) if i >= 0 else -1) if bytes_mode else (lambda i: i)
+    out = []
+    for m in regex.finditer(pat, text):
+        spans = [m.span(g) for g in range(m.re.groups + 1)]
+        out.append("|".join(f"{b(s)},{b(e)}" for s, e in spans))
+    return out
 
 
 def ours(cli, pat, texts, bytes_mode):
