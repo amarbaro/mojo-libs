@@ -128,6 +128,22 @@ above, plus feature probes, against `regex.finditer` on random Unicode strings:
 A negative control (oracle fed a different pattern) fails, so the gate is live.
 `tools/gate.sh` runs all of the above.
 
+### Pre-tokenizer coverage
+
+`tools/pretok_harvest.py` downloads `tokenizer.json` only (no weights) for the
+top N Hugging Face text-generation models by downloads, runs each model's own
+pre-tokenizer (HF `tokenizers`) on the corpus, and finds the mojo-baro family
+whose uregex pattern chain splits it identically. Top 250 (2026-10-07): 156
+covered (qwen2 78, qwen35 23, llama3 22, gpt-2 12, deepseek-v3 10, exaone 6,
+minicpm5 3, bloom 2), 68 without `tokenizer.json`, 12 without a regex
+(Metaspace/SentencePiece), 14 unmatched across 5 specs. The o200k one (gpt-oss,
+Phi-4-mini, MiniMax-M2) is now fixed in mojo-baro and pinned in difftest; the
+rest are Gemma's literal-space split (no regex), deepseek-coder and falcon-7b.
+
+```
+./.venv/bin/python3 tools/pretok_harvest.py --n 250   # .work/pretok/models.tsv
+```
+
 ## Packaging
 
 `recipe.yaml` (modular-community shape) builds a precompiled `.conda` and runs
