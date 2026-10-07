@@ -38,11 +38,24 @@ Mojo 1.1.0, CPU. Match counts equal Python `regex` for every pattern.
 Sparse patterns gain more from the first-character filter: `\p{N}{1,3}`
 94 → 137 MB/s, CJK runs 108 → 196 MB/s.
 
-| | 0.1.0 | 0.2.0 |
-|---|---|---|
-| compiled pattern (`tools/bench_compile.mojo`) | 166 KB, 0.99 ms | 27.6 KB, 0.81 ms |
-| instruction size (pinned by `test_inst_layout`) | 32 B | 12 B |
-| bench peak RSS | 68 MB | 58 MB |
+uregex 0.1.0 (fec4575) vs 0.2.1, same corpus and run:
+
+| metric | 0.1.0 | 0.2.1 | change |
+|---|---|---|---|
+| speed | 9.4 to 14.3 MB/s | 30.9 to 44.1 MB/s | 3.1 to 3.5x faster |
+| bench peak RSS | 68.3 MB | 58.4 MB | -14.5% |
+| pattern compile time (bench total) | 6.2 ms | 5.1 ms | -18% |
+| compiled pattern (`tools/bench_compile.mojo`) | 166 KB, 0.99 ms | 27.6 KB, 0.81 ms | 6x smaller |
+| instruction size (pinned by `test_inst_layout`) | 32 B | 12 B | 2.7x smaller |
+| character class size | 32 B | 48 B | +16 B (ASCII bitmap) |
+| match size | 16 B | 16 B | no change |
+
+Against Python `regex` on the same runs:
+
+| | Python `regex` | uregex | uregex vs Python |
+|---|---|---|---|
+| 0.1.0 | 13.6 to 16.4 MB/s | 9.4 to 14.3 MB/s | slower |
+| 0.2.1 | 13.9 to 16.4 MB/s | 30.9 to 44.1 MB/s | 2.0 to 3.2x faster |
 
 ## Setup
 
