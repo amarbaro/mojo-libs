@@ -32,10 +32,18 @@ def test_split_keep_covers_text() raises:
     assert_equal(pieces[1], "12")
 
 
-def test_search_offsets_are_codepoints() raises:
+def test_search_offsets_are_bytes() raises:
     var m = search(r"\p{N}+", "一二三42").value()
-    assert_equal(m.start, 3)
-    assert_equal(m.end, 5)
+    assert_equal(m.start, 9)
+    assert_equal(m.end, 11)
+
+
+def test_codepoint_offsets() raises:
+    var r = Pattern(r"\p{N}+").findall_cps_offsets("一二三42 é7")
+    assert_equal(len(r), 2)
+    assert_equal(r[0].start, 3)
+    assert_equal(r[1].start, 7)
+    assert_equal(r[1].end, 8)
 
 
 def test_rejects_unsupported() raises:

@@ -1,6 +1,6 @@
 # Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 from .parser import Parser
-from .vm import Program
+from .vm import Program, utf8_len
 
 
 @fieldwise_init
@@ -23,7 +23,13 @@ def from_codepoints(cps: List[Int], start: Int, end: Int) -> String:
     return s^
 
 
+def _slice(text: String, start: Int, end: Int) -> String:
+    return String(StringSlice(unsafe_from_utf8=text.as_bytes()[start:end]))
+
+
 struct Pattern(Copyable, Movable):
+    """Matches on UTF-8 bytes. `Match` offsets are byte offsets into the input String."""
+
     var prog: Program
     var source: String
 
@@ -33,50 +39,77 @@ struct Pattern(Copyable, Movable):
         self.prog = Program(ast)
         self.source = pattern
 
-    def match_at(self, text: List[Int], pos: Int) -> Int:
-        return self.prog.exec(text, 0, pos, False)
-
-    def search_from(self, text: List[Int], start: Int) -> Optional[Match]:
-        for s in range(start, len(text) + 1):
-            var e = self.match_at(text, s)
+    def search_from(self, text: Span[Byte, _], start: Int) -> Optional[Match]:
+        var n = len(text)
+        var s = start
+        while True:
+            var e = self.prog.exec(text, 0, s, False)
             if e >= 0:
                 return Match(s, e)
-        return None
+            if s >= n:
+                return None
+            s += utf8_len(text[s])
 
     def search(self, text: String) -> Optional[Match]:
-        return self.search_from(to_codepoints(text), 0)
+        return self.search_from(text.as_bytes(), 0)
 
-    def findall_cps(self, text: List[Int]) -> List[Match]:
+    def findall_spans(self, text: String) -> List[Match]:
+        var bytes = text.as_bytes()
+        var n = len(bytes)
         var out = List[Match]()
         var pos = 0
-        while pos <= len(text):
-            var m = self.search_from(text, pos)
+        while pos <= n:
+            var m = self.search_from(bytes, pos)
             if not m:
                 break
             var mm = m.value()
             out.append(mm)
-            pos = mm.end if mm.end > mm.start else mm.end + 1
+            if mm.end > mm.start:
+                pos = mm.end
+            elif mm.end < n:
+                pos = mm.end + utf8_len(bytes[mm.end])
+            else:
+                break
         return out^
 
+    def findall_cps_offsets(self, text: String) -> List[Match]:
+        """Like `findall_spans`, with codepoint offsets."""
+        var bytes = text.as_bytes()
+        var out = List[Match]()
+        var b = 0
+        var cp = 0
+        for m in self.findall_spans(text):
+            while b < m.start:
+                b += utf8_len(bytes[b])
+                cp += 1
+            var s = cp
+            while b < m.end:
+                b += utf8_len(bytes[b])
+                cp += 1
+            out.append(Match(s, cp))
+        return out^
+
+    def findall_cps(self, text: List[Int]) -> List[Match]:
+        """Compatibility: codepoint input, codepoint offsets."""
+        return self.findall_cps_offsets(from_codepoints(text, 0, len(text)))
+
     def findall(self, text: String) -> List[String]:
-        var cps = to_codepoints(text)
         var out = List[String]()
-        for m in self.findall_cps(cps):
-            out.append(from_codepoints(cps, m.start, m.end))
+        for m in self.findall_spans(text):
+            out.append(_slice(text, m.start, m.end))
         return out^
 
     def split_keep(self, text: String) -> List[String]:
-        var cps = to_codepoints(text)
         var out = List[String]()
         var last = 0
-        for m in self.findall_cps(cps):
+        for m in self.findall_spans(text):
             if m.start > last:
-                out.append(from_codepoints(cps, last, m.start))
+                out.append(_slice(text, last, m.start))
             if m.end > m.start:
-                out.append(from_codepoints(cps, m.start, m.end))
+                out.append(_slice(text, m.start, m.end))
             last = m.end
-        if last < len(cps):
-            out.append(from_codepoints(cps, last, len(cps)))
+        if last < text.byte_length():
+            out.append(_slice(text, last, text.byte_length()))
         return out^
 
 

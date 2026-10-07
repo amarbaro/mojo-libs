@@ -109,7 +109,7 @@ struct Program(Copyable, Movable):
             return False
         return self.classes[cls].contains(self.cases.fold(cp)) or self.classes[cls].contains(self.cases.up(cp))
 
-    def exec(self, text: List[Int], start_pc: Int, start_pos: Int, sub: Bool) -> Int:
+    def exec(self, text: Span[Byte, _], start_pc: Int, start_pos: Int, sub: Bool) -> Int:
         var n = len(text)
         var stack = List[Int]()
         var pc = start_pc
@@ -127,20 +127,28 @@ struct Program(Copyable, Movable):
                 pc += 1
                 continue
             elif ins.op == I_CHAR:
-                if pos < n and self.char_eq(text[pos], ins.a, ins.ci):
-                    pos += 1
-                    pc += 1
+                if pos < n:
+                    var d = decode_utf8(text, pos)
+                    if self.char_eq(d[0], ins.a, ins.ci):
+                        pos += d[1]
+                        pc += 1
+                    else:
+                        ok = False
                 else:
                     ok = False
             elif ins.op == I_CLASS:
-                if pos < n and self.class_has(ins.a, text[pos], ins.ci):
-                    pos += 1
-                    pc += 1
+                if pos < n:
+                    var d = decode_utf8(text, pos)
+                    if self.class_has(ins.a, d[0], ins.ci):
+                        pos += d[1]
+                        pc += 1
+                    else:
+                        ok = False
                 else:
                     ok = False
             elif ins.op == I_ANY:
                 if pos < n and text[pos] != 10:
-                    pos += 1
+                    pos += utf8_len(text[pos])
                     pc += 1
                 else:
                     ok = False
@@ -171,3 +179,31 @@ struct Program(Copyable, Movable):
                     return -1
                 pos = stack.pop()
                 pc = stack.pop()
+
+
+@always_inline
+def utf8_len(b0: Byte) -> Int:
+    if b0 < 0x80:
+        return 1
+    if b0 < 0xE0:
+        return 2
+    if b0 < 0xF0:
+        return 3
+    return 4
+
+
+@always_inline
+def decode_utf8(text: Span[Byte, _], pos: Int) -> Tuple[Int, Int]:
+    """Codepoint at byte `pos` and its byte length. `text` is valid UTF-8."""
+    var b0 = Int(text[pos])
+    if b0 < 0x80:
+        return (b0, 1)
+    if b0 < 0xE0:
+        return (((b0 & 0x1F) << 6) | (Int(text[pos + 1]) & 0x3F), 2)
+    if b0 < 0xF0:
+        return (((b0 & 0x0F) << 12) | ((Int(text[pos + 1]) & 0x3F) << 6) | (Int(text[pos + 2]) & 0x3F), 3)
+    return (
+        ((b0 & 0x07) << 18) | ((Int(text[pos + 1]) & 0x3F) << 12)
+        | ((Int(text[pos + 2]) & 0x3F) << 6) | (Int(text[pos + 3]) & 0x3F),
+        4,
+    )

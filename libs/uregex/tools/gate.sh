@@ -5,3 +5,4 @@ mkdir -p .work
 ./.venv/bin/mojo build tools/uregex-cli.mojo -I src -o .work/uregex-cli
 ./.venv/bin/mojo run -I src tests/test_uregex.mojo
 ./.venv/bin/python3 tools/difftest.py --n 5000 --maxlen 80
+./.venv/bin/python3 tools/difftest.py --n 5000 --maxlen 80 --bytes

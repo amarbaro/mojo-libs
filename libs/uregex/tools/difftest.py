@@ -3,8 +3,9 @@
 """Differential gate: uregex vs Python `regex` on random Unicode text.
 
 For every pattern, N random strings are matched with regex.finditer and with
-.work/uregex-cli (codepoint offsets, findall semantics). Any difference fails.
-Usage: tools/difftest.py [--n 2000] [--seed 0] [--cli .work/uregex-cli]
+.work/uregex-cli (findall semantics). Any difference fails. Offsets are codepoints,
+or UTF-8 bytes with --bytes.
+Usage: tools/difftest.py [--n 2000] [--seed 0] [--cli .work/uregex-cli] [--bytes]
 """
 import argparse
 import random
@@ -47,15 +48,18 @@ def rand_text(rng, k):
     return "".join(rng.choice(ALPHABET) for _ in range(rng.randint(0, k)))
 
 
-def oracle(pat, text):
+def oracle(pat, text, bytes_mode):
+    if bytes_mode:
+        b = lambda i: len(text[:i].encode())
+        return [f"{b(m.start())},{b(m.end())}" for m in regex.finditer(pat, text)]
     return [f"{m.start()},{m.end()}" for m in regex.finditer(pat, text)]
 
 
-def ours(cli, pat, texts):
+def ours(cli, pat, texts, bytes_mode):
     with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False, encoding="utf-8") as f:
         f.write("\0".join(texts))
         path = f.name
-    out = subprocess.run([cli, pat, path], capture_output=True, text=True, encoding="utf-8")
+    out = subprocess.run([cli] + (["--bytes"] if bytes_mode else []) + [pat, path], capture_output=True, text=True, encoding="utf-8")
     if out.returncode != 0:
         raise SystemExit(f"cli failed on {pat!r}: {out.stderr[-500:]}")
     return [line.split() for line in out.stdout.split("\n")[: len(texts)]]
@@ -67,16 +71,17 @@ def main():
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--cli", default=".work/uregex-cli")
     ap.add_argument("--maxlen", type=int, default=24)
+    ap.add_argument("--bytes", action="store_true")
     a = ap.parse_args()
     rng = random.Random(a.seed)
     fails = 0
     for name, pat in {**TOKENIZER_PATTERNS, **FEATURE_PATTERNS}.items():
         texts = ["", " ", "a", "\n"] + [rand_text(rng, a.maxlen) for _ in range(a.n)]
         texts = [t for t in texts if "\0" not in t]
-        got = ours(a.cli, pat, texts)
+        got = ours(a.cli, pat, texts, a.bytes)
         bad = 0
         for t, g in zip(texts, got):
-            exp = oracle(pat, t)
+            exp = oracle(pat, t, a.bytes)
             if exp != g:
                 bad += 1
                 if bad <= 3:
