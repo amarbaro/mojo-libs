@@ -5,7 +5,7 @@
 Every change must keep the gate green and must be able to fail:
 
 ```
-tools/gate.sh   # builds the CLI, runs tests/test_uregex.mojo and tools/difftest.py (21 patterns x 5004 strings vs Python regex)
+tools/gate.sh   # builds the CLI, runs tests/test_uregex.mojo and tools/difftest.py (every pattern in tools/difftest.py x 5004 random strings vs Python regex)
 ```
 
 A pull request that adds behaviour adds a case to the differential test and, where it applies, a negative case that the oracle rejects. A test that cannot go red is not a test.
