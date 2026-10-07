@@ -33,6 +33,8 @@ struct Program(Copyable, Movable):
     def __init__(out self, ast: Ast):
         self.code = List[Inst]()
         self.classes = ast.classes.copy()
+        for ref c in self.classes:
+            c.build_ascii()
         self.cases = CaseMap()
         self.emit_node(ast, ast.root)
         self.code.append(Inst(UInt8(I_MATCH), False, False, 0, 0))

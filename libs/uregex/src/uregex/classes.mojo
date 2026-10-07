@@ -29,10 +29,25 @@ def parse_ranges(table: String) -> List[Int]:
 struct CharClass(Copyable, Movable):
     var ranges: List[Int]
     var negate: Bool
+    var ascii_lo: UInt64
+    var ascii_hi: UInt64
 
     def __init__(out self):
         self.ranges = List[Int]()
         self.negate = False
+        self.ascii_lo = 0
+        self.ascii_hi = 0
+
+    def build_ascii(mut self):
+        """Cache membership of codepoints 0-127 (negation applied) as a 128-bit map."""
+        self.ascii_lo = 0
+        self.ascii_hi = 0
+        for cp in range(128):
+            if self._in(cp) != self.negate:
+                if cp < 64:
+                    self.ascii_lo |= UInt64(1) << UInt64(cp)
+                else:
+                    self.ascii_hi |= UInt64(1) << UInt64(cp - 64)
 
     def add(mut self, lo: Int, hi: Int):
         self.ranges.append(lo)
@@ -81,6 +96,10 @@ struct CharClass(Copyable, Movable):
         return False
 
     def contains(self, cp: Int) -> Bool:
+        if cp < 64:
+            return (self.ascii_lo >> UInt64(cp)) & 1 == 1
+        if cp < 128:
+            return (self.ascii_hi >> UInt64(cp - 64)) & 1 == 1
         return self._in(cp) != self.negate
 
 
