@@ -350,9 +350,9 @@ struct Parser:
                         inv.normalize()
                         var prev = 0
                         for k in range(0, len(inv.ranges), 2):
-                            if inv.ranges[k] > prev:
-                                cc.add(prev, inv.ranges[k] - 1)
-                            prev = inv.ranges[k + 1] + 1
+                            if Int(inv.ranges[k]) > prev:
+                                cc.add(prev, Int(inv.ranges[k]) - 1)
+                            prev = Int(inv.ranges[k + 1]) + 1
                         if prev <= 0x10FFFF:
                             cc.add(prev, 0x10FFFF)
                     else:

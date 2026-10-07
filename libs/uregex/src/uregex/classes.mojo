@@ -15,7 +15,7 @@ def _hex(s: StringSlice) -> Int:
     return v
 
 
-def parse_ranges(table: String) -> List[Int]:
+def parse_ranges(table: StaticString) -> List[Int]:
     var out = List[Int]()
     if table.byte_length() == 0:
         return out^
@@ -27,13 +27,13 @@ def parse_ranges(table: String) -> List[Int]:
 
 
 struct CharClass(Copyable, Movable):
-    var ranges: List[Int]
+    var ranges: List[UInt32]
     var negate: Bool
     var ascii_lo: UInt64
     var ascii_hi: UInt64
 
     def __init__(out self):
-        self.ranges = List[Int]()
+        self.ranges = List[UInt32]()
         self.negate = False
         self.ascii_lo = 0
         self.ascii_hi = 0
@@ -50,13 +50,13 @@ struct CharClass(Copyable, Movable):
                     self.ascii_hi |= UInt64(1) << UInt64(cp - 64)
 
     def add(mut self, lo: Int, hi: Int):
-        self.ranges.append(lo)
-        self.ranges.append(hi)
+        self.ranges.append(UInt32(lo))
+        self.ranges.append(UInt32(hi))
 
     def add_ranges(mut self, rs: List[Int]):
         for i in range(0, len(rs), 2):
-            self.ranges.append(rs[i])
-            self.ranges.append(rs[i + 1])
+            self.ranges.append(UInt32(rs[i]))
+            self.ranges.append(UInt32(rs[i + 1]))
 
     def normalize(mut self):
         var n = len(self.ranges) // 2
@@ -70,7 +70,7 @@ struct CharClass(Copyable, Movable):
                 idx[j] = idx[j - 1]
                 idx[j - 1] = t
                 j -= 1
-        var merged = List[Int]()
+        var merged = List[UInt32]()
         for k in range(n):
             var lo = self.ranges[2 * idx[k]]
             var hi = self.ranges[2 * idx[k] + 1]
@@ -87,9 +87,9 @@ struct CharClass(Copyable, Movable):
         var hi = len(self.ranges) // 2
         while lo < hi:
             var mid = (lo + hi) // 2
-            if cp < self.ranges[2 * mid]:
+            if cp < Int(self.ranges[2 * mid]):
                 hi = mid
-            elif cp > self.ranges[2 * mid + 1]:
+            elif cp > Int(self.ranges[2 * mid + 1]):
                 lo = mid + 1
             else:
                 return True
@@ -103,25 +103,44 @@ struct CharClass(Copyable, Movable):
         return self._in(cp) != self.negate
 
 
-struct CaseMap(Copyable, Movable):
-    var lower: Dict[Int, Int]
-    var upper: Dict[Int, Int]
+def _hex_at(t: Span[Byte, _], i: Int, w: Int) -> Int:
+    var v = 0
+    for k in range(i, i + w):
+        var c = Int(t[k])
+        v = v * 16 + (c - 48 if c <= 57 else c - 87)
+    return v
 
-    def __init__(out self):
-        self.lower = Dict[Int, Int]()
-        self.upper = Dict[Int, Int]()
-        var lo = parse_ranges(lower_table())
-        for i in range(0, len(lo), 2):
-            self.lower[lo[i]] = lo[i + 1]
-        var up = parse_ranges(upper_table())
-        for i in range(0, len(up), 2):
-            self.upper[up[i]] = up[i + 1]
+
+def _pair_lookup(table: StaticString, cp: Int) -> Int:
+    """`table` is sorted fixed-width hex pairs (6+6 chars); value for key `cp`, else `cp`."""
+    var t = table.as_bytes()
+    var lo = 0
+    var hi = len(t) // 12
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        var k = _hex_at(t, mid * 12, 6)
+        if cp < k:
+            hi = mid
+        elif cp > k:
+            lo = mid + 1
+        else:
+            return _hex_at(t, mid * 12 + 6, 6)
+    return cp
+
+
+@fieldwise_init
+struct CaseMap(Copyable, Movable):
+    """Simple case maps, searched in the static generated tables (no per-instance data)."""
 
     def fold(self, cp: Int) -> Int:
-        return self.lower.get(cp, cp)
+        if cp < 128:
+            return cp + 32 if cp >= 65 and cp <= 90 else cp
+        return _pair_lookup(lower_table(), cp)
 
     def up(self, cp: Int) -> Int:
-        return self.upper.get(cp, cp)
+        if cp < 128:
+            return cp - 32 if cp >= 97 and cp <= 122 else cp
+        return _pair_lookup(upper_table(), cp)
 
 
 def category_class(name: String) raises -> List[Int]:

@@ -111,7 +111,9 @@ struct Program(Copyable, Movable):
         if n.kind == N_EMPTY:
             return
         if n.kind == N_LIT:
-            _ = self.emit(I_CHAR, n.cp, 0, n.ci)
+            # No codepoint case-maps to or from an ASCII non-letter, so ci is a no-op there.
+            var letter = (n.cp >= 65 and n.cp <= 90) or (n.cp >= 97 and n.cp <= 122)
+            _ = self.emit(I_CHAR, n.cp, 0, n.ci and (letter or n.cp >= 128))
         elif n.kind == N_CLASS:
             _ = self.emit(I_CLASS, n.cls, 0, n.ci)
         elif n.kind == N_ANY:
