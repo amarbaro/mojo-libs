@@ -18,11 +18,11 @@ comptime I_EOL = 9
 
 @fieldwise_init
 struct Inst(Copyable, Movable):
-    var op: Int
-    var a: Int
-    var b: Int
+    var op: UInt8
     var ci: Bool
     var neg: Bool
+    var a: Int32
+    var b: Int32
 
 
 struct Program(Copyable, Movable):
@@ -35,10 +35,10 @@ struct Program(Copyable, Movable):
         self.classes = ast.classes.copy()
         self.cases = CaseMap()
         self.emit_node(ast, ast.root)
-        self.code.append(Inst(I_MATCH, 0, 0, False, False))
+        self.code.append(Inst(UInt8(I_MATCH), False, False, 0, 0))
 
     def emit(mut self, op: Int, a: Int = 0, b: Int = 0, ci: Bool = False, neg: Bool = False) -> Int:
-        self.code.append(Inst(op, a, b, ci, neg))
+        self.code.append(Inst(UInt8(op), ci, neg, Int32(a), Int32(b)))
         return len(self.code) - 1
 
     def emit_node(mut self, ast: Ast, i: Int):
@@ -63,37 +63,37 @@ struct Program(Copyable, Movable):
             for j in range(len(n.kids)):
                 if j < len(n.kids) - 1:
                     var split = self.emit(I_SPLIT)
-                    self.code[split].a = split + 1
+                    self.code[split].a = Int32(split + 1)
                     self.emit_node(ast, n.kids[j])
                     jumps.append(self.emit(I_JMP))
-                    self.code[split].b = len(self.code)
+                    self.code[split].b = Int32(len(self.code))
                 else:
                     self.emit_node(ast, n.kids[j])
             for jp in jumps:
-                self.code[jp].a = len(self.code)
+                self.code[jp].a = Int32(len(self.code))
         elif n.kind == N_REPEAT:
             for _ in range(n.lo):
                 self.emit_node(ast, n.kids[0])
             if n.hi == -1:
                 var split = self.emit(I_SPLIT)
-                self.code[split].a = split + 1
+                self.code[split].a = Int32(split + 1)
                 self.emit_node(ast, n.kids[0])
                 _ = self.emit(I_JMP, split)
-                self.code[split].b = len(self.code)
+                self.code[split].b = Int32(len(self.code))
             else:
                 var splits = List[Int]()
                 for _ in range(n.hi - n.lo):
                     var split = self.emit(I_SPLIT)
-                    self.code[split].a = split + 1
+                    self.code[split].a = Int32(split + 1)
                     splits.append(split)
                     self.emit_node(ast, n.kids[0])
                 for sp in splits:
-                    self.code[sp].b = len(self.code)
+                    self.code[sp].b = Int32(len(self.code))
         elif n.kind == N_LOOK:
             var look = self.emit(I_LOOK, 0, 0, False, n.neg)
             self.emit_node(ast, n.kids[0])
             _ = self.emit(I_LOOK_END)
-            self.code[look].a = len(self.code)
+            self.code[look].a = Int32(len(self.code))
 
     def char_eq(self, a: Int, b: Int, ci: Bool) -> Bool:
         if a == b:
@@ -115,65 +115,66 @@ struct Program(Copyable, Movable):
         var pc = start_pc
         var pos = start_pos
         while True:
-            var ins = self.code[pc].copy()
+            ref ins = self.code[pc]
+            var op = Int(ins.op)
             var ok = True
-            if ins.op == I_MATCH:
+            if op == I_MATCH:
                 if not sub:
                     return pos
                 ok = False
-            elif ins.op == I_LOOK_END:
+            elif op == I_LOOK_END:
                 if sub:
                     return pos
                 pc += 1
                 continue
-            elif ins.op == I_CHAR:
+            elif op == I_CHAR:
                 if pos < n:
                     var d = decode_utf8(text, pos)
-                    if self.char_eq(d[0], ins.a, ins.ci):
+                    if self.char_eq(d[0], Int(ins.a), ins.ci):
                         pos += d[1]
                         pc += 1
                     else:
                         ok = False
                 else:
                     ok = False
-            elif ins.op == I_CLASS:
+            elif op == I_CLASS:
                 if pos < n:
                     var d = decode_utf8(text, pos)
-                    if self.class_has(ins.a, d[0], ins.ci):
+                    if self.class_has(Int(ins.a), d[0], ins.ci):
                         pos += d[1]
                         pc += 1
                     else:
                         ok = False
                 else:
                     ok = False
-            elif ins.op == I_ANY:
+            elif op == I_ANY:
                 if pos < n and text[pos] != 10:
                     pos += utf8_len(text[pos])
                     pc += 1
                 else:
                     ok = False
-            elif ins.op == I_BOL:
+            elif op == I_BOL:
                 if pos == 0:
                     pc += 1
                 else:
                     ok = False
-            elif ins.op == I_EOL:
+            elif op == I_EOL:
                 if pos == n:
                     pc += 1
                 else:
                     ok = False
-            elif ins.op == I_JMP:
-                pc = ins.a
-            elif ins.op == I_SPLIT:
-                stack.append(ins.b)
+            elif op == I_JMP:
+                pc = Int(ins.a)
+            elif op == I_SPLIT:
+                stack.append(Int(ins.b))
                 stack.append(pos)
-                pc = ins.a
-            elif ins.op == I_LOOK:
+                pc = Int(ins.a)
+            elif op == I_LOOK:
                 var r = self.exec(text, pc + 1, pos, True)
                 if (r >= 0) == ins.neg:
                     ok = False
                 else:
-                    pc = ins.a
+                    pc = Int(ins.a)
             if not ok:
                 if len(stack) == 0:
                     return -1
