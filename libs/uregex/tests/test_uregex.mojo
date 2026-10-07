@@ -1,6 +1,8 @@
 # Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 from std.testing import assert_equal, assert_true, assert_raises, TestSuite
 from uregex import Pattern, FullPattern, findall, search, split_keep
+from uregex.vm import Inst
+from std.sys import size_of
 
 
 def test_unicode_classes() raises:
@@ -94,6 +96,11 @@ def test_groups() raises:
     assert_equal(rows[0][1].end, 2)
     assert_equal(rows[0][2].start, 2)
     assert_equal(rows[1][2].start, -1)
+
+
+def test_inst_layout() raises:
+    # op/ci/neg pack into 3 bytes + 1 pad, a/b are Int32: 12 bytes, was 32 with Int fields.
+    assert_equal(size_of[Inst](), 12)
 
 
 def main() raises:
