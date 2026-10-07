@@ -133,12 +133,13 @@ A negative control (oracle fed a different pattern) fails, so the gate is live.
 `tools/pretok_harvest.py` downloads `tokenizer.json` only (no weights) for the
 top N Hugging Face text-generation models by downloads, runs each model's own
 pre-tokenizer (HF `tokenizers`) on the corpus, and finds the mojo-baro family
-whose uregex pattern chain splits it identically. Top 250 (2026-10-07): 156
-covered (qwen2 78, qwen35 23, llama3 22, gpt-2 12, deepseek-v3 10, exaone 6,
-minicpm5 3, bloom 2), 68 without `tokenizer.json`, 12 without a regex
-(Metaspace/SentencePiece), 14 unmatched across 5 specs. The o200k one (gpt-oss,
-Phi-4-mini, MiniMax-M2) is now fixed in mojo-baro and pinned in difftest; the
-rest are Gemma's literal-space split (no regex), deepseek-coder and falcon-7b.
+whose uregex pattern chain splits it identically. Top 250 (2026-10-08): 164
+covered (qwen2 78, qwen35 23, llama3 22, gpt-2 12, deepseek-v3 10, gpt-4o 6,
+exaone 6, minicpm5 3, bloom 2, deepseek-coder 2), 68 without `tokenizer.json`,
+17 without a regex (SentencePiece, or Gemma's literal-space split), 1 unmatched
+(falcon-7b: HF applies Punctuation to byte-level characters, splitting UTF-8
+sequences; not ported). The o200k and deepseek-coder regexes are HF verbatim in
+mojo-baro and pinned in difftest.
 
 ```
 ./.venv/bin/python3 tools/pretok_harvest.py --n 250   # .work/pretok/models.tsv

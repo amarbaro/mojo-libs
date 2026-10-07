@@ -61,7 +61,9 @@ def kinds(pt):
         return ["none"]
     if pt["type"] == "Sequence":
         return [k for p in pt["pretokenizers"] for k in kinds(p)]
-    return [pt["type"] + (":regex" if pt["type"] == "Split" else "")]
+    if pt["type"] == "Split":
+        return ["Split:regex" if "Regex" in pt["pattern"] else "Split:literal"]
+    return [pt["type"]]
 
 
 def main():
@@ -103,7 +105,7 @@ def main():
             rows.append((repo, "-", "-", "LOAD_FAIL:" + type(e).__name__)); continue
         mtype = spec.get("model", {}).get("type", "?")
         k = kinds(spec.get("pre_tokenizer"))
-        if spec.get("pre_tokenizer") is None or all(x in ("Metaspace", "none", "WhitespaceSplit") for x in k):
+        if spec.get("pre_tokenizer") is None or all(x in ("Metaspace", "none", "WhitespaceSplit", "Split:literal") for x in k):
             rows.append((repo, mtype, "+".join(k), "NO_REGEX")); continue
         pt = tok.pre_tokenizer
         bytelevel = "ByteLevel" in k
