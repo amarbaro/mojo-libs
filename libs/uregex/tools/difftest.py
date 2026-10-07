@@ -87,22 +87,35 @@ def main():
     ap.add_argument("--cli", default=".work/uregex-cli")
     ap.add_argument("--maxlen", type=int, default=24)
     ap.add_argument("--bytes", action="store_true")
+    ap.add_argument("--negative", action="store_true",
+                    help="negative control: the oracle gets (?:P).? and (?:P)|. instead of P; every pattern must differ")
     a = ap.parse_args()
     rng = random.Random(a.seed)
-    fails = 0
+    fails, silent = 0, []
     for name, pat in {**TOKENIZER_PATTERNS, **FEATURE_PATTERNS}.items():
         texts = ["", " ", "a", "\n"] + [rand_text(rng, a.maxlen) for _ in range(a.n)]
         texts = [t for t in texts if "\0" not in t]
         got = ours(a.cli, pat, texts, a.bytes)
         bad = 0
         for t, g in zip(texts, got):
-            exp = oracle(pat, t, a.bytes)
-            if exp != g:
+            if a.negative:
+                diff = any(oracle(m, t, a.bytes) != g for m in (f"(?:{pat}).?", f"(?:{pat})|."))
+                exp = None
+            else:
+                exp = oracle(pat, t, a.bytes)
+                diff = exp != g
+            if diff:
                 bad += 1
-                if bad <= 3:
+                if bad <= 3 and not a.negative:
                     print(f"  DIFF {name}: text={t!r}\n    oracle={exp}\n    uregex={g}")
-        print(f"{name:12s} {len(texts)} texts  {'OK' if bad == 0 else f'FAIL {bad}'}")
+        status = (f'caught {bad}' if bad else 'SILENT') if a.negative else ('OK' if bad == 0 else f'FAIL {bad}')
+        print(f"{name:12s} {len(texts)} texts  {status}")
         fails += bad
+        if bad == 0:
+            silent.append(name)
+    if a.negative:
+        print("PASS: negative control caught every pattern" if not silent else f"FAIL: negative control silent on {silent}")
+        sys.exit(1 if silent else 0)
     print("PASS" if fails == 0 else f"FAIL: {fails} differences")
     sys.exit(1 if fails else 0)
 

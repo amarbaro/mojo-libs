@@ -1,8 +1,8 @@
 # mojo-uregex
 
 Unicode-aware regular expressions for Mojo, built for the pre-tokenizers of LLM
-tokenizers (GPT-2, Qwen, Llama 3, DeepSeek, Spark) and verified against Python's
-`regex` module by differential testing.
+tokenizers (GPT-2, Llama 3, Qwen, DeepSeek, gpt-oss, Spark-X2.5) and verified
+against Python's `regex` module by differential testing.
 
 It is the complement of [`mojo-regex`](https://github.com/msaelices/mojo-regex),
 which is a fast DFA/NFA engine for byte-class patterns. `uregex` exists for the
@@ -14,7 +14,7 @@ patterns that engine lists as missing:
 | negated shorthand classes | `\S` `\D` `\W` | `\s+(?!\S)` |
 | lookahead | `(?!...)` `(?=...)` | `\s+(?!\S)` |
 | case-insensitive groups | `(?i:'s\|'t\|'re)` | Llama 3, Qwen |
-| bounded repeats | `\p{N}{1,3}` | Llama 3, Spark |
+| bounded repeats | `\p{N}{1,3}` | Llama 3, Spark-X2.5 |
 | PCRE leftmost-first alternation | `ab\|abc` matches `ab` | all of them |
 
 Matching runs directly on the UTF-8 bytes of the input with a backtracking VM.
@@ -91,7 +91,7 @@ Offsets are UTF-8 byte offsets into the String (`search`, `findall_spans`,
 `findall_groups`); `findall_cps_offsets` gives codepoint offsets. `findall` and
 `split_keep` return slices of the input.
 
-Build with `-I src`. Requires Mojo 1.1 (`max==26.6.0`).
+Build with `-I src`. Requires Mojo 1.1 (`mojo==1.1.0` from PyPI).
 
 ## Supported syntax
 
@@ -128,22 +128,13 @@ above, plus feature probes, against `regex.finditer` on random Unicode strings:
 A negative control (oracle fed a different pattern) fails, so the gate is live.
 `tools/gate.sh` runs all of the above.
 
-### Pre-tokenizer coverage
+### Tokenizer patterns
 
-`tools/pretok_harvest.py` downloads `tokenizer.json` only (no weights) for the
-top N Hugging Face text-generation models by downloads, runs each model's own
-pre-tokenizer (HF `tokenizers`) on the corpus, and finds the mojo-baro family
-whose uregex pattern chain splits it identically. Top 250 (2026-10-08): 164
-covered (qwen2 78, qwen35 23, llama3 22, gpt-2 12, deepseek-v3 10, gpt-4o 6,
-exaone 6, minicpm5 3, bloom 2, deepseek-coder 2), 68 without `tokenizer.json`,
-17 without a regex (SentencePiece, or Gemma's literal-space split), 1 unmatched
-(falcon-7b: HF applies Punctuation to byte-level characters, splitting UTF-8
-sequences; not ported). The o200k and deepseek-coder regexes are HF verbatim in
-mojo-baro and pinned in difftest.
-
-```
-./.venv/bin/python3 tools/pretok_harvest.py --n 250   # .work/pretok/models.tsv
-```
+The tokenizer patterns in `tools/difftest.py` are copied verbatim from the
+models' own `tokenizer.json` (or llama.cpp's pre-tokenizer table): GPT-2,
+Llama 3, Qwen2, Qwen3.5, DeepSeek-Coder, the o200k pattern (gpt-oss,
+Phi-4-mini, MiniMax-M2) and Spark-X2.5. Each one runs through the same
+differential test as every other pattern.
 
 ## Packaging
 

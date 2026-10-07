@@ -25,7 +25,6 @@ The `Signed-off-by:` line certifies that you wrote the change or have the right 
 - Mojo is the implementation language. Python is allowed only as an oracle or verifier, kept in `tools/` next to what it checks, with versions pinned in `pyproject.toml`.
 - One fact, one home: numbers live in the file that produced them and are linked, not restated.
 - No attribution trailers other than `Signed-off-by`.
-- Before a push, `tools/publish-check.sh` must pass.
 
 ## Copyright
 

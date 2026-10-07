@@ -10,3 +10,4 @@ done
 ./.venv/bin/mojo run -I src tests/test_uregex.mojo
 ./.venv/bin/python3 tools/difftest.py --n 5000 --maxlen 80
 ./.venv/bin/python3 tools/difftest.py --n 5000 --maxlen 80 --bytes
+./.venv/bin/python3 tools/difftest.py --n 500 --maxlen 80 --negative
