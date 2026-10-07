@@ -23,10 +23,10 @@ and the texts are short chunks.
 
 ## Setup
 
-Mojo 1.0 in a project venv (the commands below use `./.venv/bin/mojo`):
+Mojo 1.1 in a project venv (the commands below use `./.venv/bin/mojo`):
 
 ```
-python3 -m venv .venv && ./.venv/bin/pip install 'mojo==1.0' regex
+python3 -m venv .venv && ./.venv/bin/pip install 'mojo==1.1.0' regex
 ```
 
 ## Usage
@@ -41,7 +41,7 @@ for piece in p.findall("héllo 12345"):
 var chunks = split_keep(r"\p{N}+", "ab12cd")   # ["ab", "12", "cd"]
 ```
 
-Build with `-I src`. Requires Mojo 1.0 (`max==26.5.0`).
+Build with `-I src`. Requires Mojo 1.1 (`max==26.6.0`).
 
 ## Supported syntax
 
