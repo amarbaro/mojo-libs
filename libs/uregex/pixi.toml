@@ -1,5 +1,5 @@
 [workspace]
-authors = ["beausifutmez <printopian@proton.me>"]
+authors = ["amarbaro.org <dev@amarbaro.com>"]
 channels = ["https://conda.modular.com/max", "conda-forge"]
 name = "mojo-uregex"
 platforms = ["linux-64"]
