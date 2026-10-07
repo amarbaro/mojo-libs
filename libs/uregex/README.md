@@ -27,16 +27,22 @@ slice the input without copying it to codepoints.
 `tools/bench.sh`: `findall` over a 1.05 MB mixed-script corpus, best of 5,
 Mojo 1.1.0, CPU. Match counts equal Python `regex` for every pattern.
 
-| pattern | Python `regex` MB/s | uregex 0.1.0 | uregex now |
+| pattern | Python `regex` MB/s | uregex 0.1.0 | uregex 0.2.0 |
 |---|---|---|---|
-| gpt2 | 14.97 | 12.77 | 34.10 |
-| qwen2 | 14.85 | 9.60 | 32.65 |
-| qwen35 | 13.88 | 9.44 | 32.62 |
-| llama3 | 16.17 | 10.45 | 35.80 |
-| spark2_5_3 | 13.85 | 12.88 | 45.19 |
+| gpt2 | 14.11 | 12.77 | 30.91 |
+| qwen2 | 14.87 | 9.60 | 28.75 |
+| qwen35 | 14.64 | 9.44 | 29.15 |
+| llama3 | 16.25 | 10.45 | 31.73 |
+| spark2_5_3 | 14.15 | 12.88 | 44.75 |
 
-Compiled pattern (`tools/bench_compile.mojo`): 27.5 KB and 0.83 ms each
-(was 166 KB and 0.99 ms). Peak RSS of the bench 58 MB (was 68 MB).
+Sparse patterns gain more from the first-character filter: `\p{N}{1,3}`
+94 → 137 MB/s, CJK runs 108 → 196 MB/s.
+
+| | 0.1.0 | 0.2.0 |
+|---|---|---|
+| compiled pattern (`tools/bench_compile.mojo`) | 166 KB, 0.99 ms | 27.6 KB, 0.81 ms |
+| instruction size | 32 B | 12 B |
+| bench peak RSS | 68 MB | 58 MB |
 
 ## Setup
 
@@ -49,14 +55,28 @@ python3 -m venv .venv && ./.venv/bin/pip install 'mojo==1.1.0' regex
 ## Usage
 
 ```mojo
-from uregex import Pattern, findall, split_keep
+from uregex import Pattern, FullPattern, findall, split_keep
 
 var p = Pattern(r"\p{N}{1,3}|[\p{L}\p{M}]+|\s+(?!\S)|\s+")
 for piece in p.findall("héllo 12345"):
     print(piece)                       # héllo, ' ', 123, 45
 
 var chunks = split_keep(r"\p{N}+", "ab12cd")   # ["ab", "12", "cd"]
+
+var g = FullPattern(r"(?P<word>\p{L}+)(\d)?")
+for row in g.findall_groups("é1 b"):   # byte spans: [0] match, [i] group i, (-1, -1) unset
+    print(row[0].start, row[0].end, row[g.group_index("word")].end)
 ```
+
+Two engines from one source. `Pattern` is the tokenizer engine: `(...)` does
+not capture, and named groups, lookbehind and `\b` raise. `FullPattern` adds
+them; that code is compiled only into `FullPattern`, so `Pattern` runs as fast
+as if it did not exist. The one-shot helpers (`findall`, `search`,
+`split_keep`, `compile`) use `FullPattern`.
+
+Offsets are UTF-8 byte offsets into the String (`search`, `findall_spans`,
+`findall_groups`); `findall_cps_offsets` gives codepoint offsets. `findall` and
+`split_keep` return slices of the input.
 
 Build with `-I src`. Requires Mojo 1.1 (`max==26.6.0`).
 
@@ -65,10 +85,18 @@ Build with `-I src`. Requires Mojo 1.1 (`max==26.6.0`).
 Literals and escapes (`\n \t \xHH \x{H..} \uHHHH \UHHHHHHHH`), `.` (no newline),
 `^` `$` (text start/end), classes `[...]` `[^...]` with ranges and `\p{}`/`\d\w\s`
 inside, `\p{Xx}` `\P{Xx}` for all general categories, `\d \w \s \D \W \S`,
-greedy `* + ? {m} {m,} {m,n}`, `(?:...)`, `(?i:...)`, `(?=...)`, `(?!...)`, `|`.
+greedy and lazy `* + ? {m} {m,} {m,n}` (`*?` ...), `(?:...)`, `(?i:...)`,
+`(?=...)`, `(?!...)`, `|`.
 
-Rejected with a parse error: lazy/possessive quantifiers, capture groups and
-backreferences, `\b`, lookbehind, unbounded repeats of a nullable expression.
+`FullPattern` only: capture groups `(...)`, named groups `(?P<name>...)` and
+`(?<name>...)`, word boundaries `\b` `\B`, fixed-length lookbehind `(?<=...)`
+`(?<!...)`.
+
+Rejected with a parse error: possessive quantifiers, backreferences,
+variable-length lookbehind, unbounded repeats of a nullable expression.
+
+Unicode tables come from Python `regex` (Unicode 17.0 for regex 2026.9.3,
+recorded in the generated file's header), case maps included.
 
 ## Verification
 
