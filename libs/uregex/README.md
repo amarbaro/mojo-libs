@@ -41,7 +41,7 @@ Sparse patterns gain more from the first-character filter: `\p{N}{1,3}`
 | | 0.1.0 | 0.2.0 |
 |---|---|---|
 | compiled pattern (`tools/bench_compile.mojo`) | 166 KB, 0.99 ms | 27.6 KB, 0.81 ms |
-| instruction size | 32 B | 12 B |
+| instruction size (pinned by `test_inst_layout`) | 32 B | 12 B |
 | bench peak RSS | 68 MB | 58 MB |
 
 ## Setup
