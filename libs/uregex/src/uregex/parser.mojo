@@ -244,7 +244,7 @@ struct Parser:
                     behind = True
                 elif f == 80 or f == 60:
                     if not self.captures:
-                        raise Error("uregex: named groups need Pattern[full=True]")
+                        raise Error("uregex: named groups need FullPattern")
                     self.i += 1
                     if f == 80:
                         self.expect(60)

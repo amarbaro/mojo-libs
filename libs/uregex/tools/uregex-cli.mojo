@@ -1,6 +1,6 @@
 # Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 from std.sys import argv
-from uregex import Pattern
+from uregex import Pattern, FullPattern, PatternT
 
 
 def main() raises:
@@ -15,7 +15,7 @@ def main() raises:
     with open(String(args[a + 1]), "r") as f:
         data = f.read()
     # Plain engine (the tokenizer path) whenever the pattern needs nothing more.
-    var plain = Pattern[True](src).groups() == 0
+    var plain = FullPattern(src).groups() == 0
     if plain:
         try:
             _ = Pattern(src)
@@ -24,10 +24,10 @@ def main() raises:
     if plain:
         run(Pattern(src), data, bytes_mode)
     else:
-        run(Pattern[True](src), data, bytes_mode)
+        run(FullPattern(src), data, bytes_mode)
 
 
-def run[full: Bool](pat: Pattern[full], data: String, bytes_mode: Bool) raises:
+def run[full: Bool](pat: PatternT[full], data: String, bytes_mode: Bool) raises:
     var texts = data.split("\0")
     for t in texts:
         var text = String(t)

@@ -27,12 +27,12 @@ def _slice(text: String, start: Int, end: Int) -> String:
     return String(StringSlice(unsafe_from_utf8=text.as_bytes()[start:end]))
 
 
-struct Pattern[full: Bool = False](Copyable, Movable):
+struct PatternT[full: Bool](Copyable, Movable):
     """Matches on UTF-8 bytes. `Match` offsets are byte offsets into the input String.
 
-    `Pattern` (full=False) is the tokenizer engine: `(...)` does not capture, and capture groups,
-    lookbehind and word boundaries raise. `Pattern[full=True]` supports them; that machinery is
-    compiled only into that type, so plain patterns pay nothing for it."""
+    Use the aliases. `Pattern` is the tokenizer engine: `(...)` does not capture, and named groups,
+    lookbehind and word boundaries raise. `FullPattern` supports them; that machinery is compiled
+    only into that type, so `Pattern` pays nothing for it."""
 
     var prog: Program
     var source: String
@@ -44,7 +44,7 @@ struct Pattern[full: Bool = False](Copyable, Movable):
         self.source = pattern
         comptime if not Self.full:
             if self.prog.full:
-                raise Error("uregex: lookbehind and word boundaries need Pattern[full=True]")
+                raise Error("uregex: lookbehind and word boundaries need FullPattern")
 
     def groups(self) -> Int:
         """Number of capture groups."""
@@ -172,18 +172,22 @@ struct Pattern[full: Bool = False](Copyable, Movable):
         return out^
 
 
+comptime Pattern = PatternT[False]
+comptime FullPattern = PatternT[True]
+
+
 # One-shot helpers accept the full syntax.
-def compile(pattern: String) raises -> Pattern[True]:
-    return Pattern[True](pattern)
+def compile(pattern: String) raises -> FullPattern:
+    return FullPattern(pattern)
 
 
 def search(pattern: String, text: String) raises -> Optional[Match]:
-    return Pattern[True](pattern).search(text)
+    return FullPattern(pattern).search(text)
 
 
 def findall(pattern: String, text: String) raises -> List[String]:
-    return Pattern[True](pattern).findall(text)
+    return FullPattern(pattern).findall(text)
 
 
 def split_keep(pattern: String, text: String) raises -> List[String]:
-    return Pattern[True](pattern).split_keep(text)
+    return FullPattern(pattern).split_keep(text)

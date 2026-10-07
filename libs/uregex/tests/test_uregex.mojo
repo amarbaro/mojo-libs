@@ -1,6 +1,6 @@
 # Copyright 2026 amarbaro.org. Licensed under the Apache License, Version 2.0.
 from std.testing import assert_equal, assert_true, assert_raises, TestSuite
-from uregex import Pattern, findall, search, split_keep
+from uregex import Pattern, FullPattern, findall, search, split_keep
 
 
 def test_unicode_classes() raises:
@@ -86,7 +86,7 @@ def test_lookbehind() raises:
 
 
 def test_groups() raises:
-    var p = Pattern[True](r"(?P<word>\p{L}+)(\d)?")
+    var p = FullPattern(r"(?P<word>\p{L}+)(\d)?")
     assert_equal(p.groups(), 2)
     assert_equal(p.group_index("word"), 1)
     var rows = p.findall_groups("é1 b")
