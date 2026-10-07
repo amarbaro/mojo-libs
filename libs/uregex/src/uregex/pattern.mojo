@@ -27,17 +27,24 @@ def _slice(text: String, start: Int, end: Int) -> String:
     return String(StringSlice(unsafe_from_utf8=text.as_bytes()[start:end]))
 
 
-struct Pattern(Copyable, Movable):
-    """Matches on UTF-8 bytes. `Match` offsets are byte offsets into the input String."""
+struct Pattern[full: Bool = False](Copyable, Movable):
+    """Matches on UTF-8 bytes. `Match` offsets are byte offsets into the input String.
+
+    `Pattern` (full=False) is the tokenizer engine: `(...)` does not capture, and capture groups,
+    lookbehind and word boundaries raise. `Pattern[full=True]` supports them; that machinery is
+    compiled only into that type, so plain patterns pay nothing for it."""
 
     var prog: Program
     var source: String
 
     def __init__(out self, pattern: String) raises:
-        var p = Parser(pattern)
+        var p = Parser(pattern, Self.full)
         var ast = p.parse()
         self.prog = Program(ast)
         self.source = pattern
+        comptime if not Self.full:
+            if self.prog.full:
+                raise Error("uregex: lookbehind and word boundaries need Pattern[full=True]")
 
     def groups(self) -> Int:
         """Number of capture groups."""
@@ -52,29 +59,33 @@ struct Pattern(Copyable, Movable):
     def new_slots(self) -> List[Int32]:
         return List[Int32](length=2 * (self.prog.groups + 1), fill=-1)
 
-    def search_from(
-        self, text: Span[Byte, _], mut stack: List[Int32], mut slots: List[Int32], start: Int
-    ) -> Optional[Match]:
-        if self.prog.full:
-            return self._search[True](text, stack, slots, start)
-        return self._search[False](text, stack, slots, start)
-
     @always_inline
-    def _search[full: Bool](
+    def _run(
+        self, text: Span[Byte, _], mut stack: List[Int32], mut slots: List[Int32], mut none: List[Int32], s: Int
+    ) -> Int:
+        comptime if Self.full:
+            return self.prog.exec[True](text, stack, slots, 0, s, False)
+        else:
+            return self.prog.exec[False](text, stack, none, 0, s, False)
+
+    def search_from(
         self, text: Span[Byte, _], mut stack: List[Int32], mut slots: List[Int32], start: Int
     ) -> Optional[Match]:
         var n = len(text)
         var s = start
+        # The plain engine never touches slots; a local list (not the caller's) keeps the
+        # compiler from assuming it may alias `stack`, which cost ~8% in the hot loop.
+        var none = List[Int32]()
         if self.prog.has_first:
             while s < n:
                 if self.prog.can_start(text[s]):
-                    var e = self.prog.exec[full](text, stack, slots, 0, s, False)
+                    var e = self._run(text, stack, slots, none, s)
                     if e >= 0:
                         return Match(s, e)
                 s += utf8_len(text[s])
             return None
         while True:
-            var e = self.prog.exec[full](text, stack, slots, 0, s, False)
+            var e = self._run(text, stack, slots, none, s)
             if e >= 0:
                 return Match(s, e)
             if s >= n:
@@ -87,11 +98,6 @@ struct Pattern(Copyable, Movable):
         return self.search_from(text.as_bytes(), stack, slots, 0)
 
     def findall_spans(self, text: String) -> List[Match]:
-        if self.prog.full:
-            return self._spans[True](text)
-        return self._spans[False](text)
-
-    def _spans[full: Bool](self, text: String) -> List[Match]:
         var bytes = text.as_bytes()
         var n = len(bytes)
         var out = List[Match]()
@@ -99,7 +105,7 @@ struct Pattern(Copyable, Movable):
         var slots = self.new_slots()
         var pos = 0
         while pos <= n:
-            var m = self._search[full](bytes, stack, slots, pos)
+            var m = self.search_from(bytes, stack, slots, pos)
             if not m:
                 break
             var mm = m.value()
@@ -123,7 +129,7 @@ struct Pattern(Copyable, Movable):
         while pos <= n:
             for ref v in slots:
                 v = -1
-            var m = self._search[True](bytes, stack, slots, pos)
+            var m = self.search_from(bytes, stack, slots, pos)
             if not m:
                 break
             var mm = m.value()
@@ -181,17 +187,18 @@ struct Pattern(Copyable, Movable):
         return out^
 
 
-def compile(pattern: String) raises -> Pattern:
-    return Pattern(pattern)
+# One-shot helpers accept the full syntax.
+def compile(pattern: String) raises -> Pattern[True]:
+    return Pattern[True](pattern)
 
 
 def search(pattern: String, text: String) raises -> Optional[Match]:
-    return Pattern(pattern).search(text)
+    return Pattern[True](pattern).search(text)
 
 
 def findall(pattern: String, text: String) raises -> List[String]:
-    return Pattern(pattern).findall(text)
+    return Pattern[True](pattern).findall(text)
 
 
 def split_keep(pattern: String, text: String) raises -> List[String]:
-    return Pattern(pattern).split_keep(text)
+    return Pattern[True](pattern).split_keep(text)

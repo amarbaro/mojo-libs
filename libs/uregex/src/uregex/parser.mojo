@@ -110,14 +110,17 @@ struct Parser:
     var i: Int
     var ci: Bool
     var ast: Ast
+    var captures: Bool
+    """False: `(...)` is non-capturing and named groups are rejected."""
 
-    def __init__(out self, pattern: String):
+    def __init__(out self, pattern: String, captures: Bool = True):
         self.p = List[Int]()
         for c in pattern.codepoints():
             self.p.append(Int(c.to_u32()))
         self.i = 0
         self.ci = False
         self.ast = Ast()
+        self.captures = captures
 
     def peek(self) -> Int:
         return self.p[self.i] if self.i < len(self.p) else -1
@@ -240,6 +243,8 @@ struct Parser:
                     look = True
                     behind = True
                 elif f == 80 or f == 60:
+                    if not self.captures:
+                        raise Error("uregex: named groups need Pattern[full=True]")
                     self.i += 1
                     if f == 80:
                         self.expect(60)
@@ -259,7 +264,7 @@ struct Parser:
                     self.ci = True
                 else:
                     raise Error("uregex: unsupported group syntax at " + String(self.i))
-            else:
+            elif self.captures:
                 self.ast.groups += 1
                 group = self.ast.groups
                 self.ast.names.append("")

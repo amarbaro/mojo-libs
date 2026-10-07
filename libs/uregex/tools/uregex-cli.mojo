@@ -10,10 +10,24 @@ def main() raises:
     if len(args) < a + 2:
         print("usage: uregex-cli [--bytes] PATTERN TEXTS_FILE   (texts separated by NUL)")
         return
-    var pat = Pattern(String(args[a]))
+    var src = String(args[a])
     var data: String
     with open(String(args[a + 1]), "r") as f:
         data = f.read()
+    # Plain engine (the tokenizer path) whenever the pattern needs nothing more.
+    var plain = Pattern[True](src).groups() == 0
+    if plain:
+        try:
+            _ = Pattern(src)
+        except:
+            plain = False
+    if plain:
+        run(Pattern(src), data, bytes_mode)
+    else:
+        run(Pattern[True](src), data, bytes_mode)
+
+
+def run[full: Bool](pat: Pattern[full], data: String, bytes_mode: Bool) raises:
     var texts = data.split("\0")
     for t in texts:
         var text = String(t)

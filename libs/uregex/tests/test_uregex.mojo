@@ -57,6 +57,17 @@ def test_rejects_unsupported() raises:
         _ = Pattern(r"(?P<n>a)(?P<n>b)")
 
 
+def test_plain_pattern_rejects_full_syntax() raises:
+    with assert_raises():
+        _ = Pattern(r"\bx")
+    with assert_raises():
+        _ = Pattern(r"(?<=a)b")
+    with assert_raises():
+        _ = Pattern(r"(?P<n>a)")
+    assert_equal(Pattern(r"(ab)+").groups(), 0)
+    assert_equal(Pattern(r"a+?").findall("aaa")[0], "a")
+
+
 def test_lazy() raises:
     assert_equal(findall(r"<.+?>", "<a><b>")[0], "<a>")
     assert_equal(findall(r"a{2,4}?", "aaaaa")[0], "aa")
@@ -75,7 +86,7 @@ def test_lookbehind() raises:
 
 
 def test_groups() raises:
-    var p = Pattern(r"(?P<word>\p{L}+)(\d)?")
+    var p = Pattern[True](r"(?P<word>\p{L}+)(\d)?")
     assert_equal(p.groups(), 2)
     assert_equal(p.group_index("word"), 1)
     var rows = p.findall_groups("é1 b")

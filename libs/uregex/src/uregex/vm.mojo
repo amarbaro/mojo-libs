@@ -309,22 +309,27 @@ struct Program(Copyable, Movable):
                 stack.append(Int32(pos))
                 pc = Int(ins.a)
             elif op == I_LOOK:
-                var mark = len(stack)
-                var r = self.exec[full](text, stack, slots, pc + 1, pos, True)
-                if (r >= 0) == ins.neg:
-                    comptime if full:
+                comptime if full:
+                    var mark = len(stack)
+                    var r = self.exec[full](text, stack, slots, pc + 1, pos, True)
+                    if (r >= 0) == ins.neg:
                         if r >= 0:
                             undo_to(stack, slots, mark)
-                    ok = False
-                else:
-                    pc = Int(ins.a)
-            else:
-                comptime if full:
-                    var next = self.rare_op(text, stack, slots, pc, pos)
-                    if next < 0:
                         ok = False
                     else:
-                        pc = next
+                        pc = Int(ins.a)
+                else:
+                    var r = self.exec[full](text, stack, slots, pc + 1, pos, True)
+                    if (r >= 0) == ins.neg:
+                        ok = False
+                    else:
+                        pc = Int(ins.a)
+            elif full:
+                var next = self.rare_op(text, stack, slots, pc, pos)
+                if next < 0:
+                    ok = False
+                else:
+                    pc = next
             if not ok:
                 if len(stack) == base:
                     return -1
