@@ -42,7 +42,7 @@ uregex 0.1.0 (fec4575) vs 0.2.1, same corpus and run:
 
 | metric | 0.1.0 | 0.2.1 | change |
 |---|---|---|---|
-| speed | 9.4 to 14.3 MB/s | 30.9 to 44.1 MB/s | 3.1 to 3.5x faster |
+| speed | 9.4 to 14.3 MB/s | 30.9 to 44.1 MB/s | 2.2 to 3.5x faster per pattern |
 | bench peak RSS | 68.3 MB | 58.4 MB | -14.5% |
 | pattern compile time (bench total) | 6.2 ms | 5.1 ms | -18% |
 | compiled pattern (`tools/bench_compile.mojo`) | 166 KB, 0.99 ms | 27.6 KB, 0.81 ms | 6x smaller |
