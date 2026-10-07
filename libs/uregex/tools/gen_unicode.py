@@ -5,8 +5,11 @@
 Every class the engine knows (\\p{Xx}, \\d, \\w, \\s) is derived by asking the
 oracle itself which codepoints it matches, so engine == oracle by construction;
 the differential test in tools/difftest.py then only has to check the matcher.
-Case maps come from str.lower()/str.upper() (single-codepoint results only),
-stored as fixed-width hex pairs (6+6 chars, sorted) so they are searched in place.
+Case maps come from the oracle's own (?i) matching: str.lower()/str.upper() pairs
+are kept where regex agrees, and cased codepoints Python's unicodedata does not know
+yet get their regex partner. Stored as fixed-width hex pairs (6+6 chars, sorted) so
+they are searched in place. The header records the Unicode version regex implements,
+probed from codepoints first assigned in each version.
 """
 import sys
 import unicodedata
@@ -60,10 +63,37 @@ for esc, pat in (("d", r"\d"), ("w", r"\w"), ("s", r"\s")):
     rs = ranges(matched(pat))
     lines.append(f'comptime _ESC_{esc} = "{hexranges(rs)}"')
 
-lower = [(c, ord(chr(c).lower())) for c in range(MAXCP + 1)
-         if not 0xD800 <= c <= 0xDFFF and len(chr(c).lower()) == 1 and chr(c).lower() != chr(c)]
-upper = [(c, ord(chr(c).upper())) for c in range(MAXCP + 1)
-         if not 0xD800 <= c <= 0xDFFF and len(chr(c).upper()) == 1 and chr(c).upper() != chr(c)]
+# First codepoint assigned in each Unicode version, newest first.
+PROBES = [("17.0", 0x16EA0), ("16.0", 0x1C89), ("15.1", 0x2FFC), ("15.0", 0x1E030), ("14.0", 0x061D)]
+uver = next((v for v, cp in PROBES if not regex.match(r"\p{Cn}", chr(cp))), "older than 14.0")
+lines[2] = f"# oracle: python regex {regex.__version__}, Unicode {uver}"
+
+
+def single(s):
+    return ord(s) if len(s) == 1 else None
+
+
+cand = sorted({ord(c) for c in matched(r"\p{Cased}")}
+              | {c for c in range(MAXCP + 1) if not 0xD800 <= c <= 0xDFFF
+                 and (chr(c).lower() != chr(c) or chr(c).upper() != chr(c))})
+cand_str = "".join(chr(c) for c in cand)
+lower, upper, dropped = [], [], 0
+for c in cand:
+    partners = {ord(m) for m in regex.findall("(?i)" + regex.escape(chr(c)), cand_str)} - {c}
+    lo, up = single(chr(c).lower()), single(chr(c).upper())
+    for target, out, cat in ((lo, lower, "Ll"), (up, upper, "Lu")):
+        if target is not None and target != c:
+            if target in partners:
+                out.append((c, target))
+            else:
+                dropped += 1
+        elif unicodedata.category(chr(c)) == "Cn" and partners:  # unknown to this Python
+            own = rf"\p{{{'Lu' if cat == 'Ll' else 'Ll'}}}"
+            pick = [p for p in sorted(partners) if regex.match(rf"\p{{{cat}}}", chr(p))]
+            if pick and regex.match(own, chr(c)):
+                out.append((c, pick[0]))
+lower.sort()
+upper.sort()
 lines.append('comptime _LOWER = "' + "".join(f"{a:06x}{b:06x}" for a, b in lower) + '"')
 lines.append('comptime _UPPER = "' + "".join(f"{a:06x}{b:06x}" for a, b in upper) + '"')
 lines += ["", "", "def category_table(name: String) -> StaticString:"]
@@ -79,4 +109,4 @@ lines += ["", "", "def escape_table(c: String) -> StaticString:",
           "", "", "def lower_table() -> StaticString:", "    return _LOWER",
           "", "", "def upper_table() -> StaticString:", "    return _UPPER", ""]
 OUT.write_text("\n".join(lines))
-print(OUT, OUT.stat().st_size, "bytes;", len(lower), "lower pairs", len(upper), "upper pairs")
+print(OUT, OUT.stat().st_size, "bytes; Unicode", uver, ";", len(lower), "lower pairs", len(upper), "upper pairs;", dropped, "str pairs regex rejects")

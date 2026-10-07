@@ -39,9 +39,10 @@ FEATURE_PATTERNS = {
     "dot": r"a.b",
     "anchors": r"^\s*|\s*$",
     "cjk_range": r"[぀-ヿ]+|[^぀-ヿ\s]+",
+    "ci_u17": "(?i:\U00016EA0+|\uA7CE|[\U00016EBB-\U00016EBD]x)",
 }
 ALPHABET = ("abcXYZ 'sT\t\n\r" + "éÉßİıǅ" + "一二三あアㇰ" + "0123٣٤" + "!?.,-_$€" + "😀é́̀"
-            + "   " + "ſKΩ")
+            + "   " + "ſKΩ" + "\U00016EA0\U00016EBB\U00016EA2\uA7CE\uA7CFx")
 
 
 def rand_text(rng, k):
