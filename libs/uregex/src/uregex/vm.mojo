@@ -178,9 +178,9 @@ struct Program(Copyable, Movable):
         elif n.kind == N_WORDB:
             _ = self.emit(I_WORDB, n.cls, 0, False, n.neg)
         elif n.kind == N_GROUP:
-            _ = self.emit(I_SAVE, 2 * n.cp)
+            _ = self.emit(I_SAVE, 2 * (n.cp - 1))
             self.emit_node(ast, n.kids[0])
-            _ = self.emit(I_SAVE, 2 * n.cp + 1)
+            _ = self.emit(I_SAVE, 2 * (n.cp - 1) + 1)
 
     def set_split(mut self, split: Int, body: Int, exit: Int, lazy: Bool):
         self.code[split].a = Int32(exit if lazy else body)
@@ -201,7 +201,7 @@ struct Program(Copyable, Movable):
         return self.classes[cls].contains(self.cases.fold(cp)) or self.classes[cls].contains(self.cases.up(cp))
 
     @no_inline
-    def rare_op(self, text: Span[Byte, _], mut stack: List[Int32], mut slots: List[Int32], pc: Int, pos: Int) -> Int:
+    def rare_op(self, text: Span[Byte, _], mut stack: List[Int32], pc: Int, pos: Int) -> Int:
         """Lookbehind, word boundary and capture save, kept out of the hot loop. Next pc, or -1 to backtrack."""
         ref ins = self.code[pc]
         var op = Int(ins.op)
@@ -216,13 +216,13 @@ struct Program(Copyable, Movable):
                     break
                 from_pos = cp_start_before(text, from_pos)
             if from_pos >= 0:
-                r = self.exec[True](text, stack, slots, pc + 1, from_pos, True)
+                r = self.exec[True](text, stack, pc + 1, from_pos, True)
                 if r >= 0 and r != pos:
-                    undo_to(stack, slots, mark)
+                    undo_to(stack, mark)
                     r = -1
             if (r >= 0) == ins.neg:
                 if r >= 0:
-                    undo_to(stack, slots, mark)
+                    undo_to(stack, mark)
                 return -1
             return Int(ins.a)
         if op == I_WORDB:
@@ -232,18 +232,19 @@ struct Program(Copyable, Movable):
         # I_SAVE
         var slot = Int(ins.a)
         stack.append(Int32(-1 - slot))
-        stack.append(slots[slot])
-        slots[slot] = Int32(pos)
+        stack.append(stack[slot])
+        stack[slot] = Int32(pos)
         return pc + 1
 
     def exec[full: Bool](
-        self, text: Span[Byte, _], mut stack: List[Int32], mut slots: List[Int32], start_pc: Int, start_pos: Int, sub: Bool
+        self, text: Span[Byte, _], mut stack: List[Int32], start_pc: Int, start_pos: Int, sub: Bool
     ) -> Int:
-        """Backtracking run. `stack` is caller-owned scratch. Pairs on it are (pc, pos) choice points, or
-        (-1 - slot, old value) entries that restore a capture slot when popped. Returns the end position
-        or -1. A failed run restores `slots` and `stack`; a successful lookaround run leaves only its
-        restore entries on `stack`, so outer backtracking still undoes its captures.
-        `full=False` (no groups, lookbehind or word boundary) compiles all of that out of the loop."""
+        """Backtracking run. `stack` is caller-owned scratch. Its first 2 * groups entries are the
+        capture slots (group g at 2(g-1), 2(g-1)+1); above them are (pc, pos) choice points, or
+        (-1 - slot, old value) entries that restore a slot when popped. Returns the end position or -1.
+        A failed run leaves `stack` as found; a successful lookaround run leaves only its restore
+        entries, so outer backtracking still undoes its captures. `full=False` (no groups, lookbehind
+        or word boundary) compiles all of that out of the loop."""
         var n = len(text)
         var base = len(stack)
         var pc = start_pc
@@ -311,21 +312,21 @@ struct Program(Copyable, Movable):
             elif op == I_LOOK:
                 comptime if full:
                     var mark = len(stack)
-                    var r = self.exec[full](text, stack, slots, pc + 1, pos, True)
+                    var r = self.exec[full](text, stack, pc + 1, pos, True)
                     if (r >= 0) == ins.neg:
                         if r >= 0:
-                            undo_to(stack, slots, mark)
+                            undo_to(stack, mark)
                         ok = False
                     else:
                         pc = Int(ins.a)
                 else:
-                    var r = self.exec[full](text, stack, slots, pc + 1, pos, True)
+                    var r = self.exec[full](text, stack, pc + 1, pos, True)
                     if (r >= 0) == ins.neg:
                         ok = False
                     else:
                         pc = Int(ins.a)
             elif full:
-                var next = self.rare_op(text, stack, slots, pc, pos)
+                var next = self.rare_op(text, stack, pc, pos)
                 if next < 0:
                     ok = False
                 else:
@@ -337,7 +338,7 @@ struct Program(Copyable, Movable):
                 pc = Int(stack.pop())
                 comptime if full:
                     if pc < 0:
-                        var to = unwind(stack, slots, pc, pos, base)
+                        var to = unwind(stack, pc, pos, base)
                         if to < 0:
                             return -1
                         pc = Int(stack.pop())
@@ -345,15 +346,16 @@ struct Program(Copyable, Movable):
 
 
 @no_inline
-def unwind(mut stack: List[Int32], mut slots: List[Int32], pc: Int, pos: Int, base: Int) -> Int:
+def unwind(mut stack: List[Int32], pc: Int, pos: Int, base: Int) -> Int:
     """Apply the restore entry (pc, pos) just popped and any below it down to the next choice point.
     Returns that choice point's pos with its pc left on top of `stack`, or -1 at `base`."""
-    slots[-1 - pc] = Int32(pos)
+    stack[-1 - pc] = Int32(pos)
     while len(stack) > base:
         var v = stack.pop()
         if stack[len(stack) - 1] >= 0:
             return Int(v)
-        slots[-1 - Int(stack.pop())] = v
+        var p = Int(stack.pop())
+        stack[-1 - p] = v
     return -1
 
 
@@ -368,12 +370,12 @@ def keep_restores(mut stack: List[Int32], base: Int):
     stack.shrink(w)
 
 
-def undo_to(mut stack: List[Int32], mut slots: List[Int32], mark: Int):
+def undo_to(mut stack: List[Int32], mark: Int):
     while len(stack) > mark:
         var v = stack.pop()
         var p = Int(stack.pop())
         if p < 0:
-            slots[-1 - p] = v
+            stack[-1 - p] = v
 
 
 @always_inline

@@ -56,36 +56,24 @@ struct Pattern[full: Bool = False](Copyable, Movable):
                 return i
         raise Error("uregex: no group named " + name)
 
-    def new_slots(self) -> List[Int32]:
-        return List[Int32](length=2 * (self.prog.groups + 1), fill=-1)
+    def new_stack(self) -> List[Int32]:
+        """Backtrack scratch with the capture slots at the bottom, all unset (-1)."""
+        return List[Int32](length=2 * self.prog.groups, fill=-1)
 
-    @always_inline
-    def _run(
-        self, text: Span[Byte, _], mut stack: List[Int32], mut slots: List[Int32], mut none: List[Int32], s: Int
-    ) -> Int:
-        comptime if Self.full:
-            return self.prog.exec[True](text, stack, slots, 0, s, False)
-        else:
-            return self.prog.exec[False](text, stack, none, 0, s, False)
-
-    def search_from(
-        self, text: Span[Byte, _], mut stack: List[Int32], mut slots: List[Int32], start: Int
-    ) -> Optional[Match]:
+    def search_from(self, text: Span[Byte, _], mut stack: List[Int32], start: Int) -> Optional[Match]:
+        """`stack` comes from `new_stack`; on a match its slots hold the groups."""
         var n = len(text)
         var s = start
-        # The plain engine never touches slots; a local list (not the caller's) keeps the
-        # compiler from assuming it may alias `stack`, which cost ~8% in the hot loop.
-        var none = List[Int32]()
         if self.prog.has_first:
             while s < n:
                 if self.prog.can_start(text[s]):
-                    var e = self._run(text, stack, slots, none, s)
+                    var e = self.prog.exec[Self.full](text, stack, 0, s, False)
                     if e >= 0:
                         return Match(s, e)
                 s += utf8_len(text[s])
             return None
         while True:
-            var e = self._run(text, stack, slots, none, s)
+            var e = self.prog.exec[Self.full](text, stack, 0, s, False)
             if e >= 0:
                 return Match(s, e)
             if s >= n:
@@ -93,19 +81,17 @@ struct Pattern[full: Bool = False](Copyable, Movable):
             s += utf8_len(text[s])
 
     def search(self, text: String) -> Optional[Match]:
-        var stack = List[Int32]()
-        var slots = self.new_slots()
-        return self.search_from(text.as_bytes(), stack, slots, 0)
+        var stack = self.new_stack()
+        return self.search_from(text.as_bytes(), stack, 0)
 
     def findall_spans(self, text: String) -> List[Match]:
         var bytes = text.as_bytes()
         var n = len(bytes)
         var out = List[Match]()
-        var stack = List[Int32]()
-        var slots = self.new_slots()
+        var stack = self.new_stack()
         var pos = 0
         while pos <= n:
-            var m = self.search_from(bytes, stack, slots, pos)
+            var m = self.search_from(bytes, stack, pos)
             if not m:
                 break
             var mm = m.value()
@@ -123,20 +109,19 @@ struct Pattern[full: Bool = False](Copyable, Movable):
         var bytes = text.as_bytes()
         var n = len(bytes)
         var out = List[List[Match]]()
-        var stack = List[Int32]()
-        var slots = self.new_slots()
+        var stack = self.new_stack()
         var pos = 0
         while pos <= n:
-            for ref v in slots:
-                v = -1
-            var m = self.search_from(bytes, stack, slots, pos)
+            for i in range(len(stack)):
+                stack[i] = -1
+            var m = self.search_from(bytes, stack, pos)
             if not m:
                 break
             var mm = m.value()
             var row = List[Match](capacity=self.prog.groups + 1)
             row.append(mm)
             for g in range(1, self.prog.groups + 1):
-                row.append(Match(Int(slots[2 * g]), Int(slots[2 * g + 1])))
+                row.append(Match(Int(stack[2 * g - 2]), Int(stack[2 * g - 1])))
             out.append(row^)
             if mm.end > mm.start:
                 pos = mm.end
