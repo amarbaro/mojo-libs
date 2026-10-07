@@ -109,9 +109,10 @@ struct Program(Copyable, Movable):
             return False
         return self.classes[cls].contains(self.cases.fold(cp)) or self.classes[cls].contains(self.cases.up(cp))
 
-    def exec(self, text: Span[Byte, _], start_pc: Int, start_pos: Int, sub: Bool) -> Int:
+    def exec(self, text: Span[Byte, _], mut stack: List[Int32], start_pc: Int, start_pos: Int, sub: Bool) -> Int:
+        """Backtracking run. `stack` is caller-owned scratch, left as it was found on return."""
         var n = len(text)
-        var stack = List[Int]()
+        var base = len(stack)
         var pc = start_pc
         var pos = start_pos
         while True:
@@ -120,10 +121,12 @@ struct Program(Copyable, Movable):
             var ok = True
             if op == I_MATCH:
                 if not sub:
+                    stack.shrink(base)
                     return pos
                 ok = False
             elif op == I_LOOK_END:
                 if sub:
+                    stack.shrink(base)
                     return pos
                 pc += 1
                 continue
@@ -166,20 +169,20 @@ struct Program(Copyable, Movable):
             elif op == I_JMP:
                 pc = Int(ins.a)
             elif op == I_SPLIT:
-                stack.append(Int(ins.b))
-                stack.append(pos)
+                stack.append(ins.b)
+                stack.append(Int32(pos))
                 pc = Int(ins.a)
             elif op == I_LOOK:
-                var r = self.exec(text, pc + 1, pos, True)
+                var r = self.exec(text, stack, pc + 1, pos, True)
                 if (r >= 0) == ins.neg:
                     ok = False
                 else:
                     pc = Int(ins.a)
             if not ok:
-                if len(stack) == 0:
+                if len(stack) == base:
                     return -1
-                pos = stack.pop()
-                pc = stack.pop()
+                pos = Int(stack.pop())
+                pc = Int(stack.pop())
 
 
 @always_inline

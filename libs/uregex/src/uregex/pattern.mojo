@@ -39,11 +39,11 @@ struct Pattern(Copyable, Movable):
         self.prog = Program(ast)
         self.source = pattern
 
-    def search_from(self, text: Span[Byte, _], start: Int) -> Optional[Match]:
+    def search_from(self, text: Span[Byte, _], mut stack: List[Int32], start: Int) -> Optional[Match]:
         var n = len(text)
         var s = start
         while True:
-            var e = self.prog.exec(text, 0, s, False)
+            var e = self.prog.exec(text, stack, 0, s, False)
             if e >= 0:
                 return Match(s, e)
             if s >= n:
@@ -51,15 +51,17 @@ struct Pattern(Copyable, Movable):
             s += utf8_len(text[s])
 
     def search(self, text: String) -> Optional[Match]:
-        return self.search_from(text.as_bytes(), 0)
+        var stack = List[Int32]()
+        return self.search_from(text.as_bytes(), stack, 0)
 
     def findall_spans(self, text: String) -> List[Match]:
         var bytes = text.as_bytes()
         var n = len(bytes)
         var out = List[Match]()
+        var stack = List[Int32]()
         var pos = 0
         while pos <= n:
-            var m = self.search_from(bytes, pos)
+            var m = self.search_from(bytes, stack, pos)
             if not m:
                 break
             var mm = m.value()
