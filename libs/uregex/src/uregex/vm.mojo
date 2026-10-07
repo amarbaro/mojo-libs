@@ -29,6 +29,11 @@ struct Program(Copyable, Movable):
     var code: List[Inst]
     var classes: List[CharClass]
     var cases: CaseMap
+    var has_first: Bool
+    """True when every match starts with a char in the first set below."""
+    var first_lo: UInt64
+    var first_hi: UInt64
+    var first_nonascii: Bool
 
     def __init__(out self, ast: Ast):
         self.code = List[Inst]()
@@ -36,8 +41,66 @@ struct Program(Copyable, Movable):
         for ref c in self.classes:
             c.build_ascii()
         self.cases = CaseMap()
+        self.has_first = False
+        self.first_lo = 0
+        self.first_hi = 0
+        self.first_nonascii = False
         self.emit_node(ast, ast.root)
         self.code.append(Inst(UInt8(I_MATCH), False, False, 0, 0))
+        self.build_first()
+
+    def add_first(mut self, cp: Int):
+        if cp < 64:
+            self.first_lo |= UInt64(1) << UInt64(cp)
+        elif cp < 128:
+            self.first_hi |= UInt64(1) << UInt64(cp - 64)
+        else:
+            self.first_nonascii = True
+
+    def build_first(mut self):
+        """Set of chars a match can start with. Left disabled when the pattern can match empty
+        or starts with `.` or a case-insensitive class."""
+        var seen = List[Bool](length=len(self.code), fill=False)
+        var work = List[Int]()
+        work.append(0)
+        while len(work) > 0:
+            var pc = work.pop()
+            if seen[pc]:
+                continue
+            seen[pc] = True
+            var op = Int(self.code[pc].op)
+            var a = Int(self.code[pc].a)
+            var ci = self.code[pc].ci
+            if op == I_CHAR:
+                self.add_first(a)
+                if ci:
+                    self.add_first(self.cases.fold(a))
+                    self.add_first(self.cases.up(a))
+                    self.first_nonascii = True
+            elif op == I_CLASS:
+                if ci:
+                    return
+                self.first_lo |= self.classes[a].ascii_lo
+                self.first_hi |= self.classes[a].ascii_hi
+                self.first_nonascii = True
+            elif op == I_SPLIT:
+                work.append(a)
+                work.append(Int(self.code[pc].b))
+            elif op == I_JMP or op == I_LOOK:
+                work.append(a)
+            elif op == I_BOL or op == I_EOL:
+                work.append(pc + 1)
+            else:
+                return
+        self.has_first = True
+
+    @always_inline
+    def can_start(self, b0: Byte) -> Bool:
+        if b0 >= 128:
+            return self.first_nonascii
+        if b0 < 64:
+            return (self.first_lo >> UInt64(b0)) & 1 == 1
+        return (self.first_hi >> UInt64(b0 - 64)) & 1 == 1
 
     def emit(mut self, op: Int, a: Int = 0, b: Int = 0, ci: Bool = False, neg: Bool = False) -> Int:
         self.code.append(Inst(UInt8(op), ci, neg, Int32(a), Int32(b)))

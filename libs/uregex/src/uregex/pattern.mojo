@@ -42,6 +42,14 @@ struct Pattern(Copyable, Movable):
     def search_from(self, text: Span[Byte, _], mut stack: List[Int32], start: Int) -> Optional[Match]:
         var n = len(text)
         var s = start
+        if self.prog.has_first:
+            while s < n:
+                if self.prog.can_start(text[s]):
+                    var e = self.prog.exec(text, stack, 0, s, False)
+                    if e >= 0:
+                        return Match(s, e)
+                s += utf8_len(text[s])
+            return None
         while True:
             var e = self.prog.exec(text, stack, 0, s, False)
             if e >= 0:
