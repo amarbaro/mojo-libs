@@ -108,17 +108,22 @@ greedy and lazy `* + ? {m} {m,} {m,n}` (`*?` ...), `(?:...)`, `(?i:...)`,
 Rejected with a parse error: possessive quantifiers, backreferences,
 variable-length lookbehind, unbounded repeats of a nullable expression.
 
-Unicode tables come from Python `regex` (Unicode 17.0 for regex 2026.9.3,
-recorded in the generated file's header), case maps included.
+Unicode tables (general categories, `\d \w \s`, case maps) are generated from
+the Unicode Character Database 17.0 by `tools/gen_unicode.mojo`.
 
 ## Verification
 
-`tools/gen_unicode.py` derives every class table from the Python `regex` module,
-so classes are equal to the oracle by construction (the file header records the
-`regex` and Unicode versions). `tools/difftest.py` then matches every pattern
+`tools/gen_unicode.mojo` writes `src/uregex/unicode_tables.mojo` from the
+Unicode Character Database; `tools/check_unicode.py` then checks every table
+against Python `regex` (each class equals the codepoints `regex` matches, each
+case pair matches under `(?i:...)`). `tools/difftest.py` matches every pattern
 above, plus feature probes, against `regex.finditer` on random Unicode strings:
 
 ```
+mkdir -p .work/ucd && for f in UnicodeData PropList DerivedCoreProperties CaseFolding SpecialCasing; do
+  curl -sSfo .work/ucd/$f.txt https://www.unicode.org/Public/17.0.0/ucd/$f.txt; done
+./.venv/bin/mojo run tools/gen_unicode.mojo .work/ucd   # regenerate (only when Unicode changes)
+./.venv/bin/python3 tools/check_unicode.py
 ./.venv/bin/mojo build tools/uregex-cli.mojo -I src -o .work/uregex-cli
 ./.venv/bin/python3 tools/difftest.py --n 5000 --maxlen 80          # codepoint offsets
 ./.venv/bin/python3 tools/difftest.py --n 5000 --maxlen 80 --bytes  # byte offsets
