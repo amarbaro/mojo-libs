@@ -1,4 +1,4 @@
-# rattler-build recipe, modular-community shape (modeled on xmojo/recipe.yaml).
+# rattler-build recipe, modular-community shape.
 # Build locally: rattler-build build -r recipe.yaml -c https://conda.modular.com/max -c conda-forge
 context:
   version: 0.2.1
