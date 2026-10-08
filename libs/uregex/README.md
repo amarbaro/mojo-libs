@@ -27,42 +27,35 @@ slice the input without copying it to codepoints.
 `tools/bench.sh`: `findall` over a 1.05 MB mixed-script corpus, best of 5,
 Mojo 1.1.0, CPU. Match counts equal Python `regex` for every pattern.
 
-| pattern | Python `regex` MB/s | uregex 0.1.0 | uregex 0.2.0 |
+| pattern | Python `regex` MB/s | uregex MB/s | uregex vs Python |
 |---|---|---|---|
-| gpt2 | 14.11 | 12.77 | 30.91 |
-| qwen2 | 14.87 | 9.60 | 28.75 |
-| qwen35 | 14.64 | 9.44 | 29.15 |
-| llama3 | 16.25 | 10.45 | 31.73 |
-| spark2_5_3 | 14.15 | 12.88 | 44.75 |
+| gpt2 | 14.75 | 29.52 | 2.0x |
+| ascii_gpt2 | 15.52 | 29.71 | 1.9x |
+| qwen2 | 14.91 | 30.66 | 2.1x |
+| qwen35 | 14.15 | 30.60 | 2.2x |
+| llama3 | 16.36 | 33.11 | 2.0x |
+| spark2_5_3 | 13.93 | 43.80 | 3.1x |
 
-Sparse patterns gain more from the first-character filter: `\p{N}{1,3}`
-94 → 137 MB/s, CJK runs 108 → 196 MB/s.
+Plain-ASCII text gains least. Sparse patterns gain more from the
+first-character filter: `\p{N}{1,3}` 94 → 137 MB/s, CJK runs 108 → 196 MB/s
+(0.1.0 → current).
 
-uregex 0.1.0 (fec4575) vs 0.2.1, same corpus and run:
+Against 0.1.0, same corpus:
 
-| metric | 0.1.0 | 0.2.1 | change |
+| metric | 0.1.0 | 0.3.0 | change |
 |---|---|---|---|
-| speed | 9.4 to 14.3 MB/s | 30.9 to 44.1 MB/s | 2.2 to 3.5x faster per pattern |
-| bench peak RSS | 68.3 MB | 58.4 MB | -14.5% |
-| pattern compile time (bench total) | 6.2 ms | 5.1 ms | -18% |
+| speed | 9.4 to 14.3 MB/s | 29.5 to 43.8 MB/s | 2.1 to 3.5x per pattern |
+| bench peak RSS | 68.3 MB | 55.2 MB | -19% |
 | compiled pattern (`tools/bench_compile.mojo`) | 166 KB, 0.99 ms | 27.6 KB, 0.81 ms | 6x smaller |
 | instruction size (pinned by `test_inst_layout`) | 32 B | 12 B | 2.7x smaller |
 | character class size | 32 B | 48 B | +16 B (ASCII bitmap) |
-| match size | 16 B | 16 B | no change |
-
-Against Python `regex` on the same runs:
-
-| | Python `regex` | uregex | uregex vs Python |
-|---|---|---|---|
-| 0.1.0 | 13.6 to 16.4 MB/s | 9.4 to 14.3 MB/s | slower |
-| 0.2.1 | 13.9 to 16.4 MB/s | 30.9 to 44.1 MB/s | 2.0 to 3.2x faster |
 
 ## Setup
 
 Mojo 1.1 in a project venv (the commands below use `./.venv/bin/mojo`):
 
 ```
-python3 -m venv .venv && ./.venv/bin/pip install 'mojo==1.1.0' regex
+python3 -m venv .venv && ./.venv/bin/pip install 'mojo==1.1.0' 'regex==2026.9.29'
 ```
 
 ## Usage
@@ -109,7 +102,7 @@ Rejected with a parse error: possessive quantifiers, backreferences,
 variable-length lookbehind, unbounded repeats of a nullable expression.
 
 Unicode tables (general categories, `\d \w \s`, case maps) are generated from
-the Unicode Character Database 17.0 by `tools/gen_unicode.mojo`.
+the Unicode Character Database 18.0 by `tools/gen_unicode.mojo`.
 
 ## Verification
 
@@ -121,7 +114,7 @@ above, plus feature probes, against `regex.finditer` on random Unicode strings:
 
 ```
 mkdir -p .work/ucd && for f in UnicodeData PropList DerivedCoreProperties CaseFolding SpecialCasing; do
-  curl -sSfo .work/ucd/$f.txt https://www.unicode.org/Public/17.0.0/ucd/$f.txt; done
+  curl -sSfo .work/ucd/$f.txt https://www.unicode.org/Public/18.0.0/ucd/$f.txt; done
 ./.venv/bin/mojo run tools/gen_unicode.mojo .work/ucd   # regenerate (only when Unicode changes)
 ./.venv/bin/python3 tools/check_unicode.py
 ./.venv/bin/mojo build tools/uregex-cli.mojo -I src -o .work/uregex-cli
