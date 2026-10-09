@@ -25,6 +25,18 @@ window.present: scene texture (blend NONE) + UI layer (BLEND)◄┘
   frames polled between two UI frames, so no click is lost when the UI is drawn every few app iterations. With
   `scripted` set, real mouse events are ignored and only `push()`ed events count (checks that drive the window).
 
+## Layer ownership
+
+`Layer(font)` owns its device context, draw-list, bin, count, atlas and RGBA device buffers, a pinned host RGBA buffer,
+and the compiled `compose` function. Construction uploads the atlas and synchronizes while the font is borrowed.
+After `Ui.finish()`, `layer.render(ui)` uploads the fixed host tables, launches the same compose kernel, copies RGBA
+into `layer.pixels`, and synchronizes while `ui` is borrowed. Owners remain in the struct throughout GPU work.
+`pixels` is reused each frame and can be passed to `Window.present` as `Int(layer.pixels.unsafe_ptr())`.
+
+Use the same font for the layer and UI. Dimensions remain build-time `UI_W` / `UI_H`, positive multiples of 16;
+atlases larger than `AW * AH` are rejected at construction. `launch()` enqueues compose using the last uploaded
+commands; callers using it directly must synchronize before reading results. No new kernel or frame allocations.
+
 ## Budgets
 
 | buffer | bytes |
@@ -33,12 +45,12 @@ window.present: scene texture (blend NONE) + UI layer (BLEND)◄┘
 | tile bins 80 x 45 x 64 x u16 | 460 KB |
 | tile counts 80 x 45 x u32 | 14 KB |
 | atlas 512 x 256 x u8 (device) | 128 KB |
-| layer 1280 x 720 x u32 | 3.7 MB |
+| layer 1280 x 720 x u32 (device) | 3.7 MB |
+| Layer pinned host RGBA 1280 x 720 x u32 | 3.7 MB |
 
 All allocated once. Per frame: one copy of list + bins + counts, one compose launch, one layer copy back, one texture
 upload.
 
 ## Not yet
 
-Docking (drag, resize, snap, collapse, saved layout), plots with axes, slider and text input, menus, DPI scaling,
-and a `Layer` helper owning the device buffers and the compose launch (each app does it today).
+Docking (drag, resize, snap, collapse, saved layout), plots with axes, slider and text input, menus, DPI scaling.

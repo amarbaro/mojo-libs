@@ -1,4 +1,4 @@
-"""ui.mojo check (GPU, under gpu-wait): a top bar and a fly card built from widgets with scripted input, composed on the
+"""UI and Layer check (GPU, under gpu-wait): a top bar and a fly card built from widgets with scripted input, composed on the
 card. Gates: the pause icon reports a click after press + release on it (and not elsewhere), no command dropped, a panel
 pixel has the panel's alpha, a pixel outside every panel is transparent; compose timed over 1000 launches. OUT (.ppm)
 gets the layer blended over a test background for a look.
@@ -12,6 +12,7 @@ from layout import TileTensor, row_major
 from imkit.font import AW, Font
 from imkit.ui import ACCENT, AH, BAD, CW, GOOD, NCMD, TCAP, TEXT, TX, TY, UH, UW, WARN, Ui, compose
 from imkit.window import Input
+from imkit.layer import Layer
 
 
 def frame(mut ui: Ui, inp: Input) -> Bool:
@@ -78,6 +79,42 @@ def main() raises:
     var us = Float64(perf_counter_ns() - t0) / 1000 / 1000
     ctx.enqueue_copy(host, img_b)
     ctx.synchronize()
+    var layer = Layer(ui.font)
+    layer.render(ui)
+    var pixel_ptr = Int(layer.pixels.unsafe_ptr())
+    var mismatches = 0
+    for i in range(UW * UH):
+        if host[i] != layer.pixels[i]:
+            mismatches += 1
+    print("Layer parity: mismatched pixels", mismatches)
+    if mismatches:
+        fails += 1
+    t0 = perf_counter_ns()
+    for _ in range(1000):
+        layer.launch()
+    layer.ctx.synchronize()
+    print("Layer compose", Float64(perf_counter_ns() - t0) / 1000000, "us per launch")
+    # Reuse the same owners for an empty frame, then the original scene.
+    ui.begin(idle)
+    ui.finish()
+    layer.render(ui)
+    for i in range(UW * UH):
+        if layer.pixels[i] != 0:
+            fails += 1
+            break
+    _ = frame(ui, release)
+    layer.render(ui)
+    for i in range(UW * UH):
+        if host[i] != layer.pixels[i]:
+            fails += 1
+            break
+    if Int(layer.pixels.unsafe_ptr()) != pixel_ptr:
+        fails += 1
+    t0 = perf_counter_ns()
+    for _ in range(20):
+        layer.render(ui)
+    var render_us = Float64(perf_counter_ns() - t0) / 20000
+    print("Layer render", render_us, "us per frame including transfers")
     var inside = host[60 * UW + 400] >> 24  # inside the Run panel, away from widgets
     var outside = host[600 * UW + 600] >> 24
     print("compose", us, "us per launch at", UW, "x", UH, "; panel alpha", inside, "outside alpha", outside)
@@ -95,7 +132,7 @@ def main() raises:
     if len(argv()) > 1:  # the layer over a test background, as SDL blends it
         var ppm = List[UInt8](capacity=UW * UH * 3)
         for i in range(UW * UH):
-            var p = host[i]
+            var p = layer.pixels[i]
             var a = Float32(p >> 24) / 255
             var bg: List[Float32] = [Float32(60 + (i % UW) * 80 // UW), Float32(90 + (i // UW) * 60 // UH), 70]
             for ch in range(3):
@@ -103,6 +140,16 @@ def main() raises:
         with open(String(argv()[1]), "w") as o:
             o.write("P6\n" + String(UW) + " " + String(UH) + "\n255\n")
             o.write_bytes(Span(ppm))
+    # Oversized atlases fail before device buffers are allocated.
+    ui.font.atlas.resize(AW * AH + 1, 0)
+    var rejected = False
+    try:
+        var invalid = Layer(ui.font)
+        _ = invalid.pixels.unsafe_ptr()
+    except:
+        rejected = True
+    if not rejected:
+        fails += 1
     if fails:
         raise Error("FAIL " + String(fails) + " ui checks")
     print("PASS ui_test")

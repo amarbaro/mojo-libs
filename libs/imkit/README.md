@@ -13,6 +13,7 @@ First user: [Kinestride](../kinestride)'s engine GUI (run controls, per-fly card
 | module | what it does |
 |---|---|
 | `imkit.window` | SDL3 window, vsync, letterboxed streaming texture; `poll() -> Input` (mouse, wheel, buttons, keys, quit), `present(frame, ui)`, `push()` synthetic events for scripted checks |
+| `imkit.layer` | `Layer(font)`: owns compose buffers and compiled kernel; `render(ui)` fills reusable host `pixels` after `Ui.finish()` |
 | `imkit.font` | glyph atlas from a TrueType font (ASCII 32-126, a few pixel sizes, alpha8), built once at start |
 | `imkit.ui` | `Ui`: `begin(input)`, `panel`, `button`, `icon`, `bar`, `spark`, `text`, `rect`, `line`, `tri`, `finish()`; the `compose` kernel; a dark theme |
 
@@ -21,12 +22,12 @@ First user: [Kinestride](../kinestride)'s engine GUI (run controls, per-fly card
 ```mojo
 from imkit.window import Window
 from imkit.font import Font
+from imkit.layer import Layer
 from imkit import ui as im
 
 var win = Window("App", W, H, im.UW, im.UH)          # W x H: your frame; UW x UH: the UI layer
 var u = im.Ui(Font("/usr/share/fonts/TTF/Roboto-Medium.ttf", [13, 16, 22]))
-# once: device buffers for cmd (NCMD*CW u32), bins (TX*TY*TCAP u16), counts (TX*TY u32), atlas (AW*AH u8), layer
-# (UW*UH u32); copy u.font.atlas into the atlas buffer; ctx.compile_function[im.compose]()
+var layer = Layer(u.font)                            # once: buffers, atlas upload, compiled compose
 while True:
     var inp = win.poll()
     if inp.quit:
@@ -36,8 +37,8 @@ while True:
     if u.icon(1, 1):                                  # 0 play, 1 pause, 2 step, 3 stop
         pause()
     u.finish()                                        # bins the commands into 16 x 16 tiles
-    # copy u.cmd, u.bins, u.cnt to the device, launch compose (one thread per UI pixel), copy the layer to the host
-    win.present(frame_ptr, layer_ptr)
+    layer.render(u)                                  # uploads, composes, copies back; synchronizes
+    win.present(frame_ptr, Int(layer.pixels.unsafe_ptr()))
 ```
 
 A complete app: Kinestride's live viewer (`fly-connectome/agent/body_engine/live.mojo`, `-DGUI=1`).
