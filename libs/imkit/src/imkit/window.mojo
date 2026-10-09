@@ -69,11 +69,13 @@ struct Window(Movable):
     var x: Float32
     var y: Float32
     var down: UInt32
+    var held: SIMD[DType.uint64, 2]  # keys down now (scancodes < 128): key_down(); press / release events keep it
     var scripted: Bool  # True: only push()ed mouse events count (which = SCRIPT_MOUSE); a real mouse is ignored (scripted checks)
 
     def __init__(out self, title: String, w: Int, h: Int, uw: Int = 0, uh: Int = 0) raises:
         self.sdl = OwnedDLHandle("libSDL3.so.0")
         self.w, self.h, self.x, self.y, self.down, self.scripted = w, h, 0, 0, 0, False
+        self.held = SIMD[DType.uint64, 2](0)
         self.ev = List[UInt8](length=128, fill=0)
         if not self.sdl.get_function[Bool]("SDL_Init")(UInt32(0x20)):  # SDL_INIT_VIDEO
             raise Error("SDL_Init failed")
@@ -122,12 +124,21 @@ struct Window(Movable):
                     inp.released |= bit
             elif kind == EV_WHEEL:
                 inp.wheel += f[7]
-            elif kind == EV_KEY_DOWN and e[37] == 0:  # not a repeat
+            elif kind == EV_KEY_DOWN or kind == EV_KEY_UP:
                 var sc = Int(e.unsafe_bitcast[UInt32]()[6])
                 if sc < 128:
-                    inp.keys[sc >> 6] |= UInt64(1) << UInt64(sc & 63)
+                    var bit = UInt64(1) << UInt64(sc & 63)
+                    if kind == EV_KEY_UP:
+                        self.held[sc >> 6] &= ~bit
+                    elif e[37] == 0:  # a press, not a repeat
+                        inp.keys[sc >> 6] |= bit
+                        self.held[sc >> 6] |= bit
         self.x, self.y, self.down = inp.x, inp.y, inp.down
         return inp^
+
+    def key_down(self, scancode: Int) -> Bool:
+        """Is the key held now (between its press and release events)?"""
+        return scancode < 128 and (self.held[scancode >> 6] >> UInt64(scancode & 63)) & 1 == 1
 
     def present(mut self, pixels: Int, ui: Int = 0) raises:
         """Show a W x H RGBA frame and, with a layer, the UW x UH UI over it (host memory, row-major, 4 bytes per pixel)."""
@@ -141,7 +152,7 @@ struct Window(Movable):
 
     def push(mut self, kind: Int, a: Int = 0, x: Float32 = 0, y: Float32 = 0, rx: Float32 = 0, ry: Float32 = 0, which: Int = SCRIPT_MOUSE) raises:
         """Queue a synthetic event (tests, scripted checks): motion (x, y, rx, ry), button a down/up at (x, y), wheel
-        (x = amount), key a (scancode) down. Mouse events carry `which` (SCRIPT_MOUSE; 0 looks like a real mouse)."""
+        (x = amount), key a (scancode) down or up. Mouse events carry `which` (SCRIPT_MOUSE; 0 looks like a real mouse)."""
         for k in range(128):
             self.ev[k] = 0
         var e = self.ev.unsafe_ptr()
@@ -155,9 +166,9 @@ struct Window(Movable):
             f[7], f[8], f[9], f[10] = x, y, rx, ry
         elif kind == EV_WHEEL:
             f[7] = x
-        elif kind == EV_KEY_DOWN:
+        elif kind == EV_KEY_DOWN or kind == EV_KEY_UP:
             e.unsafe_bitcast[UInt32]()[6] = UInt32(a)
-            e[36] = 1
+            e[36] = 1 if kind == EV_KEY_DOWN else 0
         _ = self.sdl.get_function[Bool]("SDL_PushEvent")(e)
 
     def close(mut self) raises:

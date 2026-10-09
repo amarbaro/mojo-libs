@@ -5,7 +5,7 @@ real mouse) between a scripted press and release is ignored; the frame rate show
 usage: mojo run -I src tests/window_test.mojo
 """
 from std.time import perf_counter_ns
-from imkit.window import EV_BUTTON_DOWN, EV_BUTTON_UP, EV_KEY_DOWN, EV_MOTION, EV_QUIT, EV_WHEEL, Window
+from imkit.window import EV_BUTTON_DOWN, EV_BUTTON_UP, EV_KEY_DOWN, EV_KEY_UP, EV_MOTION, EV_QUIT, EV_WHEEL, Window
 
 
 def check(ok: Bool, name: String, mut fails: Int):
@@ -47,6 +47,13 @@ def main() raises:
     check(c.x == 100 and c.y == 50 and c.pressed == 1 and c.released == 0 and c.dx == 0, "scripted: which 0 mouse ignored", fails)
     win.push(EV_BUTTON_UP, 1, 100, 50)
     check(win.poll().released == 1, "scripted: tagged release counts", fails)
+    win.push(EV_KEY_DOWN, 26)  # W held across frames until its release
+    var k1 = win.poll()
+    var k2 = win.poll()
+    check(k1.key(26) and not k2.key(26) and win.key_down(26), "key W: pressed once, held while down", fails)
+    win.push(EV_KEY_UP, 26)
+    _ = win.poll()
+    check(not win.key_down(26) and not win.key_down(4), "key W released, A never down", fails)
     win.push(EV_QUIT)
     check(win.poll().quit, "quit", fails)
     print("frames: 120 at", fps, "fps (vsync caps it at the display rate)")
