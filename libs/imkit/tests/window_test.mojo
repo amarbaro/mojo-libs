@@ -1,5 +1,6 @@
 """window.mojo check (needs a display, no GPU): opens the window, shows 120 gradient frames, pushes one event of each kind
-through SDL's own queue and reads it back with poll(); the frame rate shows vsync. PASS / FAIL per field, exit 1 on any FAIL.
+through SDL's own queue and reads it back with poll(); in scripted mode a real-looking mouse (which 0, as SDL gives a
+real mouse) between a scripted press and release is ignored; the frame rate shows vsync. PASS / FAIL per field, exit 1 on any FAIL.
 
 usage: mojo run -I src tests/window_test.mojo
 """
@@ -38,6 +39,14 @@ def main() raises:
     win.push(EV_BUTTON_UP, 1, 100, 50)
     var b = win.poll()
     check(b.down == 0 and b.released == 1, "button up -> down 0, released 1", fails)
+    win.scripted = True  # a real mouse wanders in between a scripted press and release
+    win.push(EV_BUTTON_DOWN, 1, 100, 50)
+    win.push(EV_MOTION, 0, 10, 10, -90, -40, which=0)
+    win.push(EV_BUTTON_UP, 1, 10, 10, which=0)
+    var c = win.poll()
+    check(c.x == 100 and c.y == 50 and c.pressed == 1 and c.released == 0 and c.dx == 0, "scripted: which 0 mouse ignored", fails)
+    win.push(EV_BUTTON_UP, 1, 100, 50)
+    check(win.poll().released == 1, "scripted: tagged release counts", fails)
     win.push(EV_QUIT)
     check(win.poll().quit, "quit", fails)
     print("frames: 120 at", fps, "fps (vsync caps it at the display rate)")

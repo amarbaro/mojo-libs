@@ -16,6 +16,7 @@ comptime EV_MOTION = 0x400
 comptime EV_BUTTON_DOWN = 0x401
 comptime EV_BUTTON_UP = 0x402
 comptime EV_WHEEL = 0x403
+comptime SCRIPT_MOUSE = 0x5C819700  # `which` of push()ed mouse events: SDL gives a real mouse 0 (non-relative mode), touch and pen their own ids
 
 
 @fieldwise_init
@@ -68,7 +69,7 @@ struct Window(Movable):
     var x: Float32
     var y: Float32
     var down: UInt32
-    var scripted: Bool  # True: real mouse events are ignored, only push()ed ones count (scripted checks)
+    var scripted: Bool  # True: only push()ed mouse events count (which = SCRIPT_MOUSE); a real mouse is ignored (scripted checks)
 
     def __init__(out self, title: String, w: Int, h: Int, uw: Int = 0, uh: Int = 0) raises:
         self.sdl = OwnedDLHandle("libSDL3.so.0")
@@ -102,8 +103,8 @@ struct Window(Movable):
             _ = self.sdl.get_function[Bool]("SDL_ConvertEventToRenderCoordinates")(self.ren, e)
             var kind = Int(e.unsafe_bitcast[UInt32]()[0])
             var f = e.unsafe_bitcast[Float32]()
-            if self.scripted and EV_MOTION <= kind <= EV_WHEEL and e.unsafe_bitcast[UInt32]()[5] != 0:
-                continue  # a real mouse (which != 0) while a script drives the window
+            if self.scripted and EV_MOTION <= kind <= EV_WHEEL and e.unsafe_bitcast[UInt32]()[5] != SCRIPT_MOUSE:
+                continue  # a real mouse, touch or pen while a script drives the window
             if kind == EV_QUIT or kind == EV_CLOSE:
                 inp.quit = True
             elif kind == EV_MOTION:
@@ -138,14 +139,16 @@ struct Window(Movable):
             _ = self.sdl.get_function[Bool]("SDL_RenderTexture")(self.ren, self.utex, Int(0), Int(0))
         _ = self.sdl.get_function[Bool]("SDL_RenderPresent")(self.ren)
 
-    def push(mut self, kind: Int, a: Int = 0, x: Float32 = 0, y: Float32 = 0, rx: Float32 = 0, ry: Float32 = 0) raises:
+    def push(mut self, kind: Int, a: Int = 0, x: Float32 = 0, y: Float32 = 0, rx: Float32 = 0, ry: Float32 = 0, which: Int = SCRIPT_MOUSE) raises:
         """Queue a synthetic event (tests, scripted checks): motion (x, y, rx, ry), button a down/up at (x, y), wheel
-        (x = amount), key a (scancode) down."""
+        (x = amount), key a (scancode) down. Mouse events carry `which` (SCRIPT_MOUSE; 0 looks like a real mouse)."""
         for k in range(128):
             self.ev[k] = 0
         var e = self.ev.unsafe_ptr()
         e.unsafe_bitcast[UInt32]()[0] = UInt32(kind)
         var f = e.unsafe_bitcast[Float32]()
+        if EV_MOTION <= kind <= EV_WHEEL:
+            e.unsafe_bitcast[UInt32]()[5] = UInt32(which)
         if kind == EV_MOTION or kind == EV_BUTTON_DOWN or kind == EV_BUTTON_UP:
             e[24] = UInt8(a)
             e[25] = UInt8(1 if kind == EV_BUTTON_DOWN else 0)
