@@ -10,7 +10,7 @@ from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 from layout import TileTensor, row_major
 from imkit.font import AW, Font
-from imkit.ui import ACCENT, AH, BAD, CW, GOOD, NCMD, TCAP, TEXT, TX, TY, UH, UW, WARN, Ui, compose
+from imkit.ui import ACCENT, AH, BAD, CW, GOOD, ISRC, NCMD, TCAP, TEXT, TX, TY, UH, UW, WARN, Ui, compose
 from imkit.window import Input
 from imkit.layer import Layer
 
@@ -59,6 +59,8 @@ def main() raises:
     var bin_b = ctx.enqueue_create_buffer[DType.uint16](TX * TY * TCAP)
     var cnt_b = ctx.enqueue_create_buffer[DType.uint32](TX * TY)
     var atl_b = ctx.enqueue_create_buffer[DType.uint8](AW * AH)
+    var src_b = ctx.enqueue_create_buffer[DType.uint32](ISRC)
+    src_b.enqueue_fill(0)
     var host = ctx.enqueue_create_host_buffer[DType.uint32](UW * UH)
     ctx.enqueue_copy(atl_b.create_sub_buffer[DType.uint8](0, len(ui.font.atlas)), ui.font.atlas.unsafe_ptr())
     ctx.enqueue_copy(cmd_b, ui.cmd.unsafe_ptr())
@@ -70,11 +72,12 @@ def main() raises:
     var tb = TileTensor(bin_b, row_major[TX * TY * TCAP]())
     var tn = TileTensor(cnt_b, row_major[TX * TY]())
     var ta = TileTensor(atl_b, row_major[AW * AH]())
-    ctx.enqueue_function(k, ti, tc, tb, tn, ta, grid_dim=(UW * UH + 255) // 256, block_dim=256)
+    var ts = TileTensor(src_b, row_major[ISRC]())
+    ctx.enqueue_function(k, ti, tc, tb, tn, ta, ts, grid_dim=(UW * UH + 255) // 256, block_dim=256)
     ctx.synchronize()
     var t0 = perf_counter_ns()
     for _ in range(1000):
-        ctx.enqueue_function(k, ti, tc, tb, tn, ta, grid_dim=(UW * UH + 255) // 256, block_dim=256)
+        ctx.enqueue_function(k, ti, tc, tb, tn, ta, ts, grid_dim=(UW * UH + 255) // 256, block_dim=256)
     ctx.synchronize()
     var us = Float64(perf_counter_ns() - t0) / 1000 / 1000
     ctx.enqueue_copy(host, img_b)
@@ -140,6 +143,23 @@ def main() raises:
         with open(String(argv()[1]), "w") as o:
             o.write("P6\n" + String(UW) + " " + String(UH) + "\n255\n")
             o.write_bytes(Span(ppm))
+    # image: a 4 x 4 source at offset 7, drawn 2x into (200, 400)-(208, 408); nearest sampling, outside untouched
+    var srcpx = List[UInt32](length=16, fill=0)
+    for j in range(16):
+        srcpx[j] = UInt32(16 * j) | UInt32(255 - 16 * j) << 8 | UInt32(77) << 16 | UInt32(255) << 24
+    layer.ctx.enqueue_copy(layer.src.create_sub_buffer[DType.uint32](7, 16), srcpx.unsafe_ptr())
+    ui.begin(idle)
+    ui.image(200, 400, 208, 408, 7, 4, 4)
+    ui.image(0, 0, 8, 8, ISRC - 3, 4, 4)  # source past the buffer: dropped and counted, not drawn
+    ui.finish()
+    layer.render(ui)
+    var near = lambda (p: UInt32, q: UInt32) -> Bool: abs(Int(p & 255) - Int(q & 255)) <= 1 and abs(Int((p >> 8) & 255) - Int((q >> 8) & 255)) <= 1 and (p >> 24) == 255
+    var tl = layer.pixels[401 * UW + 201]
+    var br = layer.pixels[407 * UW + 207]
+    var mid = layer.pixels[403 * UW + 205]  # source (2, 1)
+    print("image: top-left", hex(tl), "bottom-right", hex(br), "dropped", ui.dropped)
+    if not near(tl, srcpx[0]) or not near(br, srcpx[15]) or not near(mid, srcpx[6]) or layer.pixels[409 * UW + 209] != 0 or ui.dropped != 1:
+        fails += 1
     # Oversized atlases fail before device buffers are allocated.
     ui.font.atlas.resize(AW * AH + 1, 0)
     var rejected = False

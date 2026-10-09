@@ -6,7 +6,8 @@ alpha "over". The result is a UW x UH straight-alpha RGBA layer that window.mojo
 
 Command: CW uint32 = kind, x0, y0, x1, y1, r, rgba, aux (floats stored as bits). rect: r = corner radius, aux = blur
 (soft shadow); glyph: aux = atlas x | atlas y << 16; line: (x0, y0)-(x1, y1), r = half width; tri: (x0, y0), (x1, y1),
-(r, aux) as the third corner.
+(r, aux) as the third corner; image: r = offset into the app's source pixels (a float holds it exactly below 2^24),
+rgba = alpha in the top byte, aux = source width | height << 16, sampled nearest over the rect.
 """
 from std.math import sqrt
 from std.memory import bitcast
@@ -29,12 +30,15 @@ comptime RECT = 0
 comptime GLYPH = 1
 comptime LINE = 2
 comptime TRI = 3
+comptime IMAGE = 4
+comptime ISRC = get_defined_int["UI_IMG", 65536]()  # source pixels for images (RGBA u32, the app fills them; -DUI_IMG= for more)
 
 comptime TUI = TileTensor[DType.uint32, type_of(row_major[UW * UH]()), MutAnyOrigin]
 comptime TCMD = TileTensor[DType.uint32, type_of(row_major[NCMD * CW]()), MutAnyOrigin]
 comptime TBIN = TileTensor[DType.uint16, type_of(row_major[TX * TY * TCAP]()), MutAnyOrigin]
 comptime TCNT = TileTensor[DType.uint32, type_of(row_major[TX * TY]()), MutAnyOrigin]
 comptime TATL = TileTensor[DType.uint8, type_of(row_major[AW * AH]()), MutAnyOrigin]
+comptime TSRC = TileTensor[DType.uint32, type_of(row_major[ISRC]()), MutAnyOrigin]
 
 # theme: dark glass panels, one indigo accent (rgba packed r | g << 8 | b << 16 | a << 24)
 comptime PANEL = rgba(17, 19, 26, 214)
@@ -63,7 +67,7 @@ def flt(u: UInt32) -> Float32:
     return bitcast[DType.float32](u)
 
 
-def compose(img: TUI, cmd: TCMD, bin: TBIN, cnt: TCNT, atlas: TATL):
+def compose(img: TUI, cmd: TCMD, bin: TBIN, cnt: TCNT, atlas: TATL, src: TSRC):
     var i = Int(block_idx.x * block_dim.x + thread_idx.x)
     if i >= UW * UH:
         return
@@ -102,6 +106,15 @@ def compose(img: TUI, cmd: TCMD, bin: TBIN, cnt: TCNT, atlas: TATL):
             var dx = px - x0 - bx * h
             var dy = py - y0 - by * h
             cov = min(max(0.5 - (sqrt(dx * dx + dy * dy) - rr), Float32(0)), Float32(1))
+        elif kind == IMAGE:
+            if px >= x0 and px < x1 and py >= y0 and py < y1:
+                var sw = Int(cmd[o + 7] & 0xFFFF)
+                var sh = Int(cmd[o + 7] >> 16)
+                var u = min(Int((px - x0) / (x1 - x0) * Float32(sw)), sw - 1)
+                var v = min(Int((py - y0) / (y1 - y0) * Float32(sh)), sh - 1)
+                var s = src[Int(rr) + v * sw + u]
+                c = (s & 0xFFFFFF) | UInt32(Float32(s >> 24) * Float32(c >> 24) / 255) << 24
+                cov = 1
         else:  # TRI: largest signed edge distance, inside negative for either winding
             var x2 = rr
             var y2 = flt(cmd[o + 7])
@@ -168,6 +181,14 @@ struct Ui(Movable):
 
     def tri(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, x2: Float32, y2: Float32, c: UInt32):
         self.push(TRI, x0, y0, x1, y1, x2, c, bits(y2))
+
+    def image(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, off: Int, sw: Int, sh: Int, alpha: Int = 255):
+        """Draw sw x sh source pixels starting at `off` (the app's RGBA in the source buffer) scaled to the rect.
+        A source outside ISRC is dropped and counted."""
+        if off < 0 or sw < 1 or sh < 1 or sw > 0xFFFF or sh > 0xFFFF or off + sw * sh > ISRC:
+            self.dropped += 1
+            return
+        self.push(IMAGE, x0, y0, x1, y1, Float32(off), UInt32(alpha) << 24, UInt32(sw) | UInt32(sh) << 16)
 
     def text(mut self, x: Float32, y: Float32, s: StringSlice, size: Int, c: UInt32) -> Float32:
         """Draw s with its top at y; returns the x after it."""

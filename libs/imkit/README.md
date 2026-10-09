@@ -15,7 +15,7 @@ First user: [Kinestride](../kinestride)'s engine GUI (run controls, per-fly card
 | `imkit.window` | SDL3 window, vsync, letterboxed streaming texture; `poll() -> Input` (mouse, wheel, buttons, keys, quit), `present(frame, ui)`, `push()` synthetic events for scripted checks |
 | `imkit.layer` | `Layer(font)`: owns compose buffers and compiled kernel; `render(ui)` fills reusable host `pixels` after `Ui.finish()` |
 | `imkit.font` | glyph atlas from a TrueType font (ASCII 32-126, a few pixel sizes, alpha8), built once at start |
-| `imkit.ui` | `Ui`: `begin(input)`, `panel`, `button`, `icon`, `bar`, `spark`, `text`, `rect`, `line`, `tri`, `finish()`; the `compose` kernel; a dark theme |
+| `imkit.ui` | `Ui`: `begin(input)`, `panel`, `button`, `icon`, `bar`, `spark`, `text`, `rect`, `line`, `tri`, `image`, `finish()`; the `compose` kernel; a dark theme |
 
 ## Use
 

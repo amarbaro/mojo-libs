@@ -16,7 +16,11 @@ window.present: scene texture (blend NONE) + UI layer (BLEND)◄┘
   A click is press then release on the same widget.
 - **One draw list.** Every command is 8 u32 words: kind, x0, y0, x1, y1, r, rgba, aux. Kinds: rounded rect (r =
   radius, aux = soft-shadow blur), glyph (aux = atlas x | y << 16), capsule line (r = half width), triangle (either
-  winding). At most NCMD = 4096 commands.
+  winding), image (r = offset into the source pixels, rgba = alpha in the top byte, aux = source width | height << 16;
+  nearest sampling over the rect). At most NCMD = 4096 commands.
+- **Images.** The app owns what an image shows: it writes RGBA (straight alpha) into the source buffer (`Layer.src`,
+  ISRC = `-DUI_IMG` pixels, default 65,536) and calls `Ui.image(rect, off, sw, sh)` each frame; a source past ISRC is
+  dropped and counted. A live view (a GPU-rendered picture) is copied device to device into it, never via the host.
 - **Tiles.** The host bins commands into 16 x 16 pixel tiles (TCAP = 64 per tile; more are dropped and counted).
   `compose` runs one thread per UI pixel and walks only its tile's commands, in order: SDF anti-aliasing, alpha over.
 - **Text.** FreeType renders ASCII 32-126 at each size once into a 512-wide alpha atlas (60,928 B for 13/16/22 px);
@@ -27,7 +31,7 @@ window.present: scene texture (blend NONE) + UI layer (BLEND)◄┘
 
 ## Layer ownership
 
-`Layer(font)` owns its device context, draw-list, bin, count, atlas and RGBA device buffers, a pinned host RGBA buffer,
+`Layer(font)` owns its device context, draw-list, bin, count, atlas, image-source and RGBA device buffers, a pinned host RGBA buffer,
 and the compiled `compose` function. Construction uploads the atlas and synchronizes while the font is borrowed.
 After `Ui.finish()`, `layer.render(ui)` uploads the fixed host tables, launches the same compose kernel, copies RGBA
 into `layer.pixels`, and synchronizes while `ui` is borrowed. Owners remain in the struct throughout GPU work.
@@ -45,6 +49,7 @@ commands; callers using it directly must synchronize before reading results. No 
 | tile bins 80 x 45 x 64 x u16 | 460 KB |
 | tile counts 80 x 45 x u32 | 14 KB |
 | atlas 512 x 256 x u8 (device) | 128 KB |
+| image sources ISRC x u32 (device, default 65,536) | 256 KB |
 | layer 1280 x 720 x u32 (device) | 3.7 MB |
 | Layer pinned host RGBA 1280 x 720 x u32 | 3.7 MB |
 

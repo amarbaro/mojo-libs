@@ -2,7 +2,7 @@
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from layout import TileTensor, row_major
 from .font import AW, Font
-from .ui import AH, CW, NCMD, TCAP, TX, TY, UH, UW, Ui, compose
+from .ui import AH, CW, ISRC, NCMD, TCAP, TX, TY, UH, UW, Ui, compose
 
 
 comptime ComposeKernel = type_of(DeviceContext().compile_function[compose]())
@@ -17,6 +17,7 @@ struct Layer[Kernel: ImplicitlyCopyable & Movable & Deinitable = ComposeKernel](
     var bins: DeviceBuffer[DType.uint16]
     var counts: DeviceBuffer[DType.uint32]
     var atlas: DeviceBuffer[DType.uint8]
+    var src: DeviceBuffer[DType.uint32]  # image source pixels (Ui.image): the app copies its RGBA here
     var pixels: HostBuffer[DType.uint32]
     var kernel: Self.Kernel
 
@@ -30,6 +31,8 @@ struct Layer[Kernel: ImplicitlyCopyable & Movable & Deinitable = ComposeKernel](
         self.bins = self.ctx.enqueue_create_buffer[DType.uint16](TX * TY * TCAP)
         self.counts = self.ctx.enqueue_create_buffer[DType.uint32](TX * TY)
         self.atlas = self.ctx.enqueue_create_buffer[DType.uint8](AW * AH)
+        self.src = self.ctx.enqueue_create_buffer[DType.uint32](ISRC)
+        self.src.enqueue_fill(0)
         self.pixels = self.ctx.enqueue_create_host_buffer[DType.uint32](UW * UH)
         comptime assert Self.Kernel == ComposeKernel, "Layer kernel must be compose"
         self.kernel = rebind[Self.Kernel](self.ctx.compile_function[compose]())
@@ -44,6 +47,7 @@ struct Layer[Kernel: ImplicitlyCopyable & Movable & Deinitable = ComposeKernel](
             TileTensor(self.bins, row_major[TX * TY * TCAP]()),
             TileTensor(self.counts, row_major[TX * TY]()),
             TileTensor(self.atlas, row_major[AW * AH]()),
+            TileTensor(self.src, row_major[ISRC]()),
             grid_dim=(UW * UH + 255) // 256, block_dim=256)
 
     def render(mut self, ui: Ui) raises:
