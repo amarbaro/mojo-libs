@@ -102,9 +102,10 @@ def compose(img: TUI, cmd: TCMD, bin: TBIN, cnt: TCNT, atlas: TATL):
             var dx = px - x0 - bx * h
             var dy = py - y0 - by * h
             cov = min(max(0.5 - (sqrt(dx * dx + dy * dy) - rr), Float32(0)), Float32(1))
-        else:  # TRI: largest signed edge distance (corners counter-clockwise on screen)
+        else:  # TRI: largest signed edge distance, inside negative for either winding
             var x2 = rr
             var y2 = flt(cmd[o + 7])
+            var wind = Float32(1) if (x1 - x0) * (y2 - y0) - (y1 - y0) * (x2 - x0) > 0 else Float32(-1)  # either winding
             var d = Float32(-1e9)
             for e in range(3):
                 var ax = x0 if e == 0 else (x1 if e == 1 else x2)
@@ -113,7 +114,7 @@ def compose(img: TUI, cmd: TCMD, bin: TBIN, cnt: TCNT, atlas: TATL):
                 var cy = y1 if e == 0 else (y2 if e == 1 else y0)
                 var ex = cx - ax
                 var ey = cy - ay
-                d = max(d, ((px - ax) * ey - (py - ay) * ex) / max(sqrt(ex * ex + ey * ey), 1e-6))
+                d = max(d, wind * ((px - ax) * ey - (py - ay) * ex) / max(sqrt(ex * ex + ey * ey), 1e-6))
             cov = min(max(0.5 - d, Float32(0)), Float32(1))
         var sa = cov * Float32(c >> 24) / 255
         r = Float32(c & 255) / 255 * sa + r * (1 - sa)
@@ -283,3 +284,14 @@ struct Ui(Movable):
                     else:
                         self.dropped += 1
                     self.cnt[t] += 1
+
+
+def fmt(v: Float64, d: Int = 2) -> String:
+    """v with d decimals (labels)."""
+    var p = 10 ** d
+    var n = Int(abs(v) * Float64(p) + 0.5)
+    var s = (String("-") if v < 0 and n else String()) + String(n // p)
+    if d:
+        var f = String(n % p)
+        s += "." + String("0") * (d - f.byte_length()) + f
+    return s

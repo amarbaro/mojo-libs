@@ -83,6 +83,15 @@ def main() raises:
     print("compose", us, "us per launch at", UW, "x", UH, "; panel alpha", inside, "outside alpha", outside)
     if inside < 225 or inside > 240 or outside != 0:  # the glass panel (alpha 214) over its own soft shadow
         fails += 1
+    # icon shapes (Run panel cursor x 40, y 60; icons 36 wide, 44 apart; centre +18): play triangle, pause bars
+    var lum = lambda (p: UInt32) -> Int: Int(p & 255) + Int((p >> 8) & 255) + Int((p >> 16) & 255)
+    var play = lum(host[78 * UW + 57])
+    var bar_l = lum(host[78 * UW + 98])
+    var gap = lum(host[78 * UW + 102])
+    var bar_r = lum(host[78 * UW + 106])
+    print("icon luminance: play centre", play, "pause bars", bar_l, bar_r, "gap", gap)
+    if play < 600 or bar_l < 600 or bar_r < 600 or gap > 500:  # text-white shapes (sum ~687) on the surface or accent (sum 442)
+        fails += 1
     if len(argv()) > 1:  # the layer over a test background, as SDL blends it
         var ppm = List[UInt8](capacity=UW * UH * 3)
         for i in range(UW * UH):
