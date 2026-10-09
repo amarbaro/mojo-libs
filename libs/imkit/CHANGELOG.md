@@ -2,6 +2,7 @@
 
 Full notes in `docs/releases/`. Newest first. Format: `~/iTools/dev/release-note/TEMPLATE.md`.
 
+- [v0.4.0](docs/releases/v0.4.0.md) (2026-10-09): Layer on the app's context, compact tile bins (23 KB per frame, ~15 % faster render), unfinished frames refused
 - [v0.3.0](docs/releases/v0.3.0.md) (2026-10-09): images: Ui.image draws the app's own RGBA pixels inside the UI
 - [v0.2.1](docs/releases/v0.2.1.md) (2026-10-09): scripted mode ignores a real mouse (SDL3 gives it which = 0)
 - [v0.2.0](docs/releases/v0.2.0.md) (2026-10-09): Reusable Layer owns compose buffers, kernel, and host RGBA output
