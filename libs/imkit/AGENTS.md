@@ -29,8 +29,8 @@ engine GUI (`agent/body_engine/live.mojo -DGUI=1`, `ctl.mojo`).
 **Bytes and time** (the memory-optimization contract)
 6. Everything is allocated once at start: draw list, bins, counts, atlas, layer, id tables. No allocation inside
    `begin` ... `finish`, inside `compose`, or per frame in `window.poll` / `present`.
-7. Fixed capacities (`NCMD`, `TCAP`, any new table) overflow by **dropping and counting**, never by growing or
-   crashing; the count is readable by the app and asserted 0 in tests.
+7. Fixed capacities (`NCMD`, `NBIN`, `ISRC`, any new table) overflow by **dropping and counting** (whole commands,
+   never half a tile's list), never by growing or crashing; the count is readable by the app and asserted 0 in tests.
 8. Name the hot path, measure before and after on the same input (`ui_test` prints compose us per launch), put the
    numbers in the commit body: `hot path: X · before A us / B KB · after C / D`. Budget: compose <= 300 us at
    1280 x 720; the whole UI <= 0.5 ms per frame.
@@ -95,5 +95,4 @@ Name in your report which of these you read.
 
 ## Next work (from the board)
 
-Docking (drag, resize, snap, collapse, saved layout), a `Layer` helper owning the device buffers and the compose
-launch, plots with axes, slider, text input, menus, DPI scaling.
+Docking (drag, resize, snap, collapse, saved layout), plots with axes, slider, text input, menus, DPI scaling.

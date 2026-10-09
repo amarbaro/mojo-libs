@@ -1,6 +1,6 @@
 """Immediate-mode UI drawn by the GPU (docs/DESIGN.md). Every frame the host calls widgets with this frame's Input;
 each widget returns its interaction (clicked, toggled, dragged) and appends draw commands to one flat list. The list is
-binned into 16 x 16 tiles on the host; `compose` gives every UI pixel one thread that walks only its tile's commands in
+binned into 16 x 16 tiles on the host (one compact list, an offset per tile); `compose` gives every UI pixel one thread that walks only its tile's commands in
 order: anti-aliased rounded rects and soft shadows by SDF, glyphs from font.mojo's atlas, capsule lines, triangles,
 alpha "over". The result is a UW x UH straight-alpha RGBA layer that window.mojo blends over the scene.
 
@@ -22,7 +22,7 @@ comptime UH = get_defined_int["UI_H", 720]()
 comptime TILE = 16
 comptime TX = UW // TILE
 comptime TY = UH // TILE
-comptime TCAP = 64  # commands per tile (more are dropped and counted)
+comptime NBIN = get_defined_int["UI_BINS", 32768]()  # tile entries per frame (a command once per tile it touches); past it whole commands drop, counted
 comptime NCMD = 4096
 comptime CW = 8
 comptime AH = 256  # atlas rows on the card (font.mojo packs ~120 for three sizes)
@@ -35,8 +35,8 @@ comptime ISRC = get_defined_int["UI_IMG", 65536]()  # source pixels for images (
 
 comptime TUI = TileTensor[DType.uint32, type_of(row_major[UW * UH]()), MutAnyOrigin]
 comptime TCMD = TileTensor[DType.uint32, type_of(row_major[NCMD * CW]()), MutAnyOrigin]
-comptime TBIN = TileTensor[DType.uint16, type_of(row_major[TX * TY * TCAP]()), MutAnyOrigin]
-comptime TCNT = TileTensor[DType.uint32, type_of(row_major[TX * TY]()), MutAnyOrigin]
+comptime TBIN = TileTensor[DType.uint16, type_of(row_major[NBIN]()), MutAnyOrigin]
+comptime TOFF = TileTensor[DType.uint32, type_of(row_major[TX * TY + 1]()), MutAnyOrigin]
 comptime TATL = TileTensor[DType.uint8, type_of(row_major[AW * AH]()), MutAnyOrigin]
 comptime TSRC = TileTensor[DType.uint32, type_of(row_major[ISRC]()), MutAnyOrigin]
 
@@ -67,7 +67,7 @@ def flt(u: UInt32) -> Float32:
     return bitcast[DType.float32](u)
 
 
-def compose(img: TUI, cmd: TCMD, bin: TBIN, cnt: TCNT, atlas: TATL, src: TSRC):
+def compose(img: TUI, cmd: TCMD, bin: TBIN, off: TOFF, atlas: TATL, src: TSRC):
     var i = Int(block_idx.x * block_dim.x + thread_idx.x)
     if i >= UW * UH:
         return
@@ -78,8 +78,8 @@ def compose(img: TUI, cmd: TCMD, bin: TBIN, cnt: TCNT, atlas: TATL, src: TSRC):
     var g = Float32(0)
     var b = Float32(0)
     var a = Float32(0)  # premultiplied accumulation
-    for k in range(Int(min(cnt[t], UInt32(TCAP)))):
-        var o = Int(bin[t * TCAP + k]) * CW
+    for j in range(Int(off[t]), Int(off[t + 1])):  # this tile's commands, in draw order
+        var o = Int(bin[j]) * CW
         var kind = Int(cmd[o])
         var x0 = flt(cmd[o + 1])
         var y0 = flt(cmd[o + 2])
@@ -143,7 +143,9 @@ struct Ui(Movable):
     var cmd: List[UInt32]
     var n: Int
     var bins: List[UInt16]
-    var cnt: List[UInt32]
+    var off: List[UInt32]  # tile t's commands are bins[off[t]:off[t + 1]]
+    var cur: List[UInt32]  # fill cursor per tile (finish)
+    var binned: Int  # n at the last finish(); -1 after begin(): Layer.render refuses an unfinished frame
     var dropped: Int
     var inp: Input
     var active: Int  # widget held by the mouse (0: none)
@@ -154,14 +156,17 @@ struct Ui(Movable):
     def __init__(out self, var font: Font):
         self.font = font^
         self.cmd = List[UInt32](length=NCMD * CW, fill=0)
-        self.bins = List[UInt16](length=TX * TY * TCAP, fill=0)
-        self.cnt = List[UInt32](length=TX * TY, fill=0)
+        self.bins = List[UInt16](length=NBIN, fill=0)
+        self.off = List[UInt32](length=TX * TY + 1, fill=0)
+        self.cur = List[UInt32](length=TX * TY, fill=0)
+        self.binned = 0
         self.n, self.dropped, self.active, self.over, self.x, self.y = 0, 0, 0, False, 0, 0
         self.inp = Input(0, 0, 0, 0, 0, 0, 0, 0, SIMD[DType.uint64, 2](0), False)
 
     def begin(mut self, inp: Input):
         self.inp = inp.copy()
         self.n = 0
+        self.binned = -1
         self.over = False
 
     def push(mut self, kind: Int, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, aux: UInt32 = 0):
@@ -271,40 +276,52 @@ struct Ui(Movable):
             self.line(x0 + w * Float32(k - 1) / Float32(max(n - 1, 1)), ya, x0 + w * Float32(k) / Float32(max(n - 1, 1)), yb, 1.6, c)
         self.y += h + 8
 
+    def span(self, k: Int) -> SIMD[DType.int32, 4]:
+        """Tiles command k may touch: tx0, tx1, ty0, ty1 (half open), from its box, blur, line width or third corner."""
+        var o = k * CW
+        var kind = Int(self.cmd[o])
+        var x0 = flt(self.cmd[o + 1])
+        var y0 = flt(self.cmd[o + 2])
+        var x1 = flt(self.cmd[o + 3])
+        var y1 = flt(self.cmd[o + 4])
+        var pad = Float32(2) + (2 * flt(self.cmd[o + 7]) if kind == RECT else (flt(self.cmd[o + 5]) if kind == LINE else 0))
+        var lx, hx, ly, hy = min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1)
+        if kind == TRI:
+            lx, hx = min(lx, flt(self.cmd[o + 5])), max(hx, flt(self.cmd[o + 5]))
+            ly, hy = min(ly, flt(self.cmd[o + 7])), max(hy, flt(self.cmd[o + 7]))
+        return SIMD[DType.int32, 4](Int32(max(Int(lx - pad) // TILE, 0)), Int32(min(Int(hx + pad) // TILE + 1, TX)),
+                                    Int32(max(Int(ly - pad) // TILE, 0)), Int32(min(Int(hy + pad) // TILE + 1, TY)))
+
     def finish(mut self):
-        """End the frame: a release ends the active widget (after every widget saw it); bin the commands into tiles."""
+        """End the frame: a release ends the active widget (after every widget saw it); bin the commands into tiles,
+        counted, offsets by prefix sum, then filled in draw order. Past NBIN entries the remaining commands drop."""
         if self.inp.released & 1:
             self.active = 0
-        for k in range(TX * TY):
-            self.cnt[k] = 0
+        for t in range(TX * TY + 1):
+            self.off[t] = 0
+        var total = 0
         for k in range(self.n):
-            var o = k * CW
-            var x0 = flt(self.cmd[o + 1])
-            var y0 = flt(self.cmd[o + 2])
-            var x1 = flt(self.cmd[o + 3])
-            var y1 = flt(self.cmd[o + 4])
-            var pad = Float32(2)
-            if Int(self.cmd[o]) == RECT:
-                pad += 2 * flt(self.cmd[o + 7])
-            if Int(self.cmd[o]) == LINE:
-                pad += flt(self.cmd[o + 5])
-            var lx = min(x0, x1)
-            var hx = max(x0, x1)
-            var ly = min(y0, y1)
-            var hy = max(y0, y1)
-            if Int(self.cmd[o]) == TRI:
-                lx = min(lx, flt(self.cmd[o + 5]))
-                hx = max(hx, flt(self.cmd[o + 5]))
-                ly = min(ly, flt(self.cmd[o + 7]))
-                hy = max(hy, flt(self.cmd[o + 7]))
-            for ty in range(max(Int(ly - pad) // TILE, 0), min(Int(hy + pad) // TILE + 1, TY)):
-                for tx in range(max(Int(lx - pad) // TILE, 0), min(Int(hx + pad) // TILE + 1, TX)):
+            var s = self.span(k)
+            var e = max(Int(s[1] - s[0]), 0) * max(Int(s[3] - s[2]), 0)
+            if total + e > NBIN:
+                self.dropped += self.n - k
+                self.n = k
+                break
+            total += e
+            for ty in range(Int(s[2]), Int(s[3])):
+                for tx in range(Int(s[0]), Int(s[1])):
+                    self.off[ty * TX + tx + 1] += 1
+        for t in range(TX * TY):
+            self.off[t + 1] += self.off[t]
+            self.cur[t] = self.off[t]
+        for k in range(self.n):
+            var s = self.span(k)
+            for ty in range(Int(s[2]), Int(s[3])):
+                for tx in range(Int(s[0]), Int(s[1])):
                     var t = ty * TX + tx
-                    if self.cnt[t] < TCAP:
-                        self.bins[t * TCAP + Int(self.cnt[t])] = UInt16(k)
-                    else:
-                        self.dropped += 1
-                    self.cnt[t] += 1
+                    self.bins[Int(self.cur[t])] = UInt16(k)
+                    self.cur[t] += 1
+        self.binned = self.n
 
 
 def fmt(v: Float64, d: Int = 2) -> String:

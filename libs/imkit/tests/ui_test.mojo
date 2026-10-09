@@ -1,16 +1,17 @@
 """UI and Layer check (GPU, under gpu-wait): a top bar and a fly card built from widgets with scripted input, composed on the
-card. Gates: the pause icon reports a click after press + release on it (and not elsewhere), no command dropped, a panel
-pixel has the panel's alpha, a pixel outside every panel is transparent; compose timed over 1000 launches. OUT (.ppm)
-gets the layer blended over a test background for a look.
+card by Layer. Gates: the pause icon reports a click after press + release on it (and not elsewhere), no command dropped,
+a panel pixel has the panel's alpha, a pixel outside every panel is transparent, icon shapes, an image sampled where it
+belongs, an empty frame clears the layer, re-rendering gives the same pixels at the same address, render before finish
+raises, a frame past NBIN tile entries drops whole commands (counted) and still renders, an oversized atlas is refused.
+compose and render timed. OUT (.ppm) gets the layer blended over a test background for a look.
 
 usage: mojo run -I src tests/ui_test.mojo [OUT.ppm]
 """
 from std.sys import argv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
-from layout import TileTensor, row_major
 from imkit.font import AW, Font
-from imkit.ui import ACCENT, AH, BAD, CW, GOOD, ISRC, NCMD, TCAP, TEXT, TX, TY, UH, UW, WARN, Ui, compose
+from imkit.ui import ACCENT, AH, BAD, GOOD, ISRC, NBIN, TEXT, TX, TY, UH, UW, WARN, Ui
 from imkit.window import Input
 from imkit.layer import Layer
 
@@ -50,77 +51,47 @@ def main() raises:
     var c1 = frame(ui, press)
     var c2 = frame(ui, release)
     var c3 = frame(ui, release)  # a release with nothing active is no click
-    print("clicks idle/press/release/again:", c0, c1, c2, c3, "commands", ui.n, "dropped", ui.dropped)
+    print("clicks idle/press/release/again:", c0, c1, c2, c3, "commands", ui.n, "tile entries", Int(ui.off[TX * TY]), "dropped", ui.dropped)
     if c0 or c1 or not c2 or c3 or ui.dropped:
         fails += 1
     var ctx = DeviceContext()
-    var img_b = ctx.enqueue_create_buffer[DType.uint32](UW * UH)
-    var cmd_b = ctx.enqueue_create_buffer[DType.uint32](NCMD * CW)
-    var bin_b = ctx.enqueue_create_buffer[DType.uint16](TX * TY * TCAP)
-    var cnt_b = ctx.enqueue_create_buffer[DType.uint32](TX * TY)
-    var atl_b = ctx.enqueue_create_buffer[DType.uint8](AW * AH)
-    var src_b = ctx.enqueue_create_buffer[DType.uint32](ISRC)
-    src_b.enqueue_fill(0)
-    var host = ctx.enqueue_create_host_buffer[DType.uint32](UW * UH)
-    ctx.enqueue_copy(atl_b.create_sub_buffer[DType.uint8](0, len(ui.font.atlas)), ui.font.atlas.unsafe_ptr())
-    ctx.enqueue_copy(cmd_b, ui.cmd.unsafe_ptr())
-    ctx.enqueue_copy(bin_b, ui.bins.unsafe_ptr())
-    ctx.enqueue_copy(cnt_b, ui.cnt.unsafe_ptr())
-    var k = ctx.compile_function[compose]()
-    var ti = TileTensor(img_b, row_major[UW * UH]())
-    var tc = TileTensor(cmd_b, row_major[NCMD * CW]())
-    var tb = TileTensor(bin_b, row_major[TX * TY * TCAP]())
-    var tn = TileTensor(cnt_b, row_major[TX * TY]())
-    var ta = TileTensor(atl_b, row_major[AW * AH]())
-    var ts = TileTensor(src_b, row_major[ISRC]())
-    ctx.enqueue_function(k, ti, tc, tb, tn, ta, ts, grid_dim=(UW * UH + 255) // 256, block_dim=256)
-    ctx.synchronize()
+    var layer = Layer(ctx, ui)
+    layer.render(ui)
+    var host = List[UInt32](length=UW * UH, fill=0)  # the reference frame
+    for i in range(UW * UH):
+        host[i] = layer.pixels[i]
+    var pixel_ptr = Int(layer.pixels.unsafe_ptr())
     var t0 = perf_counter_ns()
     for _ in range(1000):
-        ctx.enqueue_function(k, ti, tc, tb, tn, ta, ts, grid_dim=(UW * UH + 255) // 256, block_dim=256)
+        layer.launch()
     ctx.synchronize()
     var us = Float64(perf_counter_ns() - t0) / 1000 / 1000
-    ctx.enqueue_copy(host, img_b)
-    ctx.synchronize()
-    var layer = Layer(ui.font)
-    layer.render(ui)
-    var pixel_ptr = Int(layer.pixels.unsafe_ptr())
-    var mismatches = 0
-    for i in range(UW * UH):
-        if host[i] != layer.pixels[i]:
-            mismatches += 1
-    print("Layer parity: mismatched pixels", mismatches)
-    if mismatches:
-        fails += 1
     t0 = perf_counter_ns()
-    for _ in range(1000):
-        layer.launch()
-    layer.ctx.synchronize()
-    print("Layer compose", Float64(perf_counter_ns() - t0) / 1000000, "us per launch")
-    # Reuse the same owners for an empty frame, then the original scene.
+    for _ in range(200):
+        layer.render(ui)
+    var render_us = Float64(perf_counter_ns() - t0) / 200 / 1000
+    print("compose", us, "us per launch,", "render", render_us, "us per frame including transfers, at", UW, "x", UH)
+    # an empty frame clears, the scene again matches the reference at the same address
     ui.begin(idle)
     ui.finish()
     layer.render(ui)
     for i in range(UW * UH):
         if layer.pixels[i] != 0:
+            print("FAIL empty frame left pixel", i)
             fails += 1
             break
     _ = frame(ui, release)
     layer.render(ui)
+    var diff = 0
     for i in range(UW * UH):
         if host[i] != layer.pixels[i]:
-            fails += 1
-            break
-    if Int(layer.pixels.unsafe_ptr()) != pixel_ptr:
+            diff += 1
+    if diff or Int(layer.pixels.unsafe_ptr()) != pixel_ptr:
+        print("FAIL re-render: pixels differ", diff)
         fails += 1
-    t0 = perf_counter_ns()
-    for _ in range(20):
-        layer.render(ui)
-    var render_us = Float64(perf_counter_ns() - t0) / 20000
-    print("Layer render", render_us, "us per frame including transfers")
     var inside = host[60 * UW + 400] >> 24  # inside the Run panel, away from widgets
     var outside = host[600 * UW + 600] >> 24
-    print("compose", us, "us per launch at", UW, "x", UH, "; panel alpha", inside, "outside alpha", outside)
+    print("panel alpha", inside, "outside alpha", outside)
     if inside < 225 or inside > 240 or outside != 0:  # the glass panel (alpha 214) over its own soft shadow
         fails += 1
     # icon shapes (Run panel cursor x 40, y 60; icons 36 wide, 44 apart; centre +18): play triangle, pause bars
@@ -135,7 +106,7 @@ def main() raises:
     if len(argv()) > 1:  # the layer over a test background, as SDL blends it
         var ppm = List[UInt8](capacity=UW * UH * 3)
         for i in range(UW * UH):
-            var p = layer.pixels[i]
+            var p = host[i]
             var a = Float32(p >> 24) / 255
             var bg: List[Float32] = [Float32(60 + (i % UW) * 80 // UW), Float32(90 + (i // UW) * 60 // UH), 70]
             for ch in range(3):
@@ -147,24 +118,49 @@ def main() raises:
     var srcpx = List[UInt32](length=16, fill=0)
     for j in range(16):
         srcpx[j] = UInt32(16 * j) | UInt32(255 - 16 * j) << 8 | UInt32(77) << 16 | UInt32(255) << 24
-    layer.ctx.enqueue_copy(layer.src.create_sub_buffer[DType.uint32](7, 16), srcpx.unsafe_ptr())
+    ctx.enqueue_copy(layer.src.create_sub_buffer[DType.uint32](7, 16), srcpx.unsafe_ptr())
     ui.begin(idle)
     ui.image(200, 400, 208, 408, 7, 4, 4)
     ui.image(0, 0, 8, 8, ISRC - 3, 4, 4)  # source past the buffer: dropped and counted, not drawn
     ui.finish()
+    var dropped0 = ui.dropped
     layer.render(ui)
     var near = lambda (p: UInt32, q: UInt32) -> Bool: abs(Int(p & 255) - Int(q & 255)) <= 1 and abs(Int((p >> 8) & 255) - Int((q >> 8) & 255)) <= 1 and (p >> 24) == 255
     var tl = layer.pixels[401 * UW + 201]
     var br = layer.pixels[407 * UW + 207]
     var mid = layer.pixels[403 * UW + 205]  # source (2, 1)
-    print("image: top-left", hex(tl), "bottom-right", hex(br), "dropped", ui.dropped)
-    if not near(tl, srcpx[0]) or not near(br, srcpx[15]) or not near(mid, srcpx[6]) or layer.pixels[409 * UW + 209] != 0 or ui.dropped != 1:
+    print("image: top-left", hex(tl), "bottom-right", hex(br), "dropped", dropped0)
+    if not near(tl, srcpx[0]) or not near(br, srcpx[15]) or not near(mid, srcpx[6]) or layer.pixels[409 * UW + 209] != 0 or dropped0 != 1:
         fails += 1
+    # past NBIN tile entries: whole commands drop (counted), the ones kept still draw
+    ui.dropped = 0
+    ui.begin(idle)
+    var each = TX * TY  # a full-screen rect touches every tile
+    var want = NBIN // each + 5
+    for _ in range(want):
+        ui.rect(0, 0, Float32(UW), Float32(UH), 0, ACCENT)
+    ui.finish()
+    layer.render(ui)
+    print("overflow: asked", want, "kept", ui.n, "dropped", ui.dropped, "tile entries", Int(ui.off[TX * TY]), "of", NBIN)
+    if ui.n != NBIN // each or ui.dropped != want - NBIN // each or Int(ui.off[TX * TY]) > NBIN or layer.pixels[360 * UW + 640] >> 24 != 255:
+        fails += 1
+    # render before finish raises
+    ui.begin(idle)
+    ui.rect(0, 0, 10, 10, 0, ACCENT)
+    var refused = False
+    try:
+        layer.render(ui)
+    except:
+        refused = True
+    if not refused:
+        print("FAIL render before finish was accepted")
+        fails += 1
+    ui.finish()
     # Oversized atlases fail before device buffers are allocated.
     ui.font.atlas.resize(AW * AH + 1, 0)
     var rejected = False
     try:
-        var invalid = Layer(ui.font)
+        var invalid = Layer(ctx, ui)
         _ = invalid.pixels.unsafe_ptr()
     except:
         rejected = True
