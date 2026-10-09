@@ -1,7 +1,7 @@
 """font.mojo check (CPU): Roboto at 13 / 16 / 22 px into one atlas; every glyph present, metrics sane, atlas written
-to OUT (.pgm) for a look (OCR reads it back). usage: mojo run -I kinestride kinestride/font_test.mojo [OUT.pgm]"""
+to OUT (.pgm) for a look (OCR reads it back). usage: mojo run -I src tests/font_test.mojo [OUT.pgm]"""
 from std.sys import argv
-from font import AW, Font, GM, NCH
+from imkit.font import AW, Font, GM, NCH
 
 
 def main() raises:

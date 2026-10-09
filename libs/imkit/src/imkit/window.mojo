@@ -1,8 +1,8 @@
-"""SDL3 window for the engine's frames (docs/RENDERER.md, GUI): one resizable window, one streaming RGBA texture at the
+"""SDL3 window for an app's frames (docs/DESIGN.md): one resizable window, one streaming RGBA texture at the
 render size W x H, letterboxed by SDL (mouse coordinates come back in W x H pixels), vsync. SDL3 is the system library,
 reached through OwnedDLHandle (no binding, no build flag). Event layouts: SDL 3.4 (offsets checked with offsetof).
 
-    var win = Window("Kinestride", W, H, UW, UH)   # UW x UH: an RGBA UI layer blended over the scene (ui.mojo)
+    var win = Window("App", W, H, UW, UH)   # UW x UH: an RGBA UI layer blended over the scene (ui.mojo)
     var inp = win.poll()            # every frame: mouse, wheel, buttons, keys, quit (in UI pixels with a layer)
     win.present(Int(out_h.unsafe_ptr()), Int(ui_h.unsafe_ptr()))   # frames in host memory, row-major RGBA
 """

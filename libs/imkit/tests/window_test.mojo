@@ -1,10 +1,10 @@
 """window.mojo check (needs a display, no GPU): opens the window, shows 120 gradient frames, pushes one event of each kind
 through SDL's own queue and reads it back with poll(); the frame rate shows vsync. PASS / FAIL per field, exit 1 on any FAIL.
 
-usage: mojo run -I kinestride kinestride/window_test.mojo
+usage: mojo run -I src tests/window_test.mojo
 """
 from std.time import perf_counter_ns
-from window import EV_BUTTON_DOWN, EV_BUTTON_UP, EV_KEY_DOWN, EV_MOTION, EV_QUIT, EV_WHEEL, Window
+from imkit.window import EV_BUTTON_DOWN, EV_BUTTON_UP, EV_KEY_DOWN, EV_MOTION, EV_QUIT, EV_WHEEL, Window
 
 
 def check(ok: Bool, name: String, mut fails: Int):

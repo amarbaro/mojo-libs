@@ -3,15 +3,15 @@ card. Gates: the pause icon reports a click after press + release on it (and not
 pixel has the panel's alpha, a pixel outside every panel is transparent; compose timed over 1000 launches. OUT (.ppm)
 gets the layer blended over a test background for a look.
 
-usage: mojo run -I kinestride kinestride/ui_test.mojo [OUT.ppm]
+usage: mojo run -I src tests/ui_test.mojo [OUT.ppm]
 """
 from std.sys import argv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 from layout import TileTensor, row_major
-from font import AW, Font
-from ui import ACCENT, AH, BAD, CW, GOOD, NCMD, TCAP, TEXT, TX, TY, UH, UW, WARN, Ui, compose
-from window import Input
+from imkit.font import AW, Font
+from imkit.ui import ACCENT, AH, BAD, CW, GOOD, NCMD, TCAP, TEXT, TX, TY, UH, UW, WARN, Ui, compose
+from imkit.window import Input
 
 
 def frame(mut ui: Ui, inp: Input) -> Bool:
