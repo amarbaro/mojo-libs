@@ -2,9 +2,9 @@
 render size W x H, letterboxed by SDL (mouse coordinates come back in W x H pixels), vsync. SDL3 is the system library,
 reached through OwnedDLHandle (no binding, no build flag). Event layouts: SDL 3.4 (offsets checked with offsetof).
 
-    var win = Window("Kinestride", W, H)
-    var inp = win.poll()            # every frame: mouse, wheel, buttons, keys, quit
-    win.present(Int(out_h.unsafe_ptr()))   # a W x H RGBA frame in host memory
+    var win = Window("Kinestride", W, H, UW, UH)   # UW x UH: an RGBA UI layer blended over the scene (ui.mojo)
+    var inp = win.poll()            # every frame: mouse, wheel, buttons, keys, quit (in UI pixels with a layer)
+    win.present(Int(out_h.unsafe_ptr()), Int(ui_h.unsafe_ptr()))   # frames in host memory, row-major RGBA
 """
 from std.ffi import OwnedDLHandle, external_call
 
@@ -33,6 +33,18 @@ struct Input(Copyable, Movable):
     var keys: SIMD[DType.uint64, 2]
     var quit: Bool
 
+    def merge(mut self, o: Input):
+        """Fold a later frame's input in: newest position and buttons held, presses / releases / keys OR'd, motion and
+        wheel summed (a UI drawn every few iterations still sees every click)."""
+        self.x, self.y, self.down = o.x, o.y, o.down
+        self.dx += o.dx
+        self.dy += o.dy
+        self.wheel += o.wheel
+        self.pressed |= o.pressed
+        self.released |= o.released
+        self.keys |= o.keys
+        self.quit = self.quit or o.quit
+
     def key(self, scancode: Int) -> Bool:
         return (self.keys[scancode >> 6] >> UInt64(scancode & 63)) & 1 == 1
 
@@ -48,29 +60,39 @@ struct Window(Movable):
     var win: Int
     var ren: Int
     var tex: Int
+    var utex: Int  # the UI layer (0: none)
     var w: Int
     var h: Int
+    var uw: Int
     var ev: List[UInt8]
     var x: Float32
     var y: Float32
     var down: UInt32
+    var scripted: Bool  # True: real mouse events are ignored, only push()ed ones count (scripted checks)
 
-    def __init__(out self, title: String, w: Int, h: Int) raises:
+    def __init__(out self, title: String, w: Int, h: Int, uw: Int = 0, uh: Int = 0) raises:
         self.sdl = OwnedDLHandle("libSDL3.so.0")
-        self.w, self.h, self.x, self.y, self.down = w, h, 0, 0, 0
+        self.w, self.h, self.x, self.y, self.down, self.scripted = w, h, 0, 0, 0, False
         self.ev = List[UInt8](length=128, fill=0)
         if not self.sdl.get_function[Bool]("SDL_Init")(UInt32(0x20)):  # SDL_INIT_VIDEO
             raise Error("SDL_Init failed")
-        var scale = max(1, 1280 // w)  # a small render size opens at least 1280 wide; SDL scales it
+        var lw, lh = (uw, uh) if uw else (w, h)  # logical size: the UI layer's when there is one
+        var scale = max(1, 1280 // lw)  # a small logical size opens at least 1280 wide; SDL scales it
         var t = title.copy()
-        self.win = self.sdl.get_function[Int]("SDL_CreateWindow")(t.as_c_string_slice().unsafe_ptr(), Int32(w * scale), Int32(h * scale), UInt64(0x20 | 0x2000))
+        self.win = self.sdl.get_function[Int]("SDL_CreateWindow")(t.as_c_string_slice().unsafe_ptr(), Int32(lw * scale), Int32(lh * scale), UInt64(0x20 | 0x2000))
         self.ren = self.sdl.get_function[Int]("SDL_CreateRenderer")(self.win, Int(0))
         if self.win == 0 or self.ren == 0:
             raise Error("SDL window or renderer failed")
         _ = self.sdl.get_function[Bool]("SDL_SetRenderVSync")(self.ren, Int32(1))
-        _ = self.sdl.get_function[Bool]("SDL_SetRenderLogicalPresentation")(self.ren, Int32(w), Int32(h), Int32(2))  # letterbox
+        _ = self.sdl.get_function[Bool]("SDL_SetRenderLogicalPresentation")(self.ren, Int32(lw), Int32(lh), Int32(2))  # letterbox
         self.tex = self.sdl.get_function[Int]("SDL_CreateTexture")(self.ren, UInt32(0x16762004), Int32(1), Int32(w), Int32(h))  # RGBA32, streaming
-        if self.tex == 0:
+        _ = self.sdl.get_function[Bool]("SDL_SetTextureBlendMode")(self.tex, UInt32(0))  # the scene is opaque (its alpha marks animals)
+        self.utex = 0
+        self.uw = uw
+        if uw:
+            self.utex = self.sdl.get_function[Int]("SDL_CreateTexture")(self.ren, UInt32(0x16762004), Int32(1), Int32(uw), Int32(uh))
+            _ = self.sdl.get_function[Bool]("SDL_SetTextureBlendMode")(self.utex, UInt32(1))  # SDL_BLENDMODE_BLEND
+        if self.tex == 0 or (uw and self.utex == 0):
             raise Error("SDL texture failed")
 
     def poll(mut self) raises -> Input:
@@ -80,6 +102,8 @@ struct Window(Movable):
             _ = self.sdl.get_function[Bool]("SDL_ConvertEventToRenderCoordinates")(self.ren, e)
             var kind = Int(e.unsafe_bitcast[UInt32]()[0])
             var f = e.unsafe_bitcast[Float32]()
+            if self.scripted and EV_MOTION <= kind <= EV_WHEEL and e.unsafe_bitcast[UInt32]()[5] != 0:
+                continue  # a real mouse (which != 0) while a script drives the window
             if kind == EV_QUIT or kind == EV_CLOSE:
                 inp.quit = True
             elif kind == EV_MOTION:
@@ -104,11 +128,14 @@ struct Window(Movable):
         self.x, self.y, self.down = inp.x, inp.y, inp.down
         return inp^
 
-    def present(mut self, pixels: Int) raises:
-        """Show a W x H RGBA frame (host memory, row-major, 4 bytes per pixel)."""
+    def present(mut self, pixels: Int, ui: Int = 0) raises:
+        """Show a W x H RGBA frame and, with a layer, the UW x UH UI over it (host memory, row-major, 4 bytes per pixel)."""
         _ = self.sdl.get_function[Bool]("SDL_UpdateTexture")(self.tex, Int(0), pixels, Int32(self.w * 4))
         _ = self.sdl.get_function[Bool]("SDL_RenderClear")(self.ren)
         _ = self.sdl.get_function[Bool]("SDL_RenderTexture")(self.ren, self.tex, Int(0), Int(0))
+        if ui and self.utex:
+            _ = self.sdl.get_function[Bool]("SDL_UpdateTexture")(self.utex, Int(0), ui, Int32(self.uw * 4))
+            _ = self.sdl.get_function[Bool]("SDL_RenderTexture")(self.ren, self.utex, Int(0), Int(0))
         _ = self.sdl.get_function[Bool]("SDL_RenderPresent")(self.ren)
 
     def push(mut self, kind: Int, a: Int = 0, x: Float32 = 0, y: Float32 = 0, rx: Float32 = 0, ry: Float32 = 0) raises:
@@ -131,6 +158,8 @@ struct Window(Movable):
         _ = self.sdl.get_function[Bool]("SDL_PushEvent")(e)
 
     def close(mut self) raises:
+        if self.utex:
+            self.sdl.get_function[NoneType]("SDL_DestroyTexture")(self.utex)
         self.sdl.get_function[NoneType]("SDL_DestroyTexture")(self.tex)
         self.sdl.get_function[NoneType]("SDL_DestroyRenderer")(self.ren)
         self.sdl.get_function[NoneType]("SDL_DestroyWindow")(self.win)
