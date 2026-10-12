@@ -15,13 +15,26 @@ the gates, and U1 (GGUF v3 reader/writer + `gguf-rewrite`, this lane); units and
 | `src/gguf_rewrite.mojo` | CLI `gguf-rewrite IN OUT [--name STR] [--remove KEY]...`; first stdout line `kv K tensors T alignment A data_offset D`; edits match `gguf_new_metadata.py` byte for byte |
 | `tools/type-census.mojo` | tensor-type census over GGUF files (header + tensor table only): count and bytes per type, per file and total; U6 scope |
 | `tests/u1-gate.sh` | U1 gate (reader/writer round trip, parse summary, metadata edits), 16 checks |
+| `tools/gen-tables.py GGUFPY OUT` | U2 generator: gguf-py `constants.py` + `tensor_mapping.py` to `consts.mojo` (enums, name tables) and `tensor_map.mojo` (per-arch name rows); deterministic |
+| `src/gguf/consts.mojo`, `src/gguf/tensor_map.mojo` | U2 generated tables, committed exactly as the generator writes them; do not edit |
+| `src/gguf/tensor_lookup.mojo` | `map_tensor_name(arch, n_blocks, hf_name)` (empty when unmapped), `expand_rows` |
+| `src/u2_dump.mojo` | U2 dump: one line of sorted-key JSON from the generated tables, byte-equal to `tests/u2-oracle.py` |
+| `src/u2_lookup.mojo` | verifier CLI for `map_tensor_name`, one lookup per line of a TSV |
+| `tests/u2-gate.sh` | U2 gate: generator runs and is deterministic, committed = generated, dump = gguf-py JSON, `PASS 7/7` |
+| `tests/u2-lookup-check.sh` | `map_tensor_name` vs gguf-py `TensorNameMap` on every key at n=2 and n=5, plus probes: `PASS 18527/18527` |
 
 ## Build and gate
 
 ```
 .venv/bin/mojo build src/gguf_rewrite.mojo -I src -o .work/u1/gguf-rewrite
 tests/u1-gate.sh        # PASS 16/16; bf16 rewrite 994 MB: 19 MB peak RSS (runtime floor 17 MB)
+tests/u2-gate.sh        # PASS 7/7 (builds src/u2_dump.mojo: about 60 s, the literal tables are large)
+tests/u2-lookup-check.sh  # PASS 18527/18527
 ```
+
+U2 tables: `tools/gen-tables.py ~/Projects/imports/llama.cpp-master/gguf-py src/gguf` regenerates them. Tensor
+rows are templates (`{bid}` expanded per n_blocks); gguf-py's `TensorNameMap` mutates a class dict in `__init__`, so
+the generator starts each arch from a pristine copy. Lookup keys are base names (no `.weight`); callers strip suffixes.
 
 Layout rules the writer follows: tensor sizes come from the input's own offsets (no quant table);
 output offsets are the running sum of spans padded to `general.alignment` (default 32); with no edit a
