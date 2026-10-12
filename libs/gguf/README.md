@@ -38,6 +38,8 @@ U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 ty
 | `src/gguf_tool.mojo` | CLI `gguf-tool dump\|hash\|set-metadata\|convert-endian ARGS`: the four gguf-py scripts, matched on stdout, exit code and written bytes; U5 |
 | `src/gguf/{fmt,values,quant,sha}.mojo` | Python-compatible formatting (exact `%.Nf`, repr, numpy float32 str), in-place value reads, GGML type table, streaming SHA-1/SHA-256 |
 | `tests/u5-gate.sh` | U5 gate (dump, hash, set-metadata, convert-endian against the pinned scripts), 14 checks |
+| `src/gguf_latent.mojo` | CLI `gguf-latent bake IN OUT --wa W.f32 --beta B --row-median M` appends `latent.version`, `latent.beta`, `latent.embd_row_median`, `latent.w_a` (f32 d*d), `latent.w_a.shape` (u32 [d, d]) as KV, replacing them if present, tensors streamed verbatim; `gguf-latent show FILE`; L2 |
+| `tests/l2-gate.sh` | L2 gate (bake read back against the fixture, rebake idempotent, show, llama-cli loads the baked file under gpu-wait), `PASS 7/7` |
 
 ## Build and gate
 
@@ -48,6 +50,8 @@ tests/u2-gate.sh        # PASS 7/7 (builds src/u2_dump.mojo: about 60 s, the lit
 tests/u2-lookup-check.sh  # PASS 18527/18527
 .venv/bin/mojo build src/gguf_tool.mojo -I src -o .work/u5/gguf-tool
 tests/u5-gate.sh        # PASS 14/14 (the gate builds the tool itself)
+.venv/bin/mojo build src/gguf_latent.mojo -I src -o .work/l2/gguf-latent
+tests/l2-gate.sh        # PASS 7/7 (builds the tool itself; bake of the 317 MB Q4_K fixture: 1.22 s / 18.8 MB peak RSS)
 ```
 
 U2 tables: `tools/gen-tables.py ~/Projects/imports/llama.cpp-master/gguf-py src/gguf` regenerates them. Tensor
