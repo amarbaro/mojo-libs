@@ -105,6 +105,9 @@ struct KV(Copyable, Movable):
     var vtype: Int
     var start: Int  # value payload: file offsets [start, end)
     var end: Int
+    var at: Int  # file offset of the key length (the record's offset)
+    var types: List[Int]  # type chain as gguf-py keeps it: [ARRAY, ..., leaf], or [vtype]
+    var count: Int  # leaf elements (gguf-py's len(field.data)): 1 for scalars and strings
 
 @fieldwise_init
 struct TensorInfo(Copyable, Movable):
@@ -112,6 +115,7 @@ struct TensorInfo(Copyable, Movable):
     var dims: List[Int]
     var ttype: Int
     var offset: Int  # relative to the data section
+    var at: Int  # file offset of the tensor info record
 
 struct Gguf(Movable):
     var fd: Int32
@@ -124,6 +128,7 @@ struct Gguf(Movable):
     var tensors: List[TensorInfo]
     var alignment: Int
     var data_offset: Int
+    var big: Bool  # file written for big-endian hosts
 
     def __init__(out self, path: String) raises:
         self.fd = open_fd(path, 0)
@@ -136,19 +141,26 @@ struct Gguf(Movable):
         self.tensors = List[TensorInfo]()
         self.alignment = 32
         self.data_offset = 0
+        self.big = False
         if self._int(4) != MAGIC:
             raise Error(path + " is not a GGUF file")
         var version = self._int(4)
+        if (version & 0xFFFF) == 0:  # low half zero: the version was written in the other byte order
+            self.big = True
+            self.pos = 4
+            version = self._int(4)
         if version != 3:
             raise Error("only GGUF v3 is supported, got v" + String(version))
         var n_tensors = self._int(8)
         var n_kv = self._int(8)
         for _ in range(n_kv):
+            var at = self.pos
             var key = self._str()
             var vtype = self._int(4)
             var start = self.pos
-            self._skip_value(vtype)
-            self.kvs.append(KV(key^, vtype, start, self.pos))
+            var types = List[Int]()
+            var count = self._skip_value(vtype, types)
+            self.kvs.append(KV(key^, vtype, start, self.pos, at, types^, count))
         var a = self.find("general.alignment")
         if a >= 0:
             if self.kvs[a].vtype != 4:
@@ -160,12 +172,13 @@ struct Gguf(Movable):
         if self.alignment == 0 or (self.alignment & (self.alignment - 1)) != 0:
             raise Error("alignment " + String(self.alignment) + " is not a power of two")
         for _ in range(n_tensors):
+            var at = self.pos
             var name = self._str()
             var dims = List[Int]()
             for _ in range(self._int(4)):
                 dims.append(self._int(8))
             var ttype = self._int(4)
-            self.tensors.append(TensorInfo(name^, dims^, ttype, self._int(8)))
+            self.tensors.append(TensorInfo(name^, dims^, ttype, self._int(8), at))
         self.data_offset = pad_to(self.pos, self.alignment)
         var prev = 0
         for t in range(len(self.tensors)):
@@ -192,7 +205,8 @@ struct Gguf(Movable):
         self._need(width)
         var v = 0
         for k in range(width):
-            v |= Int(self.win[self.pos - self.wbase + k]) << (8 * k)
+            var sh = 8 * (width - 1 - k) if self.big else 8 * k
+            v |= Int(self.win[self.pos - self.wbase + k]) << sh
         self.pos += width
         return v
 
@@ -208,13 +222,18 @@ struct Gguf(Movable):
             raise Error("truncated GGUF: value of " + String(n) + " bytes at " + String(self.pos))
         self.pos += n
 
-    def _skip_value(mut self, vtype: Int) raises:
+    def _skip_value(mut self, vtype: Int, mut types: List[Int]) raises -> Int:
+        """Skip one value payload. Records its type chain in `types` (the first element's chain for an
+        array, as gguf-py does) and returns its leaf count."""
+        types.append(vtype)
         var w = fixed_size(vtype)
         if w > 0:
             self._skip(w)
-        elif vtype == T_STRING:
+            return 1
+        if vtype == T_STRING:
             self._skip(self._int(8))
-        elif vtype == T_ARRAY:
+            return 1
+        if vtype == T_ARRAY:
             var et = self._int(4)
             var n = self._int(8)
             var ew = fixed_size(et)
@@ -224,11 +243,18 @@ struct Gguf(Movable):
                 if n > self.fsize // ew:
                     raise Error("truncated GGUF: array of " + String(n))
                 self._skip(n * ew)
-            else:
-                for _ in range(n):
-                    self._skip_value(et)
-        else:
-            raise Error("unknown value type " + String(vtype))
+                if n > 0:
+                    types.append(et)
+                return n
+            var count = 0
+            for i in range(n):
+                if i == 0:
+                    count += self._skip_value(et, types)
+                else:
+                    var scratch = List[Int]()
+                    count += self._skip_value(et, scratch)
+            return count
+        raise Error("unknown value type " + String(vtype))
 
     def find(self, key: String) -> Int:
         for k in range(len(self.kvs)):
@@ -244,6 +270,8 @@ struct Gguf(Movable):
         """Write the model to out_path. With no edit the layout is the source's; with an edit it is
         what gguf_new_metadata.py (GGUFWriter) produces: architecture KV first, `general.name`
         replaced in place or appended, removed keys dropped, no padding after an empty tensor list."""
+        if self.big:
+            raise Error("rewrite: big-endian input is not supported")
         var edited = name.byte_length() > 0 or len(remove) > 0
         var arch = self.find("general.architecture")
         if edited and arch < 0:
