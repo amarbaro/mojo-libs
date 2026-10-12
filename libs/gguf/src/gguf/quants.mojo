@@ -2,6 +2,7 @@
 without an importance matrix. Float semantics are the C's: single precision, no contraction, fp16 by
 round-to-nearest-even, `nearest_int` by the 1.5 * 2^23 trick, `roundf` half away from zero."""
 from std.math import sqrt
+from std.collections import Array
 from std.os import abort
 from std.sys.intrinsics import llvm_intrinsic
 from std.memory import bitcast
@@ -97,113 +98,140 @@ def put16(y: BP, at: Int, v: Int):
     y[unsafe_offset=at] = UInt8(v & 0xFF)
     y[unsafe_offset=at + 1] = UInt8((v >> 8) & 0xFF)
 
-def make_qx_quants(n: Int, nmax: Int, x: FP, L: BP) -> Float32:
-    """rmse_type 1 (weights x*x), no importance weights: the Q6_K sub-block fit."""
-    var mx = Float32(0)
-    var amax = Float32(0)
-    for i in range(n):
-        var ax = abs(x[unsafe_offset=i])
-        if ax > amax:
-            amax = ax
-            mx = x[unsafe_offset=i]
-    if amax < EPS:
-        for i in range(n):
-            L[unsafe_offset=i] = 0
-        return 0.0
-    var iscale = Float32(-nmax) / mx
-    var sumlx = Float32(0)
-    var suml2 = Float32(0)
-    for i in range(n):
-        var l = max(-nmax, min(nmax - 1, nint(iscale * x[unsafe_offset=i])))
-        L[unsafe_offset=i] = UInt8(l + nmax)
-        var w = m(x[unsafe_offset=i], x[unsafe_offset=i])
-        sumlx += m(m(w, x[unsafe_offset=i]), Float32(l))
-        suml2 += m(m(w, Float32(l)), Float32(l))
-    var scale = sumlx / suml2 if suml2 != 0 else Float32(0)
-    var best = m(scale, sumlx)
+@always_inline
+def vfence[W: Int](x: SIMD[DType.float32, W]) -> SIMD[DType.float32, W]:
+    return llvm_intrinsic["llvm.arithmetic.fence", SIMD[DType.float32, W]](x)
+
+@always_inline
+def vm[W: Int](a: SIMD[DType.float32, W], b: SIMD[DType.float32, W]) -> SIMD[DType.float32, W]:
+    return vfence(a * b)
+
+@always_inline
+def vnint[W: Int](f: SIMD[DType.float32, W]) -> SIMD[DType.int32, W]:
+    return (bitcast[DType.int32, W](vfence(f) + 12582912.0) & 0x7FFFFF) - 0x400000
+
+# The K-quant fits are sequential float recurrences over one sub-block, and the sub-blocks of a
+# super-block are independent: W of them run in the W lanes of one SIMD vector, element i of every
+# sub-block in `xt[i]`. Each lane performs exactly the scalar C's operations in its order, so the
+# results are bit for bit the C's; data-dependent `if`s become lane masks.
+
+def qkx2_lanes[W: Int, N: Int, NMAX: Int, NSTEP: Int, USE_MAD: Bool](
+        xt: Array[SIMD[DType.float32, W], N], wt: Array[SIMD[DType.float32, W], N],
+        mut Lt: Array[SIMD[DType.int32, W], N], mut the_min: SIMD[DType.float32, W],
+        rmin: Float32, rdelta: Float32) -> SIMD[DType.float32, W]:
+    """make_qkx2_quants over W sub-blocks of N weighted elements: (scale, min, levels 0..NMAX)."""
+    comptime F = SIMD[DType.float32, W]
+    comptime I = SIMD[DType.int32, W]
+    var mn = xt[0]
+    var mx = xt[0]
+    var sum_w = wt[0]
+    var sum_x = vm(sum_w, xt[0])
+    for i in range(1, N):
+        mn = xt[i].lt(mn).select(xt[i], mn)
+        mx = xt[i].gt(mx).select(xt[i], mx)
+        sum_w += wt[i]
+        sum_x += vm(wt[i], xt[i])
+    mn = mn.gt(F(0)).select(F(0), mn)
+    var flat = mx.eq(mn)
+    var iscale = F(Float32(NMAX)) / (mx - mn)
+    var scale = F(1) / iscale
+    var best = F(0)
+    for i in range(N):
+        var l = vnint(vm(iscale, xt[i] - mn)).clamp(I(0), I(NMAX))
+        Lt[i] = l
+        var diff = vm(scale, l.cast[DType.float32]()) + mn - xt[i]
+        comptime if USE_MAD:
+            diff = abs(diff)
+        else:
+            diff = vm(diff, diff)
+        best += vm(wt[i], diff)
+    var Laux = Array[I, N](uninitialized=True)
+    for s in range(NSTEP + 1):
+        iscale = F(rmin + m(rdelta, Float32(s)) + Float32(NMAX)) / (mx - mn)
+        var sum_l = F(0)
+        var sum_l2 = F(0)
+        var sum_xl = F(0)
+        for i in range(N):
+            var l = vnint(vm(iscale, xt[i] - mn)).clamp(I(0), I(NMAX))
+            Laux[i] = l
+            var lf = l.cast[DType.float32]()
+            var wl = vm(wt[i], lf)
+            sum_l += wl
+            sum_l2 += vm(wl, lf)
+            sum_xl += vm(wl, xt[i])
+        var D = vm(sum_w, sum_l2) - vm(sum_l, sum_l)
+        var this_scale = (vm(sum_w, sum_xl) - vm(sum_x, sum_l)) / D
+        var this_min = (vm(sum_l2, sum_x) - vm(sum_l, sum_xl)) / D
+        var pos = this_min.gt(F(0))
+        this_min = pos.select(F(0), this_min)
+        this_scale = pos.select(sum_xl / sum_l2, this_scale)
+        var cur = F(0)
+        for i in range(N):
+            var diff = vm(this_scale, Laux[i].cast[DType.float32]()) + this_min - xt[i]
+            comptime if USE_MAD:
+                diff = abs(diff)
+            else:
+                diff = vm(diff, diff)
+            cur += vm(wt[i], diff)
+        var upd = D.gt(F(0)) & cur.lt(best) & ~flat
+        for i in range(N):
+            Lt[i] = upd.select(Laux[i], Lt[i])
+        best = upd.select(cur, best)
+        scale = upd.select(this_scale, scale)
+        mn = upd.select(this_min, mn)
+    for i in range(N):
+        Lt[i] = flat.select(I(0), Lt[i])
+    the_min = -mn
+    return flat.select(F(0), scale)
+
+def qx_lanes[W: Int, N: Int, NMAX: Int](xt: Array[SIMD[DType.float32, W], N],
+                                       mut Lt: Array[SIMD[DType.int32, W], N]) -> SIMD[DType.float32, W]:
+    """make_qx_quants (rmse type 1, no importance weights) over W sub-blocks: (scale, levels 0..2*NMAX-1)."""
+    comptime F = SIMD[DType.float32, W]
+    comptime I = SIMD[DType.int32, W]
+    var amax = F(0)
+    var mx = F(0)
+    for i in range(N):
+        var ax = abs(xt[i])
+        var gt = ax.gt(amax)
+        amax = gt.select(ax, amax)
+        mx = gt.select(xt[i], mx)
+    var zero = amax.lt(F(EPS))
+    var iscale = F(Float32(-NMAX)) / mx
+    var sumlx = F(0)
+    var suml2 = F(0)
+    for i in range(N):
+        var l = vnint(vm(iscale, xt[i])).clamp(I(-NMAX), I(NMAX - 1))
+        Lt[i] = l + I(NMAX)
+        var lf = l.cast[DType.float32]()
+        var w = vm(xt[i], xt[i])
+        sumlx += vm(vm(w, xt[i]), lf)
+        suml2 += vm(vm(w, lf), lf)
+    var scale = suml2.ne(F(0)).select(sumlx / suml2, F(0))
+    var best = vm(scale, sumlx)
+    var Laux = Array[I, N](uninitialized=True)
     for k in range(-9, 10):
         if k == 0:
             continue
-        iscale = -(Float32(nmax) + m(0.1, Float32(k))) / mx
-        sumlx = 0
-        suml2 = 0
-        for i in range(n):
-            var l = max(-nmax, min(nmax - 1, nint(iscale * x[unsafe_offset=i])))
-            var w = m(x[unsafe_offset=i], x[unsafe_offset=i])
-            sumlx += m(m(w, x[unsafe_offset=i]), Float32(l))
-            suml2 += m(m(w, Float32(l)), Float32(l))
-        if suml2 > 0 and m(sumlx, sumlx) > m(best, suml2):
-            for i in range(n):
-                var l = max(-nmax, min(nmax - 1, nint(iscale * x[unsafe_offset=i])))
-                L[unsafe_offset=i] = UInt8(nmax + l)
-            scale = sumlx / suml2
-            best = m(scale, sumlx)
-    return scale
-
-def make_qkx2_quants(n: Int, nmax: Int, x: FP, w: FP, L: BP, the_min: FP, Laux: BP,
-                     rmin: Float32, rdelta: Float32, nstep: Int, use_mad: Bool) -> Float32:
-    var mn = x[unsafe_offset=0]
-    var mx = x[unsafe_offset=0]
-    var sum_w = w[unsafe_offset=0]
-    var sum_x = m(sum_w, x[unsafe_offset=0])
-    for i in range(1, n):
-        if x[unsafe_offset=i] < mn:
-            mn = x[unsafe_offset=i]
-        if x[unsafe_offset=i] > mx:
-            mx = x[unsafe_offset=i]
-        sum_w += w[unsafe_offset=i]
-        sum_x += m(w[unsafe_offset=i], x[unsafe_offset=i])
-    if mn > 0:
-        mn = 0
-    if mx == mn:
-        for i in range(n):
-            L[unsafe_offset=i] = 0
-        the_min[unsafe_offset=0] = -mn
-        return 0.0
-    var iscale = Float32(nmax) / (mx - mn)
-    var scale = 1.0 / iscale
-    var best_error = Float32(0)
-    for i in range(n):
-        var l = max(0, min(nmax, nint(iscale * (x[unsafe_offset=i] - mn))))
-        L[unsafe_offset=i] = UInt8(l)
-        var diff = m(scale, Float32(l)) + mn - x[unsafe_offset=i]
-        diff = abs(diff) if use_mad else m(diff, diff)
-        best_error += m(w[unsafe_offset=i], diff)
-    if nstep < 1:
-        the_min[unsafe_offset=0] = -mn
-        return scale
-    for s in range(nstep + 1):
-        iscale = (rmin + m(rdelta, Float32(s)) + Float32(nmax)) / (mx - mn)
-        var sum_l = Float32(0)
-        var sum_l2 = Float32(0)
-        var sum_xl = Float32(0)
-        for i in range(n):
-            var l = max(0, min(nmax, nint(iscale * (x[unsafe_offset=i] - mn))))
-            Laux[unsafe_offset=i] = UInt8(l)
-            var wi = w[unsafe_offset=i]
-            sum_l += m(wi, Float32(l))
-            sum_l2 += m(m(wi, Float32(l)), Float32(l))
-            sum_xl += m(m(wi, Float32(l)), x[unsafe_offset=i])
-        var D = m(sum_w, sum_l2) - m(sum_l, sum_l)
-        if D > 0:
-            var this_scale = (m(sum_w, sum_xl) - m(sum_x, sum_l)) / D
-            var this_min = (m(sum_l2, sum_x) - m(sum_l, sum_xl)) / D
-            if this_min > 0:
-                this_min = 0
-                this_scale = sum_xl / sum_l2
-            var cur_error = Float32(0)
-            for i in range(n):
-                var diff = m(this_scale, Float32(Laux[unsafe_offset=i])) + this_min - x[unsafe_offset=i]
-                diff = abs(diff) if use_mad else m(diff, diff)
-                cur_error += m(w[unsafe_offset=i], diff)
-            if cur_error < best_error:
-                for i in range(n):
-                    L[unsafe_offset=i] = Laux[unsafe_offset=i]
-                best_error = cur_error
-                scale = this_scale
-                mn = this_min
-    the_min[unsafe_offset=0] = -mn
-    return scale
+        iscale = F(-(Float32(NMAX) + m(0.1, Float32(k)))) / mx
+        sumlx = F(0)
+        suml2 = F(0)
+        for i in range(N):
+            var l = vnint(vm(iscale, xt[i])).clamp(I(-NMAX), I(NMAX - 1))
+            Laux[i] = l
+            var lf = l.cast[DType.float32]()
+            var w = vm(xt[i], xt[i])
+            sumlx += vm(vm(w, xt[i]), lf)
+            suml2 += vm(vm(w, lf), lf)
+        var take = suml2.gt(F(0)) & vm(sumlx, sumlx).gt(vm(best, suml2)) & ~zero
+        for i in range(N):
+            Lt[i] = take.select(Laux[i] + I(NMAX), Lt[i])
+        var ns = sumlx / suml2
+        scale = take.select(ns, scale)
+        best = take.select(vm(ns, sumlx), best)
+    for i in range(N):
+        Lt[i] = zero.select(I(0), Lt[i])
+    return zero.select(F(0), scale)
 
 def q4_0_row(x: FP, y: BP, n: Int, hi: Int):
     """Q4_0 (hi 8, 4-bit) and Q5_0 (hi 16, 5-bit with a qh word): the signed-max scale."""
@@ -259,32 +287,39 @@ def q2_0_row(x: FP, y: BP, n: Int):
             var q = max(0, min(3, roundf(x[unsafe_offset=64 * i + j] * id) + 1))
             y[unsafe_offset=18 * i + 2 + j // 4] |= UInt8(q << ((j % 4) * 2))
 
-def q2_k_row(x: FP, y: BP, n: Int, sf: FP, sb: BP):
-    var weights = sf
-    var mins = sf.unsafe_offset(32)
-    var scales = sf.unsafe_offset(48)
+def q2_k_row(x: FP, y: BP, n: Int, sb: BP):
+    comptime F = SIMD[DType.float32, 16]
+    var xt = Array[F, 16](uninitialized=True)
+    var wt = Array[F, 16](uninitialized=True)
+    var Lt = Array[SIMD[DType.int32, 16], 16](uninitialized=True)
     var L = sb
-    var Laux = sb.unsafe_offset(QK_K)
     for i in range(n // QK_K):
         var xb = x.unsafe_offset(QK_K * i)
         var yb = y.unsafe_offset(84 * i)
+        for l in range(16):
+            var v = F(0)
+            for j in range(16):
+                v[j] = xb[unsafe_offset=16 * j + l]
+            xt[l] = v
+            wt[l] = abs(v)
+        var mins = F(0)
+        var scales = qkx2_lanes[16, 16, 3, 15, True](xt, wt, Lt, mins, -0.5, 0.1)
+        for l in range(16):
+            for j in range(16):
+                L[unsafe_offset=16 * j + l] = UInt8(Lt[l][j])
         var max_scale = Float32(0)
         var max_min = Float32(0)
         for j in range(16):
-            for l in range(16):
-                weights[unsafe_offset=l] = abs(xb[unsafe_offset=16 * j + l])
-            scales[unsafe_offset=j] = make_qkx2_quants(16, 3, xb.unsafe_offset(16 * j), weights, L.unsafe_offset(16 * j),
-                                                     mins.unsafe_offset(j), Laux, -0.5, 0.1, 15, True)
-            if scales[unsafe_offset=j] > max_scale:
-                max_scale = scales[unsafe_offset=j]
-            if mins[unsafe_offset=j] > max_min:
-                max_min = mins[unsafe_offset=j]
+            if scales[j] > max_scale:
+                max_scale = scales[j]
+            if mins[j] > max_min:
+                max_min = mins[j]
         var d16 = Float16(0)
         var dm16 = Float16(0)
         if max_scale > 0:
             var iscale = 15.0 / max_scale
             for j in range(16):
-                yb[unsafe_offset=j] = UInt8(nint(iscale * scales[unsafe_offset=j]) & 0xFF)
+                yb[unsafe_offset=j] = UInt8(nint(m(iscale, scales[j])) & 0xFF)
             d16 = Float16(max_scale / 15.0)
         else:
             for j in range(16):
@@ -292,7 +327,7 @@ def q2_k_row(x: FP, y: BP, n: Int, sf: FP, sb: BP):
         if max_min > 0:
             var iscale = 15.0 / max_min
             for j in range(16):
-                yb[unsafe_offset=j] |= UInt8((nint(iscale * mins[unsafe_offset=j]) << 4) & 0xFF)
+                yb[unsafe_offset=j] |= UInt8((nint(m(iscale, mins[j])) << 4) & 0xFF)
             dm16 = Float16(max_min / 15.0)
         put16(yb, 80, Int(bitcast[DType.uint16](d16)))
         put16(yb, 82, Int(bitcast[DType.uint16](dm16)))
@@ -309,35 +344,42 @@ def q2_k_row(x: FP, y: BP, n: Int, sf: FP, sb: BP):
                 yb[unsafe_offset=16 + j // 4 + l] = L[unsafe_offset=j + l] | (L[unsafe_offset=j + l + 32] << 2) | (
                     L[unsafe_offset=j + l + 64] << 4) | (L[unsafe_offset=j + l + 96] << 6)
 
-def q4_k_row(x: FP, y: BP, n: Int, sf: FP, sb: BP):
-    var weights = sf
-    var mins = sf.unsafe_offset(32)
-    var scales = sf.unsafe_offset(48)
+def q4_k_row(x: FP, y: BP, n: Int, sb: BP):
+    comptime F = SIMD[DType.float32, 8]
+    var xt = Array[F, 32](uninitialized=True)
+    var wt = Array[F, 32](uninitialized=True)
+    var Lt = Array[SIMD[DType.int32, 8], 32](uninitialized=True)
     var L = sb
-    var Laux = sb.unsafe_offset(QK_K)
     for i in range(n // QK_K):
         var xb = x.unsafe_offset(QK_K * i)
         var yb = y.unsafe_offset(144 * i)
+        var sum_x2 = F(0)
+        for l in range(32):
+            var v = F(0)
+            for j in range(8):
+                v[j] = xb[unsafe_offset=32 * j + l]
+            xt[l] = v
+            sum_x2 += vm[8](v, v)
+        var av_x = sqrt(sum_x2 / F(32))
+        for l in range(32):
+            wt[l] = av_x + abs(xt[l])
+        var mins = F(0)
+        var scales = qkx2_lanes[8, 32, 15, 20, False](xt, wt, Lt, mins, -1.0, 0.1)
+        for l in range(32):
+            for j in range(8):
+                L[unsafe_offset=32 * j + l] = UInt8(Lt[l][j])
         var max_scale = Float32(0)
         var max_min = Float32(0)
         for j in range(8):
-            var sum_x2 = Float32(0)
-            for l in range(32):
-                sum_x2 += m(xb[unsafe_offset=32 * j + l], xb[unsafe_offset=32 * j + l])
-            var av_x = sqrt(sum_x2 / 32.0)
-            for l in range(32):
-                weights[unsafe_offset=l] = av_x + abs(xb[unsafe_offset=32 * j + l])
-            scales[unsafe_offset=j] = make_qkx2_quants(32, 15, xb.unsafe_offset(32 * j), weights, L.unsafe_offset(32 * j),
-                                                     mins.unsafe_offset(j), Laux, -1.0, 0.1, 20, False)
-            if scales[unsafe_offset=j] > max_scale:
-                max_scale = scales[unsafe_offset=j]
-            if mins[unsafe_offset=j] > max_min:
-                max_min = mins[unsafe_offset=j]
+            if scales[j] > max_scale:
+                max_scale = scales[j]
+            if mins[j] > max_min:
+                max_min = mins[j]
         var inv_scale = 63.0 / max_scale if max_scale > 0 else Float32(0)
         var inv_min = 63.0 / max_min if max_min > 0 else Float32(0)
         for j in range(8):
-            var ls = min(63, nint(inv_scale * scales[unsafe_offset=j]) & 0xFF)
-            var lm = min(63, nint(inv_min * mins[unsafe_offset=j]) & 0xFF)
+            var ls = min(63, nint(m(inv_scale, scales[j])) & 0xFF)
+            var lm = min(63, nint(m(inv_min, mins[j])) & 0xFF)
             if j < 4:
                 yb[unsafe_offset=4 + j] = UInt8(ls)
                 yb[unsafe_offset=4 + j + 4] = UInt8(lm)
@@ -369,20 +411,29 @@ def q4_k_row(x: FP, y: BP, n: Int, sf: FP, sb: BP):
             for l in range(32):
                 yb[unsafe_offset=16 + 32 * k + l] = L[unsafe_offset=64 * k + l] | (L[unsafe_offset=64 * k + l + 32] << 4)
 
-def q6_k_row(x: FP, y: BP, n: Int, sf: FP, sb: BP):
-    var scales = sf
+def q6_k_row(x: FP, y: BP, n: Int, sb: BP):
+    comptime F = SIMD[DType.float32, 16]
+    var xt = Array[F, 16](uninitialized=True)
+    var Lt = Array[SIMD[DType.int32, 16], 16](uninitialized=True)
     var L = sb
     for i in range(n // QK_K):
         var xb = x.unsafe_offset(QK_K * i)
         var yb = y.unsafe_offset(210 * i)
+        for l in range(16):
+            var v = F(0)
+            for j in range(16):
+                v[j] = xb[unsafe_offset=16 * j + l]
+            xt[l] = v
+        var scales = qx_lanes[16, 16, 32](xt, Lt)
+        for l in range(16):
+            for j in range(16):
+                L[unsafe_offset=16 * j + l] = UInt8(Lt[l][j])
         var max_scale = Float32(0)
         var max_abs = Float32(0)
         for ib in range(16):
-            var s = make_qx_quants(16, 32, xb.unsafe_offset(16 * ib), L.unsafe_offset(16 * ib))
-            scales[unsafe_offset=ib] = s
-            if abs(s) > max_abs:
-                max_abs = abs(s)
-                max_scale = s
+            if abs(scales[ib]) > max_abs:
+                max_abs = abs(scales[ib])
+                max_scale = scales[ib]
         if max_abs < EPS:
             for k in range(210):
                 yb[unsafe_offset=k] = 0
@@ -391,7 +442,7 @@ def q6_k_row(x: FP, y: BP, n: Int, sf: FP, sb: BP):
         var d16 = Float16(1.0 / iscale)
         put16(yb, 208, Int(bitcast[DType.uint16](d16)))
         for ib in range(16):
-            yb[unsafe_offset=192 + ib] = UInt8(min(127, nint(iscale * scales[unsafe_offset=ib])) & 0xFF)
+            yb[unsafe_offset=192 + ib] = UInt8(min(127, nint(m(iscale, scales[ib]))) & 0xFF)
         for j in range(16):
             var sc = Int(yb[unsafe_offset=192 + j])
             if sc >= 128:
@@ -460,8 +511,8 @@ def tq2_0_row(x: FP, y: BP, n: Int):
                     q += ((roundf(xb[unsafe_offset=4 * j + m + k * 32] * id) + 1) & 3) << (2 * k)
                 yb[unsafe_offset=j + m] = UInt8(q)
 
-def quantize_row(t: Int, x: FP, y: BP, n: Int, sf: FP, sb: BP):
-    """One row of n floats into the row layout of type t. sf: 64 floats of scratch, sb: 288 bytes."""
+def quantize_row(t: Int, x: FP, y: BP, n: Int, sb: BP):
+    """One row of n floats into the row layout of type t. sb: 256 bytes of scratch."""
     if t == T_Q8_0:
         q8_0_row(x, y, n)
     elif t == T_Q4_0:
@@ -471,11 +522,11 @@ def quantize_row(t: Int, x: FP, y: BP, n: Int, sf: FP, sb: BP):
     elif t == T_Q2_0:
         q2_0_row(x, y, n)
     elif t == T_Q2_K:
-        q2_k_row(x, y, n, sf, sb)
+        q2_k_row(x, y, n, sb)
     elif t == T_Q4_K:
-        q4_k_row(x, y, n, sf, sb)
+        q4_k_row(x, y, n, sb)
     elif t == T_Q6_K:
-        q6_k_row(x, y, n, sf, sb)
+        q6_k_row(x, y, n, sb)
     elif t == T_TQ1_0:
         tq1_0_row(x, y, n)
     elif t == T_TQ2_0:

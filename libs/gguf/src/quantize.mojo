@@ -1,4 +1,4 @@
-"""quantize --pure IN OUT TYPE [NTHREADS]: llama-quantize's pure mode, byte for byte.
+"""Quantize --pure IN OUT TYPE [NTHREADS]: llama-quantize's pure mode, byte for byte.
 
 One type for every weight tensor (with llama-quantize's block-size fallbacks), written in the
 loader's tensor order. Tensor data is streamed in slabs of rows through two fixed buffers and
@@ -11,7 +11,7 @@ from max.algorithm import parallelize
 from gguf import Gguf
 from gguf.model import Out, T_STRING, pad_to, pread_into
 from gguf.quants import (FP, BP, T_F32, T_F16, T_BF16, T_Q4_0, T_Q5_0, T_Q8_0, T_Q2_K, T_Q4_K, T_Q6_K,
-                         T_TQ1_0, T_TQ2_0, T_Q2_0, blck, row_size, quantize_row)
+                         T_TQ1_0, T_TQ2_0, T_Q2_0, QK_K, blck, row_size, quantize_row)
 
 comptime SLAB = 16 << 20
 comptime QUANT_VERSION = 2
@@ -48,7 +48,7 @@ def parse_type(name: String) raises -> Tuple[Int, Int]:
     raise Error("unsupported type " + name)
 
 def fallback(target: Int, ne0: Int) -> Int:
-    """llama-quantize's demotion when a row is not a whole number of blocks."""
+    """The demotion llama-quantize applies when a row is not a whole number of blocks."""
     if ne0 % blck(target) == 0:
         return target
     var t = target
@@ -145,15 +145,13 @@ def quantize_tensor(fd: Int32, ofd: Int32, p: Plan, out_at: Int, nthreads: Int) 
 
         def work(w: Int) {imm}:
             var rowf = List[Float32](length=ne0, fill=0)
-            var sf = List[Float32](length=64, fill=0)
-            var sb = List[UInt8](length=288, fill=0)
+            var sb = List[UInt8](length=QK_K, fill=0)
             var rp = rowf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-            var fp = sf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
             var bp = sb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
             for r in range(w * nr // items, (w + 1) * nr // items):
                 load_row(st, sp, r * src_row, ne0, rp)
-                quantize_row(dt, rp, dp.unsafe_offset(r * dst_row), ne0, fp, bp)
-            _ = len(rowf) + len(sf) + len(sb)
+                quantize_row(dt, rp, dp.unsafe_offset(r * dst_row), ne0, bp)
+            _ = len(rowf) + len(sb)
         parallelize(work, items, nthreads)
         pwrite_all(ofd, dbuf, nr * dst_row, out_at + r0 * dst_row)
 
@@ -181,7 +179,6 @@ def run() raises:
     var ft = parse_type(pos[2])
     var g = Gguf(pos[0])
     var n = len(g.tensors)
-    var total = g.fsize - g.data_offset
     var plans = List[Plan]()
     for t in range(n):
         ref info = g.tensors[t]
@@ -195,8 +192,9 @@ def run() raises:
         var dst = info.ttype
         if allows_quantization(info.name, n_dims):
             dst = fallback(ft[1], ne0)
-            if blck(info.ttype) == 0 or info.ttype > T_BF16:
-                raise Error("cannot requantize tensor " + info.name + " of type " + String(info.ttype))
+            var is_float = info.ttype == T_F32 or info.ttype == T_F16 or info.ttype == T_BF16
+            if dst != info.ttype and not is_float:
+                raise Error("requantizing tensor " + info.name + " from type " + String(info.ttype) + " is not supported")
         elif blck(info.ttype) == 0:
             raise Error("unsupported type " + String(info.ttype) + " in tensor " + info.name)
         plans.append(Plan(info.ttype, dst, ne0, nrows, g.data_offset + info.offset))
@@ -264,7 +262,6 @@ def run() raises:
         var pad = pad_to(p.dst_bytes, g.alignment) - p.dst_bytes
         if pad > 0:
             pwrite_all(out.fd, List[UInt8](length=pad, fill=0), pad, base + p.dst_off + p.dst_bytes)
-    _ = total
     out.close()
 
 def main():

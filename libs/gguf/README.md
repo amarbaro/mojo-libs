@@ -2,7 +2,7 @@
 
 GGUF tooling in Mojo: reader/writer, HF safetensors to GGUF conversion, quantizers, and the gguf-py
 scripts, each unit gated byte-for-byte against a pinned llama.cpp (`1744c6bde`). Built so far: the oracle,
-the gates, and U1 (GGUF v3 reader/writer + `gguf-rewrite`, this lane); units and status: `docs/PLAN.md`.
+the gates, U1 (GGUF v3 reader/writer + `gguf-rewrite`) and U4 (`quantize --pure`); units and status: `docs/PLAN.md`.
 
 ## What exists
 
@@ -15,6 +15,8 @@ the gates, and U1 (GGUF v3 reader/writer + `gguf-rewrite`, this lane); units and
 | `src/gguf_rewrite.mojo` | CLI `gguf-rewrite IN OUT [--name STR] [--remove KEY]...`; first stdout line `kv K tensors T alignment A data_offset D`; edits match `gguf_new_metadata.py` byte for byte |
 | `tools/type-census.mojo` | tensor-type census over GGUF files (header + tensor table only): count and bytes per type, per file and total; U6 scope |
 | `tests/u1-gate.sh` | U1 gate (reader/writer round trip, parse summary, metadata edits), 16 checks |
+| `src/quantize.mojo` + `src/gguf/quants.mojo` | CLI `quantize --pure IN OUT TYPE [NTHREADS]` for Q8_0 Q4_0 Q4_K Q6_K Q2_K Q2_0 TQ1_0 TQ2_0 (with llama-quantize's block-size fallbacks), byte-identical to `llama-quantize --pure`; K-quant fits run one sub-block per SIMD lane, every product fenced against FMA contraction |
+| `tests/u4-gate.sh` | U4 gate: identical bytes per type + wall and peak RSS next to the oracle's, 11 checks |
 
 ## Build and gate
 
