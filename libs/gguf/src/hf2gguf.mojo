@@ -9,7 +9,7 @@ Rules ported from the script, in the order it applies them:
     tokenizer: vocab padded to config vocab_size with [PAD<i>], token types from the added-token flags,
     merges, special ids (tokenizer_config.json, then config.json), chat template
   * tokenizer.ggml.pre: the script hashes a tokenization of a fixed text with HF tokenizers. Here the name is
-    looked up from the pre_tokenizer section of tokenizer.json (PRE_NAMES): the same regex and ByteLevel flags
+    looked up from the pre_tokenizer section of tokenizer.json (QWEN2_RE): the same regex and ByteLevel flags
     give the same hash for the same vocab family. A pre-tokenizer not in the table is a FAIL, never a guess.
 """
 from std.sys import argv, exit
@@ -182,7 +182,7 @@ def pre_name(tj: Json) raises -> String:
             ok = tj.get_string(byte_level, "type") == "ByteLevel" and tj.kind(tj.get(byte_level, "add_prefix_space")) == 102 \
                 and tj.kind(tj.get(byte_level, "use_regex")) == 102
     if not ok:
-        raise Error("pre-tokenizer not in the hf2gguf table (src/hf2gguf.mojo PRE_NAMES): hash it with the script, then add a row")
+        raise Error("pre-tokenizer not in the hf2gguf table (QWEN2_RE in src/hf2gguf.mojo): hash it with the script, then add a row")
     return "qwen2"
 
 def tokenizer_kvs(dir: String, hp: Json, mut w: Gw) raises:
