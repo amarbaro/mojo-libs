@@ -15,12 +15,17 @@ the gates, and U1 (GGUF v3 reader/writer + `gguf-rewrite`, this lane); units and
 | `src/gguf_rewrite.mojo` | CLI `gguf-rewrite IN OUT [--name STR] [--remove KEY]...`; first stdout line `kv K tensors T alignment A data_offset D`; edits match `gguf_new_metadata.py` byte for byte |
 | `tools/type-census.mojo` | tensor-type census over GGUF files (header + tensor table only): count and bytes per type, per file and total; U6 scope |
 | `tests/u1-gate.sh` | U1 gate (reader/writer round trip, parse summary, metadata edits), 16 checks |
+| `src/gguf_tool.mojo` | CLI `gguf-tool dump\|hash\|set-metadata\|convert-endian ARGS`: the four gguf-py scripts, matched on stdout, exit code and written bytes; U5 |
+| `src/gguf/{fmt,values,quant,sha}.mojo` | Python-compatible formatting (exact `%.Nf`, repr, numpy float32 str), in-place value reads, GGML type table, streaming SHA-1/SHA-256 |
+| `tests/u5-gate.sh` | U5 gate (dump, hash, set-metadata, convert-endian against the pinned scripts), 14 checks |
 
 ## Build and gate
 
 ```
 .venv/bin/mojo build src/gguf_rewrite.mojo -I src -o .work/u1/gguf-rewrite
 tests/u1-gate.sh        # PASS 16/16; bf16 rewrite 994 MB: 19 MB peak RSS (runtime floor 17 MB)
+.venv/bin/mojo build src/gguf_tool.mojo -I src -o .work/u5/gguf-tool
+tests/u5-gate.sh        # PASS 14/14 (the gate builds the tool itself)
 ```
 
 Layout rules the writer follows: tensor sizes come from the input's own offsets (no quant table);
