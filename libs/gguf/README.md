@@ -19,7 +19,7 @@ the gates, U1 (GGUF v3 reader/writer + `gguf-rewrite`) and U3a (safetensors read
 | `src/hf2gguf.mojo` | CLI `hf2gguf HF_DIR --outfile OUT --outtype bf16\|q8_0` for Qwen2 (`Qwen2ForCausalLM`, `Qwen2Model`); byte-identical to `convert_hf_to_gguf.py`; every unsupported input is `FAIL hf2gguf: <reason>`, exit 1 |
 | `src/hfconv/` | converter pieces: `qwen2_names.mojo` (HF to GGUF tensor names, swap for the generated map), `naming.mojo` (gguf-py Metadata name heuristics), `quant.mojo` (BF16 / F32 / Q8_0 kernels, bit-exact with gguf-py `quants.py`) |
 | `tests/u3-gate.sh` | U3a gate: bf16 and q8_0 identical-bytes against the script, wall + peak RSS vs the oracle |
-| `tools/u3-naming-check.sh` | `hfconv.naming` vs gguf-py `get_model_id_components` / `id_to_title` / `size_label` on 25 ids x 3 parameter counts |
+| `check/u3-naming-check.sh` | `hfconv.naming` vs gguf-py `get_model_id_components` / `id_to_title` / `size_label` on 25 ids x 3 parameter counts |
 
 ## Build and gate
 

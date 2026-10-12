@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # hfconv.naming vs gguf-py Metadata.get_model_id_components / id_to_title / size_label on a list of model ids.
-#   tools/u3-naming-check.sh          exit 0 only when every line agrees
+#   check/u3-naming-check.sh          exit 0 only when every line agrees
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 MAIN=$(cd "$(git rev-parse --path-format=absolute --git-common-dir)/.." && pwd)
 LLAMACPP=${LLAMACPP:-$HOME/Projects/imports/llama.cpp-master}
 W=.work/u3; mkdir -p "$W"
-"$MAIN/.venv/bin/mojo" build tools/u3-naming-probe.mojo -I src -o "$W/naming-probe" > "$W/naming-build.log" 2>&1 || { echo "FAIL build: $W/naming-build.log"; exit 1; }
+"$MAIN/.venv/bin/mojo" build check/u3-naming-probe.mojo -I src -o "$W/naming-probe" > "$W/naming-build.log" 2>&1 || { echo "FAIL build: $W/naming-build.log"; exit 1; }
 IDS=(qwen2.5-0.5b-instruct-hf Qwen/Qwen2.5-7B-Instruct Llama-3.2-1B-Instruct bloom-7b1 Mixtral-8x7B-Instruct-v0.1
      granite-4.2-3b-bf16 Meta-Llama-3.1-8B phi-2 gemma-2-9b-it Qwen3-30B-A3B tinyllama-1.1b-chat-v1.0 model
      mistral-7b-instruct-v0.2-Q4_K_M SmolLM2-135M deepseek-coder-6.7b-base x-large Falcon3-1B-Base falcon-180B-chat
