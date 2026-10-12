@@ -18,5 +18,6 @@ grep -q "version: $v" recipe.yaml || say "recipe version is not $v"
 grep -q '\[yyyy\]\|\[name of copyright owner\]' LICENSE && say "LICENSE appendix still has the template placeholders"
 grep -q 'github.com/amarbaro/xmojo' recipe.yaml || say "recipe homepage/repository not github.com/amarbaro/xmojo"
 "$HOME/iTools/bin/gh-actions-runtime" . || say "workflow action on a deprecated runtime (gh-actions-runtime)"
+pixi exec actionlint || say "workflow lint (actionlint)"
 [ "$fail" = 0 ] && echo "publish-check: OK ($(git rev-parse --short HEAD))"
 exit $fail
