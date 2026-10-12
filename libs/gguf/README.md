@@ -36,6 +36,9 @@ the gates, U1 (GGUF v3 reader/writer + `gguf-rewrite`) and U6 CPU dequant (`gguf
 | `src/gguf_dequant.mojo` | CLI `gguf-dequant MODEL TENSOR ROW0 N OUT.f32`: N rows as little-endian f32, streamed through a 16 MiB f32 buffer |
 | `tools/u6-extra-types.py` | verifier beyond the gate: random raw blocks of all 19 types (incl. Q4_1, Q2_K, IQ1_S, on no ladder model) vs `to_float`, offset reads, 20 MB streaming read |
 | `tests/u6-gate.sh` | U6 gate: 16 types of five real models, first/last tensor per type, 6 rows each, bit-equal, falsifier per type; `PASS 4/4` |
+| `src/gguf_tool.mojo` | CLI `gguf-tool dump\|hash\|set-metadata\|convert-endian ARGS`: the four gguf-py scripts, matched on stdout, exit code and written bytes; U5 |
+| `src/gguf/{fmt,values,quant,sha}.mojo` | Python-compatible formatting (exact `%.Nf`, repr, numpy float32 str), in-place value reads, GGML type table, streaming SHA-1/SHA-256 |
+| `tests/u5-gate.sh` | U5 gate (dump, hash, set-metadata, convert-endian against the pinned scripts), 14 checks |
 
 ## Build and gate
 
@@ -44,6 +47,8 @@ the gates, U1 (GGUF v3 reader/writer + `gguf-rewrite`) and U6 CPU dequant (`gguf
 tests/u1-gate.sh        # PASS 16/16; bf16 rewrite 994 MB: 19 MB peak RSS (runtime floor 17 MB)
 tests/u2-gate.sh        # PASS 7/7 (builds src/u2_dump.mojo: about 60 s, the literal tables are large)
 tests/u2-lookup-check.sh  # PASS 18527/18527
+.venv/bin/mojo build src/gguf_tool.mojo -I src -o .work/u5/gguf-tool
+tests/u5-gate.sh        # PASS 14/14 (the gate builds the tool itself)
 ```
 
 U2 tables: `tools/gen-tables.py ~/Projects/imports/llama.cpp-master/gguf-py src/gguf` regenerates them. Tensor
