@@ -1,16 +1,17 @@
 """GGUF v3 little-endian reader and writer.
 
-The model keeps the header prefix (magic .. tensor infos) in one flat buffer; KV values are typed
-spans into it, validated by a full walk (all 13 value types, nested arrays). Tensor data is never
-loaded: `rewrite` streams it from the source file in CHUNK-sized pread/write pieces.
+Nothing but small windows of the file is ever in memory: the reader walks the header through a
+WINDOW-byte sliding read buffer and records, per KV, its key, type and file span (all 13 value types
+and nested arrays are validated by the walk). `rewrite` streams KV payloads and tensor data from the
+source through one CHUNK-byte staging buffer.
 """
 from std.ffi import external_call, c_ssize_t
 
 comptime MAGIC = 0x46554747
-comptime CHUNK = 4 << 20
+comptime WINDOW = 256 << 10
+comptime CHUNK = 1 << 20
 comptime T_STRING = 8
 comptime T_ARRAY = 9
-comptime O_WRONLY_CREAT_TRUNC = 1 | 0o100 | 0o1000
 
 def fixed_size(t: Int) -> Int:
     """Byte size of a fixed-width value type; 0 for string, array and unknown."""
@@ -42,27 +43,67 @@ def pread_into(fd: Int32, mut dst: List[UInt8], at: Int, n: Int, off: Int) raise
             raise Error("short read at byte " + String(off + got))
         got += Int(r)
 
-def pwrite_all(fd: Int32, src: List[UInt8], at: Int, n: Int, off: Int) raises:
-    var done = 0
-    while done < n:
-        var r = external_call["pwrite", c_ssize_t](fd, src.unsafe_ptr().unsafe_offset(at + done), n - done, Int64(off + done))
-        if r <= 0:
-            raise Error("write failed")
-        done += Int(r)
+struct Out(Movable):
+    """Output file behind one CHUNK-byte staging buffer; every write goes through `buf`."""
+    var fd: Int32
+    var off: Int  # file offset of buf[0]
+    var used: Int
+    var buf: List[UInt8]
 
-def put(mut out: List[UInt8], v: Int, width: Int):
-    for k in range(width):
-        out.append(UInt8((v >> (8 * k)) & 0xFF))
+    def __init__(out self, path: String) raises:
+        self.fd = open_fd(path, 1 | 0o100 | 0o1000)  # O_WRONLY | O_CREAT | O_TRUNC
+        self.off = 0
+        self.used = 0
+        self.buf = List[UInt8](length=CHUNK, fill=0)
 
-def put_str(mut out: List[UInt8], s: String):
-    put(out, s.byte_length(), 8)
-    out.extend(s.as_bytes())
+    def flush(mut self) raises:
+        var done = 0
+        while done < self.used:
+            var r = external_call["pwrite", c_ssize_t](self.fd, self.buf.unsafe_ptr().unsafe_offset(done), self.used - done, Int64(self.off + done))
+            if r <= 0:
+                raise Error("write failed at byte " + String(self.off + done))
+            done += Int(r)
+        self.off += self.used
+        self.used = 0
+
+    def put(mut self, v: Int, width: Int) raises:
+        if self.used + width > CHUNK:
+            self.flush()
+        for k in range(width):
+            self.buf[self.used + k] = UInt8((v >> (8 * k)) & 0xFF)
+        self.used += width
+
+    def put_str(mut self, s: String) raises:
+        self.put(s.byte_length(), 8)
+        for b in s.as_bytes():
+            self.put(Int(b), 1)
+
+    def copy(mut self, src: Int32, at: Int, n: Int) raises:
+        var left = n
+        var pos = at
+        while left > 0:
+            if self.used == CHUNK:
+                self.flush()
+            var k = min(left, CHUNK - self.used)
+            pread_into(src, self.buf, self.used, k, pos)
+            self.used += k
+            pos += k
+            left -= k
+
+    def pad(mut self, align: Int) raises:
+        for _ in range(pad_to(self.off + self.used, align) - self.off - self.used):
+            self.put(0, 1)
+
+    def close(mut self) raises:
+        self.flush()
+        if external_call["close", Int32](self.fd) != 0:
+            raise Error("close failed")
 
 @fieldwise_init
 struct KV(Copyable, Movable):
     var key: String
     var vtype: Int
-    var start: Int  # value payload span in Gguf.buf
+    var start: Int  # value payload: file offsets [start, end)
     var end: Int
 
 @fieldwise_init
@@ -75,9 +116,10 @@ struct TensorInfo(Copyable, Movable):
 struct Gguf(Movable):
     var fd: Int32
     var fsize: Int
-    var buf: List[UInt8]
+    var win: List[UInt8]
+    var wbase: Int
+    var wlen: Int
     var pos: Int
-    var version: Int
     var kvs: List[KV]
     var tensors: List[TensorInfo]
     var alignment: Int
@@ -86,42 +128,44 @@ struct Gguf(Movable):
     def __init__(out self, path: String) raises:
         self.fd = open_fd(path, 0)
         self.fsize = Int(external_call["lseek", Int](self.fd, Int64(0), Int32(2)))
-        self.buf = List[UInt8]()
+        self.win = List[UInt8](length=WINDOW, fill=0)
+        self.wbase = 0
+        self.wlen = 0
         self.pos = 0
-        self.version = 0
         self.kvs = List[KV]()
         self.tensors = List[TensorInfo]()
         self.alignment = 32
         self.data_offset = 0
-        if self._u32() != MAGIC:
+        if self._int(4) != MAGIC:
             raise Error(path + " is not a GGUF file")
-        self.version = self._u32()
-        if self.version != 3:
-            raise Error("only GGUF v3 is supported, got v" + String(self.version))
-        var n_tensors = self._u64()
-        var n_kv = self._u64()
+        var version = self._int(4)
+        if version != 3:
+            raise Error("only GGUF v3 is supported, got v" + String(version))
+        var n_tensors = self._int(8)
+        var n_kv = self._int(8)
         for _ in range(n_kv):
             var key = self._str()
-            var vtype = self._u32()
+            var vtype = self._int(4)
             var start = self.pos
             self._skip_value(vtype)
             self.kvs.append(KV(key^, vtype, start, self.pos))
-        for k in range(len(self.kvs)):
-            if self.kvs[k].key == "general.alignment":
-                if self.kvs[k].vtype != 4:
-                    raise Error("general.alignment is not uint32")
-                self.pos = self.kvs[k].start
-                self.alignment = self._u32()
+        var a = self.find("general.alignment")
+        if a >= 0:
+            if self.kvs[a].vtype != 4:
+                raise Error("general.alignment is not uint32")
+            var end = self.pos
+            self.pos = self.kvs[a].start
+            self.alignment = self._int(4)
+            self.pos = end
         if self.alignment == 0 or (self.alignment & (self.alignment - 1)) != 0:
             raise Error("alignment " + String(self.alignment) + " is not a power of two")
-        self.pos = self.kvs[len(self.kvs) - 1].end if len(self.kvs) > 0 else 24
         for _ in range(n_tensors):
             var name = self._str()
             var dims = List[Int]()
-            for _ in range(self._u32()):
-                dims.append(self._u64())
-            var ttype = self._u32()
-            self.tensors.append(TensorInfo(name^, dims^, ttype, self._u64()))
+            for _ in range(self._int(4)):
+                dims.append(self._int(8))
+            var ttype = self._int(4)
+            self.tensors.append(TensorInfo(name^, dims^, ttype, self._int(8)))
         self.data_offset = pad_to(self.pos, self.alignment)
         var prev = 0
         for t in range(len(self.tensors)):
@@ -134,59 +178,52 @@ struct Gguf(Movable):
         _ = external_call["close", Int32](self.fd)
 
     def _need(mut self, n: Int) raises:
-        if n < 0 or n > self.fsize:
-            raise Error("truncated GGUF: bad length " + String(n))
-        var end = self.pos + n
-        if end <= len(self.buf):
+        if n < 0 or self.pos + n > self.fsize:
+            raise Error("truncated GGUF: need " + String(n) + " bytes at " + String(self.pos) + " of " + String(self.fsize))
+        if self.pos >= self.wbase and self.pos + n <= self.wbase + self.wlen:
             return
-        if end > self.fsize:
-            raise Error("truncated GGUF: need byte " + String(end) + " of " + String(self.fsize))
-        var have = len(self.buf)
-        var want = min(self.fsize, max(end, max(2 * have, 1 << 20)))
-        self.buf.resize(want, 0)
-        pread_into(self.fd, self.buf, have, want - have, have)
+        if n > len(self.win):
+            self.win = List[UInt8](length=n, fill=0)
+        self.wlen = min(len(self.win), self.fsize - self.pos)
+        self.wbase = self.pos
+        pread_into(self.fd, self.win, 0, self.wlen, self.pos)
 
     def _int(mut self, width: Int) raises -> Int:
         self._need(width)
         var v = 0
         for k in range(width):
-            v |= Int(self.buf[self.pos + k]) << (8 * k)
+            v |= Int(self.win[self.pos - self.wbase + k]) << (8 * k)
         self.pos += width
         return v
 
-    def _u32(mut self) raises -> Int:
-        return self._int(4)
-
-    def _u64(mut self) raises -> Int:
-        return self._int(8)
-
     def _str(mut self) raises -> String:
-        var n = self._u64()
+        var n = self._int(8)
         self._need(n)
-        var s = String(unsafe_from_utf8=Span(self.buf)[self.pos : self.pos + n])
+        var at = self.pos - self.wbase
         self.pos += n
-        return s^
+        return String(unsafe_from_utf8=Span(self.win)[at : at + n])
+
+    def _skip(mut self, n: Int) raises:
+        if n < 0 or self.pos + n > self.fsize:
+            raise Error("truncated GGUF: value of " + String(n) + " bytes at " + String(self.pos))
+        self.pos += n
 
     def _skip_value(mut self, vtype: Int) raises:
         var w = fixed_size(vtype)
         if w > 0:
-            self._need(w)
-            self.pos += w
+            self._skip(w)
         elif vtype == T_STRING:
-            var n = self._u64()
-            self._need(n)
-            self.pos += n
+            self._skip(self._int(8))
         elif vtype == T_ARRAY:
-            var et = self._u32()
-            var n = self._u64()
+            var et = self._int(4)
+            var n = self._int(8)
+            var ew = fixed_size(et)
             if et > 12:
                 raise Error("unknown array element type " + String(et))
-            var ew = fixed_size(et)
             if ew > 0:
                 if n > self.fsize // ew:
                     raise Error("truncated GGUF: array of " + String(n))
-                self._need(n * ew)
-                self.pos += n * ew
+                self._skip(n * ew)
             else:
                 for _ in range(n):
                     self._skip_value(et)
@@ -203,7 +240,7 @@ struct Gguf(Movable):
         return String("kv ", len(self.kvs), " tensors ", len(self.tensors), " alignment ", self.alignment,
                       " data_offset ", self.data_offset)
 
-    def rewrite(mut self, out_path: String, name: String, remove: List[String]) raises:
+    def rewrite(self, out_path: String, name: String, remove: List[String]) raises:
         """Write the model to out_path. With no edit the layout is the source's; with an edit it is
         what gguf_new_metadata.py (GGUFWriter) produces: architecture KV first, `general.name`
         replaced in place or appended, removed keys dropped, no padding after an empty tensor list."""
@@ -212,73 +249,49 @@ struct Gguf(Movable):
         if edited and arch < 0:
             raise Error("cannot edit: no general.architecture KV")
         var order = List[Int]()
+        var has_name = False
         if edited:
             order.append(arch)
         for i in range(len(self.kvs)):
             if edited and (i == arch or self.kvs[i].key in remove):
                 continue
             order.append(i)
-        var name_at = len(self.buf)
-        put_str(self.buf, name)
-        var hdr = List[UInt8]()
-        put(hdr, MAGIC, 4)
-        put(hdr, 3, 4)
-        put(hdr, len(self.tensors), 8)
-        var n_kv_at = len(hdr)
-        put(hdr, 0, 8)
-        var n_kv = 0
-        var named = name.byte_length() == 0
         for i in order:
-            var kv = self.kvs[i].copy()
-            if name.byte_length() > 0 and kv.key == "general.name":
-                kv = KV(kv.key.copy(), T_STRING, name_at, len(self.buf))
-                named = True
-            put_str(hdr, kv.key)
-            put(hdr, kv.vtype, 4)
-            hdr.extend(Span(self.buf)[kv.start : kv.end])
-            n_kv += 1
-        if not named:
-            put_str(hdr, "general.name")
-            put(hdr, T_STRING, 4)
-            hdr.extend(Span(self.buf)[name_at:])
-            n_kv += 1
-        for k in range(8):
-            hdr[n_kv_at + k] = UInt8((n_kv >> (8 * k)) & 0xFF)
+            has_name = has_name or self.kvs[i].key == "general.name"
+        var rename = name.byte_length() > 0
+        var out = Out(out_path)
+        out.put(MAGIC, 4)
+        out.put(3, 4)
+        out.put(len(self.tensors), 8)
+        out.put(len(order) + Int(rename and not has_name), 8)
+        for i in order:
+            ref kv = self.kvs[i]
+            out.put_str(kv.key)
+            out.put(T_STRING if rename and kv.key == "general.name" else kv.vtype, 4)
+            if rename and kv.key == "general.name":
+                out.put_str(name)
+            else:
+                out.copy(self.fd, kv.start, kv.end - kv.start)
+        if rename and not has_name:
+            out.put_str("general.name")
+            out.put(T_STRING, 4)
+            out.put_str(name)
         var total = self.fsize - self.data_offset
-        var out_off = 0
-        var spans = List[Int]()
+        var new_off = 0
+        for t in range(len(self.tensors)):
+            ref info = self.tensors[t]
+            out.put_str(info.name)
+            out.put(len(info.dims), 4)
+            for d in info.dims:
+                out.put(d, 8)
+            out.put(info.ttype, 4)
+            out.put(new_off, 8)
+            var nxt = self.tensors[t + 1].offset if t + 1 < len(self.tensors) else total
+            new_off += pad_to(nxt - info.offset, self.alignment)
+        if len(self.tensors) > 0 or not edited:
+            out.pad(self.alignment)
         for t in range(len(self.tensors)):
             var nxt = self.tensors[t + 1].offset if t + 1 < len(self.tensors) else total
-            var info = self.tensors[t].copy()
-            spans.append(nxt - info.offset)
-            put_str(hdr, info.name)
-            put(hdr, len(info.dims), 4)
-            for d in info.dims:
-                put(hdr, d, 8)
-            put(hdr, info.ttype, 4)
-            put(hdr, out_off, 8)
-            out_off += pad_to(nxt - info.offset, self.alignment)
-        var fout = open_fd(out_path, O_WRONLY_CREAT_TRUNC)
-        pwrite_all(fout, hdr, 0, len(hdr), 0)
-        var opos = len(hdr)
-        var zeros = List[UInt8](length=self.alignment, fill=0)
-        if len(self.tensors) > 0 or not edited:
-            var pad = pad_to(opos, self.alignment) - opos
-            pwrite_all(fout, zeros, 0, pad, opos)
-            opos += pad
-        var chunk = List[UInt8](length=CHUNK, fill=0)
-        for t in range(len(self.tensors)):
-            var left = spans[t]
-            var at = self.data_offset + self.tensors[t].offset
-            while left > 0:
-                var n = min(left, CHUNK)
-                pread_into(self.fd, chunk, 0, n, at)
-                pwrite_all(fout, chunk, 0, n, opos)
-                opos += n
-                at += n
-                left -= n
-            var pad = pad_to(spans[t], self.alignment) - spans[t]
-            pwrite_all(fout, zeros, 0, pad, opos)
-            opos += pad
-        if external_call["close", Int32](fout) != 0:
-            raise Error("close failed on " + out_path)
+            out.copy(self.fd, self.data_offset + self.tensors[t].offset, nxt - self.tensors[t].offset)
+            out.pad(self.alignment)
+        out.close()
