@@ -41,6 +41,8 @@ quality of a quant vs its bf16 source). Units and status: `docs/PLAN.md`.
 | `src/gguf_tool.mojo` | CLI `gguf-tool dump\|hash\|set-metadata\|convert-endian ARGS`: the four gguf-py scripts, matched on stdout, exit code and written bytes; U5 |
 | `src/gguf/{fmt,values,quant,sha}.mojo` | Python-compatible formatting (exact `%.Nf`, repr, numpy float32 str), in-place value reads, GGML type table, streaming SHA-1/SHA-256 |
 | `tests/u5-gate.sh` | U5 gate (dump, hash, set-metadata, convert-endian against the pinned scripts), 14 checks |
+| `src/gguf_latent.mojo` | CLI `gguf-latent bake IN OUT --wa W.f32 --beta B --row-median M` appends `latent.version`, `latent.beta`, `latent.embd_row_median`, `latent.w_a` (f32 d*d), `latent.w_a.shape` (u32 [d, d]) as KV, replacing them if present, tensors streamed verbatim; `gguf-latent show FILE`; L2 |
+| `tests/l2-gate.sh` | L2 gate (bake read back against the fixture, rebake idempotent, show, llama-cli loads the baked file under gpu-wait), `PASS 7/7` |
 | `src/lora2gguf.mojo` | CLI `lora2gguf ADAPTER_DIR --base HF_DIR --outfile OUT --outtype f32\|f16\|bf16\|q8_0`: `convert_lora_to_gguf.py` for Qwen2 bases, byte-identical; U7 |
 | `tests/u7-gate.sh` | U7 gate: two synthetic adapters x three out types vs the script, `PASS 9/9` |
 | `tools/lora-extra-check.sh` | lora2gguf vs the script on an adapter the gate does not reach (embedding transpose, norms, F16, mixed dtypes, aLoRA tokens, dir/template outfile) |
@@ -60,6 +62,8 @@ tests/u2-gate.sh        # PASS 7/7 (builds src/u2_dump.mojo: about 60 s, the lit
 tests/u2-lookup-check.sh  # PASS 18527/18527
 .venv/bin/mojo build src/gguf_tool.mojo -I src -o .work/u5/gguf-tool
 tests/u5-gate.sh        # PASS 14/14 (the gate builds the tool itself)
+.venv/bin/mojo build src/gguf_latent.mojo -I src -o .work/l2/gguf-latent
+tests/l2-gate.sh        # PASS 7/7 (builds the tool itself; bake of the 317 MB Q4_K fixture: 1.22 s / 18.8 MB peak RSS)
 .venv/bin/mojo build src/ggml2gguf.mojo -I src -o .work/u9/ggml2gguf
 tests/u9-gate.sh        # PASS 7/7 (the gate builds the tool itself); 83 MB F16 file: 0.04 s / 37 MB peak RSS, script 0.22 s / 122 MB
 tests/u9-parity.sh      # PASS 25/25
