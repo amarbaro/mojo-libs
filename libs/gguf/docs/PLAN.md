@@ -11,6 +11,7 @@ flowchart LR
   U1 --> U4[U4 quant encoders]
   U2 --> U3[U3 safetensors + hf2gguf<br/>qwen2, then qwen3_5]
   U1 --> U5[U5 scripts: dump, set/new_metadata, hash, endian]
+  U0 --> U6[U6 dequant, CPU + GPU<br/>every type on disk]
 ```
 
 ## Upstream size (wc -l at f9a95ae, 2026-10-12)
@@ -55,3 +56,32 @@ codex `gpt-6-luna`, deepseek via AgentJack, claude sonnet, local model via `baro
 Score per lane: gate PASS count (of 11), wall clock to READY, LOC, repair rounds, orchestrator nudges,
 rewrite wall + RSS on the 994 MB file. Later units go to the winner; decorrelated second writer for U3/U4
 if two lanes pass.
+
+## U6 dequant (added 2026-10-12, Mario: every type on disk, CPU + GPU, five best models first)
+
+Why: gguf-py cannot open Qwen3.8-Flash (type 42, Q2_0); latent-wa dequantizes 8 types on the CPU, q4x has GPU kernels
+only for Flash's types. One Mojo dequant for every type on this box, CPU and GPU, each row bit-equal to llama.cpp.
+
+Census (`tools/type-census.mojo`, 44 LLM GGUFs under ~/Models, header + tensor table only, 0.09 s / 31 MB):
+19 types on disk: F32 F16 BF16 Q4_0 Q4_1 Q5_0 Q8_0 Q2_K Q3_K Q4_K Q5_K Q6_K IQ2_XXS IQ1_S IQ1_M IQ4_NL IQ4_XS TQ1_0 Q2_0.
+
+Ladder: five models first (proposed, they cover 16 of the 19 types), then the remaining three (Q4_1, Q2_K, IQ1_S).
+
+| model | types it brings |
+|---|---|
+| Qwen3.8-Flash-Next GSQ Q2_0 (qwen4exp, flagship) | F32 F16 BF16 Q4_0 Q5_0 Q8_0 Q3_K Q4_K Q5_K Q6_K IQ4_NL IQ4_XS Q2_0 |
+| Qwen3.8-Flash-Next UD-IQ1_M | + IQ2_XXS IQ1_M |
+| RegesCore-1.0-35B UD-Q4_K_S (qwen35moe, served) + its TQ1_0 bake | + TQ1_0 |
+| Qwen3.8-27B OBLITERATED Q4_K_M | Q4_K Q6_K (dense 27B) |
+| Qwythos-9B v2 Q4_0 | Q4_0 (served 9B) |
+
+Deliverables: `src/gguf/dequant.mojo` (`deq_row(type, src, n, dst)` per type, parallel over rows), GPU row kernels
+(one per type, the m=1 decode order), CLI `gguf-dequant MODEL TENSOR [ROW0 N] OUT.f32`.
+
+Gates (harness before kernel):
+1. CPU vs oracle: `tests/u6-gate.sh` samples rows from every tensor type of each ladder model (first, last, 64 random
+   rows per tensor, seed pinned) and compares our f32 bytes with `ggml_get_type_traits(t)->to_float` from the pinned
+   build's `libggml-base.so`: bit-equal, per type `PASS n/n` or `FAIL type tensor row first-diff`.
+2. GPU vs CPU: the same rows through the GPU kernel, bit-equal to gate 1's output (under gpu-wait).
+3. Falsifier per type: one flipped byte in a block must change that row's output.
+4. Speed recorded, not gated: GB/s per type, CPU (16 threads) and GPU, plus peak RSS / VRAM.
