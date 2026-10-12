@@ -91,7 +91,7 @@ Report: `exchange/lane-u6-report.md`.
 
 ```
 .venv/bin/mojo build src/lora2gguf.mojo -I src -o .work/u7/lora2gguf
-tests/u7-gate.sh        # PASS 9/9; 0.01-0.02 s, 19-24 MB peak RSS per adapter (script: 3.6-7.2 s, 1.21 GB)
+tests/u7-gate.sh        # PASS 9/9; 0.01-0.05 s, 16-24 MB peak RSS per adapter (script: 3.6-7.2 s, 1.21 GB)
 tools/lora-extra-check.sh   # PASS 6/6 on the cases the gate's adapters do not hit
 ```
 
