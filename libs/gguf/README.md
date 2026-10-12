@@ -3,7 +3,10 @@
 GGUF tooling in Mojo: reader/writer, HF safetensors to GGUF conversion, quantizers, dequant and the gguf-py
 scripts, each unit gated byte-for-byte against a pinned llama.cpp (`1744c6bde`). Built: U1 reader/writer
 (`gguf-rewrite`), U2 generated tables, U3a safetensors + `hf2gguf` for Qwen2, U4 `quantize --pure` (8 types),
-U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 types). Units and status: `docs/PLAN.md`.
+U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 types), U7 `lora2gguf`. Units and status: `docs/PLAN.md`.
+U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 types), U9 legacy GGML to GGUF (`ggml2gguf`). Units and status: `docs/PLAN.md`.
+U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 types), L3 `latent-metric` (latent
+quality of a quant vs its bf16 source). Units and status: `docs/PLAN.md`.
 
 ## What exists
 
@@ -40,6 +43,15 @@ U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 ty
 | `tests/u5-gate.sh` | U5 gate (dump, hash, set-metadata, convert-endian against the pinned scripts), 14 checks |
 | `src/gguf_latent.mojo` | CLI `gguf-latent bake IN OUT --wa W.f32 --beta B --row-median M` appends `latent.version`, `latent.beta`, `latent.embd_row_median`, `latent.w_a` (f32 d*d), `latent.w_a.shape` (u32 [d, d]) as KV, replacing them if present, tensors streamed verbatim; `gguf-latent show FILE`; L2 |
 | `tests/l2-gate.sh` | L2 gate (bake read back against the fixture, rebake idempotent, show, llama-cli loads the baked file under gpu-wait), `PASS 7/7` |
+| `src/lora2gguf.mojo` | CLI `lora2gguf ADAPTER_DIR --base HF_DIR --outfile OUT --outtype f32\|f16\|bf16\|q8_0`: `convert_lora_to_gguf.py` for Qwen2 bases, byte-identical; U7 |
+| `tests/u7-gate.sh` | U7 gate: two synthetic adapters x three out types vs the script, `PASS 9/9` |
+| `tools/lora-extra-check.sh` | lora2gguf vs the script on an adapter the gate does not reach (embedding transpose, norms, F16, mixed dtypes, aLoRA tokens, dir/template outfile) |
+| `src/ggml2gguf.mojo` | CLI `ggml2gguf --input IN --output OUT [--name S] [--desc S] [--gqa N] [--eps E] [--context-length N]`: legacy GGML, GGMF v1 and GGJT v1 to v3 (lmgg, fmgg, tjgg) as GGUF, byte-identical to `convert_llama_ggml_to_gguf.py`; the script's Q8_0 refusal is kept (exit 1); `--model-metadata-dir` and `--vocab-dir` exit 2 (not supported); U9 |
+| `tests/u9-gate.sh` | U9 gate: three legacy fixtures identical to the script, the GGJTv3 Q8_0 refusal, `PASS 7/7` |
+| `tests/u9-parity.sh` | U9 parity beyond the gate: containers, versions, F16/F32 weights, byte/space/empty tokens, 300-token vocab, argv flags, against the script; `PASS 25/25` |
+| `src/latent_metric.mojo` | CLI `latent-metric REF.gguf TEST.gguf PROMPTS.txt OUT.json`: per-prompt (last position) final-norm hidden cos, top-1 agreement, soft-embedding cos, and TEST's W_a known-answer recovery; L3 |
+| `tools/l3-verify.py` | numpy re-derivation of every `latent-metric` key from the same dumps (beyond the gate's cos oracle); also covers the untied `output.weight` path |
+| `tests/l3-gate.sh` | L3 gate: keys, bf16 vs itself exact, Q4_K beats Q2_K, byte-identical rerun, cos_mean vs `tests/l3-cos.py`; `PASS 8/8` |
 
 ## Build and gate
 
@@ -52,6 +64,9 @@ tests/u2-lookup-check.sh  # PASS 18527/18527
 tests/u5-gate.sh        # PASS 14/14 (the gate builds the tool itself)
 .venv/bin/mojo build src/gguf_latent.mojo -I src -o .work/l2/gguf-latent
 tests/l2-gate.sh        # PASS 7/7 (builds the tool itself; bake of the 317 MB Q4_K fixture: 1.22 s / 18.8 MB peak RSS)
+.venv/bin/mojo build src/ggml2gguf.mojo -I src -o .work/u9/ggml2gguf
+tests/u9-gate.sh        # PASS 7/7 (the gate builds the tool itself); 83 MB F16 file: 0.04 s / 37 MB peak RSS, script 0.22 s / 122 MB
+tests/u9-parity.sh      # PASS 25/25
 ```
 
 U2 tables: `tools/gen-tables.py ~/Projects/imports/llama.cpp-master/gguf-py src/gguf` regenerates them. Tensor
@@ -87,6 +102,40 @@ multiply/add sequence; the f16 scale conversion is exact), so outputs are equal 
 IQ2 sign table is not stored: `ksigns_iq2xs[i]` is `i` plus a parity bit 7. Errors print
 `FAIL gguf-dequant: <reason>` (unknown tensor, type without a dequantizer, rows out of range) and exit 1.
 Report: `exchange/lane-u6-report.md`.
+
+### lora2gguf (U7)
+
+```
+.venv/bin/mojo build src/lora2gguf.mojo -I src -o .work/u7/lora2gguf
+tests/u7-gate.sh        # PASS 9/9; 0.01-0.05 s, 16-24 MB peak RSS per adapter (script: 3.6-7.2 s, 1.21 GB)
+tools/lora-extra-check.sh   # PASS 6/6 on the cases the gate's adapters do not hit
+```
+
+The adapter file is mmapped and streamed through the hf2gguf writer; names, naming heuristics and the Q8_0 row rule
+are the hf2gguf pieces (`hfconv/`, `Gw`, `dropped`, `sampling`). Tensors come in file-offset order (safetensors
+`keys()`), norm tensors first, then `<name>.lora_a` / `.lora_b` per base tensor in first-seen order; under q8_0 a tensor
+whose last dim is not a multiple of 32 (lora_b: rank) is F16, as in the script. `general.*` come from the ADAPTER
+directory name with the negative-parameter-count rules, and no `general.file_type` is written. The embedding lora_a is
+transposed through one tensor's F32 staging. FAIL, never a guess: README.md model-card frontmatter, `invocation_string`
+without `alora_invocation_tokens`, no `--base`, `--outtype auto` (the script itself raises AttributeError), non-Qwen2
+bases. Report: `exchange/lane-u7-report.md`.
+### latent-metric (L3)
+
+```
+.venv/bin/mojo build src/latent_metric.mojo -I src -o .work/l3/latent-metric
+tests/l3-gate.sh        # PASS 8/8 (about 15 min: llama.cpp CPU dumps of the 0.5B per run, 79 s each)
+```
+
+Forward passes are `hidden-probe-dump` (override with `HIDDEN_PROBE_DUMP`) into `OUT.json.dump-ref` / `.dump-test`
+(790 MB per 32 prompts on the 0.5B), deleted after reading; REF == TEST dumps once. Everything after the dump is
+deterministic Mojo: same inputs, same JSON bytes. Per prompt it reads the `result_norm` row (cos, f64, exactly 1.0
+for equal vectors) and the `result_output` row (argmax; softmax in f64 times each model's own dequantized
+`token_embd`, streamed 2048 rows at a time). `wa_recovery` forms `G = W_out^T W_out` (4x4 SIMD tiles over row chunks,
+f64 total) and `B = W_out^T W_in` (`G` when tied), factors `G + 1e-4 trace/d I` by Cholesky, solves only the 256 probe
+rows (`z = (G+lambda I)^-1 W_out[t]`, `e = z^T B`) and scores `e` against every `token_embd` row by cosine
+(zero rows score 0). After the dump on the 0.5B: 1.2 s wall, 54 MB peak RSS; the numpy re-derivation takes 24.6 s and
+3.9 GB. Env `LATENT_METRIC_REUSE=1` keeps the dumps and reuses ones already present (development only). Errors print
+`FAIL latent-metric: <reason>` and exit 1. Report: `exchange/lane-l3-report.md`.
 
 ## Setup
 
