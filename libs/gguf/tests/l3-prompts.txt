@@ -1,0 +1,32 @@
+The capital of France is Paris.
+Water boils at one hundred degrees Celsius at sea level.
+def add(a, b): return a + b
+The quick brown fox jumps over the lazy dog.
+Photosynthesis turns light into chemical energy.
+Seven times eight is fifty-six.
+She opened the window and the cold air rushed in.
+A prime number has exactly two divisors.
+The Treaty of Versailles was signed in 1919.
+Gradient descent follows the negative gradient.
+My favourite colour is green because of the forest.
+The train leaves at nine and arrives at noon.
+An electron carries a negative charge.
+Please translate this sentence into German.
+The stock market fell sharply on Monday.
+Mount Everest is the highest mountain on Earth.
+for i in range(10): print(i)
+The cat sat quietly on the warm windowsill.
+Rain is expected in the north tomorrow afternoon.
+Shakespeare wrote Hamlet around the year 1600.
+A triangle's angles add up to one hundred eighty degrees.
+The recipe needs two eggs and a cup of flour.
+Light travels faster than sound.
+He forgot his keys at the office again.
+The derivative of x squared is two x.
+Bees communicate by dancing.
+The museum opens at ten every morning.
+Iron rusts when exposed to water and oxygen.
+Chess is played on a board of sixty-four squares.
+The library was silent except for turning pages.
+Neurons transmit signals with electrical impulses.
+The meeting was moved to Thursday.
