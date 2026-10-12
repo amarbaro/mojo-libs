@@ -5,7 +5,7 @@
 # loadable. `gguf-latent show FILE` prints `latent beta B median M w_a DxD`. Fixture: qwen2.5-0.5B W_a from latent-wa.
 #   tests/l2-gate.sh    exit 0 only on PASS 7/7 (the load check queues a CPU-only llama-cli under gpu-wait)
 source "$(dirname "$0")/gate-lib.sh"
-W=$PWD/.work/l2; rm -rf "$W"; mkdir -p "$W"; LA=$MAIN/.work/oracle/latent
+W=$PWD/.work/l2; rm -rf "$W"; mkdir -p "$W"  # per-check logs stay in $W; redirect a gate run elsewhere; LA=$MAIN/.work/oracle/latent
 BETA=$(grep -oE '^beta=[0-9.e+-]+' "$LA/qwen-wa.txt" | cut -d= -f2)
 MED=$(grep -oE 'median_W_in_row=[0-9.e+-]+' "$LA/qwen-wa.txt" | cut -d= -f2)
 check gate-files-untouched untouched
@@ -19,7 +19,7 @@ rebake() { "$W/gguf-latent" bake "$W/out.gguf" "$W/out2.gguf" --wa "$LA/qwen-wa.
 check rebake-idempotent rebake
 show() { local s; s=$("$W/gguf-latent" show "$W/out.gguf"); echo "     $s"; [[ "$s" == "latent beta "*" median "*" w_a 896x896" ]]; }
 check show show
-load() { [ -s "$W/out.gguf" ] || return 1; local rc=0; gpu-wait run --vram 1 --timeout 600 -- env HIP_VISIBLE_DEVICES=-1 "$LLAMACPP/build/bin/llama-cli" -m "$W/out.gguf" -p "The capital of France is" -n 4 -no-cnv -ngl 0 --temp 0 > "$W/load.log" 2>&1 || rc=$?
+load() { [ -s "$W/out.gguf" ] || return 1; local rc=0; gpu-wait run --vram 1 --timeout 600 -- env HIP_VISIBLE_DEVICES=-1 "$LLAMACPP/build/bin/llama-cli" -m "$W/out.gguf" -p "The capital of France is" -n 4 -st -ngl 0 --temp 0 > "$W/load.log" 2>&1 || rc=$?
   [ "$rc" = 0 ] && ! grep -qiE 'error|failed to load' "$W/load.log"; }
 check llama-cpp-loads load
 finish
