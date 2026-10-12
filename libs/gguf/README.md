@@ -3,7 +3,7 @@
 GGUF tooling in Mojo: reader/writer, HF safetensors to GGUF conversion, quantizers, dequant and the gguf-py
 scripts, each unit gated byte-for-byte against a pinned llama.cpp (`1744c6bde`). Built: U1 reader/writer
 (`gguf-rewrite`), U2 generated tables, U3a safetensors + `hf2gguf` for Qwen2, U4 `quantize --pure` (8 types),
-U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 types). Units and status: `docs/PLAN.md`.
+U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 types), U7 `lora2gguf`. Units and status: `docs/PLAN.md`.
 
 ## What exists
 
@@ -38,6 +38,9 @@ U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 ty
 | `src/gguf_tool.mojo` | CLI `gguf-tool dump\|hash\|set-metadata\|convert-endian ARGS`: the four gguf-py scripts, matched on stdout, exit code and written bytes; U5 |
 | `src/gguf/{fmt,values,quant,sha}.mojo` | Python-compatible formatting (exact `%.Nf`, repr, numpy float32 str), in-place value reads, GGML type table, streaming SHA-1/SHA-256 |
 | `tests/u5-gate.sh` | U5 gate (dump, hash, set-metadata, convert-endian against the pinned scripts), 14 checks |
+| `src/lora2gguf.mojo` | CLI `lora2gguf ADAPTER_DIR --base HF_DIR --outfile OUT --outtype f32\|f16\|bf16\|q8_0`: `convert_lora_to_gguf.py` for Qwen2 bases, byte-identical; U7 |
+| `tests/u7-gate.sh` | U7 gate: two synthetic adapters x three out types vs the script, `PASS 9/9` |
+| `tools/lora-extra-check.sh` | lora2gguf vs the script on an adapter the gate does not reach (embedding transpose, norms, F16, mixed dtypes, aLoRA tokens, dir/template outfile) |
 
 ## Build and gate
 
@@ -83,6 +86,23 @@ multiply/add sequence; the f16 scale conversion is exact), so outputs are equal 
 IQ2 sign table is not stored: `ksigns_iq2xs[i]` is `i` plus a parity bit 7. Errors print
 `FAIL gguf-dequant: <reason>` (unknown tensor, type without a dequantizer, rows out of range) and exit 1.
 Report: `exchange/lane-u6-report.md`.
+
+### lora2gguf (U7)
+
+```
+.venv/bin/mojo build src/lora2gguf.mojo -I src -o .work/u7/lora2gguf
+tests/u7-gate.sh        # PASS 9/9; 0.01-0.02 s, 19-24 MB peak RSS per adapter (script: 3.6-7.2 s, 1.21 GB)
+tools/lora-extra-check.sh   # PASS 6/6 on the cases the gate's adapters do not hit
+```
+
+The adapter file is mmapped and streamed through the hf2gguf writer; names, naming heuristics and the Q8_0 row rule
+are the hf2gguf pieces (`hfconv/`, `Gw`, `dropped`, `sampling`). Tensors come in file-offset order (safetensors
+`keys()`), norm tensors first, then `<name>.lora_a` / `.lora_b` per base tensor in first-seen order; under q8_0 a tensor
+whose last dim is not a multiple of 32 (lora_b: rank) is F16, as in the script. `general.*` come from the ADAPTER
+directory name with the negative-parameter-count rules, and no `general.file_type` is written. The embedding lora_a is
+transposed through one tensor's F32 staging. FAIL, never a guess: README.md model-card frontmatter, `invocation_string`
+without `alora_invocation_tokens`, no `--base`, `--outtype auto` (the script itself raises AttributeError), non-Qwen2
+bases. Report: `exchange/lane-u7-report.md`.
 
 ## Setup
 
