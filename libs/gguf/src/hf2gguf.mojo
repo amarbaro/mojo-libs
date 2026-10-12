@@ -18,12 +18,15 @@ from std.os.path import exists, isdir
 from std.memory import bitcast
 from gguf.model import Out, pad_to, CHUNK
 from st.json import Json
-from st.safetensors import Checkpoint
+from st.safetensors import Checkpoint, ST_F32
 from hfconv.qwen2_names import qwen2_name
 from hfconv.naming import components, size_label, id_to_title
 from hfconv.quant import emit_f32, emit_bf16, emit_q8_0
 
 comptime ALIGN = 32
+comptime PAGE = 4096
+comptime RELEASE = 4 << 20  # bytes of consumed source per madvise
+comptime MADV_DONTNEED = 4
 comptime SLICE = 16384  # elements per conversion step (a multiple of 32)
 comptime GGML_F32 = 0
 comptime GGML_Q8_0 = 8
@@ -511,6 +514,8 @@ def convert(dir: String, outfile: String, outtype: String) raises:
         ref t = ck.tensors[p.src]
         var base_addr = ck.shards[t.shard].base + t.begin
         var n = t.numel()
+        var esz = 4 if t.dtype == ST_F32 else 2
+        var released = base_addr & ~(PAGE - 1)
         var done = 0
         while done < n:
             var cnt = min(n - done, SLICE)
@@ -526,6 +531,14 @@ def convert(dir: String, outfile: String, outtype: String) raises:
                 emit_q8_0(t.dtype, base_addr, done, cnt, dst)
             w.out.used += nb
             done += cnt
+            # source pages are read once: hand them back as we go, so RSS stays near the staging buffers
+            var upto = (base_addr + done * esz) & ~(PAGE - 1)
+            if upto - released >= RELEASE:
+                _ = external_call["madvise", Int32](released, upto - released, Int32(MADV_DONTNEED))
+                released = upto
+        var tail = (base_addr + n * esz + PAGE - 1) & ~(PAGE - 1)
+        if tail > released:
+            _ = external_call["madvise", Int32](released, tail - released, Int32(MADV_DONTNEED))
         w.out.pad(ALIGN)
     w.out.flush()
     var count = List[UInt8](length=8, fill=0)
