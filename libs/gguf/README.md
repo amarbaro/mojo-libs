@@ -2,7 +2,7 @@
 
 GGUF tooling in Mojo: reader/writer, HF safetensors to GGUF conversion, quantizers, and the gguf-py
 scripts, each unit gated byte-for-byte against a pinned llama.cpp (`1744c6bde`). Built so far: the oracle,
-the gates, and U1 (GGUF v3 reader/writer + `gguf-rewrite`, this lane); units and status: `docs/PLAN.md`.
+the gates, U1 (GGUF v3 reader/writer + `gguf-rewrite`) and U3a (safetensors reader + `hf2gguf` for Qwen2); units and status: `docs/PLAN.md`.
 
 ## What exists
 
@@ -22,6 +22,11 @@ the gates, and U1 (GGUF v3 reader/writer + `gguf-rewrite`, this lane); units and
 | `src/u2_lookup.mojo` | verifier CLI for `map_tensor_name`, one lookup per line of a TSV |
 | `tests/u2-gate.sh` | U2 gate: generator runs and is deterministic, committed = generated, dump = gguf-py JSON, `PASS 7/7` |
 | `tests/u2-lookup-check.sh` | `map_tensor_name` vs gguf-py `TensorNameMap` on every key at n=2 and n=5, plus probes: `PASS 18527/18527` |
+| `src/st/` | `json.mojo`: cursor JSON reader over one byte buffer; `safetensors.mojo`: mmap'd shards, tensors in the converter's order (shards by file name, tensors by name), `model.safetensors.index.json` cross-check |
+| `src/hf2gguf.mojo` | CLI `hf2gguf HF_DIR --outfile OUT --outtype bf16\|q8_0` for Qwen2 (`Qwen2ForCausalLM`, `Qwen2Model`); byte-identical to `convert_hf_to_gguf.py`; every unsupported input is `FAIL hf2gguf: <reason>`, exit 1 |
+| `src/hfconv/` | converter pieces: `qwen2_names.mojo` (HF to GGUF tensor names, swap for the generated map), `naming.mojo` (gguf-py Metadata name heuristics), `quant.mojo` (BF16 / F32 / Q8_0 kernels, bit-exact with gguf-py `quants.py`) |
+| `tests/u3-gate.sh` | U3a gate: bf16 and q8_0 identical-bytes against the script, wall + peak RSS vs the oracle |
+| `check/u3-naming-check.sh` | `hfconv.naming` vs gguf-py `get_model_id_components` / `id_to_title` / `size_label` on 25 ids x 3 parameter counts |
 
 ## Build and gate
 
@@ -35,6 +40,20 @@ tests/u2-lookup-check.sh  # PASS 18527/18527
 U2 tables: `tools/gen-tables.py ~/Projects/imports/llama.cpp-master/gguf-py src/gguf` regenerates them. Tensor
 rows are templates (`{bid}` expanded per n_blocks); gguf-py's `TensorNameMap` mutates a class dict in `__init__`, so
 the generator starts each arch from a pristine copy. Lookup keys are base names (no `.weight`); callers strip suffixes.
+### hf2gguf (U3a)
+
+```
+.venv/bin/mojo build src/hf2gguf.mojo -I src -o .work/u3/hf2gguf
+tests/u3-gate.sh        # PASS 5/5; bf16 0.5 s, q8_0 0.5 s, 42 MB peak RSS (script: 17.00 s / 2.31 GB, 6.12 s / 2.10 GB)
+```
+
+Plan first (names, types, sizes from the safetensors headers), then header + KVs + tensor infos, then each tensor
+streamed through the kernels; consumed source pages are handed back with `madvise(DONTNEED)`. The pre-tokenizer
+name comes from the regex in `tokenizer.json`, not from the script's hash of an HF-tokenizers run: the table
+(`QWEN2_RE`) has one row, and an unknown pre-tokenizer is a FAIL. Not ported yet, all FAIL loudly: other
+architectures, rope scaling, MoE keys, `head_dim`, F16 fallback for rows not divisible by 32, source dtypes
+other than BF16/F16/F32, sentence-transformers pooling, named chat templates, tokenizers without `tokenizer.json`.
+Mojo refuses a module that imports a package of its own name, so the helpers are `src/hfconv/`, not `src/hf2gguf/`.
 
 Layout rules the writer follows: tensor sizes come from the input's own offsets (no quant table);
 output offsets are the running sum of spans padded to `general.alignment` (default 32); with no edit a
