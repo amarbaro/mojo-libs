@@ -1,6 +1,6 @@
 """Verifier for gguf-dequant beyond the gate's real models: random raw blocks of every supported type (all code
 points, incl. the types on no ladder model: Q4_1 Q2_K IQ1_S), compared bit for bit with libggml-base `to_float`
-through the CLI; also a multi-row read at an offset, and a 20 MB F32 tensor that forces several streaming chunks.
+through the CLI; also a multi-row read at an offset, and a 20 MB F32 tensor that forces 2 streaming chunks.
 f16 scales with exponent 31 are cleared (NaN payload is not the property under test).
 usage: u6-extra-types.py GGUFPY LIBGGML_BASE GGUF_DEQUANT WORKDIR   exit 0 only when every case is equal."""
 import ctypes, os, subprocess, sys
