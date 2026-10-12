@@ -1,10 +1,9 @@
 # mojo-gguf
 
-GGUF tooling in Mojo: reader/writer, HF safetensors to GGUF conversion, quantizers, and the gguf-py
-scripts, each unit gated byte-for-byte against a pinned llama.cpp (`1744c6bde`). Built so far: the oracle,
-the gates, U1 (GGUF v3 reader/writer + `gguf-rewrite`) and U3a (safetensors reader + `hf2gguf` for Qwen2); units and status: `docs/PLAN.md`.
-the gates, U1 (GGUF v3 reader/writer + `gguf-rewrite`) and U4 (`quantize --pure`); units and status: `docs/PLAN.md`.
-the gates, U1 (GGUF v3 reader/writer + `gguf-rewrite`) and U6 CPU dequant (`gguf-dequant`); units and status: `docs/PLAN.md`.
+GGUF tooling in Mojo: reader/writer, HF safetensors to GGUF conversion, quantizers, dequant and the gguf-py
+scripts, each unit gated byte-for-byte against a pinned llama.cpp (`1744c6bde`). Built: U1 reader/writer
+(`gguf-rewrite`), U2 generated tables, U3a safetensors + `hf2gguf` for Qwen2, U4 `quantize --pure` (8 types),
+U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 types). Units and status: `docs/PLAN.md`.
 
 ## What exists
 
