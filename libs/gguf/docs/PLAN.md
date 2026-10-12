@@ -85,3 +85,39 @@ Gates (harness before kernel):
 2. GPU vs CPU: the same rows through the GPU kernel, bit-equal to gate 1's output (under gpu-wait).
 3. Falsifier per type: one flipped byte in a block must change that row's output.
 4. Speed recorded, not gated: GB/s per type, CPU (16 threads) and GPU, plus peak RSS / VRAM.
+
+## Converters + our latent method (added 2026-10-12, Mario)
+
+Scope: full Mojo rewrite of the four llama.cpp converters (`convert_hf_to_gguf.py` + `conversion/` 93 files,
+`convert_lora_to_gguf.py`, `convert_hf_to_gguf_update.py`, `convert_llama_ggml_to_gguf.py`), maximum parity with the
+pinned output, plus our own latent method: latent-aware precision, latent tensors baked in, a latent quality metric.
+Goal: minimal quality loss per byte against the bf16 source. Order: hf first (archs we serve), then lora, hf_update,
+legacy ggml. U6 dequant stays as the support unit (gguf-py cannot open Flash).
+
+```mermaid
+flowchart LR
+  U1[U1 reader/writer<br/>bake-off verdict] --> U2[U2 tables]
+  U2 --> U3[U3 hf2gguf<br/>qwen2, qwen3_5, llama,<br/>qwen35moe, qwen4exp]
+  U3 --> U7[U7 lora2gguf]
+  U2 --> U8[U8 hf_update<br/>tokenizer pre-hash]
+  U1 --> U9[U9 legacy ggml2gguf]
+  U1 --> U4[U4 quant encoders]
+  U1 --> U6[U6 dequant]
+  U6 --> L3[L3 latent metric]
+  U4 --> L1[L1 latent-aware precision]
+  L3 --> L1
+  U3 --> L2[L2 latent tensors baked in]
+```
+
+| unit | deliverable | gate |
+|---|---|---|
+| U3 | `hf2gguf` per arch (transform code ported, tables from U2) | gguf-cmp identical bytes vs the pinned converter: qwen2.5-0.5B bf16 + q8_0, Qwythos-9B bf16 (qwen3_5 + MTP); wall + RSS vs 17.00 s / 2.31 GB. qwen35moe / qwen4exp have no HF source here: per-tensor transform tests only until one is fetched |
+| U7 | `lora2gguf` | identical bytes vs the pinned script on an adapter (none on disk: train a tiny LoRA on the 0.5B or fetch one) |
+| U8 | `hf-update`: tokenizer pre-tokenizer hash table from local tokenizer dirs | same `chkhsh` per tokenizer as the pinned script, offline |
+| U9 | `ggml2gguf` for GGML/GGJT files | identical bytes vs the pinned script (needs a legacy fixture; last) |
+| L3 | latent metric on a bf16-sourced model: final-norm hidden cos vs bf16, teacher-forced top-1 agreement, latent-wa probe (W_out[tok] W_a recovery, soft nearest = greedy, soft cos vs bf16 soft), plus perplexity | metric reproduces on two runs; bf16 vs itself = exact; a known-bad quant (Q2_K everywhere) scores worse than Q4_K_M |
+| L1 | `quantize --latent BUDGET`: per-tensor type search at a byte budget scored by L3 (token_embd / output / final norm candidates first: latent arms read them, Flash ships token_embd at Q3_K) | prereg: at <= llama.cpp Q4_K_M bytes, lower L3 loss on held-out prompts and perplexity not worse, on Qwythos-9B |
+| L2 | writer emits `latent.*`: KV `latent.beta`, `latent.embd_row_median`, tensor `latent.w_a` (d x d), later the trained P4 block | read back equal by latent-wa and q4x; llama.cpp still loads the file (extra tensors ignored) |
+
+Limits stated now: Flash has no bf16 source on this box, so L1/L3 are measured on Qwythos-9B (bf16 HF present) and
+only transferred to Flash as a recipe; a Flash quality claim needs its HF weights first.
