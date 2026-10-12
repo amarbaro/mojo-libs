@@ -3,6 +3,7 @@
 GGUF tooling in Mojo: reader/writer, HF safetensors to GGUF conversion, quantizers, and the gguf-py
 scripts, each unit gated byte-for-byte against a pinned llama.cpp (`1744c6bde`). Built so far: the oracle,
 the gates, U1 (GGUF v3 reader/writer + `gguf-rewrite`) and U3a (safetensors reader + `hf2gguf` for Qwen2); units and status: `docs/PLAN.md`.
+the gates, U1 (GGUF v3 reader/writer + `gguf-rewrite`) and U4 (`quantize --pure`); units and status: `docs/PLAN.md`.
 
 ## What exists
 
@@ -27,6 +28,8 @@ the gates, U1 (GGUF v3 reader/writer + `gguf-rewrite`) and U3a (safetensors read
 | `src/hfconv/` | converter pieces: `qwen2_names.mojo` (HF to GGUF tensor names, swap for the generated map), `naming.mojo` (gguf-py Metadata name heuristics), `quant.mojo` (BF16 / F32 / Q8_0 kernels, bit-exact with gguf-py `quants.py`) |
 | `tests/u3-gate.sh` | U3a gate: bf16 and q8_0 identical-bytes against the script, wall + peak RSS vs the oracle |
 | `check/u3-naming-check.sh` | `hfconv.naming` vs gguf-py `get_model_id_components` / `id_to_title` / `size_label` on 25 ids x 3 parameter counts |
+| `src/quantize.mojo` + `src/gguf/quants.mojo` | CLI `quantize --pure IN OUT TYPE [NTHREADS]` for Q8_0 Q4_0 Q4_K Q6_K Q2_K Q2_0 TQ1_0 TQ2_0 (with llama-quantize's block-size fallbacks), byte-identical to `llama-quantize --pure`; K-quant fits run one sub-block per SIMD lane, every product fenced against FMA contraction |
+| `tests/u4-gate.sh` | U4 gate: identical bytes per type + wall and peak RSS next to the oracle's, 11 checks |
 
 ## Build and gate
 
