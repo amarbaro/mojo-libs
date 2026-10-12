@@ -5,7 +5,8 @@
 # loadable. `gguf-latent show FILE` prints `latent beta B median M w_a DxD`. Fixture: qwen2.5-0.5B W_a from latent-wa.
 #   tests/l2-gate.sh    exit 0 only on PASS 7/7 (the load check queues a CPU-only llama-cli under gpu-wait)
 source "$(dirname "$0")/gate-lib.sh"
-W=$PWD/.work/l2; rm -rf "$W"; mkdir -p "$W"  # per-check logs stay in $W; redirect a gate run elsewhere; LA=$MAIN/.work/oracle/latent
+W=$PWD/.work/l2; rm -rf "$W"; mkdir -p "$W"   # per-check logs live in $W: redirect a gate run elsewhere
+LA=$MAIN/.work/oracle/latent
 BETA=$(grep -oE '^beta=[0-9.e+-]+' "$LA/qwen-wa.txt" | cut -d= -f2)
 MED=$(grep -oE 'median_W_in_row=[0-9.e+-]+' "$LA/qwen-wa.txt" | cut -d= -f2)
 check gate-files-untouched untouched
