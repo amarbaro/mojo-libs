@@ -4,7 +4,7 @@ from std.ffi import external_call, c_ssize_t
 from gguf.model import Gguf, open_fd, pread_into
 from gguf.dequant import quant_block, deq_rows
 
-comptime CHUNK = 8 << 20  # source bytes per round trip: bounds memory whatever N is
+comptime CHUNK = 16 << 20  # f32 output bytes per round trip: bounds memory whatever N is (source is smaller)
 
 def run() raises:
     var a = argv()
@@ -30,7 +30,7 @@ def run() raises:
     if row0 < 0 or n < 0 or row0 + n > nrows:
         raise Error("rows " + String(row0) + ".." + String(row0 + n) + " out of range: tensor has " + String(nrows))
     var rb = ne0 // info[0] * info[1]
-    var step = max(1, CHUNK // rb)
+    var step = max(1, CHUNK // (ne0 * 4))
     var src = List[UInt8](length=min(n, step) * rb, fill=0)
     var dst = List[Float32](length=min(n, step) * ne0, fill=0)
     var fd = open_fd(String(a[5]), 1 | 0o100 | 0o1000)  # O_WRONLY | O_CREAT | O_TRUNC
