@@ -4,6 +4,7 @@ GGUF tooling in Mojo: reader/writer, HF safetensors to GGUF conversion, quantize
 scripts, each unit gated byte-for-byte against a pinned llama.cpp (`1744c6bde`). Built: U1 reader/writer
 (`gguf-rewrite`), U2 generated tables, U3a safetensors + `hf2gguf` for Qwen2, U4 `quantize --pure` (8 types),
 U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 types), U7 `lora2gguf`. Units and status: `docs/PLAN.md`.
+U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 types), U9 legacy GGML to GGUF (`ggml2gguf`). Units and status: `docs/PLAN.md`.
 
 ## What exists
 
@@ -41,6 +42,9 @@ U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 ty
 | `src/lora2gguf.mojo` | CLI `lora2gguf ADAPTER_DIR --base HF_DIR --outfile OUT --outtype f32\|f16\|bf16\|q8_0`: `convert_lora_to_gguf.py` for Qwen2 bases, byte-identical; U7 |
 | `tests/u7-gate.sh` | U7 gate: two synthetic adapters x three out types vs the script, `PASS 9/9` |
 | `tools/lora-extra-check.sh` | lora2gguf vs the script on an adapter the gate does not reach (embedding transpose, norms, F16, mixed dtypes, aLoRA tokens, dir/template outfile) |
+| `src/ggml2gguf.mojo` | CLI `ggml2gguf --input IN --output OUT [--name S] [--desc S] [--gqa N] [--eps E] [--context-length N]`: legacy GGML, GGMF v1 and GGJT v1 to v3 (lmgg, fmgg, tjgg) as GGUF, byte-identical to `convert_llama_ggml_to_gguf.py`; the script's Q8_0 refusal is kept (exit 1); `--model-metadata-dir` and `--vocab-dir` exit 2 (not supported); U9 |
+| `tests/u9-gate.sh` | U9 gate: three legacy fixtures identical to the script, the GGJTv3 Q8_0 refusal, `PASS 7/7` |
+| `tests/u9-parity.sh` | U9 parity beyond the gate: containers, versions, F16/F32 weights, byte/space/empty tokens, 300-token vocab, argv flags, against the script; `PASS 25/25` |
 
 ## Build and gate
 
@@ -51,6 +55,9 @@ tests/u2-gate.sh        # PASS 7/7 (builds src/u2_dump.mojo: about 60 s, the lit
 tests/u2-lookup-check.sh  # PASS 18527/18527
 .venv/bin/mojo build src/gguf_tool.mojo -I src -o .work/u5/gguf-tool
 tests/u5-gate.sh        # PASS 14/14 (the gate builds the tool itself)
+.venv/bin/mojo build src/ggml2gguf.mojo -I src -o .work/u9/ggml2gguf
+tests/u9-gate.sh        # PASS 7/7 (the gate builds the tool itself); 83 MB F16 file: 0.04 s / 37 MB peak RSS, script 0.22 s / 122 MB
+tests/u9-parity.sh      # PASS 25/25
 ```
 
 U2 tables: `tools/gen-tables.py ~/Projects/imports/llama.cpp-master/gguf-py src/gguf` regenerates them. Tensor
