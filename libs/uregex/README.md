@@ -126,6 +126,12 @@ mkdir -p .work/ucd && for f in UnicodeData PropList DerivedCoreProperties CaseFo
 A negative control (oracle fed a different pattern) fails, so the gate is live.
 `tools/gate.sh` runs all of the above.
 
+Random strings from a fixed alphabet miss what real text holds. `tools/difftest-real.sh CORPUS` runs every
+tokenizer pattern against `regex` over a file of real lines (one text per line) through the
+`difftest` iTool (`~/iTools/dev/difftest`, not published), one process per side per pattern, and writes the first disagreement
+as a certificate that `difftest replay` re-runs. On 19,557 lines (2.76 MB: math-heavy Unicode, notes, Mojo
+source) all 14 patterns agree; the same run with gpt2 against llama3 differs on the first line with a number.
+
 ### Tokenizer patterns
 
 The tokenizer patterns in `tools/difftest.py` are copied verbatim from the
