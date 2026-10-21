@@ -58,8 +58,8 @@ The API is in [docs/api.md](docs/api.md). How it works and what it costs is in
   seconds were left out) and its kind, not a date object.
 - **Integers are `Int64`.** Values outside its range are rejected, as the spec requires.
 - **Whole document in memory.** No streaming parser.
-- TOML 1.0 documents parse the same as before. A strict 1.0 mode does not exist, so the
-  1.1 additions above are always accepted.
+- **No strict TOML 1.0 mode.** 1.0 documents parse, and the 1.1 additions above are
+  always accepted.
 
 ## Conformance check
 
