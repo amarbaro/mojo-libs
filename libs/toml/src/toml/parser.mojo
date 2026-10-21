@@ -67,6 +67,23 @@ def hex_val(c: UInt8) -> Int:
     return -1
 
 
+def add_seconds(mut b: List[UInt8], off: Int):
+    """TOML 1.1 makes seconds optional: insert ":00" after a bare HH:MM at off."""
+    if len(b) < off + 5 or b[off + 2] != COLON:
+        return
+    if len(b) > off + 5 and b[off + 5] == COLON:
+        return
+    var out: List[UInt8] = []
+    for i in range(off + 5):
+        out.append(b[i])
+    out.append(COLON)
+    out.append(48)
+    out.append(48)
+    for i in range(off + 5, len(b)):
+        out.append(b[i])
+    b = out^
+
+
 def is_leap_year(year: Int) -> Bool:
     if year % 4 != 0:
         return False
@@ -522,6 +539,11 @@ struct Parser:
                     out.append(QUOTE)
                 elif e == BACKSLASH:
                     out.append(BACKSLASH)
+                elif e == UInt8(101):  # e (TOML 1.1)
+                    out.append(27)
+                elif e == UInt8(120):  # x (TOML 1.1)
+                    var cp = self.read_hex_escape(2)
+                    append_utf8(out, cp)
                 elif e == UInt8(117):  # u
                     var cp = self.read_hex_escape(4)
                     append_utf8(out, cp)
@@ -666,12 +688,13 @@ struct Parser:
         n.header_closed = True
         n.inline_closed = True
         var idx = self.doc.push(n^)
-        self.skip_line_ws()
+        # TOML 1.1: newlines, comments and a trailing comma are allowed inside
+        self.skip_array_ws()
         if self.peek() == RBRACE:
             self.pos += 1
             return idx
         while True:
-            self.skip_line_ws()
+            self.skip_array_ws()
             var segments = self.parse_key_path()
             self.skip_line_ws()
             if self.peek() != EQUALS:
@@ -680,9 +703,13 @@ struct Parser:
             self.skip_line_ws()
             var v = self.parse_value()
             self.set_key_path(idx, segments, v)
-            self.skip_line_ws()
+            self.skip_array_ws()
             if self.peek() == COMMA:
                 self.pos += 1
+                self.skip_array_ws()
+                if self.peek() == RBRACE:
+                    self.pos += 1
+                    break
                 continue
             if self.peek() == RBRACE:
                 self.pos += 1
@@ -727,10 +754,10 @@ struct Parser:
 
     def looks_like_date(self, tok: String) -> Bool:
         var b = tok.as_bytes()
-        if len(b) < 8:
+        if len(b) < 5:
             return False
-        # local-time shape: DD:DD:DD...
-        if len(b) >= 8 and is_digit(b[0]) and is_digit(b[1]) and b[2] == COLON:
+        # local-time shape: DD:DD[:DD]... (seconds optional in TOML 1.1)
+        if is_digit(b[0]) and is_digit(b[1]) and b[2] == COLON:
             return True
         # date shape: DDDD-DD-DD...
         if len(b) >= 10 and is_digit(b[0]) and is_digit(b[1]) and is_digit(b[2]) and is_digit(b[3]) and b[4] == DASH and is_digit(b[5]) and is_digit(b[6]) and b[7] == DASH:
@@ -741,7 +768,11 @@ struct Parser:
         var b = bytes_list(text)
         var n = TomlNode()
         n.kind = KIND_DATETIME
-        n.s = text
+        if b[2] == COLON:
+            add_seconds(b, 0)
+        elif len(b) > 10:
+            add_seconds(b, 11)
+        n.s = String(from_utf8=Span(b))
 
         if b[2] == COLON:
             # local-time only
