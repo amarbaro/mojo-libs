@@ -101,11 +101,7 @@ def days_in_month(year: Int, month: Int) -> Int:
 
 
 def bytes_list(s: String) -> List[UInt8]:
-    var b = s.as_bytes()
-    var out: List[UInt8] = []
-    for i in range(len(b)):
-        out.append(b[i])
-    return out^
+    return List[UInt8](s.as_bytes())
 
 
 def append_utf8(mut buf: List[UInt8], cp: Int):
@@ -267,8 +263,9 @@ struct Parser:
             else:
                 self.parse_keyval_line(self.current_table)
             self.expect_eol()
-        var arc = ArcPointer(self.doc.copy())
-        return TomlValue(arc, self.root)
+        var doc = TomlDoc()
+        swap(doc, self.doc)  # move the pool out, never a second copy
+        return TomlValue(ArcPointer(doc^), self.root)
 
     def parse_table_header(mut self) raises:
         self.pos += 1
@@ -306,7 +303,7 @@ struct Parser:
             n.kind = KIND_TABLE
             var idx = self.doc.push(n^)
             self.doc.pool[cur].tkeys.append(key)
-            self.doc.pool[cur].tvals.append(idx)
+            self.doc.pool[cur].kids.append(idx)
             return idx
         var kind = self.doc.pool[existing].kind
         if kind == KIND_TABLE:
@@ -316,10 +313,10 @@ struct Parser:
         if kind == KIND_ARRAY:
             if not self.doc.pool[existing].is_aot:
                 self.fail("cannot index into a static array with a table header")
-            var n = len(self.doc.pool[existing].arr)
+            var n = len(self.doc.pool[existing].kids)
             if n == 0:
                 self.fail("empty array of tables")
-            return self.doc.pool[existing].arr[n - 1]
+            return self.doc.pool[existing].kids[n - 1]
         self.fail("cannot redefine '" + key + "' as a table")
         return -1
 
@@ -331,7 +328,7 @@ struct Parser:
             n.header_closed = True
             var idx = self.doc.push(n^)
             self.doc.pool[cur].tkeys.append(key)
-            self.doc.pool[cur].tvals.append(idx)
+            self.doc.pool[cur].kids.append(idx)
             return idx
         var kind = self.doc.pool[existing].kind
         if kind != KIND_TABLE:
@@ -349,7 +346,7 @@ struct Parser:
             arrn.is_aot = True
             var arr_idx = self.doc.push(arrn^)
             self.doc.pool[cur].tkeys.append(key)
-            self.doc.pool[cur].tvals.append(arr_idx)
+            self.doc.pool[cur].kids.append(arr_idx)
             existing = arr_idx
         var kind = self.doc.pool[existing].kind
         if kind != KIND_ARRAY or not self.doc.pool[existing].is_aot:
@@ -358,7 +355,7 @@ struct Parser:
         elem.kind = KIND_TABLE
         elem.header_closed = True
         var elem_idx = self.doc.push(elem^)
-        self.doc.pool[existing].arr.append(elem_idx)
+        self.doc.pool[existing].kids.append(elem_idx)
         return elem_idx
 
     # ---- keys ----
@@ -411,7 +408,7 @@ struct Parser:
                 n.dotted_closed = True
                 var idx = self.doc.push(n^)
                 self.doc.pool[cur].tkeys.append(key)
-                self.doc.pool[cur].tvals.append(idx)
+                self.doc.pool[cur].kids.append(idx)
                 cur = idx
             else:
                 var kind = self.doc.pool[existing].kind
@@ -422,7 +419,7 @@ struct Parser:
         if self.doc.pool[cur].find_key(last) >= 0:
             self.fail("duplicate key '" + last + "'")
         self.doc.pool[cur].tkeys.append(last)
-        self.doc.pool[cur].tvals.append(value_idx)
+        self.doc.pool[cur].kids.append(value_idx)
 
     # ---- values ----
 
@@ -678,7 +675,7 @@ struct Parser:
                 self.pos += 1
                 break
             self.fail("expected ',' or ']'")
-        n.arr = items^
+        n.kids = items^
         return self.doc.push(n^)
 
     def parse_inline_table(mut self) raises -> Int:
@@ -747,10 +744,7 @@ struct Parser:
         return self.finish_number(tok, start)
 
     def slice_str(self, a: Int, b: Int) raises -> String:
-        var out: List[UInt8] = []
-        for i in range(a, b):
-            out.append(self.data[i])
-        return String(from_utf8=Span(out))
+        return String(from_utf8=Span(self.data)[a:b])
 
     def looks_like_date(self, tok: String) -> Bool:
         var b = tok.as_bytes()
@@ -1052,9 +1046,5 @@ struct Parser:
 
 
 def parse(text: String) raises -> TomlValue:
-    var b = text.as_bytes()
-    var data: List[UInt8] = []
-    for i in range(len(b)):
-        data.append(b[i])
-    var p = Parser(data^)
+    var p = Parser(bytes_list(text))
     return p.parse()
