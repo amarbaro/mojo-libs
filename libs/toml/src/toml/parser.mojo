@@ -930,14 +930,11 @@ struct Parser:
             j += 1
 
         var is_float = False
-        var frac_digits: List[Int] = []
-        var exp_digits: List[Int] = []
-        var exp_neg = False
         if j < n and b[j] == DOT:
             is_float = True
             j += 1
             var fstart = j
-            frac_digits = self.collect_underscored_digits(b, j, n, 10, start)
+            _ = self.collect_underscored_digits(b, j, n, 10, start)
             var jj = j
             while jj < n and (is_digit(b[jj]) or b[jj] == UNDERSCORE):
                 jj += 1
@@ -948,10 +945,9 @@ struct Parser:
             is_float = True
             j += 1
             if j < n and (b[j] == PLUS or b[j] == DASH):
-                exp_neg = b[j] == DASH
                 j += 1
             var estart = j
-            exp_digits = self.collect_underscored_digits(b, j, n, 10, start)
+            _ = self.collect_underscored_digits(b, j, n, 10, start)
             var jj2 = j
             while jj2 < n and (is_digit(b[jj2]) or b[jj2] == UNDERSCORE):
                 jj2 += 1

@@ -190,5 +190,4 @@ struct TomlValue(Copyable, Movable):
         return out^
 
     def contains(self, key: String) -> Bool:
-        ref n = self.doc[].pool[self.idx]
         return self.doc[].find_key(self.idx, key) >= 0
