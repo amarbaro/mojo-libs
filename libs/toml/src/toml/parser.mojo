@@ -297,13 +297,12 @@ struct Parser:
         return self.open_std_table(cur, last)
 
     def step_header_ancestor(mut self, cur: Int, key: String) raises -> Int:
-        var existing = self.doc.pool[cur].find_key(key)
+        var existing = self.doc.find_key(cur, key)
         if existing < 0:
             var n = TomlNode()
             n.kind = KIND_TABLE
             var idx = self.doc.push(n^)
-            self.doc.pool[cur].tkeys.append(key)
-            self.doc.pool[cur].kids.append(idx)
+            self.doc.add_key(cur, key, idx)
             return idx
         var kind = self.doc.pool[existing].kind
         if kind == KIND_TABLE:
@@ -321,14 +320,13 @@ struct Parser:
         return -1
 
     def open_std_table(mut self, cur: Int, key: String) raises -> Int:
-        var existing = self.doc.pool[cur].find_key(key)
+        var existing = self.doc.find_key(cur, key)
         if existing < 0:
             var n = TomlNode()
             n.kind = KIND_TABLE
             n.header_closed = True
             var idx = self.doc.push(n^)
-            self.doc.pool[cur].tkeys.append(key)
-            self.doc.pool[cur].kids.append(idx)
+            self.doc.add_key(cur, key, idx)
             return idx
         var kind = self.doc.pool[existing].kind
         if kind != KIND_TABLE:
@@ -339,14 +337,13 @@ struct Parser:
         return existing
 
     def open_array_table(mut self, cur: Int, key: String) raises -> Int:
-        var existing = self.doc.pool[cur].find_key(key)
+        var existing = self.doc.find_key(cur, key)
         if existing < 0:
             var arrn = TomlNode()
             arrn.kind = KIND_ARRAY
             arrn.is_aot = True
             var arr_idx = self.doc.push(arrn^)
-            self.doc.pool[cur].tkeys.append(key)
-            self.doc.pool[cur].kids.append(arr_idx)
+            self.doc.add_key(cur, key, arr_idx)
             existing = arr_idx
         var kind = self.doc.pool[existing].kind
         if kind != KIND_ARRAY or not self.doc.pool[existing].is_aot:
@@ -382,10 +379,7 @@ struct Parser:
             self.pos += 1
         if self.pos == start:
             self.fail("expected a key")
-        var out: List[UInt8] = []
-        for i in range(start, self.pos):
-            out.append(self.data[i])
-        return String(from_utf8=Span(out))
+        return self.slice_str(start, self.pos)
 
     def parse_keyval_line(mut self, table_idx: Int) raises:
         var segments = self.parse_key_path()
@@ -401,14 +395,13 @@ struct Parser:
         var cur = table_idx
         for si in range(len(segments) - 1):
             var key = segments[si]
-            var existing = self.doc.pool[cur].find_key(key)
+            var existing = self.doc.find_key(cur, key)
             if existing < 0:
                 var n = TomlNode()
                 n.kind = KIND_TABLE
                 n.dotted_closed = True
                 var idx = self.doc.push(n^)
-                self.doc.pool[cur].tkeys.append(key)
-                self.doc.pool[cur].kids.append(idx)
+                self.doc.add_key(cur, key, idx)
                 cur = idx
             else:
                 var kind = self.doc.pool[existing].kind
@@ -416,10 +409,9 @@ struct Parser:
                     self.fail("cannot extend '" + key + "' with a dotted key")
                 cur = existing
         var last = segments[len(segments) - 1]
-        if self.doc.pool[cur].find_key(last) >= 0:
+        if self.doc.find_key(cur, last) >= 0:
             self.fail("duplicate key '" + last + "'")
-        self.doc.pool[cur].tkeys.append(last)
-        self.doc.pool[cur].kids.append(value_idx)
+        self.doc.add_key(cur, last, value_idx)
 
     # ---- values ----
 

@@ -43,18 +43,46 @@ struct TomlNode(Copyable, Movable):
         self.dotted_closed = False
         self.inline_closed = False
 
-    def find_key(self, key: String) -> Int:
-        for idx in range(len(self.tkeys)):
-            if self.tkeys[idx] == key:
-                return self.kids[idx]
-        return -1
+
+comptime INDEX_AT = 16  # tables with more keys than this get a hash index
 
 
 struct TomlDoc(Copyable, Movable):
     var pool: List[TomlNode]
+    # table node -> key -> value node, only for tables past INDEX_AT keys,
+    # so small tables stay a linear scan with no per-node cost
+    var index: Dict[Int, Dict[String, Int]]
 
     def __init__(out self):
         self.pool = []
+        self.index = {}
+
+    def find_key(self, table: Int, key: String) -> Int:
+        if table in self.index:
+            try:
+                return self.index[table].get(key, -1)
+            except:
+                return -1
+        ref n = self.pool[table]
+        for i in range(len(n.tkeys)):
+            if n.tkeys[i] == key:
+                return n.kids[i]
+        return -1
+
+    def add_key(mut self, table: Int, key: String, value: Int):
+        self.pool[table].tkeys.append(key)
+        self.pool[table].kids.append(value)
+        ref n = self.pool[table]
+        if len(n.tkeys) == INDEX_AT + 1:
+            var d = Dict[String, Int]()
+            for i in range(len(n.tkeys)):
+                d[n.tkeys[i]] = n.kids[i]
+            self.index[table] = d^
+        elif len(n.tkeys) > INDEX_AT + 1:
+            try:
+                self.index[table][key] = value
+            except:
+                pass
 
     def push(mut self, var n: TomlNode) -> Int:
         self.pool.append(n^)
@@ -149,7 +177,7 @@ struct TomlValue(Copyable, Movable):
         ref n = self.doc[].pool[self.idx]
         if n.kind != KIND_TABLE:
             return None
-        var i = n.find_key(key)
+        var i = self.doc[].find_key(self.idx, key)
         if i < 0:
             return None
         return TomlValue(self.doc, i)
@@ -163,4 +191,4 @@ struct TomlValue(Copyable, Movable):
 
     def contains(self, key: String) -> Bool:
         ref n = self.doc[].pool[self.idx]
-        return n.find_key(key) >= 0
+        return self.doc[].find_key(self.idx, key) >= 0
