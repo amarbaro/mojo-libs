@@ -122,7 +122,8 @@ struct Cork(Movable, Sized):
     var ids: List[Int]  # queue, head at `head`
     var enq: List[Float64]
     var head: Int
-    var locked: Bool  # the one-batch-at-a-time semaphore
+    var inflight: Int  # batches running
+    var max_inflight: Int  # the semaphore: BentoML runs one batch at a time
     var phase: Int
     var req_count: Int
     var phase_wait: Float64
@@ -134,14 +135,15 @@ struct Cork(Movable, Sized):
     # (time, o_a, o_b, wait) after every refresh, for the replay gate
     var params: List[Float64]
 
-    def __init__(out self, max_latency_ms: Int, max_batch: Int, now: Float64):
+    def __init__(out self, max_latency_ms: Int, max_batch: Int, now: Float64, max_inflight: Int = 1):
         self.max_latency = Float64(max_latency_ms) / 1000.0
         self.max_batch = max_batch
         self.opt = Optimizer(self.max_latency, now)
         self.ids = List[Int]()
         self.enq = List[Float64]()
         self.head = 0
-        self.locked = False
+        self.inflight = 0
+        self.max_inflight = max_inflight
         self.phase = 0
         self.req_count = 0
         self.phase_wait = 0.0
@@ -185,7 +187,7 @@ struct Cork(Movable, Sized):
         while len(self) > 0 and len(self.out_ids) < self.max_batch:
             self.out_ids.append(self.ids[self.head])
             self.head += 1
-        self.locked = True
+        self.inflight += 1
         if self.head > 1024 and self.head * 2 > len(self.ids):  # compact the consumed prefix
             var ids = List[Int]()
             var enq = List[Float64]()
@@ -210,7 +212,7 @@ struct Cork(Movable, Sized):
             if tb > 1:
                 if n < tb and (Float64(tb) * self.opt.o_a + self.opt.o_b) + w0 <= self.phase_wait:
                     return SLEEP
-            if self.locked:
+            if self.inflight >= self.max_inflight:
                 return SLEEP
             self.req_count += 1
             self._take(True)
@@ -228,7 +230,7 @@ struct Cork(Movable, Sized):
         if n > 1 and latency_0 >= self.max_latency:
             self._drop_head()
             return CANCEL
-        if self.locked:
+        if self.inflight >= self.max_inflight:
             if n == 1 and w0 >= self.max_latency:
                 self._drop_head()
                 return CANCEL
@@ -238,14 +240,14 @@ struct Cork(Movable, Sized):
         self._take(False)
         return DISPATCH
 
-    def done(mut self, now: Float64, start: Float64):
-        """The batch of `out_ids`, started at `start`, returned."""
+    def done(mut self, now: Float64, start: Float64, n: Int, first: Float64, training: Bool):
+        """A batch of `n` items (oldest enqueued at `first`), started at `start`, returned."""
         var wait = 0.0
-        if not self.out_training:
-            wait = start - self.out_first
-        if self.opt.log_outbound(now, len(self.out_ids), wait, now - start):
+        if not training:
+            wait = start - first
+        if self.opt.log_outbound(now, n, wait, now - start):
             self._refresh(now)
-        self.locked = False
+        self.inflight -= 1
 
     def failed(mut self):
-        self.locked = False
+        self.inflight -= 1

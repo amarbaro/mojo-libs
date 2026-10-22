@@ -53,6 +53,8 @@ def main() raises:
     var comp_t = -1.0
     var comp_start = 0.0
     var comp_ids = List[Int]()
+    var comp_first = 0.0
+    var comp_training = False
     var calls = 0
     var settled = 0
     while settled < len(arr):
@@ -79,7 +81,7 @@ def main() raises:
                 res_t[id] = now
                 res_ok[id] = True
                 settled += 1
-            cork.done(now, comp_start)
+            cork.done(now, comp_start, len(comp_ids), comp_first, comp_training)
             comp_t = -1.0
             continue
         else:
@@ -105,6 +107,8 @@ def main() raises:
                     comp_ids.append(id)
                 lines.append(line)
                 comp_start = now
+                comp_first = cork.out_first
+                comp_training = cork.out_training
                 comp_t = now + (dur_a * Float64(n) + dur_b + jit[calls % len(jit)])
                 calls += 1
     for l in lines:

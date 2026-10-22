@@ -2,7 +2,7 @@
 
 `Batcher[In, Out].submit(item)` blocks the calling worker thread until its batch has run and returns that item's
 output. Batches form by `bento.dispatch.Cork` (the same decisions BentoML makes, replayed in tests/batch_replay.mojo):
-one controller thread polls it every millisecond, one thread per batch runs `run_batch`, at most one batch at a time.
+one controller thread polls it every millisecond, one thread per batch runs `run_batch`, `max_inflight` batches at a time (1: as BentoML).
 
 Errors: `run_batch` raising fails every item of that batch with its message; an item that waits longer than
 `max_latency_ms` fails with "batcher: overloaded" (BentoML answers those with its fallback, an HTTP 503).
@@ -78,11 +78,15 @@ struct Batch(Movable):
     var core: Int  # address of the Core
     var ids: List[Int]
     var start: Float64
+    var first: Float64  # when its oldest item was enqueued
+    var training: Bool
 
-    def __init__(out self, core: Int, var ids: List[Int], start: Float64):
+    def __init__(out self, core: Int, var ids: List[Int], start: Float64, first: Float64, training: Bool):
         self.core = core
         self.ids = ids^
         self.start = start
+        self.first = first
+        self.training = training
 
 
 def _batch_main[In: Copyable & Deinitable, Out: Copyable & Deinitable](arg: Int) abi("C") -> Int:
@@ -116,7 +120,7 @@ def _batch_main[In: Copyable & Deinitable, Out: Copyable & Deinitable](arg: Int)
     if failed:
         c[].cork.failed()
     else:
-        c[].cork.done(c[].now(), b[].start)
+        c[].cork.done(c[].now(), b[].start, len(b[].ids), b[].first, b[].training)
     c[].batches += 1
     c[].items += len(b[].ids)
     c[].inflight -= 1
@@ -145,7 +149,7 @@ def _controller_main[In: Copyable & Deinitable, Out: Copyable & Deinitable](arg:
             c[].mu.lock()
         else:
             var b = alloc[Batch](1)
-            b.unsafe_write(Batch(arg, c[].cork.out_ids.copy(), now))
+            b.unsafe_write(Batch(arg, c[].cork.out_ids.copy(), now, c[].cork.out_first, c[].cork.out_training))
             var tid = alloc[UInt64](1)
             var rc = external_call["pthread_create", Int32](tid, Int(0), _batch_main[In, Out], Int(b))
             if rc != 0:
@@ -176,9 +180,10 @@ struct Batcher[In: Copyable & Deinitable, Out: Copyable & Deinitable](Movable):
         run_batch: def(List[Self.In]) thin raises -> List[Self.Out],
         max_latency_ms: Int = 10000,
         max_batch_size: Int = 32,
+        max_inflight: Int = 1,
     ):
         self.core = alloc[Core[Self.In, Self.Out]](1)
-        self.core.unsafe_write(Core[Self.In, Self.Out](Cork(max_latency_ms, max_batch_size, 0.0), run_batch))
+        self.core.unsafe_write(Core[Self.In, Self.Out](Cork(max_latency_ms, max_batch_size, 0.0, max_inflight), run_batch))
 
     def submit(self, var item: Self.In) raises -> Self.Out:
         """Queue `item`, block until its batch ran, return its output."""

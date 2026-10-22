@@ -3,6 +3,7 @@ a failing run_batch fails exactly its batch, an overloaded queue drops with the 
 """
 from std.ffi import external_call
 from std.memory import alloc
+from std.atomic import Atomic, Ordering
 from std.testing import assert_equal, assert_true
 from bento.batch import Batcher, OVERLOADED
 
@@ -27,6 +28,21 @@ def run_batch(reqs: List[Req]) raises -> List[Int]:
         if r.v == 13:
             raise Error("poison 13")
         out.append(r.v * 2)
+    return out^
+
+
+def run_batch_conc(reqs: List[Req]) raises -> List[Int]:
+    """Like run_batch, but counts the batches running at once (stats viewed as Int32: active, most seen at once)."""
+    var s = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=reqs[0].stats)
+    var now = Atomic[Int32].fetch_add(s, 1) + 1
+    var seen = Atomic[Int32].load[ordering=Ordering.ACQUIRE](s.unsafe_offset(1))
+    while now > seen and Atomic[Int32].compare_exchange(s.unsafe_offset(1), seen, now):
+        pass
+    _ = external_call["usleep", Int32](Int32(20_000))
+    var out = List[Int]()
+    for r in reqs:
+        out.append(r.v * 2)
+    _ = Atomic[Int32].fetch_add(s, -1)
     return out^
 
 
@@ -128,4 +144,15 @@ def main() raises:
         _ = external_call["pthread_join", Int32](tids.unsafe_offset(i)[], Int(0))
     assert_equal(cx[0].errs + cx[1].errs, 1, "exactly the queued item should fail on close")
     assert_equal(cx[0].bad + cx[1].bad, 0)
+    # max_inflight 2: two batches run at once, every answer still its own
+    var cs = alloc[Int32](4)
+    for i in range(4):
+        cs.unsafe_offset(i).unsafe_write(0)
+    var two = Batcher[Req, Int](run_batch_conc, 10_000, 4, 2)
+    var tp = Int(Pointer(to=two))
+    var t = run_workers(tp, Int(cs), WORKERS)
+    assert_equal(t[0], 0, "wrong results with max_inflight 2")
+    assert_equal(t[1], 0, "errors with max_inflight 2")
+    assert_equal(Int(cs.unsafe_offset(1)[]), 2, "batches never overlapped, or overlapped more than max_inflight")
+    two.close()
     print("PASS batch-threads")

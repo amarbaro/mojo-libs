@@ -19,7 +19,7 @@ struct Mutex(Movable):
     def unlock(self):
         _ = external_call["pthread_mutex_unlock", Int32](self.p)
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self.p.unsafe_free()
 
 
@@ -49,5 +49,5 @@ struct Cond(Movable):
     def broadcast(self):
         _ = external_call["pthread_cond_broadcast", Int32](self.p)
 
-    def __del__(deinit self):
+    def __deinit__(deinit self):
         self.p.unsafe_free()
