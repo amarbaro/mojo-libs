@@ -85,42 +85,82 @@ def _tap[sd: DType, w: Int](p: Ptr[Scalar[sd]], k: Ptr[Float32], nk: Int, at: In
     return s
 
 
+def _hrow_f[sd: DType](s: Ptr[Scalar[sd]], d: Ptr[Float32], k: Ptr[Float32], nk: Int, cols: Int, ch: Int, mode: Int):
+    """d[i] = sum_t k[t] * s[i + (t - nk // 2) * ch], one row; SIMD interior, scalar edges mapped through bidx."""
+    var n = cols * ch
+    var ex = nk // 2
+    var e = ex * ch
+    var i = e
+    while i + WF <= n - e:
+        d.unsafe_store(i, _tap[sd, WF](s, k, nk, i - e, ch))
+        i += WF
+    for side in range(2):
+        for ii in range(0 if side == 0 else max(i, e), min(e, n) if side == 0 else n):
+            var acc = Float32(0)
+            for t in range(nk):
+                var px = bidx(ii // ch + t - ex, cols, mode)
+                if px >= 0:
+                    acc += k[t] * Float32(s[unsafe_offset=px * ch + ii % ch])
+            d[unsafe_offset=ii] = acc
+
+
 def sepfilter[sd: DType, od: DType](src: Mat[sd], kx: List[Float32], ky: List[Float32], mode: Int = 0) -> Mat[od]:
-    """Correlate with the column kernel ky and row kernel kx. Saturates and rounds like cv2 when od is integral."""
+    """Correlate with the column kernel ky and row kernel kx. Saturates and rounds like cv2 when od is integral.
+    Each worker filters bands of 8 rows: the row pass of the rows a band needs lands in a small scratch that stays
+    in cache, then the column pass reads it; the source is read in place, edges go through bidx."""
     var nx = len(kx)
     var ny = len(ky)
-    var p = pad(src, ny // 2, nx // 2, mode)
-    var tmp = Mat[F32](p.rows, src.cols, src.ch)
-    var o = Mat[od](src.rows, src.cols, src.ch)
+    var o = Mat[od](src.rows, src.cols, src.ch, False)
     var n = src.cols * src.ch
-    var ch = src.ch
-    var pp = p.ptr()
-    var pt = tmp.ptr()
+    var rows = src.rows
+    var ps = src.ptr()
     var po = o.ptr()
     var pkx = ptr_of(kx)
     var pky = ptr_of(ky)
-    var pstride = p.cols * ch
+    comptime B = 32
+    comptime NT = 8
 
-    def hrow(r: Int) {imm}:
-        var i = 0
-        while i + WF <= n:
-            pt.unsafe_store(r * n + i, _tap[sd, WF](pp, pkx, nx, r * pstride + i, ch))
-            i += WF
-        for j in range(i, n):
-            pt.unsafe_store(r * n + j, _tap[sd, 1](pp, pkx, nx, r * pstride + j, ch))
+    def task(t: Int) {imm}:
+        var scratch = List[Float32](unsafe_uninit_length=min(rows, B + ny - 1) * n)
+        var sc = ptr_of(scratch)
+        var offs = List[Int](length=ny, fill=0)
+        var po_ = ptr_of(offs)
+        var y = rows * t // NT
+        var y_end = rows * (t + 1) // NT
+        while y < y_end:
+            var ye = min(y + B, y_end)
+            var lo = rows
+            var hi = -1
+            for yy in range(y, ye):
+                for q in range(ny):
+                    var r = bidx(yy + q - ny // 2, rows, mode)
+                    if r >= 0:
+                        lo = min(lo, r)
+                        hi = max(hi, r)
+            for r in range(lo, hi + 1):
+                _hrow_f[sd](ps + r * src.cols * src.ch, sc + (r - lo) * n, pkx, nx, src.cols, src.ch, mode)
+            for yy in range(y, ye):
+                for q in range(ny):
+                    var r = bidx(yy + q - ny // 2, rows, mode)
+                    po_[unsafe_offset=q] = (r - lo) * n if r >= 0 else -1
+                var i = 0
+                while i + WF <= n:
+                    var acc = SIMD[F32, WF](0)
+                    for q in range(ny):
+                        if po_[unsafe_offset=q] >= 0:
+                            acc += sc.unsafe_load[width=WF](po_[unsafe_offset=q] + i) * pky[q]
+                    po.unsafe_store(yy * n + i, _fin[od, WF](acc))
+                    i += WF
+                for j in range(i, n):
+                    var acc = Float32(0)
+                    for q in range(ny):
+                        if po_[unsafe_offset=q] >= 0:
+                            acc += sc[unsafe_offset=po_[unsafe_offset=q] + j] * pky[q]
+                    po.unsafe_store(yy * n + j, _fin[od, 1](SIMD[F32, 1](acc)))
+            y = ye
 
-    par(hrow, p.rows)
-
-    def vrow(r: Int) {imm}:
-        var i = 0
-        while i + WF <= n:
-            po.unsafe_store(r * n + i, _fin[od, WF](_tap[F32, WF](pt, pky, ny, r * n + i, n)))
-            i += WF
-        for j in range(i, n):
-            po.unsafe_store(r * n + j, _fin[od, 1](_tap[F32, 1](pt, pky, ny, r * n + j, n)))
-
-    par(vrow, src.rows)
-    _ = (p.rows, tmp.rows)
+    par(task, NT)
+    _ = (nx, ny)
     return o^
 
 
@@ -194,43 +234,53 @@ def sobel[sd: DType, od: DType](src: Mat[sd], dx: Int, dy: Int, ksize: Int, scal
 
 
 def pyr_down[dt: DType](src: Mat[dt]) -> Mat[dt]:
-    """5-tap binomial blur (reflect101), then every second row and column; output ceil(n / 2)."""
+    """5-tap binomial blur (reflect101), then every second row and column; output ceil(n / 2). Per output row the
+    column pass runs on contiguous SIMD lanes into one cached row, then the row pass reads every second pixel."""
     var oc = (src.cols + 1) // 2
     var orow = (src.rows + 1) // 2
     var ch = src.ch
-    var p = pad(src, 2, 2)
-    var pp = p.ptr()
-    var tmp = Mat[F32](p.rows, oc, ch)
-    var pt = tmp.ptr()
-    var o = Mat[dt](orow, oc, ch)
+    var n = src.cols * ch
+    var o = Mat[dt](orow, oc, ch, False)
+    var ps = src.ptr()
     var po = o.ptr()
-    comptime kk = SIMD[F32, 8](1, 4, 6, 4, 1, 0, 0, 0)
+    comptime NT = 8
 
-    def hrow(r: Int) {imm}:
-        for c in range(oc):
-            for k in range(ch):
-                var base = (r * p.cols + 2 * c) * ch + k
-                var s = Float32(0)
-                comptime for t in range(5):
-                    s += kk[t] * Float32(pp[unsafe_offset=base + t * ch])
-                pt[unsafe_offset=(r * oc + c) * ch + k] = s
+    def task(t: Int) {imm}:
+        var vrow = List[Float32](unsafe_uninit_length=n)
+        var v = ptr_of(vrow)
+        for r in range(orow * t // NT, orow * (t + 1) // NT):
+            var p0 = ps + bidx(2 * r - 2, src.rows, 0) * n
+            var p1 = ps + bidx(2 * r - 1, src.rows, 0) * n
+            var p2 = ps + (2 * r) * n
+            var p3 = ps + bidx(2 * r + 1, src.rows, 0) * n
+            var p4 = ps + bidx(2 * r + 2, src.rows, 0) * n
+            var i = 0
+            while i + WF <= n:
+                var s = _ld[dt, WF](p0, i) + _ld[dt, WF](p1, i) * 4 + _ld[dt, WF](p2, i) * 6 + _ld[dt, WF](p3, i) * 4 + _ld[dt, WF](p4, i)
+                v.unsafe_store(i, s)
+                i += WF
+            for j in range(i, n):
+                v[unsafe_offset=j] = Float32(p0[unsafe_offset=j]) + Float32(p1[unsafe_offset=j]) * 4 + Float32(p2[unsafe_offset=j]) * 6 + Float32(p3[unsafe_offset=j]) * 4 + Float32(p4[unsafe_offset=j])
+            var hi = max((src.cols - 3) // 2, 0)  # columns 1..hi need no reflection
+            for c in range(oc):
+                var c0 = (2 * c - 2) * ch
+                var c1 = (2 * c - 1) * ch
+                var c3 = (2 * c + 1) * ch
+                var c4 = (2 * c + 2) * ch
+                if c < 1 or c > hi:
+                    c0 = bidx(2 * c - 2, src.cols, 0) * ch
+                    c1 = bidx(2 * c - 1, src.cols, 0) * ch
+                    c3 = bidx(2 * c + 1, src.cols, 0) * ch
+                    c4 = bidx(2 * c + 2, src.cols, 0) * ch
+                for k in range(ch):
+                    var s = v[unsafe_offset=c0 + k] + v[unsafe_offset=c1 + k] * 4 + v[unsafe_offset=2 * c * ch + k] * 6 + v[unsafe_offset=c3 + k] * 4 + v[unsafe_offset=c4 + k]
+                    comptime if dt.is_integral():
+                        s = floor(s / 256 + 0.5)
+                    else:
+                        s = s / 256
+                    po.unsafe_store(r * oc * ch + c * ch + k, _fin[dt, 1](SIMD[F32, 1](s)))
 
-    par(hrow, p.rows)
-    var n = oc * ch
-
-    def vrow(r: Int) {imm}:
-        for i in range(n):
-            var s = Float32(0)
-            comptime for t in range(5):
-                s += kk[t] * pt[unsafe_offset=(2 * r + t) * n + i]
-            comptime if dt.is_integral():
-                s = floor(s / 256 + 0.5)
-            else:
-                s = s / 256
-            po.unsafe_store(r * n + i, _fin[dt, 1](SIMD[F32, 1](s)))
-
-    par(vrow, orow)
-    _ = (p.rows, tmp.rows)
+    par(task, NT)
     return o^
 
 
