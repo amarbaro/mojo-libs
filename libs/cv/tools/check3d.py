@@ -42,6 +42,12 @@ def check(row, fx):
     mcv.save(want, WORK / f"{name}.mcv")
     if "equals" in expect:
         want = mcv.load(WORK / f"{expect['equals']}.mcv")
+    if "cyl" in expect:  # exact rational quarter cylinder: radius 1, normal = outward radial
+        xy, nz = got[..., :2], got[..., 3:5]
+        d = max(float(np.abs(np.linalg.norm(xy, axis=-1) - 1).max()), float(np.abs(xy - nz).max()), float(np.abs(got[..., 5]).max()))
+        if d > 1e-12:
+            return False, f"cylinder deviates by {d:g}"
+        print(f"     {name}: radius and radial normal exact to {d:.1e}")
     if "crop" in expect:
         c = int(expect["crop"])
         got, want = got[c:-c, c:-c], want[c:-c, c:-c]

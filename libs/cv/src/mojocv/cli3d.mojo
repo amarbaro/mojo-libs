@@ -11,6 +11,7 @@ from mojocv.desc3d import describe, match_desc
 from mojocv.tapvid import tapvid
 from mojocv.phasecorr import phase_corr
 from mojocv.burst import burst, register
+from mojocv.nurbs import eval_surface, fit_surface
 from mojocv.octree import Octree, walk, walk_cells
 
 
@@ -104,6 +105,15 @@ def dispatch3d(args: List[String]) raises -> Bool:
         for t in range(sh.rows):
             print("burst shift", t, sh.data[t * 2], sh.data[t * 2 + 1])
         save(burst(frames, sh, _i(kv, "scale", 2)), out)
+    elif op == "nurbs_fit":
+        save(fit_surface(load[DType.float64](ins[0]), _i(kv, "nu", 6), _i(kv, "nv", 6), _i(kv, "p", 3), _i(kv, "q", 3)), out)
+    elif op == "nurbs_eval":
+        save(
+            eval_surface(
+                load[DType.float64](ins[0]), _i(kv, "p", 3), _i(kv, "q", 3), _i(kv, "m", 16), _i(kv, "n", 16)
+            ),
+            out,
+        )
     else:
         return False
     return True

@@ -199,6 +199,77 @@ def burst(ins, kv):
     return np.where(den > 1e-9, num / np.maximum(den, 1e-300), fill)
 
 
+def _knots(n, p):
+    return np.concatenate([np.zeros(p), np.linspace(0, 1, n - p + 1), np.ones(p)])
+
+
+def _bsp(n, p, u):
+    """Cox-de Boor: basis (len(u), n) and derivative (len(u), n) on the clamped uniform knots."""
+    kn = _knots(n, p)
+    u = np.asarray(u, float)
+
+    def level(deg):
+        m = len(kn) - deg - 1
+        if deg == 0:
+            b = np.zeros((len(u), len(kn) - 1))
+            for i in range(len(kn) - 1):
+                if kn[i] < kn[i + 1]:
+                    last = kn[i + 1] == 1.0
+                    b[:, i] = (u >= kn[i]) & ((u < kn[i + 1]) | (last & (u == 1.0)))
+            return b
+        lo = level(deg - 1)
+        b = np.zeros((len(u), m))
+        for i in range(m):
+            d1, d2 = kn[i + deg] - kn[i], kn[i + deg + 1] - kn[i + 1]
+            if d1 > 0:
+                b[:, i] += (u - kn[i]) / d1 * lo[:, i]
+            if d2 > 0:
+                b[:, i] += (kn[i + deg + 1] - u) / d2 * lo[:, i + 1]
+        return b
+
+    b = level(p)
+    lo = level(p - 1)
+    d = np.zeros_like(b)
+    for i in range(n):
+        d1, d2 = kn[i + p] - kn[i], kn[i + p + 1] - kn[i + 1]
+        if d1 > 0:
+            d[:, i] += p * lo[:, i] / d1
+        if d2 > 0:
+            d[:, i] -= p * lo[:, i + 1] / d2
+    return b, d
+
+
+def nurbs_eval(ins, kv):
+    net = ins[0]
+    nu, nv = net.shape[:2]
+    p, q, m, n = (int(kv.get(k, d)) for k, d in (("p", 3), ("q", 3), ("m", 16), ("n", 16)))
+    bu, du = _bsp(nu, p, np.linspace(0, 1, m))
+    bv, dv = _bsp(nv, q, np.linspace(0, 1, n))
+    pw = np.concatenate([net[..., :3] * net[..., 3:], net[..., 3:]], axis=2)
+    h = np.einsum("ai,bj,ijc->abc", bu, bv, pw)
+    hu = np.einsum("ai,bj,ijc->abc", du, bv, pw)
+    hv = np.einsum("ai,bj,ijc->abc", bu, dv, pw)
+    s = h[..., :3] / h[..., 3:]
+    su = (hu[..., :3] - hu[..., 3:] * s) / h[..., 3:]
+    sv = (hv[..., :3] - hv[..., 3:] * s) / h[..., 3:]
+    nrm = np.cross(su, sv)
+    nrm = nrm / np.linalg.norm(nrm, axis=2, keepdims=True)
+    return np.concatenate([s, nrm], axis=2)
+
+
+def nurbs_fit(ins, kv):
+    g = ins[0]
+    nu, nv, p, q = (int(kv.get(k, d)) for k, d in (("nu", 6), ("nv", 6), ("p", 3), ("q", 3)))
+    m, n = g.shape[:2]
+    bu, _ = _bsp(nu, p, np.linspace(0, 1, m))
+    bv, _ = _bsp(nv, q, np.linspace(0, 1, n))
+    net = np.ones((nu, nv, 4))
+    for c in range(3):
+        qm = np.linalg.lstsq(bu, g[..., c], rcond=None)[0]
+        net[..., c] = np.linalg.lstsq(bv, qm.T, rcond=None)[0].T
+    return net
+
+
 def umeyama(ins, kv):
     x, y = ins
     mx, my = x.mean(0), y.mean(0)
@@ -217,7 +288,7 @@ def umeyama(ins, kv):
 
 OPS = {"voxelize": voxelize, "unvoxelize": unvoxelize, "occupied": occupied, "ohash": ohash, "odiff": odiff,
        "static": static, "umeyama": umeyama, "haar3f": haar3f, "haar3i": haar3i,
-       "haar3c": haar3c, "tapvid": tapvid, "phasecorr": phasecorr, "burst": burst, "describe": describe, "match": match}
+       "haar3c": haar3c, "tapvid": tapvid, "phasecorr": phasecorr, "nurbs_eval": nurbs_eval, "nurbs_fit": nurbs_fit, "burst": burst, "describe": describe, "match": match}
 
 
 def fixtures():
@@ -249,6 +320,7 @@ def fixtures():
     fx.update(tap_fixtures())
     fx.update(pc_fixtures())
     fx.update(burst_fixtures())
+    fx.update(nurbs_fixtures())
     return fx
 
 
@@ -405,3 +477,34 @@ def burst_fixtures():
         frames[f"bs_r{t}"] = fshift(r0, sy, sx)
     frames["bs_rn"] = frames["bs_r3"] + 0.05 * rs.random((13, 17))
     return frames
+
+
+def nurbs_fixtures():
+    rs = np.random.default_rng(29)
+    fx = {}
+    net = np.ones((6, 5, 4))
+    net[..., :3] = rs.normal(size=(6, 5, 3))
+    fx["ns_net"] = net
+    netw = net.copy()
+    netw[..., 3] = rs.uniform(0.5, 2.0, (6, 5))
+    fx["ns_netw"] = netw
+    grid = nurbs_eval([net], {"p": 3, "q": 2, "m": 30, "n": 25})[..., :3]
+    fx["ns_grid"] = grid
+    fx["ns_grid_noisy"] = grid + 0.01 * rs.normal(size=grid.shape)
+    fx["ns_grid_small"] = grid[:4, :4]
+    # plane: control points at the Greville abscissae reproduce (u, v, 0) exactly
+    ku, kv_ = _knots(6, 3), _knots(5, 2)
+    gu = np.array([ku[i + 1:i + 4].mean() for i in range(6)])
+    gv = np.array([kv_[j + 1:j + 3].mean() for j in range(5)])
+    plane = np.ones((6, 5, 4))
+    plane[..., 0], plane[..., 1], plane[..., 2] = gu[:, None], gv[None, :], 0.0
+    fx["ns_plane"] = plane
+    u, v = np.meshgrid(np.linspace(0, 1, 9), np.linspace(0, 1, 7), indexing="ij")
+    fx["ns_plane_truth"] = np.concatenate(
+        [np.stack([u, v, 0 * u], 2), np.broadcast_to([0.0, 0.0, 1.0], (9, 7, 3))], axis=2)
+    cyl = np.ones((3, 2, 4))
+    for i, (x, y, w) in enumerate([(1, 0, 1), (1, 1, np.sqrt(0.5)), (0, 1, 1)]):
+        for j in range(2):
+            cyl[i, j] = [x, y, j, w]
+    fx["ns_cyl"] = cyl
+    return fx
