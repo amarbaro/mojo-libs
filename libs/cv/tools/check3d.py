@@ -51,6 +51,18 @@ def check(row, fx):
         if v >= float(expect["visited_frac_lt"]) * d:
             return False, f"visited {v} of {d} dense"
         print(f"     {name}: visited {v} of {d} dense cells = {100.0 * v / d:.4f}%")
+    if "kept_frac_lt" in expect:
+        m = re.search(r"kept=\s*(\d+)\s+of=\s*(\d+)", stdout)
+        k, n = int(m[1]), int(m[2])
+        if k >= float(expect["kept_frac_lt"]) * n:
+            return False, f"kept {k} of {n}"
+        x = mcv.load(ins[0])
+        c = oracle3d.OPS["haar3f"]([x], kv)
+        dropped = float((c[np.abs(c) < float(kv["thr"])] ** 2).sum())
+        err = float(((x - got) ** 2).sum())
+        if abs(err - dropped) > 1e-9 * max(1.0, dropped):  # Parseval: squared error = dropped energy
+            return False, f"error energy {err:g} != dropped energy {dropped:g}"
+        print(f"     {name}: kept {k} of {n} coefficients = {100.0 * k / n:.2f}%, squared error {err:.4g} = dropped energy")
     return True, f"maxdiff {diff:g}"
 
 

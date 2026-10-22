@@ -5,6 +5,7 @@ from std.collections import Dict
 from mojocv.mat import Mat, load, save
 from mojocv.voxel import voxelize, unvoxelize, occupied
 from mojocv.align import umeyama
+from mojocv.wavelet import haar3, compress
 from mojocv.octree import Octree, walk, walk_cells
 
 
@@ -57,6 +58,14 @@ def dispatch3d(args: List[String]) raises -> Bool:
         save(walk_cells(w, op == "static"), out)
     elif op == "umeyama":
         save(umeyama(load[DType.float64](ins[0]), load[DType.float64](ins[1]), _i(kv, "scale", 1) != 0), out)
+    elif op == "haar3f" or op == "haar3i":
+        var v = load[DType.float64](ins[0])
+        save(haar3[False](v, _i(kv, "levels", 0)) if op == "haar3f" else haar3[True](v, _i(kv, "levels", 0)), out)
+    elif op == "haar3c":
+        var v = load[DType.float64](ins[0])
+        var r = compress(v, _f(kv, "thr", 0.0), _i(kv, "levels", 0))
+        print("haar3c kept=", r[1], "of=", v.size())
+        save(r[0], out)
     else:
         return False
     return True

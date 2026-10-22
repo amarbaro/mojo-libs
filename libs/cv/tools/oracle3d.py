@@ -63,6 +63,39 @@ def static(ins, kv):
     return np.array([(*c, int(all(c in s for s in sets))) for c in allc], dtype=np.int32).reshape(-1, 4)
 
 
+def _haar(a, inverse, levels):
+    n = a.shape[0]
+    full = int(np.log2(n))
+    nl = int(levels) or full
+    a = a.astype(np.float64).copy()
+    r = np.sqrt(0.5)
+    for k in range(nl):
+        m = n >> (nl - 1 - k if inverse else k)
+        for ax in range(3):
+            v = np.moveaxis(a[:m, :m, :m], ax, 0)  # a view: assignments write through
+            if inverse:
+                lo, hi = v[: m // 2].copy(), v[m // 2 :].copy()
+                v[0::2], v[1::2] = (lo + hi) * r, (lo - hi) * r
+            else:
+                e, o = v[0::2].copy(), v[1::2].copy()
+                v[: m // 2], v[m // 2 :] = (e + o) * r, (e - o) * r
+    return a
+
+
+def haar3f(ins, kv):
+    return _haar(ins[0], False, kv.get("levels", 0))
+
+
+def haar3i(ins, kv):
+    return _haar(ins[0], True, kv.get("levels", 0))
+
+
+def haar3c(ins, kv):
+    c = _haar(ins[0], False, kv.get("levels", 0))
+    c[np.abs(c) < f(kv, "thr", 0.0)] = 0.0
+    return _haar(c, True, kv.get("levels", 0))
+
+
 def umeyama(ins, kv):
     x, y = ins
     mx, my = x.mean(0), y.mean(0)
@@ -80,7 +113,8 @@ def umeyama(ins, kv):
 
 
 OPS = {"voxelize": voxelize, "unvoxelize": unvoxelize, "occupied": occupied, "ohash": ohash, "odiff": odiff,
-       "static": static, "umeyama": umeyama}
+       "static": static, "umeyama": umeyama, "haar3f": haar3f, "haar3i": haar3i,
+       "haar3c": haar3c}
 
 
 def fixtures():
@@ -107,6 +141,7 @@ def fixtures():
     fx["frame1"] = np.vstack([room, [[4, 3, 5], [4, 3, 6]]]).astype(np.int32)
     fx["frame2"] = np.vstack([room[:-1], [[5, 3, 5], [5, 3, 6]]]).astype(np.int32)
     fx.update(align_fixtures())
+    fx.update(wavelet_fixtures())
     return fx
 
 
@@ -144,3 +179,17 @@ def align_fixtures():
     fx["al_few_dst"] = fx["al_dst"][:3]
     fx["al_one"] = src[:1]
     return fx
+
+
+def wavelet_fixtures():
+    rs = np.random.default_rng(11)
+    g = np.linspace(-1, 1, 32)
+    z, y, x = np.meshgrid(g, g, g, indexing="ij")
+    return {
+        "wv_rand8": rs.normal(size=(8, 8, 8)),
+        "wv_blob32": np.exp(-4 * (x ** 2 + 2 * y ** 2 + z ** 2)) + 0.01 * rs.normal(size=(32, 32, 32)),
+        "wv_const16": np.full((16, 16, 16), 3.0),
+        "wv_const_coef": np.pad(np.full((1, 1, 1), 3.0 * 16 ** 1.5), ((0, 15),) * 3),
+        "wv_n2": rs.normal(size=(2, 2, 2)),
+        "wv_bad6": rs.normal(size=(6, 6, 6)),
+    }
