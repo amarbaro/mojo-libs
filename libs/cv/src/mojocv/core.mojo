@@ -5,6 +5,7 @@ from std.sys.info import simd_width_of, size_of
 from std.time import monotonic
 from std.math import clamp
 from max.algorithm import parallelize
+from std.atomic import Atomic
 from mojocv.mat import Mat, load, save
 
 comptime DTS = [DType.uint8, DType.float32, DType.int32, DType.float64, DType.int16]
@@ -75,6 +76,23 @@ def par[F: def(Int) -> None](f: F, n: Int, workers: Int = 8):
     """parallelize on the 8 physical cores: with 16 workers every call waits ~215 us for a sleeping SMT sibling
     (measured), with 8 the dispatch takes ~8 us. Pass 16 for regions that run for many milliseconds."""
     parallelize(f, n, workers)
+
+
+def par_dyn[F: def(Int) -> None](f: F, n: Int, workers: Int = 8):
+    """f(0) .. f(n - 1) on `workers` threads, each taking the next unclaimed index from one shared counter, so threads
+    that drew cheap items (rows outside a rotated image) take more of them instead of idling at the join."""
+    var ctr = List[Int64](length=1, fill=0)
+    var pc = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=Int(ctr.unsafe_ptr()))
+
+    def worker(_t: Int) {imm}:
+        while True:
+            var i = Int(Atomic[Scalar[DType.int64]].fetch_add(pc, 1))
+            if i >= n:
+                break
+            f(i)
+
+    parallelize(worker, workers, workers)
+    _ = len(ctr)
 
 
 def peek_code(path: String) raises -> Int:
