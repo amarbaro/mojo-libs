@@ -2,6 +2,7 @@
 # padded copy of the source, so every inner loop is a plain contiguous SIMD loop over the flattened row
 # (pixel i of channel c sits at i * ch + c, so a horizontal tap at dx is a load at offset dx * ch).
 from std.sys.info import simd_width_of
+from std.utils import IndexList
 from std.math import sqrt, exp, floor, ceil, cos, sin, atan2, cbrt
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args, DTS, peek_code, par
@@ -1156,12 +1157,66 @@ struct Taps(Movable):
                 self.w[d * self.n + t] = Float32(ww[t])
 
 
+def _pair_mask[n: Int, ch: Int, odd: Int]() -> IndexList[n]:
+    """Shuffle mask taking pixel 2p + odd of interleaved pixels for output pixel p, for the n // (2 * ch) pixels a
+    vector of n bytes holds (the rest of the lanes read lane 0)."""
+    var m = IndexList[n]()
+    for j in range(n):
+        m[j] = (j // ch) * 2 * ch + odd * ch + j % ch if j < n // (2 * ch) * ch else 0
+    return m
+
+
+def _half_rows[dt: DType, ch: Int](pa: Ptr[Scalar[dt]], po: Ptr[Scalar[dt]], dw: Int, r0: Int, r1: Int):
+    """Output rows r0..r1 of the exact 2x linear shrink: the mean of each 2x2 block, rounded half up (cv2's INTER_AREA
+    fast path). One 64-byte load per source row, added in uint16, even and odd pixels picked with one shuffle each;
+    the store is n // 2 bytes wide, so a block may write up to ch - 1 bytes past its pixels (the next block or the
+    scalar tail overwrites them)."""
+    comptime SW = 64
+    comptime P = SW // (2 * ch)
+    comptime G = SW // 2 - P * ch
+    comptime me = _pair_mask[SW, ch, 0]()
+    comptime mo = _pair_mask[SW, ch, 1]()
+    var sn = 2 * dw * ch
+    for r in range(r0, r1):
+        var a = pa + 2 * r * sn
+        var b = a + sn
+        var o = po + r * dw * ch
+        var p = 0
+        while p + P + (1 if G > 0 else 0) <= dw:
+            var s = a.unsafe_load[width=SW](2 * p * ch).cast[DType.uint16]() + b.unsafe_load[width=SW](2 * p * ch).cast[DType.uint16]()
+            var v = (s.shuffle[me]().slice[SW // 2]() + s.shuffle[mo]().slice[SW // 2]() + 2) >> 2
+            o.unsafe_store(p * ch, v.cast[dt]())
+            p += P
+        for q in range(p, dw):
+            for k in range(ch):
+                var i = 2 * q * ch + k
+                o[unsafe_offset=q * ch + k] = Scalar[dt]((UInt16(a[unsafe_offset=i]) + UInt16(a[unsafe_offset=i + ch]) + UInt16(b[unsafe_offset=i]) + UInt16(b[unsafe_offset=i + ch]) + 2) >> 2)
+
+
 def resize[dt: DType](src: Mat[dt], dw_in: Int, dh_in: Int, kind_in: Int) -> Mat[dt]:
     """Column taps first, on contiguous SIMD over the source width into one cached row per output row; then the row
     taps pick (dw) pixels from that row."""
     var dw = dw_in
     var dh = dh_in
     var kind = kind_in
+    comptime if dt == DType.uint8:
+        if kind == 1 and src.cols == 2 * dw and src.rows == 2 * dh and (src.ch == 1 or src.ch == 3 or src.ch == 4):
+            var o = Mat[dt](dh, dw, src.ch, False)
+            var pa = src.ptr()
+            var po = o.ptr()
+            var ch = src.ch
+
+            def half(t: Int) {imm}:
+                if ch == 1:
+                    _half_rows[dt, 1](pa, po, dw, dh * t // 8, dh * (t + 1) // 8)
+                elif ch == 3:
+                    _half_rows[dt, 3](pa, po, dw, dh * t // 8, dh * (t + 1) // 8)
+                else:
+                    _half_rows[dt, 4](pa, po, dw, dh * t // 8, dh * (t + 1) // 8)
+
+            par(half, 8)
+            _ = len(src.data)
+            return o^
     var tx = Taps(src.cols, dw, Float64(src.cols) / Float64(dw), kind)
     var ty = Taps(src.rows, dh, Float64(src.rows) / Float64(dh), kind)
     var ch = src.ch

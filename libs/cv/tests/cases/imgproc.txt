@@ -68,6 +68,8 @@ resize_lan_sm      resize sm w=300 h=151 interp=3 => max:2
 resize_lan_hdg     resize hdg w=2500 h=1300 interp=3 => max:2
 resize_lin_one     resize one w=5 h=3 interp=1 => max:1
 resize_lin_f32     resize f32 w=40 h=20 interp=1 => max:0.01
+resize_half_g       resize smg w=240 h=135 interp=1 => max:1
+resize_half_c       resize sm w=240 h=135 interp=1 => max:1
 resize_area_hd     resize hd w=640 h=360 interp=4 => max:1
 resize_area_frac   resize hd w=777 h=431 interp=4 => max:1
 resize_area_up2    resize sm w=960 h=540 interp=4 => exact
