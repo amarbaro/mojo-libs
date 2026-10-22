@@ -12,6 +12,7 @@ from mojocv.tapvid import tapvid
 from mojocv.phasecorr import phase_corr
 from mojocv.burst import burst, register
 from mojocv.nurbs import eval_surface, fit_surface
+from mojocv.mesh import voxel_mesh, edges_euler
 from mojocv.octree import Octree, walk, walk_cells
 
 
@@ -114,6 +115,13 @@ def dispatch3d(args: List[String]) raises -> Bool:
             ),
             out,
         )
+    elif op == "mesh":
+        # OUT = vertices (V x 3 float64), faces=PATH = triangles (F x 3 int32)
+        var m = voxel_mesh(load[DType.int32](ins[0]))
+        var ec = edges_euler(m)
+        print("mesh V=", m.verts.rows, "E=", ec[0], "F=", m.faces.rows, "chi=", ec[1])
+        save(m.verts, out)
+        save(m.faces, kv["faces"])
     else:
         return False
     return True

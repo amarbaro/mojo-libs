@@ -321,6 +321,7 @@ def fixtures():
     fx.update(pc_fixtures())
     fx.update(burst_fixtures())
     fx.update(nurbs_fixtures())
+    fx.update(mesh_fixtures())
     return fx
 
 
@@ -508,3 +509,81 @@ def nurbs_fixtures():
             cyl[i, j] = [x, y, j, w]
     fx["ns_cyl"] = cyl
     return fx
+
+
+# --- ops whose result is not one array: custom checks, ctx = dict(name, ins, args, expect, work, run, mcv) ---
+def mesh_invariants(v, f):
+    """Closed-surface facts of a triangle mesh, computed independently of the Mojo code."""
+    e = np.sort(np.concatenate([f[:, [0, 1]], f[:, [1, 2]], f[:, [2, 0]]]), axis=1)
+    uniq, cnt = np.unique(e, axis=0, return_counts=True)
+    p0, p1, p2 = v[f[:, 0]], v[f[:, 1]], v[f[:, 2]]
+    vol = float(np.einsum("ij,ij->i", p0, np.cross(p1, p2)).sum() / 6)
+    area = float(0.5 * np.linalg.norm(np.cross(p1 - p0, p2 - p0), axis=1).sum())
+    manifold = True
+    link = {}
+    for a, b, c in f.tolist():
+        link.setdefault(a, []).append((b, c))
+        link.setdefault(b, []).append((c, a))
+        link.setdefault(c, []).append((a, b))
+    for vtx, segs in link.items():  # the triangles around a vertex must close into ONE cycle
+        nxt = dict(segs)
+        if len(nxt) != len(segs):
+            manifold = False
+            break
+        start = segs[0][0]
+        cur, steps = start, 0
+        while True:
+            cur = nxt.get(cur)
+            steps += 1
+            if cur is None or cur == start or steps > len(segs):
+                break
+        manifold &= cur == start and steps == len(segs)
+    return dict(V=len(v), E=len(uniq), F=len(f), edges_twice=bool((cnt == 2).all()), vol=vol, area=area,
+                chi=len(v) - len(uniq) + len(f), manifold=manifold, unused=len(set(range(len(v))) - set(f.ravel().tolist())))
+
+
+def check_mesh(ctx):
+    cells = ctx["mcv"].load(ctx["ins"][0])
+    out, faces = ctx["work"] / f"{ctx['name']}.v.mcv", ctx["work"] / f"{ctx['name']}.f.mcv"
+    code, stdout, stderr = ctx["run"](out, ctx["ins"], ctx["args"] + [f"faces={faces}"])
+    if code != 0:
+        return False, f"exit {code}: {(stdout + stderr).strip()[:200]}"
+    v, f = ctx["mcv"].load(out), ctx["mcv"].load(faces).astype(int)
+    inv = mesh_invariants(v, f)
+    cs = set(map(tuple, cells.tolist()))
+    quads = sum((c[0] + d[0], c[1] + d[1], c[2] + d[2]) not in cs for c in cs
+                for d in ((1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)))
+    bad = [k for k, ok in (("edges not on exactly two faces", inv["edges_twice"]), ("vertex fan not one cycle", inv["manifold"]),
+                           ("faces != 2 x boundary quads", inv["F"] == 2 * quads),
+                           ("area != boundary quads", abs(inv["area"] - quads) < 1e-9),
+                           ("signed volume != cell count (orientation or closure)", abs(inv["vol"] - len(cs)) < 1e-9),
+                           ("unused vertex", inv["unused"] == 0)) if not ok]
+    for k, val in ctx["expect"].items():
+        if k in ("V", "chi") and inv[k] != int(val):
+            bad.append(f"{k} {inv[k]} != {val}")
+    if f"V={inv['V']} E={inv['E']} F={inv['F']} chi={inv['chi']}".replace("=", "=") and f"chi= {inv['chi']}" not in stdout:
+        bad.append("printed chi differs from independent chi")
+    print(f"     {ctx['name']}: V={inv['V']} E={inv['E']} F={inv['F']} chi={inv['chi']} volume={inv['vol']:g} area={inv['area']:g}")
+    return not bad, "; ".join(bad)
+
+
+CUSTOM = {"mesh": check_mesh}
+
+
+def mesh_fixtures():
+    def box(a, b, c, o=(0, 0, 0)):
+        return [(x + o[0], y + o[1], z + o[2]) for x in range(a) for y in range(b) for z in range(c)]
+    arr = lambda cs: np.array(sorted(set(cs)), np.int32).reshape(-1, 3)
+    ring = [c for c in box(3, 3, 1) if c != (1, 1, 0)]
+    shell = [c for c in box(3, 3, 3) if c != (1, 1, 1)]
+    rs = np.random.default_rng(31)
+    blob = np.unique(rs.integers(0, 6, (120, 3)), axis=0).astype(np.int32)
+    return {
+        "ms_one": arr([(0, 0, 0)]), "ms_cube3": arr(box(3, 3, 3)), "ms_bar": arr(box(4, 1, 2)),
+        "ms_ring": arr(ring), "ms_shell": arr(shell), "ms_two": arr(box(1, 1, 1) + box(1, 1, 1, (3, 0, 0))),
+        "ms_edge": arr([(0, 0, 0), (1, 1, 0)]), "ms_corner": arr([(0, 0, 0), (1, 1, 1)]),
+        "ms_L": arr(box(2, 1, 1) + box(1, 2, 1) + box(1, 1, 2)), "ms_blob": blob,
+        "ms_neg": arr([(-1, -1, -1), (0, -1, -1)]),
+        # two cells touching along one edge whose end points are each joined through a chain of cells below and above
+        "ms_pinch": arr([(0, 0, 1), (1, 1, 1), (0, 0, 0), (1, 1, 0), (0, 1, 0), (0, 0, 2), (1, 1, 2), (0, 1, 2)]),
+    }

@@ -32,6 +32,9 @@ def check(row, fx):
     kv = dict(a.split("=") for a in args)
     ins = [WORK / f"{n}.mcv" for n in ins_s.split(",")]
     out = WORK / f"{name}.ours.mcv"
+    if op in oracle3d.CUSTOM:
+        return oracle3d.CUSTOM[op](dict(name=name, ins=ins, args=args, expect=expect, work=WORK, mcv=mcv,
+                                        run=lambda o, i, a: ours(op, o, i, a)))
     code, stdout, stderr = ours(op, out, ins, args)
     if "raises" in expect:
         return (code != 0), ("expected a failure, got exit 0" if code == 0 else "")
