@@ -268,16 +268,26 @@ def aruco_detect(i, kv):
     return [ids.reshape(-1, 1)[o].astype(np.int32), np.concatenate([corners[k].reshape(4, 2) for k in o]).astype(np.float32)]
 
 
+@op()
+def ORB(i, kv):
+    orb = cv2.ORB_create(nfeatures=kv_i(kv, "nfeatures", 500), fastThreshold=kv_i(kv, "fastThreshold", 20))
+    kps, d = orb.detectAndCompute(i[0], None)
+    if d is None:
+        return np.zeros((0, 36), np.float32)
+    rows = [[k.pt[0], k.pt[1], k.angle, k.octave] + list(r) for k, r in zip(kps, d)]
+    return np.array(rows, np.float32)
+
+
 # ---- compare ----------------------------------------------------------------------------------------------
 def compare(ours, ref, spec):
-    if ours.shape != ref.shape:
+    if ours.shape != ref.shape and not spec.startswith(("orb", "pts", "cnt")):
         return False, f"shape {ours.shape} vs {ref.shape}"
     if ours.dtype != ref.dtype:
         return False, f"dtype {ours.dtype} vs {ref.dtype}"
     k, *p = spec.split(":")
     p = [float(x) for x in p]
     o, r = ours.astype(np.float64), ref.astype(np.float64)
-    d = np.abs(o - r)
+    d = np.abs(o - r) if o.shape == r.shape else None
     if k == "exact":
         return bool((d == 0).all()), f"maxdiff {d.max() if d.size else 0}"
     if k == "max":
@@ -295,6 +305,24 @@ def compare(ours, ref, spec):
     if k == "cnt":
         n, m = len(ours), len(ref)
         return bool(abs(n - m) <= p[0] * max(m, 1)), f"count {n} vs {m}"
+    if k == "orb":  # orb:T:F:H rows are x, y, angle, octave, 32 descriptor bytes
+        if len(ref) == 0:
+            return True, "no ref keypoints"
+        if len(ours) == 0:
+            return False, "no keypoints"
+        hits, ham = 0, []
+        for rr in ref:
+            same = ours[ours[:, 3] == rr[3]]
+            if len(same) == 0:
+                continue
+            dist = np.hypot(same[:, 0] - rr[0], same[:, 1] - rr[1])
+            j = dist.argmin()
+            if dist[j] <= p[0]:
+                hits += 1
+                ham.append(int(np.unpackbits((same[j, 4:].astype(np.uint8) ^ rr[4:].astype(np.uint8))).sum()))
+        f = hits / len(ref)
+        mh = float(np.mean(ham)) if ham else 1e9
+        return bool(f >= p[1] and mh <= p[2]), f"kp matched {f:.3f} (want {p[1]}), mean hamming {mh:.1f} (want <= {p[2]}), ours {len(ours)} ref {len(ref)}"
     if k == "pts":
         a, b = o.reshape(len(o), -1), r.reshape(len(r), -1)
         if len(b) == 0:
