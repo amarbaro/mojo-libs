@@ -7,7 +7,7 @@ Inputs are the same `.mcv` fixtures (`hd*` = 1920x1080 crops of a real screensho
 `docs/provenance/2d.md`: ours <= cv2. **Misses are listed as measured; nothing is hidden.** The HOG rows time cv2 4.8.1
 (cv2 5.0 has no HOG).
 
-1080p rows: 10 of 39 faster than cv2, 3 more within 1.5x, the rest slower (ratio column).
+1080p rows: 4 of 39 faster than cv2, 1 more within 1.5x, the rest slower (ratio column).
 
 - **Parallel dispatch**: `max.algorithm.parallelize` with the default 16 workers costs about 215 us per region (best of
   50 trivial regions); with 8 workers (the physical cores) it costs about 8 us, so `core.par` uses 8 and takes 16 only for
@@ -23,45 +23,45 @@ Inputs are the same `.mcv` fixtures (`hd*` = 1920x1080 crops of a real screensho
 
 | op | row | ours ms | cv2 ms | ours/cv2 |
 |---|---|---:|---:|---:|
-| flip | flip_x_hd | 0.75 | 0.17 | 4.32 |
-| rotate | rotate_cw_hd | 1.30 | 1.12 | 1.16 |
-| transpose | transpose_hd | 0.86 | 0.14 | 5.93 |
-| absdiff | absdiff_hd | 0.13 | 0.28 | 0.47 **faster** |
-| bitwise_and | bitwise_and_hd | 0.13 | 0.23 | 0.55 **faster** |
-| bitwise_not | bitwise_not_hd | 0.11 | 0.17 | 0.64 **faster** |
-| convert | convert_u8_f32_hd | 0.43 | 16.31 | 0.03 **faster** |
-| bitwise_or | bitwise_or_hd | 0.12 | 0.21 | 0.58 **faster** |
-| bitwise_xor | bitwise_xor_hd | 0.13 | 0.21 | 0.62 **faster** |
-| ORB | orb_hd | 59.82 | 14.27 | 4.19 |
-| GaussianBlur | gauss5_hd | 2.51 | 0.42 | 6.02 |
-| GaussianBlur | gauss_s2_hdg | 1.15 | 0.67 | 1.72 |
-| pyrDown | pyrdown_hd | 4.13 | 0.50 | 8.25 |
-| Sobel | sobel_dx_hdg | 0.64 | 0.17 | 3.77 |
-| Sobel | sobel_dy5_hd | 2.02 | 1.54 | 1.32 |
-| threshold | thresh_bin_hdg | 0.05 | 0.02 | 2.14 |
-| threshold | thresh_tozinv_hd | 0.12 | 0.05 | 2.64 |
-| threshold | thresh_otsu_hdg | 0.05 | 1.09 | 0.05 **faster** |
-| integral | integral_hdg | 1.33 | 0.34 | 3.88 |
-| integral | integral_hd | 3.73 | 1.60 | 2.33 |
-| erode | erode_hdg | 0.38 | 1.14 | 0.33 **faster** |
-| erode | erode_hd5 | 2.31 | 0.20 | 11.84 |
-| cvtColor | cvt_gray_hd | 0.42 | 0.08 | 5.28 |
-| cvtColor | cvt_swap_hd | 0.92 | 0.08 | 11.15 |
-| cvtColor | cvt_hsv_hd | 2.02 | 0.81 | 2.49 |
-| cvtColor | cvt_ycrcb_hd | 1.73 | 0.21 | 8.22 |
-| resize | resize_down_lin_hd | 2.10 | 0.42 | 4.99 |
-| resize | resize_nn_hd | 0.58 | 0.09 | 6.43 |
-| resize | resize_cub_hdg | 1.14 | 0.12 | 9.20 |
-| resize | resize_lan_hdg | 5.00 | 3.75 | 1.33 |
-| warpAffine | warp_rot_hd | 8.63 | 1.12 | 7.68 |
-| remap | remap_lin_hd | 4.84 | 1.34 | 3.62 |
-| blobFromImage | blob_hd | 0.87 | 0.30 | 2.88 |
-| Canny | canny_hdg | 44.39 | 4.87 | 9.12 |
-| goodFeaturesToTrack | gftt_hdg | 46.46 | 26.95 | 1.72 |
-| line | line_diag_hd | 0.24 | 0.29 | 0.82 **faster** |
-| HOGScores | hog_scores_hdg | 55.39 | 342.99 | 0.16 **faster** |
-| detectMultiScale | hog_raw_hdg | 637.41 | 74.78 | 8.52 |
-| detectMultiScale | hog_group_hdg | 633.23 | 79.56 | 7.96 |
+| flip | flip_x_hd | 2.10 | 0.15 | 14.44 |
+| rotate | rotate_cw_hd | 2.58 | 1.03 | 2.51 |
+| transpose | transpose_hd | 1.70 | 0.21 | 8.06 |
+| absdiff | absdiff_hd | 0.97 | 0.26 | 3.77 |
+| bitwise_and | bitwise_and_hd | 0.93 | 0.21 | 4.42 |
+| bitwise_not | bitwise_not_hd | 0.80 | 0.20 | 4.08 |
+| convert | convert_u8_f32_hd | 1.89 | 18.69 | 0.10 **faster** |
+| bitwise_or | bitwise_or_hd | 0.36 | 0.23 | 1.55 |
+| bitwise_xor | bitwise_xor_hd | 0.60 | 0.21 | 2.83 |
+| ORB | orb_hd | 146.45 | 18.67 | 7.84 |
+| GaussianBlur | gauss5_hd | 2.66 | 0.52 | 5.13 |
+| GaussianBlur | gauss_s2_hdg | 2.46 | 1.12 | 2.20 |
+| pyrDown | pyrdown_hd | 5.14 | 0.65 | 7.97 |
+| Sobel | sobel_dx_hdg | 1.68 | 0.42 | 4.00 |
+| Sobel | sobel_dy5_hd | 3.11 | 1.98 | 1.57 |
+| threshold | thresh_bin_hdg | 0.76 | 0.06 | 12.65 |
+| threshold | thresh_tozinv_hd | 0.12 | 0.07 | 1.84 |
+| threshold | thresh_otsu_hdg | 0.26 | 1.04 | 0.25 **faster** |
+| integral | integral_hdg | 4.00 | 0.35 | 11.37 |
+| integral | integral_hd | 5.93 | 1.75 | 3.38 |
+| erode | erode_hdg | 1.23 | 0.12 | 10.41 |
+| erode | erode_hd5 | 6.10 | 0.38 | 16.09 |
+| cvtColor | cvt_gray_hd | 0.71 | 0.11 | 6.42 |
+| cvtColor | cvt_swap_hd | 1.09 | 0.08 | 13.27 |
+| cvtColor | cvt_hsv_hd | 2.24 | 1.57 | 1.43 |
+| cvtColor | cvt_ycrcb_hd | 2.99 | 0.32 | 9.41 |
+| resize | resize_down_lin_hd | 2.92 | 0.27 | 10.71 |
+| resize | resize_nn_hd | 0.61 | 0.14 | 4.48 |
+| resize | resize_cub_hdg | 1.77 | 0.66 | 2.69 |
+| resize | resize_lan_hdg | 9.23 | 5.01 | 1.84 |
+| warpAffine | warp_rot_hd | 16.86 | 5.52 | 3.05 |
+| remap | remap_lin_hd | 6.31 | 2.34 | 2.70 |
+| blobFromImage | blob_hd | 1.80 | 0.20 | 9.08 |
+| Canny | canny_hdg | 14.13 | 1.15 | 12.28 |
+| goodFeaturesToTrack | gftt_hdg | 82.94 | 26.71 | 3.11 |
+| line | line_diag_hd | 0.12 | 0.14 | 0.91 **faster** |
+| HOGScores | hog_scores_hdg | 88.16 | 411.41 | 0.21 **faster** |
+| detectMultiScale | hog_raw_hdg | 1137.89 | 113.96 | 9.99 |
+| detectMultiScale | hog_group_hdg | 1209.50 | 123.75 | 9.77 |
 
 ## Other sizes (270x480 and smaller, point sets, stereo pairs)
 
@@ -72,154 +72,154 @@ Inputs are the same `.mcv` fixtures (`hd*` = 1920x1080 crops of a real screensho
 | Rodrigues | rod_mat | 0.01 | 0.00 | n/a |
 | Rodrigues | rod_mat_pi | 0.00 | 0.00 | n/a |
 | Rodrigues | rod_mat_id | 0.00 | 0.00 | n/a |
-| projectPoints | proj_d4 | 0.00 | 0.01 | 0.12 **faster** |
-| projectPoints | proj_d5 | 0.00 | 0.01 | 0.13 **faster** |
-| projectPoints | proj_d8 | 0.00 | 0.01 | 0.10 **faster** |
-| projectPoints | proj_d12 | 0.00 | 0.01 | 0.13 **faster** |
-| projectPoints | proj_nodist | 0.00 | 0.01 | 0.12 **faster** |
-| fisheye_projectPoints | fproj | 0.00 | 0.01 | 0.28 **faster** |
+| projectPoints | proj_d4 | 0.00 | 0.01 | 0.18 **faster** |
+| projectPoints | proj_d5 | 0.00 | 0.01 | 0.11 **faster** |
+| projectPoints | proj_d8 | 0.00 | 0.01 | 0.17 **faster** |
+| projectPoints | proj_d12 | 0.00 | 0.01 | 0.23 **faster** |
+| projectPoints | proj_nodist | 0.00 | 0.01 | 0.15 **faster** |
+| fisheye_projectPoints | fproj | 0.00 | 0.01 | 0.37 **faster** |
 | undistortPoints | undist_d4 | 0.00 | 0.00 | n/a |
 | undistortPoints | undist_d8 | 0.00 | 0.00 | n/a |
-| undistortPoints | undist_rp | 0.00 | 0.01 | 0.44 **faster** |
+| undistortPoints | undist_rp | 0.00 | 0.01 | 0.63 **faster** |
 | undistortPoints | undist_zero | 0.00 | 0.00 | n/a |
 | fisheye_undistortPoints | fundist | 0.00 | 0.00 | n/a |
-| fisheye_undistortPoints | fundist_rp | 0.00 | 0.00 | n/a |
-| initUndistortRectifyMap | rectmap_d5 | 2.08 | 0.21 | 9.91 |
-| initUndistortRectifyMap | rectmap_id | 0.04 | 0.01 | 5.81 |
-| fisheye_initUndistortRectifyMap | frectmap | 0.58 | 1.26 | 0.46 **faster** |
-| estimateAffine2D | aff_ransac | 0.01 | 0.03 | 0.43 **faster** |
-| estimateAffine2D | aff_tight | 0.03 | 0.03 | 1.02 |
-| solvePnP | pnp_d4 | 0.26 | 0.06 | 4.15 |
-| solvePnP | pnp_planar | 0.08 | 0.08 | 0.94 **faster** |
-| solvePnP | pnp_nodist | 0.31 | 0.09 | 3.35 |
-| solvePnPRansac | pnp_ransac | 3.85 | 0.99 | 3.88 |
-| findEssentialMat | ess_ransac | 2.30 | 2.19 | 1.05 |
-| stereoRectify | rect_zero | 0.01 | 0.02 | 0.36 **faster** |
-| stereoRectify | rect_dist | 0.01 | 0.02 | 0.36 **faster** |
-| stereoRectify | rect_nozd | 0.01 | 0.02 | 0.34 **faster** |
-| findEssentialMat | ess_noisy | 6.70 | 2.74 | 2.44 |
-| recoverPose | pose_masked | 0.70 | 0.23 | 3.05 |
-| recoverPose | pose_all | 1.00 | 0.23 | 4.32 |
-| StereoSGBM | sgbm_dots | 9.87 | 2.06 | 4.80 |
-| StereoSGBM | sgbm_block3 | 9.02 | 2.15 | 4.20 |
-| StereoSGBM | sgbm_mind | 6.30 | 1.71 | 3.69 |
-| findChessboardCorners | chess_a | 6.85 | 0.79 | 8.67 |
-| findChessboardCorners | chess_b_rot | 7.66 | 1.01 | 7.59 |
-| findChessboardCorners | chess_c | 6.51 | 3.94 | 1.65 |
-| findChessboardCorners | chess_none | 7.44 | 10.67 | 0.70 **faster** |
-| aruco_detect | aruco_four | 7.74 | 1.20 | 6.45 |
-| aruco_detect | aruco_persp | 2.60 | 0.43 | 6.09 |
-| aruco_detect | aruco_none | 3.47 | 0.58 | 5.93 |
-| fisheye_projectPoints | fproj_zero_rot | 0.00 | 0.01 | 0.26 **faster** |
-| fisheye_initUndistortRectifyMap | frectmap_small | 0.02 | 0.02 | 1.07 |
-| solvePnPRansac | pnp_ransac_pl | 0.44 | 0.32 | 1.36 |
-| flip | flip_y_odd | 0.01 | 0.00 | n/a |
-| flip | flip_xy_one | 0.01 | 0.00 | n/a |
-| flip | flip_y_f32 | 0.01 | 0.00 | n/a |
-| rotate | rotate_180_odd | 0.01 | 0.00 | n/a |
-| rotate | rotate_ccw_i16 | 0.01 | 0.00 | n/a |
-| transpose | transpose_i32 | 0.23 | 0.00 | n/a |
-| absdiff | absdiff_g1 | 0.01 | 0.00 | n/a |
-| absdiff | absdiff_i16 | 0.01 | 0.00 | n/a |
-| absdiff | absdiff_f32 | 0.01 | 0.00 | n/a |
-| bitwise_or | bitwise_or_odd | 0.01 | 0.00 | n/a |
-| bitwise_xor | bitwise_xor_f32 | 0.22 | 0.00 | n/a |
-| bitwise_not | bitwise_not_one | 0.22 | 0.00 | n/a |
-| convert | convert_f32_u8_half | 0.01 | 0.01 | 1.25 |
-| convert | convert_f32_i16_scale | 0.01 | 0.01 | 1.15 |
-| convert | convert_f64_i32 | 0.01 | 0.01 | 1.15 |
-| convert | convert_u8_u8_one | 0.01 | 0.01 | 1.37 |
-| bitwise_and | bitwise_and_odd | 0.01 | 0.00 | n/a |
-| bitwise_xor | bitwise_xor_i16 | 0.01 | 0.00 | n/a |
-| bfmatch | bf_ab | 0.83 | 0.16 | 5.05 |
-| bfmatch | bf_one | 0.03 | 0.01 | 4.43 |
-| bfmatch | bf_self | 0.60 | 0.15 | 4.09 |
-| knnmatch | knn_ab | 0.81 | 0.28 | 2.85 |
-| knnmatch | knn_ratio_tight | 0.85 | 0.29 | 2.90 |
-| ORB | orb_sm | 10.81 | 1.88 | 5.76 |
-| ORB | orb_blank | 4.75 | 0.03 | 171.15 |
-| GaussianBlur | gauss7_odd | 0.04 | 0.01 | 7.40 |
-| GaussianBlur | gauss_f32 | 0.03 | 0.00 | n/a |
-| GaussianBlur | gauss3_one | 0.03 | 0.00 | n/a |
-| pyrDown | pyrdown_odd | 0.03 | 0.00 | n/a |
-| pyrDown | pyrdown_one | 0.03 | 0.00 | n/a |
+| fisheye_undistortPoints | fundist_rp | 0.01 | 0.00 | n/a |
+| initUndistortRectifyMap | rectmap_d5 | 2.06 | 0.43 | 4.81 |
+| initUndistortRectifyMap | rectmap_id | 0.69 | 0.01 | 74.40 |
+| fisheye_initUndistortRectifyMap | frectmap | 2.54 | 1.28 | 1.98 |
+| estimateAffine2D | aff_ransac | 0.02 | 0.03 | 0.85 **faster** |
+| estimateAffine2D | aff_tight | 0.02 | 0.03 | 0.54 **faster** |
+| solvePnP | pnp_d4 | 0.36 | 0.06 | 5.58 |
+| solvePnP | pnp_planar | 0.08 | 0.08 | 0.97 **faster** |
+| solvePnP | pnp_nodist | 0.44 | 0.09 | 4.85 |
+| solvePnPRansac | pnp_ransac | 6.05 | 1.00 | 6.03 |
+| findEssentialMat | ess_ransac | 2.81 | 2.28 | 1.23 |
+| stereoRectify | rect_zero | 0.01 | 0.02 | 0.57 **faster** |
+| stereoRectify | rect_dist | 0.01 | 0.02 | 0.58 **faster** |
+| stereoRectify | rect_nozd | 0.01 | 0.02 | 0.63 **faster** |
+| findEssentialMat | ess_noisy | 7.73 | 2.67 | 2.89 |
+| recoverPose | pose_masked | 1.15 | 0.23 | 5.02 |
+| recoverPose | pose_all | 1.26 | 0.22 | 5.83 |
+| StereoSGBM | sgbm_dots | 19.11 | 2.23 | 8.58 |
+| StereoSGBM | sgbm_block3 | 20.01 | 2.36 | 8.48 |
+| StereoSGBM | sgbm_mind | 9.68 | 1.60 | 6.04 |
+| findChessboardCorners | chess_a | 24.83 | 0.79 | 31.34 |
+| findChessboardCorners | chess_b_rot | 13.01 | 0.89 | 14.66 |
+| findChessboardCorners | chess_c | 18.44 | 3.94 | 4.69 |
+| findChessboardCorners | chess_none | 23.68 | 10.29 | 2.30 |
+| aruco_detect | aruco_four | 20.65 | 0.97 | 21.20 |
+| aruco_detect | aruco_persp | 5.62 | 0.60 | 9.36 |
+| aruco_detect | aruco_none | 6.14 | 0.74 | 8.27 |
+| fisheye_projectPoints | fproj_zero_rot | 0.00 | 0.01 | 0.29 **faster** |
+| fisheye_initUndistortRectifyMap | frectmap_small | 0.24 | 0.02 | 15.33 |
+| solvePnPRansac | pnp_ransac_pl | 0.73 | 0.32 | 2.27 |
+| flip | flip_y_odd | 1.17 | 0.00 | n/a |
+| flip | flip_xy_one | 1.22 | 0.00 | n/a |
+| flip | flip_y_f32 | 0.23 | 0.00 | n/a |
+| rotate | rotate_180_odd | 0.31 | 0.00 | n/a |
+| rotate | rotate_ccw_i16 | 1.00 | 0.00 | n/a |
+| transpose | transpose_i32 | 0.52 | 0.00 | n/a |
+| absdiff | absdiff_g1 | 0.22 | 0.00 | n/a |
+| absdiff | absdiff_i16 | 1.06 | 0.00 | n/a |
+| absdiff | absdiff_f32 | 0.22 | 0.00 | n/a |
+| bitwise_or | bitwise_or_odd | 0.84 | 0.00 | n/a |
+| bitwise_xor | bitwise_xor_f32 | 0.42 | 0.00 | n/a |
+| bitwise_not | bitwise_not_one | 0.23 | 0.00 | n/a |
+| convert | convert_f32_u8_half | 0.22 | 0.01 | 28.01 |
+| convert | convert_f32_i16_scale | 1.06 | 0.01 | 102.12 |
+| convert | convert_f64_i32 | 0.24 | 0.01 | 28.85 |
+| convert | convert_u8_u8_one | 0.87 | 0.01 | 101.62 |
+| bitwise_and | bitwise_and_odd | 0.57 | 0.00 | n/a |
+| bitwise_xor | bitwise_xor_i16 | 0.39 | 0.00 | n/a |
+| bfmatch | bf_ab | 2.01 | 0.23 | 8.93 |
+| bfmatch | bf_one | 0.22 | 0.01 | 29.77 |
+| bfmatch | bf_self | 1.51 | 0.28 | 5.38 |
+| knnmatch | knn_ab | 2.60 | 0.50 | 5.18 |
+| knnmatch | knn_ratio_tight | 1.85 | 0.30 | 6.06 |
+| ORB | orb_sm | 41.37 | 2.00 | 20.64 |
+| ORB | orb_blank | 28.70 | 0.03 | 936.03 |
+| GaussianBlur | gauss7_odd | 1.11 | 0.01 | 122.47 |
+| GaussianBlur | gauss_f32 | 0.96 | 0.00 | n/a |
+| GaussianBlur | gauss3_one | 0.11 | 0.00 | n/a |
+| pyrDown | pyrdown_odd | 0.66 | 0.00 | n/a |
+| pyrDown | pyrdown_one | 0.67 | 0.00 | n/a |
 | pyrDown | pyrdown_f32 | 0.03 | 0.00 | n/a |
 | Sobel | sobel_scharr_g1 | 0.03 | 0.00 | n/a |
-| Sobel | sobel_f32_dxx | 0.03 | 0.00 | n/a |
-| threshold | thresh_inv_sm | 0.02 | 0.01 | 1.90 |
+| Sobel | sobel_f32_dxx | 0.65 | 0.00 | n/a |
+| threshold | thresh_inv_sm | 0.67 | 0.01 | 79.07 |
 | threshold | thresh_trunc_g1 | 0.01 | 0.00 | n/a |
-| threshold | thresh_tozero_g1 | 0.01 | 0.00 | n/a |
-| threshold | thresh_otsu_one | 0.01 | 0.00 | n/a |
-| threshold | thresh_f32 | 0.01 | 0.00 | n/a |
-| integral | integral_odd | 0.02 | 0.00 | n/a |
-| integral | integral_f32 | 0.02 | 0.00 | n/a |
-| integral | integral_one | 0.02 | 0.00 | n/a |
-| dilate | dilate_cross_sm | 0.12 | 0.07 | 1.82 |
-| dilate | dilate_ell_smg | 0.13 | 0.08 | 1.54 |
-| erode | erode_ell_odd | 0.02 | 0.00 | n/a |
-| dilate | dilate_one | 0.03 | 0.00 | n/a |
-| erode | erode_f32 | 0.03 | 0.00 | n/a |
-| cvtColor | cvt_rgb2gray_odd | 0.01 | 0.00 | n/a |
-| cvtColor | cvt_gray2bgr_g1 | 0.01 | 0.00 | n/a |
-| cvtColor | cvt_hsv_odd | 0.01 | 0.00 | n/a |
-| cvtColor | cvt_hsv_one | 0.01 | 0.00 | n/a |
-| cvtColor | cvt_hsv2bgr_odd | 0.01 | 0.00 | n/a |
-| cvtColor | cvt_ycrcb2bgr_sm | 0.13 | 0.04 | 2.99 |
-| cvtColor | cvt_gray_f32 | 0.22 | 0.00 | n/a |
-| resize | resize_up_lin_sm | 0.72 | 0.17 | 4.16 |
-| resize | resize_nn_odd | 0.02 | 0.00 | n/a |
-| resize | resize_cub_sm | 0.74 | 0.09 | 7.87 |
-| resize | resize_lan_sm | 0.50 | 1.56 | 0.32 **faster** |
-| resize | resize_lin_one | 0.02 | 0.00 | n/a |
-| resize | resize_lin_f32 | 0.02 | 0.00 | n/a |
-| warpAffine | warp_nn_sm | 0.51 | 0.03 | 20.26 |
-| warpAffine | warp_cub_smg | 0.90 | 0.08 | 11.60 |
-| warpAffine | warp_rep_odd | 0.01 | 0.01 | 1.25 |
-| warpAffine | warp_inv_g1 | 0.01 | 0.01 | 1.47 |
-| warpAffine | warp_f32 | 0.01 | 0.01 | 1.27 |
-| remap | remap_nn_sm | 0.40 | 0.04 | 9.99 |
-| remap | remap_cub_smg | 0.69 | 0.10 | 7.03 |
-| remap | remap_odd_const | 0.01 | 0.00 | n/a |
-| remap | remap_odd_refl | 0.01 | 0.00 | n/a |
-| blobFromImage | blob_sm | 0.55 | 0.24 | 2.27 |
-| connectedComponentsWithStats | ccl8_bin | 1.37 | 0.31 | 4.40 |
-| connectedComponentsWithStats | ccl4_binhd | 19.81 | 8.58 | 2.31 |
-| connectedComponentsWithStats | ccl8_shapes | 0.04 | 0.02 | 1.72 |
+| threshold | thresh_tozero_g1 | 0.64 | 0.00 | n/a |
+| threshold | thresh_otsu_one | 0.44 | 0.00 | n/a |
+| threshold | thresh_f32 | 0.64 | 0.00 | n/a |
+| integral | integral_odd | 0.49 | 0.00 | n/a |
+| integral | integral_f32 | 1.22 | 0.00 | n/a |
+| integral | integral_one | 1.31 | 0.00 | n/a |
+| dilate | dilate_cross_sm | 0.12 | 0.06 | 2.02 |
+| dilate | dilate_ell_smg | 2.44 | 0.08 | 28.77 |
+| erode | erode_ell_odd | 0.45 | 0.00 | n/a |
+| dilate | dilate_one | 2.23 | 0.00 | n/a |
+| erode | erode_f32 | 1.69 | 0.00 | n/a |
+| cvtColor | cvt_rgb2gray_odd | 0.24 | 0.00 | n/a |
+| cvtColor | cvt_gray2bgr_g1 | 0.64 | 0.00 | n/a |
+| cvtColor | cvt_hsv_odd | 1.06 | 0.00 | n/a |
+| cvtColor | cvt_hsv_one | 0.24 | 0.00 | n/a |
+| cvtColor | cvt_hsv2bgr_odd | 0.85 | 0.00 | n/a |
+| cvtColor | cvt_ycrcb2bgr_sm | 0.14 | 0.07 | 1.86 |
+| cvtColor | cvt_gray_f32 | 0.01 | 0.00 | n/a |
+| resize | resize_up_lin_sm | 0.73 | 0.32 | 2.29 |
+| resize | resize_nn_odd | 2.29 | 0.00 | n/a |
+| resize | resize_cub_sm | 3.02 | 0.14 | 21.14 |
+| resize | resize_lan_sm | 1.14 | 1.65 | 0.69 **faster** |
+| resize | resize_lin_one | 0.73 | 0.00 | n/a |
+| resize | resize_lin_f32 | 0.45 | 0.00 | n/a |
+| warpAffine | warp_nn_sm | 1.51 | 0.16 | 9.61 |
+| warpAffine | warp_cub_smg | 0.89 | 0.18 | 4.94 |
+| warpAffine | warp_rep_odd | 1.05 | 0.01 | 139.63 |
+| warpAffine | warp_inv_g1 | 0.01 | 0.01 | 1.76 |
+| warpAffine | warp_f32 | 0.48 | 0.01 | 64.45 |
+| remap | remap_nn_sm | 0.90 | 0.12 | 7.62 |
+| remap | remap_cub_smg | 2.38 | 0.33 | 7.11 |
+| remap | remap_odd_const | 0.85 | 0.00 | n/a |
+| remap | remap_odd_refl | 1.37 | 0.00 | n/a |
+| blobFromImage | blob_sm | 1.53 | 0.21 | 7.39 |
+| connectedComponentsWithStats | ccl8_bin | 1.94 | 0.63 | 3.09 |
+| connectedComponentsWithStats | ccl4_binhd | 29.66 | 3.96 | 7.48 |
+| connectedComponentsWithStats | ccl8_shapes | 0.05 | 0.03 | 1.52 |
 | connectedComponentsWithStats | ccl_blank | 0.00 | 0.00 | n/a |
-| Canny | canny_smg_l2 | 0.64 | 0.10 | 6.55 |
-| Canny | canny_sm5 | 0.66 | 0.17 | 3.81 |
-| Canny | canny_blank | 6.51 | 0.01 | 729.40 |
-| Canny | canny_g1 | 0.08 | 0.01 | 9.57 |
-| findContours | contours_ext_shapes | 0.02 | 0.02 | 0.98 **faster** |
-| findContours | contours_list_shapes | 0.02 | 0.02 | 0.85 **faster** |
-| findContours | contours_simple_shapes | 0.02 | 0.02 | 0.93 **faster** |
-| findContours | contours_ext_bin | 0.42 | 0.06 | 6.93 |
-| findContours | contours_list_bin | 0.46 | 0.28 | 1.65 |
+| Canny | canny_smg_l2 | 0.59 | 0.36 | 1.62 |
+| Canny | canny_sm5 | 3.25 | 0.34 | 9.43 |
+| Canny | canny_blank | 0.09 | 0.01 | 8.50 |
+| Canny | canny_g1 | 1.79 | 0.01 | 209.04 |
+| findContours | contours_ext_shapes | 0.03 | 0.02 | 1.80 |
+| findContours | contours_list_shapes | 0.02 | 0.02 | 0.88 **faster** |
+| findContours | contours_simple_shapes | 0.02 | 0.02 | 0.83 **faster** |
+| findContours | contours_ext_bin | 0.75 | 0.06 | 11.58 |
+| findContours | contours_list_bin | 0.76 | 0.28 | 2.73 |
 | findContours | contours_blank | 0.00 | 0.00 | n/a |
-| findContours | contours_full | 0.00 | 0.01 | 0.18 **faster** |
-| goodFeaturesToTrack | gftt_smg | 27.22 | 2.74 | 9.94 |
-| goodFeaturesToTrack | gftt_blank | 12.45 | 0.01 | 1237.62 |
+| findContours | contours_full | 0.00 | 0.01 | 0.30 **faster** |
+| goodFeaturesToTrack | gftt_smg | 2.34 | 1.93 | 1.21 |
+| goodFeaturesToTrack | gftt_blank | 0.13 | 0.01 | 12.64 |
 | line | line_steep_g1 | 0.00 | 0.00 | n/a |
-| line | line_clip_sm | 0.01 | 0.01 | 0.69 **faster** |
-| line | line_out_sm | 0.01 | 0.01 | 0.54 **faster** |
+| line | line_clip_sm | 0.01 | 0.01 | 0.89 **faster** |
+| line | line_out_sm | 0.01 | 0.01 | 0.89 **faster** |
 | line | line_hor_odd | 0.00 | 0.00 | n/a |
-| rectangle | rect_edge_sm | 0.01 | 0.01 | 0.70 **faster** |
+| rectangle | rect_edge_sm | 0.02 | 0.01 | 1.22 |
 | rectangle | rect_fill_odd | 0.00 | 0.00 | n/a |
-| HOGScores | hog_scores_smg | 4.66 | 12.11 | 0.39 **faster** |
-| detectMultiScale | hog_raw_smg | 49.34 | 4.09 | 12.07 |
-| detectMultiScale | hog_group_smg | 46.23 | 4.23 | 10.92 |
-| detectMultiScale | hog_group_smg2 | 49.40 | 4.29 | 11.51 |
-| detectMultiScale | hog_none | 46.28 | 3.75 | 12.35 |
-| groupRectangles | group_rects_hdg | 0.98 | 1.48 | 0.67 **faster** |
-| grabCut | grabcut_scene | 36.75 | 9.75 | 3.77 |
-| grabCut | grabcut_shot | 55.12 | 10.19 | 5.41 |
-| grabCut | grabcut_tiny | 0.10 | 0.07 | 1.43 |
-| cornerSubPix | subpix_sm | 1.40 | 0.56 | 2.47 |
-| cornerSubPix | subpix_win3 | 0.74 | 0.37 | 1.99 |
-| cornerSubPix | subpix_edge | 2.88 | 0.93 | 3.12 |
-| calcOpticalFlowPyrLK | lk_sm | 9.82 | 0.26 | 38.35 |
-| calcOpticalFlowPyrLK | lk_sm_win9 | 5.68 | 0.13 | 44.73 |
-| calcOpticalFlowFarneback | fb_shift | 26.48 | 17.73 | 1.49 |
-| calcOpticalFlowFarneback | fb_frames | 27.74 | 18.35 | 1.51 |
-| calcOpticalFlowFarneback | fb_poly7 | 22.44 | 17.62 | 1.27 |
-| calcOpticalFlowFarneback | fb_tiny | 1.30 | 0.01 | 98.18 |
+| HOGScores | hog_scores_smg | 5.93 | 13.28 | 0.45 **faster** |
+| detectMultiScale | hog_raw_smg | 113.01 | 6.35 | 17.79 |
+| detectMultiScale | hog_group_smg | 124.18 | 5.76 | 21.56 |
+| detectMultiScale | hog_group_smg2 | 107.53 | 4.92 | 21.84 |
+| detectMultiScale | hog_none | 132.73 | 5.83 | 22.77 |
+| groupRectangles | group_rects_hdg | 1.01 | 2.41 | 0.42 **faster** |
+| grabCut | grabcut_scene | 55.91 | 12.70 | 4.40 |
+| grabCut | grabcut_shot | 89.74 | 16.09 | 5.58 |
+| grabCut | grabcut_tiny | 0.15 | 0.06 | 2.29 |
+| cornerSubPix | subpix_sm | 1.49 | 0.62 | 2.41 |
+| cornerSubPix | subpix_win3 | 1.30 | 0.34 | 3.80 |
+| cornerSubPix | subpix_edge | 3.60 | 1.14 | 3.17 |
+| calcOpticalFlowPyrLK | lk_sm | 22.83 | 0.80 | 28.49 |
+| calcOpticalFlowPyrLK | lk_sm_win9 | 19.59 | 0.18 | 109.82 |
+| calcOpticalFlowFarneback | fb_shift | 126.16 | 22.97 | 5.49 |
+| calcOpticalFlowFarneback | fb_frames | 110.08 | 25.58 | 4.30 |
+| calcOpticalFlowFarneback | fb_poly7 | 60.16 | 22.45 | 2.68 |
+| calcOpticalFlowFarneback | fb_tiny | 1.60 | 0.01 | 124.40 |
