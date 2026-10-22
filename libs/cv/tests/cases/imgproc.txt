@@ -47,6 +47,17 @@ cvt_hsv2bgr_odd  cvtColor odd code=hsv2bgr => max:1
 cvt_ycrcb_hd     cvtColor hd code=bgr2ycrcb => max:1
 cvt_ycrcb2bgr_sm cvtColor sm code=ycrcb2bgr => max:1
 cvt_gray_f32     cvtColor f32 code=bgr2gray => max:0.01
+cvt_lab_hd       cvtColor hd code=bgr2lab => max:2
+cvt_lab_one      cvtColor one code=bgr2lab => max:1
+cvt_lab_f32      cvtColor f32 code=bgr2lab => max:0.01
+cvt_lab2bgr_sm   cvtColor sm_lab code=lab2bgr => max:2
+cvt_lab2bgr_one  cvtColor one code=lab2bgr => max:2
+cvt_luv_hd       cvtColor hd code=bgr2luv => max:1
+cvt_luv_odd      cvtColor odd code=bgr2luv => max:1
+cvt_luv_f32      cvtColor f32 code=bgr2luv => max:0.01
+cvt_luv2bgr_sm   cvtColor sm_luv code=luv2bgr => max:2
+cvt_luv2bgr_f32  cvtColor sm_luv_f code=luv2bgr => frac:0.001:0.9999
+cvt_lab2bgr_f32  cvtColor sm_lab_f code=lab2bgr => max:0.001
 resize_down_lin_hd resize hd w=960 h=540 interp=1 => max:1
 resize_up_lin_sm   resize sm w=913 h=401 interp=1 => max:1
 resize_nn_hd       resize hd w=640 h=360 interp=0 => exact

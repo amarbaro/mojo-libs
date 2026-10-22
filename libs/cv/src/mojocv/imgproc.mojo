@@ -2,7 +2,7 @@
 # padded copy of the source, so every inner loop is a plain contiguous SIMD loop over the flattened row
 # (pixel i of channel c sits at i * ch + c, so a horizontal tap at dx is a load at offset dx * ch).
 from std.sys.info import simd_width_of
-from std.math import sqrt, exp, floor, cos, sin, atan2
+from std.math import sqrt, exp, floor, cos, sin, atan2, cbrt
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args, DTS, peek_code, par
 from std.math import log as log_
@@ -622,7 +622,7 @@ def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int)
 # ---- cvtColor ---------------------------------------------------------------------------------------------
 
 def cvt_code(name: String) raises -> Int:
-    var names: List[String] = ["bgr2gray", "rgb2gray", "gray2bgr", "bgr2rgb", "bgr2hsv", "hsv2bgr", "bgr2ycrcb", "ycrcb2bgr"]
+    var names: List[String] = ["bgr2gray", "rgb2gray", "gray2bgr", "bgr2rgb", "bgr2hsv", "hsv2bgr", "bgr2ycrcb", "ycrcb2bgr", "bgr2lab", "lab2bgr", "bgr2luv", "luv2bgr"]
     for i in range(len(names)):
         if names[i] == name:
             return i
@@ -633,8 +633,141 @@ def _sat8(v: Float32) -> UInt8:
     return UInt8(min(max(floor(v + 0.5), 0), 255))
 
 
+def _srgb_gamma(v: Float32) -> Float32:
+    return v / 12.92 if v <= 0.04045 else Float32(((Float64(v) + 0.055) / 1.055) ** 2.4)
+
+
+def _srgb_ungamma(v: Float32) -> Float32:
+    return 12.92 * v if v <= 0.0031308 else Float32(1.055 * Float64(v) ** (1.0 / 2.4) - 0.055)
+
+
+def cvt_lab_luv[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
+    """BGR <-> CIE Lab / Luv (D65, sRGB gamma) with cv2's float formulas. 8-bit images are scaled the way cv2 does
+    (L * 255 / 100; a, b + 128; u + 134 and v + 140 stretched to 255); cv2 reaches the 8-bit result through fixed-point
+    tables, so those agree to within 1."""
+    if src.ch != 3:
+        raise Error("mojocv: cvtColor Lab/Luv wants 3 channels")
+    comptime is8 = dt == DType.uint8
+    var o = Mat[dt](src.rows, src.cols, 3, False)
+    var ps = src.ptr()
+    var po = o.ptr()
+    var n = src.cols
+    var gam = List[Float32](length=256, fill=0)
+    for i in range(256):
+        gam[i] = _srgb_gamma(Float32(i) / 255.0)
+    var pg = ptr_of(gam)
+    comptime XN = Float32(0.950456)
+    comptime ZN = Float32(1.088754)
+    comptime UN = Float32(4.0 * 0.950456 / (0.950456 + 15.0 + 3.0 * 1.088754))
+    comptime VN = Float32(9.0 / (0.950456 + 15.0 + 3.0 * 1.088754))
+    comptime LT = Float32(0.008856)
+    var inverse = code == 9 or code == 11
+    var luv = code == 10 or code == 11
+
+    def row(y: Int) {imm}:
+        for x in range(n):
+            var i = (y * n + x) * 3
+            if not inverse:
+                var b = Float32(ps[unsafe_offset=i]) / 255.0 if is8 else Float32(ps[unsafe_offset=i])
+                var g = Float32(ps[unsafe_offset=i + 1]) / 255.0 if is8 else Float32(ps[unsafe_offset=i + 1])
+                var r = Float32(ps[unsafe_offset=i + 2]) / 255.0 if is8 else Float32(ps[unsafe_offset=i + 2])
+                comptime if is8:
+                    b = pg[unsafe_offset=Int(ps[unsafe_offset=i])]
+                    g = pg[unsafe_offset=Int(ps[unsafe_offset=i + 1])]
+                    r = pg[unsafe_offset=Int(ps[unsafe_offset=i + 2])]
+                else:
+                    b = _srgb_gamma(clamp01(b))
+                    g = _srgb_gamma(clamp01(g))
+                    r = _srgb_gamma(clamp01(r))
+                var xx = 0.412453 * r + 0.357580 * g + 0.180423 * b
+                var yy = 0.212671 * r + 0.715160 * g + 0.072169 * b
+                var zz = 0.019334 * r + 0.119193 * g + 0.950227 * b
+                var l = 116.0 * Float32(cbrt(Float64(yy))) - 16.0 if yy > LT else 903.3 * yy
+                var c1: Float32
+                var c2: Float32
+                if luv:
+                    var d = Float32(52.0) / max(xx + 15.0 * yy + 3.0 * zz, Float32(1.1920929e-07))
+                    c1 = l * (xx * d - 13.0 * UN)
+                    c2 = l * (Float32(2.25) * yy * d - 13.0 * VN)
+                else:
+                    var fx = xx / XN
+                    var fz = zz / ZN
+                    fx = Float32(cbrt(Float64(fx))) if fx > LT else 7.787 * fx + 16.0 / 116.0
+                    var fy = Float32(cbrt(Float64(yy))) if yy > LT else 7.787 * yy + 16.0 / 116.0
+                    fz = Float32(cbrt(Float64(fz))) if fz > LT else 7.787 * fz + 16.0 / 116.0
+                    c1 = 500.0 * (fx - fy)
+                    c2 = 200.0 * (fy - fz)
+                comptime if is8:
+                    po[unsafe_offset=i] = Scalar[dt](_sat8(l * 2.55))
+                    po[unsafe_offset=i + 1] = Scalar[dt](_sat8((c1 + 134.0) * (255.0 / 354.0) if luv else c1 + 128.0))
+                    po[unsafe_offset=i + 2] = Scalar[dt](_sat8((c2 + 140.0) * (255.0 / 262.0) if luv else c2 + 128.0))
+                else:
+                    po[unsafe_offset=i] = Scalar[dt](l)
+                    po[unsafe_offset=i + 1] = Scalar[dt](c1)
+                    po[unsafe_offset=i + 2] = Scalar[dt](c2)
+            else:
+                var l = Float32(ps[unsafe_offset=i])
+                var c1 = Float32(ps[unsafe_offset=i + 1])
+                var c2 = Float32(ps[unsafe_offset=i + 2])
+                comptime if is8:
+                    l = l * (100.0 / 255.0)
+                    c1 = c1 * (354.0 / 255.0) - 134.0 if luv else c1 - 128.0
+                    c2 = c2 * (262.0 / 255.0) - 140.0 if luv else c2 - 128.0
+                var xx: Float32
+                var yy: Float32
+                var zz: Float32
+                if luv:
+                    yy = ((l + 16.0) / 116.0) ** 3 if l > 7.9996248 else l / 903.3
+                    if l <= 0:
+                        xx = 0
+                        zz = 0
+                    else:
+                        var up = c1 / (13.0 * l) + UN
+                        var vp = c2 / (13.0 * l) + VN
+                        xx = yy * 2.25 * up / vp
+                        zz = yy * (12.0 - 3.0 * up - 20.0 * vp) / (4.0 * vp)
+                else:
+                    var fy: Float32
+                    if l <= 7.9996248:
+                        yy = l / 903.3
+                        fy = 7.787 * yy + 16.0 / 116.0
+                    else:
+                        fy = (l + 16.0) / 116.0
+                        yy = fy * fy * fy
+                    var fx = c1 / 500.0 + fy
+                    var fz = fy - c2 / 200.0
+                    xx = (fx - 16.0 / 116.0) / 7.787 if fx <= 0.20689303 else fx * fx * fx
+                    zz = (fz - 16.0 / 116.0) / 7.787 if fz <= 0.20689303 else fz * fz * fz
+                    xx *= XN
+                    zz *= ZN
+                var r = 3.240479 * xx - 1.53715 * yy - 0.498535 * zz
+                var g = -0.969256 * xx + 1.875991 * yy + 0.041556 * zz
+                var b = 0.055648 * xx - 0.204043 * yy + 1.057311 * zz
+                r = _srgb_ungamma(clamp01(r))
+                g = _srgb_ungamma(clamp01(g))
+                b = _srgb_ungamma(clamp01(b))
+                comptime if is8:
+                    po[unsafe_offset=i] = Scalar[dt](_sat8(b * 255.0))
+                    po[unsafe_offset=i + 1] = Scalar[dt](_sat8(g * 255.0))
+                    po[unsafe_offset=i + 2] = Scalar[dt](_sat8(r * 255.0))
+                else:
+                    po[unsafe_offset=i] = Scalar[dt](b)
+                    po[unsafe_offset=i + 1] = Scalar[dt](g)
+                    po[unsafe_offset=i + 2] = Scalar[dt](r)
+
+    par(row, src.rows)
+    _ = len(gam)
+    return o^
+
+
+def clamp01(v: Float32) -> Float32:
+    return min(max(v, 0.0), 1.0)
+
+
 def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
     """code indexes CODES. 8-bit images use cv2's integer arithmetic; float images use its float formulas."""
+    if code >= 8:
+        return cvt_lab_luv(src, code)
     var oc = 1 if (code == 0 or code == 1) else 3
     var ic = 1 if code == 2 else 3
     if src.ch != ic:

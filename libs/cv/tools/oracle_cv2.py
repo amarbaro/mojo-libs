@@ -96,7 +96,8 @@ def dilate(i, kv): return cv2.dilate(i[0], _se(kv), iterations=kv_i(kv, "iters",
 @op()
 def cvtColor(i, kv):
     c = {"bgr2gray": cv2.COLOR_BGR2GRAY, "rgb2gray": cv2.COLOR_RGB2GRAY, "gray2bgr": cv2.COLOR_GRAY2BGR, "bgr2rgb": cv2.COLOR_BGR2RGB,
-         "bgr2hsv": cv2.COLOR_BGR2HSV, "hsv2bgr": cv2.COLOR_HSV2BGR, "bgr2ycrcb": cv2.COLOR_BGR2YCrCb, "ycrcb2bgr": cv2.COLOR_YCrCb2BGR}
+         "bgr2hsv": cv2.COLOR_BGR2HSV, "hsv2bgr": cv2.COLOR_HSV2BGR, "bgr2ycrcb": cv2.COLOR_BGR2YCrCb, "ycrcb2bgr": cv2.COLOR_YCrCb2BGR,
+         "bgr2lab": cv2.COLOR_BGR2Lab, "lab2bgr": cv2.COLOR_Lab2BGR, "bgr2luv": cv2.COLOR_BGR2Luv, "luv2bgr": cv2.COLOR_Luv2BGR}
     return cv2.cvtColor(i[0], c[kv["code"]])
 
 
@@ -395,6 +396,9 @@ def make_fixtures(d):
     fx["hdg2"] = cv2.cvtColor(fx["hd2"], cv2.COLOR_BGR2GRAY)
     fx["sm"], fx["sm2"] = fx["hd"][300:570, 400:880].copy(), fx["hd2"][300:570, 400:880].copy()
     fx["smg"], fx["smg2"] = fx["hdg"][300:570, 400:880].copy(), fx["hdg2"][300:570, 400:880].copy()
+    fx["sm_lab"], fx["sm_luv"] = cv2.cvtColor(fx["sm"], cv2.COLOR_BGR2Lab), cv2.cvtColor(fx["sm"], cv2.COLOR_BGR2Luv)
+    smf = fx["sm"].astype(np.float32) / 255
+    fx["sm_lab_f"], fx["sm_luv_f"] = cv2.cvtColor(smf, cv2.COLOR_BGR2Lab), cv2.cvtColor(smf, cv2.COLOR_BGR2Luv)
     fx["bin"] = (fx["smg"] < 128).astype(np.uint8) * 255
     fx["binhd"] = (fx["hdg"] < 128).astype(np.uint8) * 255
     shapes = np.zeros((60, 80), np.uint8)
