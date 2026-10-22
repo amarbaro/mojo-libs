@@ -206,10 +206,65 @@ def deriv_kernel(n: Int, order: Int) -> List[Float32]:
     return k^
 
 
+def _binom5_u8[dt: DType](src: Mat[dt]) -> Mat[dt]:
+    """GaussianBlur 5x5 with the 1-4-6-4-1 kernel on uint8 in integers like cv2 (reflect101): per output row the column
+    pass sums five source rows in uint16 into a padded scratch row (4080 at most), the row pass sums five shifted
+    loads (65280 at most, no overflow) and (v + 128) >> 8 rounds half up."""
+    comptime WU = simd_width_of[DType.uint16]()
+    comptime U16 = DType.uint16
+    var o = Mat[dt](src.rows, src.cols, src.ch, False)
+    var n = src.cols * src.ch
+    var ch = src.ch
+    var rows = src.rows
+    var cols = src.cols
+    var ps = src.ptr()
+    var po = o.ptr()
+    comptime NT = 8
+
+    def task(t: Int) {imm}:
+        var scratch = List[UInt16](unsafe_uninit_length=n + 4 * ch + WU)
+        var sc = ptr_of(scratch) + 2 * ch
+        for y in range(rows * t // NT, rows * (t + 1) // NT):
+            var r0 = ps + bidx(y - 2, rows, 0) * n
+            var r1 = ps + bidx(y - 1, rows, 0) * n
+            var r2 = ps + y * n
+            var r3 = ps + bidx(y + 1, rows, 0) * n
+            var r4 = ps + bidx(y + 2, rows, 0) * n
+            var i = 0
+            while i + WU <= n:
+                var v = r0.unsafe_load[width=WU](i).cast[U16]() + r4.unsafe_load[width=WU](i).cast[U16]() + 4 * (r1.unsafe_load[width=WU](i).cast[U16]() + r3.unsafe_load[width=WU](i).cast[U16]()) + 6 * r2.unsafe_load[width=WU](i).cast[U16]()
+                sc.unsafe_store(i, v)
+                i += WU
+            for j in range(i, n):
+                sc[unsafe_offset=j] = UInt16(r0[unsafe_offset=j]) + UInt16(r4[unsafe_offset=j]) + 4 * (UInt16(r1[unsafe_offset=j]) + UInt16(r3[unsafe_offset=j])) + 6 * UInt16(r2[unsafe_offset=j])
+            for k in range(ch):
+                sc[unsafe_offset=k - ch] = sc[unsafe_offset=ch + k]
+                sc[unsafe_offset=k - 2 * ch] = sc[unsafe_offset=2 * ch + k]
+                sc[unsafe_offset=n + k] = sc[unsafe_offset=n - 2 * ch + k]
+                sc[unsafe_offset=n + ch + k] = sc[unsafe_offset=n - 3 * ch + k]
+            var dst = po + y * n
+            i = 0
+            while i + WU <= n:
+                var v = sc.unsafe_load[width=WU](i - 2 * ch) + sc.unsafe_load[width=WU](i + 2 * ch) + 4 * (sc.unsafe_load[width=WU](i - ch) + sc.unsafe_load[width=WU](i + ch)) + 6 * sc.unsafe_load[width=WU](i)
+                dst.unsafe_store(i, ((v + 128) >> 8).cast[dt]())
+                i += WU
+            for j in range(i, n):
+                var v = sc[unsafe_offset=j - 2 * ch] + sc[unsafe_offset=j + 2 * ch] + 4 * (sc[unsafe_offset=j - ch] + sc[unsafe_offset=j + ch]) + 6 * sc[unsafe_offset=j]
+                dst[unsafe_offset=j] = Scalar[dt]((v + 128) >> 8)
+        _ = len(scratch)
+
+    par(task, NT)
+    _ = (rows, cols)
+    return o^
+
+
 def gaussian_blur[dt: DType](src: Mat[dt], ksize: Int, sigma: Float64) -> Mat[dt]:
     var n = ksize
     if n <= 0:
         n = Int(sigma * (3.0 if dt == DType.uint8 else 4.0) * 2 + 1.0 + 0.5) | 1
+    comptime if dt == DType.uint8:
+        if n == 5 and sigma <= 0 and src.cols >= 3 and src.rows >= 3:
+            return _binom5_u8(src)
     var k = gauss_kernel(n, sigma)
     return sepfilter[dt, dt](src, k, k)
 

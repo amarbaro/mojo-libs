@@ -1,6 +1,9 @@
 # imgproc: one real image (hd/sm, screenshot crops) and one edge case per op
 gauss5_hd        GaussianBlur hd ksize=5 sigma=0 => max:1
 gauss_s2_hdg      GaussianBlur hdg ksize=0 sigma=2.0 => max:2
+gauss5_odd       GaussianBlur odd ksize=5 sigma=0 => exact
+gauss5_smg       GaussianBlur smg ksize=5 sigma=0 => exact
+gauss5_sm        GaussianBlur sm ksize=5 sigma=0 => exact
 gauss7_odd       GaussianBlur odd ksize=7 sigma=0 => max:1
 gauss_f32        GaussianBlur f32 ksize=5 sigma=1.2 => max:0.01
 gauss3_one       GaussianBlur one ksize=3 sigma=0 => max:1
