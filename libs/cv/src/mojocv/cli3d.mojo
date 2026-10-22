@@ -14,6 +14,7 @@ from mojocv.burst import burst, register
 from mojocv.nurbs import eval_surface, fit_surface
 from mojocv.mesh import voxel_mesh, edges_euler
 from mojocv.glb import write_glb, read_glb
+from mojocv.step import write_step_mesh, write_step_surface, read_step
 from mojocv.octree import Octree, walk, walk_cells
 
 
@@ -137,6 +138,18 @@ def dispatch3d(args: List[String]) raises -> Bool:
             save(g.normals, kv["normals"])
         if "colors" in kv and g.colors.rows > 0:
             save(g.colors, kv["colors"])
+    elif op == "step":
+        write_step_mesh(load[DType.float64](ins[0]), load[DType.int32](ins[1]), out)
+    elif op == "step_surface":
+        write_step_surface(load[DType.float64](ins[0]), _i(kv, "p", 3), _i(kv, "q", 3), out)
+    elif op == "step_read":
+        # IN.stp -> OUT = vertices, faces=PATH; net=PATH for a surface (p and q are printed)
+        var d = read_step(ins[0], _i(kv, "lenient", 0) == 0)
+        print("step_read V=", d.verts.rows, "F=", d.faces.rows, "net=", d.net.rows, "x", d.net.cols, "p=", d.p, "q=", d.q)
+        save(d.verts, out)
+        save(d.faces, kv["faces"])
+        if "net" in kv and d.net.rows > 0:
+            save(d.net, kv["net"])
     else:
         return False
     return True

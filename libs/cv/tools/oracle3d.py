@@ -767,7 +767,254 @@ def check_glb_read(ctx):
     return not bad, "; ".join(bad)
 
 
-CUSTOM = {"mesh": check_mesh, "glb": check_glb, "glb_read": check_glb_read}
+# ---- STEP: an independent Part 21 parser and the checks built on it ----
+def _p21_value(t, i):
+    import re
+    while t[i].isspace():
+        i += 1
+    c = t[i]
+    if c == "$":
+        return None, i + 1
+    if c == "*":
+        return "*", i + 1
+    if c == "#":
+        m = re.compile(r"#(\d+)").match(t, i)
+        return ("ref", int(m[1])), m.end()
+    if c == "'":
+        j = i + 1
+        out = ""
+        while True:
+            if t[j] == "'" and t[j + 1:j + 2] == "'":
+                out += "'"
+                j += 2
+            elif t[j] == "'":
+                return out, j + 1
+            else:
+                out += t[j]
+                j += 1
+    if c == ".":
+        j = t.index(".", i + 1)
+        return ("enum", t[i + 1:j]), j + 1
+    if c == "(":
+        items, i = [], i + 1
+        while True:
+            while t[i].isspace():
+                i += 1
+            if t[i] == ")":
+                return items, i + 1
+            if t[i] == ",":
+                i += 1
+                continue
+            v, i = _p21_value(t, i)
+            items.append(v)
+    m = re.compile(r"[A-Z_][A-Z0-9_]*").match(t, i)
+    if m:
+        j = m.end()
+        while t[j].isspace():
+            j += 1
+        args, j = _p21_value(t, j)
+        return ("typed", m[0], args), j
+    m = re.compile(r"[+-]?\d+(\.\d*)?([eE][+-]?\d+)?").match(t, i)
+    return float(m[0]), m.end()
+
+
+def p21_parse(text):
+    import re
+    assert text.startswith("ISO-10303-21;") and text.rstrip().endswith("END-ISO-10303-21;"), "envelope"
+    assert "FILE_SCHEMA" in text and "AP242" in text, "schema"
+    data = re.search(r"DATA;(.*)ENDSEC;\s*END-ISO-10303-21;", text, re.S)[1]
+    data = re.sub(r"/\*.*?\*/", "", data, flags=re.S)
+    ents, i = {}, 0
+    while True:
+        while i < len(data) and data[i].isspace():
+            i += 1
+        if i >= len(data):
+            return ents
+        m = re.compile(r"#(\d+)\s*=\s*").match(data, i)
+        v, i = _p21_value(data, m.end())
+        if isinstance(v, list):
+            v = ("complex", v)
+        assert data[i] == ";", "statement end"
+        assert int(m[1]) not in ents, "duplicate id"
+        ents[int(m[1])] = v
+        i += 1
+
+
+def _refs(v, acc):
+    if isinstance(v, tuple) and v[0] == "ref":
+        acc.add(v[1])
+    elif isinstance(v, tuple) and v[0] == "typed":
+        _refs(v[2], acc)
+    elif isinstance(v, tuple) and v[0] == "complex":
+        _refs(v[1], acc)
+    elif isinstance(v, list):
+        for x in v:
+            _refs(x, acc)
+    return acc
+
+
+def _pt(ents, ref):
+    return tuple(ents[ref[1]][2][1])
+
+
+def step_triangles(ents):
+    """[(p0, p1, p2) of coordinates, ids] of every FACE under the FACETED_BREP, plus directed edges by point id."""
+    tris, edges = [], []
+    brep = [v for v in ents.values() if isinstance(v, tuple) and v[0] == "typed" and v[1] == "FACETED_BREP"]
+    for b in brep:
+        for fref in ents[b[2][1][1]][2][1]:
+            bound = ents[ents[fref[1]][2][1][0][1]]
+            loop = ents[bound[2][1][1]][2][1]
+            tris.append(tuple(_pt(ents, r) for r in loop))
+            ids = [r[1] for r in loop]
+            edges += [(ids[k], ids[(k + 1) % len(ids)]) for k in range(len(ids))]
+    return tris, edges
+
+
+def check_step(ctx):
+    import re
+    mcv, work, name = ctx["mcv"], ctx["work"], ctx["name"]
+    v, f = mcv.load(ctx["ins"][0]), mcv.load(ctx["ins"][1]).astype(int)
+    out = work / f"{name}.stp"
+    code, stdout, stderr = ctx["run"](out, ctx["ins"], ctx["args"])
+    if code != 0:
+        return False, f"exit {code}: {(stdout + stderr).strip()[:200]}"
+    text = out.read_text()
+    bad = []
+    if re.search(r"(?<![.\d])\d+[eE]", text) or re.search(r"\d\.?\d*e", text):
+        bad.append("a real is not in Part 21 form (digit, '.', optional E exponent)")
+    ents = p21_parse(text)
+    allrefs = set()
+    for val in ents.values():
+        _refs(val, allrefs)
+    if not allrefs <= set(ents):
+        bad.append("dangling references")
+    kinds = {(v_[1] if v_[0] == "typed" else "complex") for v_ in ents.values() if isinstance(v_, tuple)}
+    for need in ("PRODUCT", "PRODUCT_DEFINITION", "SHAPE_DEFINITION_REPRESENTATION", "ADVANCED_BREP_SHAPE_REPRESENTATION",
+                 "FACETED_BREP", "CLOSED_SHELL", "FACE", "FACE_OUTER_BOUND", "POLY_LOOP", "CARTESIAN_POINT"):
+        if need not in kinds:
+            bad.append(f"missing {need}")
+    tris, edges = step_triangles(ents)
+    want = sorted(tuple(map(tuple, v[t].tolist())) for t in f)
+    if sorted(tris) != want:
+        bad.append("triangles differ from the mesh")
+    es = set(edges)
+    if len(es) != len(edges) or any((b, a) not in es for a, b in es):
+        bad.append("shell not closed and consistently oriented (every directed edge needs its reverse once)")
+    # back through the Mojo reader
+    rv, rf = work / f"{name}.rv.mcv", work / f"{name}.rf.mcv"
+    code, so, se = ctx["run3"]("step_read", rv, [out], [f"faces={rf}"])
+    if code != 0:
+        bad.append(f"own reader failed: {(so + se).strip()[:150]}")
+    else:
+        got = sorted(tuple(map(tuple, mcv.load(rv)[t].tolist())) for t in mcv.load(rf).astype(int))
+        if got != want or len(mcv.load(rv)) != len(v):
+            bad.append("round trip through the Mojo reader changed the mesh")
+    print(f"     {name}: {len(ents)} entities, {len(tris)} faces, {out.stat().st_size} bytes, problems: {bad if bad else 'none'}")
+    return not bad, "; ".join(bad)
+
+
+def check_step_surface(ctx):
+    mcv, work, name = ctx["mcv"], ctx["work"], ctx["name"]
+    net = mcv.load(ctx["ins"][0])
+    p, q = int(dict(a.split("=") for a in ctx["args"])["p"]), int(dict(a.split("=") for a in ctx["args"])["q"])
+    out = work / f"{name}.stp"
+    code, stdout, stderr = ctx["run"](out, ctx["ins"], ctx["args"])
+    if code != 0:
+        return False, f"exit {code}: {(stdout + stderr).strip()[:200]}"
+    ents = p21_parse(out.read_text())
+    bad = []
+    surf = [v_ for v_ in ents.values() if isinstance(v_, tuple) and (
+        (v_[0] == "complex" and any(m[1] == "B_SPLINE_SURFACE" for m in v_[1])) or
+        (v_[0] == "typed" and v_[1] == "B_SPLINE_SURFACE_WITH_KNOTS"))]
+    if len(surf) != 1:
+        return False, "expected exactly one surface entity"
+    s = surf[0]
+    parts = {m[1]: m[2] for m in s[1]} if s[0] == "complex" else None
+    if parts:
+        pp, qq, grid = parts["B_SPLINE_SURFACE"][0], parts["B_SPLINE_SURFACE"][1], parts["B_SPLINE_SURFACE"][2]
+        mu, mv, ku, kv = parts["B_SPLINE_SURFACE_WITH_KNOTS"][:4]
+        w = np.array(parts["RATIONAL_B_SPLINE_SURFACE"][0])
+    else:
+        a = s[2]
+        pp, qq, grid, mu, mv, ku, kv = a[1], a[2], a[3], a[8], a[9], a[10], a[11]
+        w = np.ones((len(grid), len(grid[0])))
+    cp = np.array([[_pt(ents, r) for r in row] for row in grid])
+    got = np.concatenate([cp, w[..., None]], axis=2)
+    if (int(pp), int(qq)) != (p, q) or got.shape != net.shape or np.abs(got - net).max() > 1e-14 * max(1, np.abs(net).max()):
+        bad.append("control net, weights or degrees differ")
+    kn_u = np.repeat(ku, [int(m) for m in mu])
+    kn_v = np.repeat(kv, [int(m) for m in mv])
+    if np.abs(kn_u - _knots(net.shape[0], p)).max() > 1e-14 or np.abs(kn_v - _knots(net.shape[1], q)).max() > 1e-14:
+        bad.append("knot vectors expanded from multiplicities are not the clamped uniform ones")
+    rn = work / f"{name}.rn.mcv"
+    code, so, se = ctx["run3"]("step_read", work / f"{name}.rv.mcv", [out], [f"faces={work / (name + '.rf.mcv')}", f"net={rn}"])
+    if code != 0:
+        bad.append(f"own reader failed: {(so + se).strip()[:150]}")
+    else:
+        back = mcv.load(rn)
+        if back.shape != net.shape or np.abs(back - net).max() > 1e-14 * max(1, np.abs(net).max()):
+            bad.append("round trip through the Mojo reader changed the net")
+        if f"p= {p} q= {q}" not in so:
+            bad.append("reader degrees")
+    kind = "rational" if parts else "plain"
+    print(f"     {name}: {kind} surface {net.shape[0]}x{net.shape[1]} p={p} q={q}, problems: {bad if bad else 'none'}")
+    return not bad, "; ".join(bad)
+
+
+def check_step_read(ctx):
+    """Our reader on a numpy-side edited copy of a good file: accepted layouts and rejected corruptions."""
+    import re
+    mcv, work, name, variant = ctx["mcv"], ctx["work"], ctx["name"], ctx["expect"]["variant"]
+    base = (work / "step_base.stp")
+    if not base.exists():
+        code, so, se = ctx["run3"]("step", base, [work / "mesh_one.v.mcv", work / "mesh_one.f.mcv"], [])
+        assert code == 0, so + se
+    t = base.read_text()
+    lenient = []
+    if variant == "pretty":  # whitespace and comments the format allows
+        t = re.sub(r",(?=[^']*(?:'[^']*'[^']*)*$)", ",\n   ", t.split("DATA;")[0]) + "DATA;" + re.sub(
+            r",", " ,\n  /* c */ ", t.split("DATA;")[1].replace("\n", " \n\n "))
+    elif variant == "unknown_entity":
+        t = t.replace("ENDSEC;\nEND-", "#9000=CIRCLE('',#16,1.);\nENDSEC;\nEND-")
+    elif variant == "unknown_lenient":
+        t = t.replace("ENDSEC;\nEND-", "#9000=CIRCLE('',#16,1.);\nENDSEC;\nEND-")
+        lenient = ["lenient=1"]
+    elif variant == "dangling":
+        t = t.replace("POLY_LOOP('',(#20,", "POLY_LOOP('',(#99999,", 1)
+    elif variant == "no_end":
+        t = t.replace("END-ISO-10303-21;", "")
+    elif variant == "truncated":
+        t = t[: len(t) // 2]
+    elif variant == "dup_id":
+        t = t.replace("#21=CARTESIAN_POINT", "#20=CARTESIAN_POINT", 1)
+    elif variant == "open_string":
+        t = t.replace("'part','part'", "'part,'part", 1)
+    elif variant == "bad_char":
+        t = t.replace("#20=CARTESIAN_POINT", "#20=CARTESIAN_POINT@", 1)
+    elif variant == "quad":
+        t = t.replace("POLY_LOOP('',(#20,#21,#22", "POLY_LOOP('',(#20,#21,#22,#23", 1)
+    elif variant == "empty":
+        t = ""
+    elif variant == "no_geometry":
+        t = re.sub(r"#\d+=(FACETED_BREP|CLOSED_SHELL)[^\n]*\n", "", t)
+    path = work / f"{name}.stp"
+    path.write_text(t)
+    rv, rf = work / f"{name}.rv.mcv", work / f"{name}.rf.mcv"
+    code, so, se = ctx["run"](rv, [path], [f"faces={rf}", *lenient])
+    if "raises" in ctx["expect"]:
+        return code != 0, ("" if code != 0 else "accepted a corrupt or unsupported STEP file")
+    if code != 0:
+        return False, f"exit {code}: {(so + se).strip()[:200]}"
+    v = mcv.load(work / "mesh_one.v.mcv")
+    f = mcv.load(work / "mesh_one.f.mcv").astype(int)
+    got = sorted(tuple(map(tuple, mcv.load(rv)[tt].tolist())) for tt in mcv.load(rf).astype(int))
+    want = sorted(tuple(map(tuple, v[tt].tolist())) for tt in f)
+    return got == want, "" if got == want else "mesh differs"
+
+
+CUSTOM = {"mesh": check_mesh, "glb": check_glb, "glb_read": check_glb_read, "step": check_step,
+          "step_surface": check_step_surface, "step_read": check_step_read}
 
 
 def mesh_fixtures():
