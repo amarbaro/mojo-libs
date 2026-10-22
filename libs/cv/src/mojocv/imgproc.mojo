@@ -6,6 +6,7 @@ from std.math import sqrt, exp, floor, cos, sin, atan2
 from max.algorithm import parallelize
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args, DTS, peek_code
+from std.math import log as log_
 
 comptime Ptr = MutPointer[_, MutAnyOrigin]
 comptime F32 = DType.float32
@@ -1400,6 +1401,388 @@ def hog_detect(src: Mat[DType.uint8], svm: Mat[F32], hit: Float32, scale0: Float
     return o^
 
 
+# ---- GrabCut ----------------------------------------------------------------------------------------------
+# Rother, Kolmogorov, Blake 2004: iterate (assign GMM components, refit two 5-component colour GMMs, min-cut on a
+# 8-neighbour contrast graph). The cut is Dinic's algorithm; cv2 uses Boykov-Kolmogorov and a different k-means seed,
+# so masks agree up to ties and cluster seeding, not bit for bit.
+
+comptime GC_BGD: UInt8 = 0
+comptime GC_FGD: UInt8 = 1
+comptime GC_PR_BGD: UInt8 = 2
+comptime GC_PR_FGD: UInt8 = 3
+
+
+struct Gmm(Movable):
+    var coef: List[Float64]
+    var mean: List[Float64]
+    var inv: List[Float64]
+    var det: List[Float64]
+
+    def __init__(out self):
+        self.coef = List[Float64](length=5, fill=0)
+        self.mean = List[Float64](length=15, fill=0)
+        self.inv = List[Float64](length=45, fill=0)
+        self.det = List[Float64](length=5, fill=0)
+
+    def comp(self, k: Int, c0: Float64, c1: Float64, c2: Float64) -> Float64:
+        if self.coef[k] <= 0:
+            return 0.0
+        var d0 = c0 - self.mean[3 * k]
+        var d1 = c1 - self.mean[3 * k + 1]
+        var d2 = c2 - self.mean[3 * k + 2]
+        var b = 9 * k
+        var m = d0 * (self.inv[b] * d0 + self.inv[b + 3] * d1 + self.inv[b + 6] * d2) + d1 * (self.inv[b + 1] * d0 + self.inv[b + 4] * d1 + self.inv[b + 7] * d2) + d2 * (self.inv[b + 2] * d0 + self.inv[b + 5] * d1 + self.inv[b + 8] * d2)
+        return self.coef[k] * 1.0 / sqrt(self.det[k]) * exp(-0.5 * m)
+
+    def prob(self, c0: Float64, c1: Float64, c2: Float64) -> Float64:
+        var s = Float64(0)
+        for k in range(5):
+            s += self.comp(k, c0, c1, c2)
+        return s
+
+    def which(self, c0: Float64, c1: Float64, c2: Float64) -> Int:
+        var best = 0
+        var bp = -1.0
+        for k in range(5):
+            var p = self.comp(k, c0, c1, c2)
+            if p > bp:
+                bp = p
+                best = k
+        return best
+
+    def fit(mut self, samples: List[Float64], labels: List[Int]):
+        """Refit from samples (r, g, b triples) with component labels 0..4."""
+        var n = len(labels)
+        var cnt = List[Float64](length=5, fill=0)
+        var sm = List[Float64](length=15, fill=0)
+        var sp = List[Float64](length=45, fill=0)
+        for i in range(n):
+            var k = labels[i]
+            cnt[k] += 1
+            for a in range(3):
+                sm[3 * k + a] += samples[3 * i + a]
+                for b in range(3):
+                    sp[9 * k + 3 * a + b] += samples[3 * i + a] * samples[3 * i + b]
+        for k in range(5):
+            if cnt[k] == 0:
+                self.coef[k] = 0
+                continue
+            self.coef[k] = cnt[k] / Float64(n)
+            var c = List[Float64](length=9, fill=0)
+            for a in range(3):
+                self.mean[3 * k + a] = sm[3 * k + a] / cnt[k]
+            for a in range(3):
+                for b in range(3):
+                    c[3 * a + b] = sp[9 * k + 3 * a + b] / cnt[k] - self.mean[3 * k + a] * self.mean[3 * k + b]
+            var det = c[0] * (c[4] * c[8] - c[5] * c[7]) - c[1] * (c[3] * c[8] - c[5] * c[6]) + c[2] * (c[3] * c[7] - c[4] * c[6])
+            if det <= 2.220446049250313e-16:
+                c[0] += 0.01
+                c[4] += 0.01
+                c[8] += 0.01
+                det = c[0] * (c[4] * c[8] - c[5] * c[7]) - c[1] * (c[3] * c[8] - c[5] * c[6]) + c[2] * (c[3] * c[7] - c[4] * c[6])
+            self.det[k] = det
+            var b = 9 * k
+            self.inv[b] = (c[4] * c[8] - c[5] * c[7]) / det
+            self.inv[b + 3] = -(c[3] * c[8] - c[5] * c[6]) / det
+            self.inv[b + 6] = (c[3] * c[7] - c[4] * c[6]) / det
+            self.inv[b + 1] = -(c[1] * c[8] - c[2] * c[7]) / det
+            self.inv[b + 4] = (c[0] * c[8] - c[2] * c[6]) / det
+            self.inv[b + 7] = -(c[0] * c[7] - c[1] * c[6]) / det
+            self.inv[b + 2] = (c[1] * c[5] - c[2] * c[4]) / det
+            self.inv[b + 5] = -(c[0] * c[5] - c[2] * c[3]) / det
+            self.inv[b + 8] = (c[0] * c[4] - c[1] * c[3]) / det
+
+
+def kmeans5(samples: List[Float64]) -> List[Int]:
+    """k-means++ seeding then ten Lloyd steps, five clusters on 3-D points."""
+    var n = len(samples) // 3
+    var labels = List[Int](length=n, fill=0)
+    if n < 5:
+        return labels^
+    var state = UInt64(0x2545F4914F6CDD1D)
+    var cen = List[Float64]()
+    var first = Int(state % UInt64(n))
+    for a in range(3):
+        cen.append(samples[3 * first + a])
+    var d2 = List[Float64](length=n, fill=1e300)
+    for c in range(1, 5):
+        var tot = Float64(0)
+        for i in range(n):
+            var d = Float64(0)
+            for a in range(3):
+                d += (samples[3 * i + a] - cen[3 * (c - 1) + a]) ** 2
+            d2[i] = min(d2[i], d)
+            tot += d2[i]
+        state ^= state << 13
+        state ^= state >> 7
+        state ^= state << 17
+        var target = Float64(state % 1000003) / 1000003.0 * tot
+        var pick = 0
+        var acc = Float64(0)
+        for i in range(n):
+            acc += d2[i]
+            if acc >= target:
+                pick = i
+                break
+        for a in range(3):
+            cen.append(samples[3 * pick + a])
+    for _ in range(10):
+        var sums = List[Float64](length=15, fill=0)
+        var cnt = List[Int](length=5, fill=0)
+        for i in range(n):
+            var best = 0
+            var bd = 1e300
+            for c in range(5):
+                var d = Float64(0)
+                for a in range(3):
+                    d += (samples[3 * i + a] - cen[3 * c + a]) ** 2
+                if d < bd:
+                    bd = d
+                    best = c
+            labels[i] = best
+            cnt[best] += 1
+            for a in range(3):
+                sums[3 * best + a] += samples[3 * i + a]
+        for c in range(5):
+            if cnt[c] > 0:
+                for a in range(3):
+                    cen[3 * c + a] = sums[3 * c + a] / Float64(cnt[c])
+    return labels^
+
+
+struct Flow(Movable):
+    """Dinic max-flow on arrays; node 0 is the source, node 1 the sink."""
+
+    var head: List[Int32]
+    var nxt: List[Int32]
+    var to: List[Int32]
+    var cap: List[Float64]
+
+    def __init__(out self, nodes: Int):
+        self.head = List[Int32](length=nodes, fill=-1)
+        self.nxt = List[Int32]()
+        self.to = List[Int32]()
+        self.cap = List[Float64]()
+
+    def add(mut self, a: Int, b: Int, c_ab: Float64, c_ba: Float64):
+        self.to.append(Int32(b))
+        self.cap.append(c_ab)
+        self.nxt.append(self.head[a])
+        self.head[a] = Int32(len(self.to) - 1)
+        self.to.append(Int32(a))
+        self.cap.append(c_ba)
+        self.nxt.append(self.head[b])
+        self.head[b] = Int32(len(self.to) - 1)
+
+    def maxflow(mut self, s: Int, t: Int) -> Float64:
+        var n = len(self.head)
+        var total = Float64(0)
+        var level = List[Int32](length=n, fill=0)
+        var it = List[Int32](length=n, fill=0)
+        var queue = List[Int32](length=n, fill=0)
+        while True:
+            for i in range(n):
+                level[i] = -1
+            level[s] = 0
+            var qh = 0
+            var qt = 1
+            queue[0] = Int32(s)
+            while qh < qt:
+                var u = Int(queue[qh])
+                qh += 1
+                var e = self.head[u]
+                while e >= 0:
+                    var v = Int(self.to[Int(e)])
+                    if self.cap[Int(e)] > 1e-12 and level[v] < 0:
+                        level[v] = level[u] + 1
+                        queue[qt] = Int32(v)
+                        qt += 1
+                    e = self.nxt[Int(e)]
+            if level[t] < 0:
+                break
+            for i in range(n):
+                it[i] = self.head[i]
+            # iterative blocking-flow DFS
+            var path = List[Int32]()
+            var u = s
+            while True:
+                if u == t:
+                    var f = Float64(1e300)
+                    for e in path:
+                        f = min(f, self.cap[Int(e)])
+                    for e in path:
+                        self.cap[Int(e)] -= f
+                        self.cap[Int(e) ^ 1] += f
+                    total += f
+                    # restart from the first saturated edge
+                    var cut = 0
+                    for i in range(len(path)):
+                        if self.cap[Int(path[i])] <= 1e-12:
+                            cut = i
+                            break
+                    u = s if cut == 0 else Int(self.to[Int(path[cut - 1])])
+                    var np_ = List[Int32]()
+                    for i in range(cut):
+                        np_.append(path[i])
+                    path = np_^
+                    continue
+                var advanced = False
+                while it[u] >= 0:
+                    var e = Int(it[u])
+                    var v = Int(self.to[e])
+                    if self.cap[e] > 1e-12 and level[v] == level[u] + 1:
+                        path.append(Int32(e))
+                        u = v
+                        advanced = True
+                        break
+                    it[u] = self.nxt[e]
+                if not advanced:
+                    if u == s:
+                        break
+                    level[u] = -1
+                    var last = Int(path.pop())
+                    u = Int(self.to[last ^ 1])
+        return total
+
+
+def grab_cut(img: Mat[DType.uint8], rx: Int, ry: Int, rw: Int, rh: Int, iters: Int) -> Mat[DType.uint8]:
+    """GC_INIT_WITH_RECT on a 3-channel image: returns the binary foreground mask (255 = foreground)."""
+    var h = img.rows
+    var w = img.cols
+    var mask = Mat[DType.uint8](h, w, 1)
+    for y in range(h):
+        for x in range(w):
+            var inside = x >= rx and x < rx + rw and y >= ry and y < ry + rh
+            mask.set(y, x, 0, GC_PR_FGD if inside else GC_BGD)
+    # contrast terms
+    var beta = Float64(0)
+    var cntn = 0
+    for y in range(h):
+        for x in range(w):
+            for d in range(4):
+                var nx = x + (-1 if d != 2 else 0) + (2 if d == 3 else 0)
+                var ny = y - (0 if d == 0 else 1)
+                if d == 3:
+                    nx = x + 1
+                if nx < 0 or nx >= w or ny < 0:
+                    continue
+                var dd = Float64(0)
+                for c in range(3):
+                    var df = Float64(img.at(y, x, c)) - Float64(img.at(ny, nx, c))
+                    dd += df * df
+                beta += dd
+                cntn += 1
+    beta = 1.0 / (2 * beta / Float64(max(cntn, 1))) if beta > 2.220446049250313e-16 else 0.0
+    var gamma = 50.0
+    var lam = 9 * gamma
+    var nw = List[Float64](length=4 * h * w, fill=0)
+    for y in range(h):
+        for x in range(w):
+            for d in range(4):
+                var nx = x + (-1 if d != 2 else 0) + (2 if d == 3 else 0)
+                var ny = y - (0 if d == 0 else 1)
+                if d == 3:
+                    nx = x + 1
+                if nx < 0 or nx >= w or ny < 0:
+                    continue
+                var dd = Float64(0)
+                for c in range(3):
+                    var df = Float64(img.at(y, x, c)) - Float64(img.at(ny, nx, c))
+                    dd += df * df
+                var wgt = gamma * exp(-beta * dd)
+                nw[4 * (y * w + x) + d] = wgt if (d == 0 or d == 2) else wgt / 1.4142135623730951
+    var bg = Gmm()
+    var fg = Gmm()
+    var bs = List[Float64]()
+    var fs = List[Float64]()
+    for y in range(h):
+        for x in range(w):
+            var m = mask.at(y, x)
+            var tgt = fs.copy() if False else List[Float64]()
+            if m == GC_BGD or m == GC_PR_BGD:
+                for c in range(3):
+                    bs.append(Float64(img.at(y, x, c)))
+            else:
+                for c in range(3):
+                    fs.append(Float64(img.at(y, x, c)))
+    bg.fit(bs, kmeans5(bs))
+    fg.fit(fs, kmeans5(fs))
+    for _ in range(iters):
+        var bl = List[Int]()
+        var fl_ = List[Int]()
+        var bs2 = List[Float64]()
+        var fs2 = List[Float64]()
+        for y in range(h):
+            for x in range(w):
+                var c0 = Float64(img.at(y, x, 0))
+                var c1 = Float64(img.at(y, x, 1))
+                var c2 = Float64(img.at(y, x, 2))
+                var m = mask.at(y, x)
+                if m == GC_BGD or m == GC_PR_BGD:
+                    bl.append(bg.which(c0, c1, c2))
+                    bs2.append(c0)
+                    bs2.append(c1)
+                    bs2.append(c2)
+                else:
+                    fl_.append(fg.which(c0, c1, c2))
+                    fs2.append(c0)
+                    fs2.append(c1)
+                    fs2.append(c2)
+        bg.fit(bs2, bl)
+        fg.fit(fs2, fl_)
+        var g = Flow(h * w + 2)
+        for y in range(h):
+            for x in range(w):
+                var node = 2 + y * w + x
+                var m = mask.at(y, x)
+                var from_s = Float64(0)
+                var to_t = Float64(0)
+                if m == GC_PR_BGD or m == GC_PR_FGD:
+                    var c0 = Float64(img.at(y, x, 0))
+                    var c1 = Float64(img.at(y, x, 1))
+                    var c2 = Float64(img.at(y, x, 2))
+                    from_s = -log_(max(bg.prob(c0, c1, c2), 1e-300))
+                    to_t = -log_(max(fg.prob(c0, c1, c2), 1e-300))
+                elif m == GC_BGD:
+                    to_t = lam
+                else:
+                    from_s = lam
+                g.add(0, node, from_s, 0.0)
+                g.add(node, 1, to_t, 0.0)
+                for d in range(4):
+                    var wgt = nw[4 * (y * w + x) + d]
+                    if wgt > 0:
+                        var nx = x + (-1 if d != 2 else 0) + (2 if d == 3 else 0)
+                        var ny = y - (0 if d == 0 else 1)
+                        if d == 3:
+                            nx = x + 1
+                        g.add(node, 2 + ny * w + nx, wgt, wgt)
+        _ = g.maxflow(0, 1)
+        # source side = reachable in the residual graph
+        var seen = List[Bool](length=h * w + 2, fill=False)
+        var stack = List[Int]()
+        stack.append(0)
+        seen[0] = True
+        while len(stack) > 0:
+            var u = stack.pop()
+            var e = g.head[u]
+            while e >= 0:
+                var v = Int(g.to[Int(e)])
+                if g.cap[Int(e)] > 1e-12 and not seen[v]:
+                    seen[v] = True
+                    stack.append(v)
+                e = g.nxt[Int(e)]
+        for y in range(h):
+            for x in range(w):
+                var m = mask.at(y, x)
+                if m == GC_PR_BGD or m == GC_PR_FGD:
+                    mask.set(y, x, 0, GC_PR_FGD if seen[2 + y * w + x] else GC_PR_BGD)
+    var o = Mat[DType.uint8](h, w, 1)
+    for i in range(h * w):
+        o.data[i] = 255 if (mask.data[i] & 1) == 1 else 0
+    return o^
+
+
 # ---- CLI --------------------------------------------------------------------------------------------------
 
 
@@ -1524,6 +1907,12 @@ def run_u8(mut a: Args) raises -> Bool:
         while a.again():
             o = good_features(m, a.i("maxCorners", 100), a.f("quality", 0.01), a.f("minDist", 10.0), a.i("block", 3))
         save(o, a.out)
+    elif a.op == "grabCut":
+        var r = a.fl("rect", [0.0, 0.0, Float64(m.cols), Float64(m.rows)])
+        var o = Mat[DType.uint8](0, 0)
+        while a.again():
+            o = grab_cut(m, Int(r[0]), Int(r[1]), Int(r[2]), Int(r[3]), a.i("iters", 5))
+        save(o, a.out)
     elif a.op == "HOGScores":
         var svm = load[F32](a.ins[1])
         var o = Mat[F32](0, 0)
@@ -1563,7 +1952,7 @@ def run(mut a: Args) raises -> Bool:
             o.data[i] = Int32(g[i])
         save(o, a.out)
         return True
-    if a.op in ["connectedComponentsWithStats", "Canny", "findContours", "goodFeaturesToTrack", "line", "rectangle", "HOGScores", "detectMultiScale"]:
+    if a.op in ["connectedComponentsWithStats", "Canny", "findContours", "goodFeaturesToTrack", "line", "rectangle", "HOGScores", "detectMultiScale", "grabCut"]:
         return run_u8(a)
     if not (a.op in ["GaussianBlur", "pyrDown", "Sobel", "threshold", "integral", "erode", "dilate", "cvtColor", "resize", "warpAffine", "remap", "blobFromImage"]):
         return False

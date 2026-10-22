@@ -303,6 +303,15 @@ def groupRectangles(i, kv):
     return np.array(r, np.int32).reshape(-1, 4)
 
 
+@op()
+def grabCut(i, kv):
+    r = [int(x) for x in kv_l(kv, "rect", [0, 0, i[0].shape[1], i[0].shape[0]])]
+    mask = np.zeros(i[0].shape[:2], np.uint8)
+    bgd, fgd = np.zeros((1, 65)), np.zeros((1, 65))
+    cv2.grabCut(i[0], mask, tuple(r), bgd, fgd, kv_i(kv, "iters", 5), cv2.GC_INIT_WITH_RECT)
+    return ((mask & 1) * 255).astype(np.uint8)
+
+
 # ---- compare ----------------------------------------------------------------------------------------------
 def compare(ours, ref, spec):
     if ours.shape != ref.shape and not spec.startswith(("orb", "pts", "cnt")):
@@ -496,6 +505,29 @@ def make_fixtures(d):
     mp = cv2.warpPerspective(np.ones_like(mk) * 255, P, (320, 240), flags=cv2.INTER_NEAREST)
     sc2[mp > 0] = wp[mp > 0]
     fx["aruco_b"] = sc2
+    # grabCut inputs: a coloured scene (blobs on a textured background) and a screenshot crop
+    gy, gx = np.mgrid[0:110, 0:150]
+    sc3 = np.zeros((110, 150, 3), np.uint8)
+    sc3[:] = (40, 90, 30)
+    sc3 = np.clip(sc3.astype(np.int16) + rng.integers(-12, 13, sc3.shape), 0, 255).astype(np.uint8)
+    cv2.ellipse(sc3, (75, 55), (32, 24), 20, 0, 360, (200, 60, 50), -1)
+    cv2.circle(sc3, (60, 50), 10, (230, 200, 40), -1)
+    sc3 = np.clip(sc3.astype(np.int16) + rng.integers(-10, 11, sc3.shape), 0, 255).astype(np.uint8)
+    fx["gc_scene"] = sc3
+    best_c, best_xy = -1, (0, 0)  # the screenshot crop with the most distinct colours (UI is mostly flat)
+    for y0 in range(0, 1080 - 110, 20):
+        for x0 in range(0, 1920 - 150, 30):
+            c_ = len(np.unique(fx["hd"][y0:y0 + 110:3, x0:x0 + 150:3].reshape(-1, 3), axis=0))
+            if c_ > best_c:
+                best_c, best_xy = c_, (y0, x0)
+    gs = fx["hd"][best_xy[0]:best_xy[0] + 110, best_xy[1]:best_xy[1] + 150].copy()
+    obj = np.zeros_like(gs)
+    obj[:] = (30, 160, 230)
+    obj = np.clip(obj.astype(np.int16) + rng.integers(-25, 26, obj.shape), 0, 255).astype(np.uint8)
+    om = np.zeros(gs.shape[:2], np.uint8)
+    cv2.ellipse(om, (80, 55), (38, 28), -15, 0, 360, 255, -1)
+    gs[om > 0] = obj[om > 0]  # a coloured object on a real screenshot crop
+    fx["gc_shot"] = gs
     fx["odd"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["odd2"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["one"] = np.array([[[200, 0, 77]]], np.uint8)
