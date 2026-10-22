@@ -31,6 +31,15 @@ struct Mat[dt: DType](Movable):
         self.ch = ch
         self.data = List[Scalar[Self.dt]](length=rows * cols * ch, fill=0)
 
+    def __init__(out self, rows: Int, cols: Int, ch: Int, zero: Bool):
+        self.rows = rows
+        self.cols = cols
+        self.ch = ch
+        if zero:
+            self.data = List[Scalar[Self.dt]](length=rows * cols * ch, fill=0)
+        else:
+            self.data = List[Scalar[Self.dt]](unsafe_uninit_length=rows * cols * ch)
+
     def __init__(out self, *, copy: Self):
         self.rows = copy.rows
         self.cols = copy.cols

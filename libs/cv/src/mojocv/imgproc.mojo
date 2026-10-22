@@ -326,30 +326,41 @@ def threshold[dt: DType](src: Mat[dt], thresh: Float64, maxval: Float64, kind: I
 def integral[sd: DType, od: DType](src: Mat[sd]) -> Mat[od]:
     """(rows + 1) x (cols + 1) summed-area table, zero first row and column, per channel."""
     var ch = src.ch
-    var o = Mat[od](src.rows + 1, src.cols + 1, ch)
+    var o = Mat[od](src.rows + 1, src.cols + 1, ch, False)
     var pa = src.ptr()
     var po = o.ptr()
     var stride = o.cols * ch
+    # zero first row and first column (rest is overwritten)
+    for i in range(stride):
+        po[unsafe_offset=i] = Scalar[od](0)
+    for r in range(o.rows):
+        for k in range(ch):
+            po[unsafe_offset=r * stride + k] = Scalar[od](0)
 
     def hrow(r: Int) {imm}:
         for k in range(ch):
             var acc = Scalar[od](0)
+            var psrc = pa + (r * src.cols) * ch + k
+            var pdst = po + (r + 1) * stride + ch + k
             for c in range(src.cols):
-                acc += Scalar[od](pa[unsafe_offset=(r * src.cols + c) * ch + k])
-                po[unsafe_offset=(r + 1) * stride + (c + 1) * ch + k] = acc
+                acc += Scalar[od](psrc[unsafe_offset=c * ch])
+                pdst[unsafe_offset=c * ch] = acc
 
     par(hrow, src.rows)
-    var chunk = 256
-    var nchunk = (stride + chunk - 1) // chunk
 
-    def vcol(t: Int) {imm}:
-        for i in range(t * chunk, min((t + 1) * chunk, stride)):
-            var acc = Scalar[od](0)
-            for r in range(1, o.rows):
-                acc += po[unsafe_offset=r * stride + i]
-                po[unsafe_offset=r * stride + i] = acc
+    comptime W = simd_width_of[od]()
+    for r in range(1, o.rows):
+        var base = r * stride
+        var prev = (r - 1) * stride
+        var i = 0
+        while i + W <= stride:
+            var cur = po.unsafe_load[width=W](base + i)
+            var pr = po.unsafe_load[width=W](prev + i)
+            po.unsafe_store(base + i, cur + pr)
+            i += W
+        for j in range(i, stride):
+            po[unsafe_offset=base + j] += po[unsafe_offset=prev + j]
 
-    par(vcol, nchunk)
     return o^
 
 
