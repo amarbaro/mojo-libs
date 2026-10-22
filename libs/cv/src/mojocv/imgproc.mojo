@@ -3,6 +3,7 @@
 # (pixel i of channel c sits at i * ch + c, so a horizontal tap at dx is a load at offset dx * ch).
 from std.sys.info import simd_width_of
 from std.utils import IndexList
+from std.sys.intrinsics import gather
 from std.math import sqrt, exp, floor, ceil, cos, sin, atan2, cbrt
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args, DTS, peek_code, par
@@ -1474,22 +1475,94 @@ def sample[dt: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: Float64, fy: Float6
         dst[unsafe_offset=k] = Scalar[dt](acc)
 
 
-def _lin_vec[dt: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: SIMD[DType.float64, WF], fy: SIMD[DType.float64, WF], mode: Int, bv: Scalar[dt], dst: Ptr[Scalar[dt]]) -> Bool:
+def _ilv_mask[ch: Int]() -> IndexList[4 * WF]:
+    var m = IndexList[4 * WF]()
+    for i in range(4 * WF):
+        m[i] = (i % ch) * WF + i // ch if i < ch * WF else 0
+    return m
+
+
+def _words3(t: SIMD[DType.int, WF]) -> Tuple[SIMD[DType.uint32, WF], SIMD[DType.uint32, WF]]:
+    """Two pixels of 3 channels (6 bytes, read as 8) at each of WF byte addresses, as the low and high 32 bits."""
+    var m = SIMD[DType.bool, WF // 2](fill=True)
+    var z = SIMD[DType.uint64, WF // 2](0)
+    var a = gather[alignment=1](t.slice[WF // 2](), m, z)
+    var b = gather[alignment=1](t.slice[WF // 2, offset = WF // 2](), m, z)
+    var lo = rebind[SIMD[DType.uint32, WF]](a.cast[DType.uint32]().join(b.cast[DType.uint32]()))
+    var hi = rebind[SIMD[DType.uint32, WF]]((a >> 32).cast[DType.uint32]().join((b >> 32).cast[DType.uint32]()))
+    return (lo, hi)
+
+
+def _ab3[k: Int](lo: SIMD[DType.uint32, WF], hi: SIMD[DType.uint32, WF]) -> Tuple[SIMD[F32, WF], SIMD[F32, WF]]:
+    """Channel k of the left and the right pixel of _words3."""
+    comptime if k == 0:
+        return ((lo & 255).cast[F32](), (lo >> 24).cast[F32]())
+    elif k == 1:
+        return (((lo >> 8) & 255).cast[F32](), (hi & 255).cast[F32]())
+    else:
+        return (((lo >> 16) & 255).cast[F32](), ((hi >> 8) & 255).cast[F32]())
+
+
+def _lin_u8[dt: DType, ch: Int](ps: Ptr[Scalar[dt]], size: Int, cols: Int, sx: SIMD[DType.int32, WF], sy: SIMD[DType.int32, WF], wx1: SIMD[F32, WF], wy1: SIMD[F32, WF], dst: Ptr[Scalar[dt]], wide: Bool, safe: Bool) -> Bool:
+    """uint8 bilinear, ch 1 or 3. ch 3: one 8-byte gather per source row and pixel holds both columns of all three
+    channels (4 gathers of 8 lanes per WF pixels, 12 before); ch 1: two 4-byte gathers hold both columns. The
+    channels are interleaved with one shuffle and stored as one 4 * WF-byte write when `wide` (the 16 bytes past the
+    pixels belong to the next block or are the caller's to spare). False, nothing written, when a wide read could
+    pass the end of the source."""
+    var a = (sy.cast[DType.int]() * cols + sx.cast[DType.int]()) * ch + Int(ps)
+    if not safe and Int(a.reduce_max()) - Int(ps) + (7 if ch == 3 else 3) + cols * ch >= size:
+        return False
+    var wx0 = 1 - wx1
+    var wy0 = 1 - wy1
+    var row = SIMD[DType.int, WF](cols * ch)
+    comptime if ch == 3:
+        var res = SIMD[dt, 4 * WF](0)
+        var r0 = _words3(a)
+        var r1 = _words3(a + row)
+        comptime for k in range(3):
+            var p0 = _ab3[k](r0[0], r0[1])
+            var p1 = _ab3[k](r1[0], r1[1])
+            res = res.insert[offset = k * WF](_fin[dt, WF](wy0 * (wx0 * p0[0] + wx1 * p0[1]) + wy1 * (wx0 * p1[0] + wx1 * p1[1])))
+        if wide:
+            dst.unsafe_store(0, res.shuffle[_ilv_mask[3]()]())
+        else:
+            comptime for k in range(3):
+                (dst + k).unsafe_scatter(SIMD[DType.int32, WF](0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45), res.slice[WF, offset = k * WF]())
+    else:
+        var m = SIMD[DType.bool, WF](fill=True)
+        var w0 = gather[alignment=1](a, m, SIMD[DType.uint32, WF](0))
+        var w1 = gather[alignment=1](a + row, m, SIMD[DType.uint32, WF](0))
+        var v = wy0 * (wx0 * (w0 & 255).cast[F32]() + wx1 * ((w0 >> 8) & 255).cast[F32]()) + wy1 * (wx0 * (w1 & 255).cast[F32]() + wx1 * ((w1 >> 8) & 255).cast[F32]())
+        dst.unsafe_store(0, _fin[dt, WF](v))
+    return True
+
+
+def _lin_vec[dt: DType, ct: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: SIMD[ct, WF], fy: SIMD[ct, WF], mode: Int, bv: Scalar[dt], dst: Ptr[Scalar[dt]], wide: Bool = False, safe: Bool = False) -> Bool:
     """Bilinear samples at WF positions straight into dst (WF pixels), or bv when all of them lie outside under a
-    constant border. False, with dst untouched, when any position needs the general border path."""
+    constant border. False, with dst untouched, when any position needs the general border path. Coordinates in
+    float32 (remap: the fraction of a float32 is exact) or float64 (warp). `safe`: the caller
+    proved 0 <= x < cols - 1 and 0 <= y < rows - 2 for every lane, so none of the checks run."""
     var ffx = floor(fx)
     var ffy = floor(fy)
     var sx = ffx.cast[DType.int32]()
     var sy = ffy.cast[DType.int32]()
-    if mode == 2 and (Int(sx.reduce_max()) < -1 or Int(sx.reduce_min()) >= src.cols or Int(sy.reduce_max()) < -1 or Int(sy.reduce_min()) >= src.rows):
-        for i in range(WF * src.ch):
-            dst[unsafe_offset=i] = bv
-        return True
-    if sx.reduce_min() < 0 or sy.reduce_min() < 0 or Int(sx.reduce_max()) + 2 > src.cols or Int(sy.reduce_max()) + 2 > src.rows:
+    var bad = sx.lt(0) | sy.lt(0) | (sx + 2).gt(Int32(src.cols)) | (sy + 2).gt(Int32(src.rows))
+    if not safe and bad.reduce_or():
+        if mode == 2 and (Int(sx.reduce_max()) < -1 or Int(sx.reduce_min()) >= src.cols or Int(sy.reduce_max()) < -1 or Int(sy.reduce_min()) >= src.rows):
+            for i in range(WF * src.ch):
+                dst[unsafe_offset=i] = bv
+            return True
         return False
     var ch = src.ch
     var wx1 = (fx - ffx).cast[F32]()
     var wy1 = (fy - ffy).cast[F32]()
+    comptime if dt == DType.uint8:
+        if ch == 3:
+            if _lin_u8[dt, 3](ps, src.rows * src.cols * ch, src.cols, sx, sy, wx1, wy1, dst, wide, safe):
+                return True
+        elif ch == 1:
+            if _lin_u8[dt, 1](ps, src.rows * src.cols, src.cols, sx, sy, wx1, wy1, dst, wide, safe):
+                return True
     var wx0 = 1 - wx1
     var wy0 = 1 - wy1
     var base = (sy * Int32(src.cols) + sx) * Int32(ch)
@@ -1507,9 +1580,22 @@ def _lin_vec[dt: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: SIMD[DType.float6
     return True
 
 
+def _span(a: Float64, b: Float64, lo: Float64, hi: Float64, n: Int) -> Tuple[Int, Int]:
+    """The x in [0, n) with lo <= a * x + b < hi, one pixel narrower on each side to absorb rounding."""
+    if abs(a) < 1e-9:
+        return (0, n) if (b >= lo + 1e-6 and b < hi - 1e-6) else (0, 0)
+    var t1 = (lo - b) / a
+    var t2 = (hi - b) / a
+    if a < 0:
+        var t = t1
+        t1 = t2
+        t2 = t
+    return (max(Int(ceil(max(t1, -1.0))) + 1, 0), min(Int(floor(min(t2, Float64(n) + 1))) - 1, n))
+
+
 def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kind: Int, mode: Int, bval: Float64) -> Mat[dt]:
     """m is the inverse map (dst -> src) as a 2 x 3 matrix."""
-    var o = Mat[dt](dh, dw, src.ch)
+    var o = Mat[dt](dh, dw, src.ch, False)
     var pm = ptr_of(m)
     var po = o.ptr()
     var ps = src.ptr()
@@ -1522,10 +1608,17 @@ def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kin
             iota[j] = Float64(j)
         var bx = pm[unsafe_offset=1] * Float64(y) + pm[unsafe_offset=2]
         var by = pm[unsafe_offset=4] * Float64(y) + pm[unsafe_offset=5]
+        var xlo = 0
+        var xhi = 0
+        if kind == 1:
+            var sx_ = _span(pm[unsafe_offset=0], bx, 0.0, Float64(src.cols - 1), dw)
+            var sy_ = _span(pm[unsafe_offset=3], by, 0.0, Float64(src.rows - 2), dw)
+            xlo = max(sx_[0], sy_[0])
+            xhi = min(sx_[1], sy_[1])
         while x < dw:
             if kind == 1 and x + WF <= dw:
                 var xv = iota + Float64(x)
-                if _lin_vec(src, ps, pm[unsafe_offset=0] * xv + bx, pm[unsafe_offset=3] * xv + by, mode, bv, po + (y * dw + x) * src.ch):
+                if _lin_vec(src, ps, pm[unsafe_offset=0] * xv + bx, pm[unsafe_offset=3] * xv + by, mode, bv, po + (y * dw + x) * src.ch, x + WF + 6 <= dw, x >= xlo and x + WF <= xhi):
                     x += WF
                     continue
             var fx = pm[unsafe_offset=0] * Float64(x) + bx
@@ -1533,13 +1626,20 @@ def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kin
             sample(src, ps, fx, fy, kind, mode, bv, po + (y * dw + x) * src.ch)
             x += 1
 
-    par(row, dh)
+    comptime NT = 8
+
+    def band(t: Int) {imm}:
+        for b in range(t, (dh + 7) // 8, NT):
+            for y in range(b * 8, min(b * 8 + 8, dh)):
+                row(y)
+
+    par(band, NT)
     _ = len(m)
     return o^
 
 
 def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: Int, bval: Float64) -> Mat[dt]:
-    var o = Mat[dt](mx.rows, mx.cols, src.ch)
+    var o = Mat[dt](mx.rows, mx.cols, src.ch, False)
     var po = o.ptr()
     var ps = src.ptr()
     var bv = Scalar[dt](bval)
@@ -1551,13 +1651,20 @@ def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: 
         while x < mx.cols:
             var i = y * mx.cols + x
             if kind == 1 and x + WF <= mx.cols:
-                if _lin_vec(src, ps, pmx.unsafe_load[width=WF](i).cast[DType.float64](), pmy.unsafe_load[width=WF](i).cast[DType.float64](), mode, bv, po + i * src.ch):
+                if _lin_vec(src, ps, pmx.unsafe_load[width=WF](i), pmy.unsafe_load[width=WF](i), mode, bv, po + i * src.ch, x + WF + 6 <= mx.cols):
                     x += WF
                     continue
             sample(src, ps, Float64(pmx[unsafe_offset=i]), Float64(pmy[unsafe_offset=i]), kind, mode, bv, po + i * src.ch)
             x += 1
 
-    par(row, mx.rows)
+    comptime NT = 8
+
+    def band(t: Int) {imm}:
+        for b in range(t, (mx.rows + 7) // 8, NT):
+            for y in range(b * 8, min(b * 8 + 8, mx.rows)):
+                row(y)
+
+    par(band, NT)
     _ = (mx.rows, my.rows)
     return o^
 
