@@ -45,3 +45,13 @@ aruco_none       aruco_detect st_l => exact, exact
 fproj_zero_rot   fisheye_projectPoints obj3 rv0 tv K dfe => max:1e-9
 frectmap_small   fisheye_initUndistortRectifyMap K dfe Rr K w=32 h=24 => max:0.001, max:0.001
 pnp_ransac_pl    solvePnPRansac pnp_obj_pl2 pnp_img_pl_out K d4 thresh=2 => max:1e-5, max:1e-5, exact
+pnp_epnp_four    solvePnP pnp_four pnp_four_img K d4 epnp=1 => max:1e-6, max:1e-6
+pnp_epnp_noise   solvePnP pnp_obj pnp_img_noise K d4 => max:1e-6, max:1e-6
+ess_five_minimal findEssentialMat ess_six1 ess_six2 K thresh=0.01 => max:1e-5, exact
+ess_five_clean   findEssentialMat ess_clean1 ess_clean2 K thresh=0.01 => max:1e-6, exact
+# Exactly five matches: ten algebraic roots, six real essential matrices, four complex roots excluded.
+ess_five_roots   findEssentialMat ess_five1 ess_five2 K thresh=0.01 => max:1e-6, exact
+rect_alpha0      stereoRectify K dst1 K2 dst2 Rst Tst w=640 h=480 alpha=0 => max:1e-9, max:1e-9, max:1e-3, max:1e-3, max:1e-3
+rect_alpha1      stereoRectify K dst1 K2 dst2 Rst Tst w=640 h=480 alpha=1 => max:1e-9, max:1e-9, max:1e-3, max:1e-3, max:1e-3
+rect_vertical    stereoRectify K dst1 K2 dst2 Rst Tstv w=640 h=480 zero=0 => max:1e-9, max:1e-9, max:1e-3, max:1e-3, max:1e-3
+rect_vertical_a  stereoRectify K dst1 K2 dst2 Rst Tstv w=640 h=480 zero=0 alpha=0.5 => max:1e-9, max:1e-9, max:1e-3, max:1e-3, max:1e-3

@@ -41,12 +41,13 @@ ArUco ids; within 1 grey level are resize, warp, remap, blob, YCrCb, HSV to BGR;
 - **Gray weights**: cv2 5.0 computes 8-bit gray with 15-bit weights (3735, 19235, 9798), not the older 14-bit ones; fitted
   on all 16.7M colours.
 - **Warps and remaps** interpolate at the exact float position in cv2 5.0 (no 1/32 tables); so do we.
-- **findEssentialMat** draws eight-point models (MSAC cost) where cv2 draws five-point sets; on consistent data both give
-  the same E. E is returned with unit Frobenius norm and the largest entry positive (cv2's is normalised the same way
-  by the oracle). Noisy data agree only loosely (row `ess_noisy`).
-- **solvePnP**: homography (coplanar) or 3x4 DLT start, then Levenberg-Marquardt on the pixel error with distortion.
-  No EPnP. RANSAC samples 6 points (4 coplanar), 100 iterations, adaptive.
-- **stereoRectify**: default alpha (-1) and horizontal baseline only; cv2 5.0 averages the two focal lengths.
+- **findEssentialMat** draws five-point models, solves the essential cubic constraints using a 10x10 action
+  matrix, and scores all real solutions by MSAC. This uses an action-matrix root solve rather than Nister's
+  particular degree-ten polynomial elimination. Noisy data retain the existing loose row `ess_noisy`.
+- **solvePnP**: EPnP control points with Gauss-Newton distance refinement, then damped Gauss-Newton on pixel error.
+  RANSAC samples four points, 100 iterations, adaptive. See `docs/f34.md`.
+- **stereoRectify**: horizontal and vertical baselines, alpha -1 (default) or [0, 1]; nine-point-per-edge
+  bounds interpolate between valid-pixel cropping and complete-image retention.
 - **StereoSGBM**: own SGM (Birchfield-Tomasi cost, box window, eight paths, parabola refinement, left-right and
   uniqueness checks), not cv2's pre-filtered 5-path pipeline: 94 to 95 percent of pixels agree within one disparity.
 - **findChessboardCorners**: set of corners matches; order is "cols axis right, rows axis down", cv2 sometimes starts
@@ -59,8 +60,7 @@ ArUco ids; within 1 grey level are resize, warp, remap, blob, YCrCb, HSV to BGR;
 ## Not implemented
 
 cvtColor Lab/Luv/YUV, resize INTER_AREA, threshold triangle, Harris in goodFeaturesToTrack, findContours hierarchy
-(tree/ccomp), thick lines (> 1 px) and thick rectangles, anisotropic or even erode kernels, vertical stereo rectify,
-stereoRectify alpha in [0, 1], GPU kernels (every op is CPU; `gpu-wait` was not needed).
+(tree/ccomp), thick lines (> 1 px) and thick rectangles, anisotropic or even erode kernels, GPU kernels (every op is CPU; `gpu-wait` was not needed).
 
 ## Speed
 

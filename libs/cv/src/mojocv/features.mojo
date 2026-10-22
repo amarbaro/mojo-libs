@@ -3,7 +3,8 @@ from std.bit import pop_count
 from mojocv.mat import Mat, load, save
 from std.math import floor, pow, cos, sin, sqrt
 from mojocv.core import Args, par
-from mojocv.imgproc import resize, gaussian_blur, rint
+from mojocv.imgproc import resize, gaussian_blur, rint, Ptr
+from std.sys.info import simd_width_of
 
 
 def hamming(a: Mat[DType.uint8], ia: Int, b: Mat[DType.uint8], ib: Int) -> Int:
@@ -127,6 +128,29 @@ def fast_score(img: Mat[DType.uint8], y: Int, x: Int, t: Int) -> Int:
     return best - 1 if best - 1 >= t else 0
 
 
+def fast_vec[W: Int](ps: Ptr[UInt8], i: Int, stride: Int, t: Int) -> SIMD[DType.int32, W]:
+    """fast_score for the W pixels starting at ps[i]: per lane the best of the 16 nine-pixel arcs, all of them
+    above (or below) the centre by more than t, found as max over arcs of the arc minimum of the 16 circle diffs."""
+    comptime dxs = SIMD[DType.int32, 16](0, 1, 2, 3, 3, 3, 2, 1, 0, -1, -2, -3, -3, -3, -2, -1)
+    comptime dys = SIMD[DType.int32, 16](3, 3, 2, 1, 0, -1, -2, -3, -3, -3, -2, -1, 0, 1, 2, 3)
+    comptime V = SIMD[DType.int16, W]
+    var c = ps.unsafe_load[width=W](i).cast[DType.int16]()
+    var up = V(-32768)
+    var dn = V(32767)
+    comptime for k in range(16):
+        var lo = V(32767)
+        var hi = V(-32768)
+        comptime for j in range(9):
+            comptime q = (k + j) % 16
+            var v = ps.unsafe_load[width=W](i + Int(dys[q]) * stride + Int(dxs[q])).cast[DType.int16]() - c
+            lo = min(lo, v)
+            hi = max(hi, v)
+        up = max(up, lo)
+        dn = min(dn, hi)
+    var best = max(up, -dn).cast[DType.int32]()
+    return (best.ge(Int32(t + 1))).select(best - 1, SIMD[DType.int32, W](0))
+
+
 struct KP(Copyable, Movable):
     var x: Int
     var y: Int
@@ -201,27 +225,40 @@ def orb_detect(img: Mat[DType.uint8], nfeatures: Int, fast_t: Int) raises -> Mat
         var cols = im.cols
         var sc = Mat[DType.int32](rows, cols, 1)
         var psc = sc.ptr()
+        var pim = im.ptr()
+        comptime FW = simd_width_of[DType.int16]()
 
         def score_row(y: Int) {imm}:
             if y < 3 or y >= rows - 3:
                 return
-            for x in range(3, cols - 3):
-                psc[unsafe_offset=y * cols + x] = Int32(fast_score(im, y, x, fast_t))
+            var x = 3
+            while x + FW <= cols - 3:
+                psc.unsafe_store(y * cols + x, fast_vec[FW](pim, y * cols + x, cols, fast_t))
+                x += FW
+            for xx in range(x, cols - 3):
+                psc[unsafe_offset=y * cols + xx] = Int32(fast_score(im, y, xx, fast_t))
 
-        par(score_row, rows, 16)
+        par(score_row, rows)
         _ = sc.rows
+        comptime WI = simd_width_of[DType.int32]()
         for y in range(3, rows - 3):
-            for x in range(3, cols - 3):
-                var s = sc.at(y, x)
-                if s == 0:
+            var x = 3
+            while x < cols - 3:
+                if x + WI <= cols - 3 and not psc.unsafe_load[width=WI](y * cols + x).ne(0).reduce_or():
+                    x += WI
                     continue
-                var peak = True
-                for ddy in range(-1, 2):
-                    for ddx in range(-1, 2):
-                        if (ddy != 0 or ddx != 0) and sc.at(y + ddy, x + ddx) >= s:
-                            peak = False
-                if peak and x >= edge and x < cols - edge and y >= edge and y < rows - edge:
-                    cand.append(KP(x, y, Float32(s)))
+                for xx in range(x, min(x + WI, cols - 3)):
+                    var s = psc[unsafe_offset=y * cols + xx]
+                    if s == 0:
+                        continue
+                    var peak = True
+                    for ddy in range(-1, 2):
+                        for ddx in range(-1, 2):
+                            if (ddy != 0 or ddx != 0) and psc[unsafe_offset=(y + ddy) * cols + xx + ddx] >= s:
+                                peak = False
+                    if peak and xx >= edge and xx < cols - edge and y >= edge and y < rows - edge:
+                        cand.append(KP(xx, y, Float32(s)))
+                x += WI
         retain_best(cand, 2 * counts[l])
         for i in range(len(cand)):
             var x0 = cand[i].x

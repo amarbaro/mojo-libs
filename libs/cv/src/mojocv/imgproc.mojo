@@ -2,7 +2,7 @@
 # padded copy of the source, so every inner loop is a plain contiguous SIMD loop over the flattened row
 # (pixel i of channel c sits at i * ch + c, so a horizontal tap at dx is a load at offset dx * ch).
 from std.sys.info import simd_width_of
-from std.math import sqrt, exp, floor, cos, sin, atan2
+from std.math import sqrt, exp, floor, ceil, cos, sin, atan2, cbrt
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args, DTS, peek_code, par
 from std.math import log as log_
@@ -85,42 +85,83 @@ def _tap[sd: DType, w: Int](p: Ptr[Scalar[sd]], k: Ptr[Float32], nk: Int, at: In
     return s
 
 
+def _hrow_f[sd: DType](s: Ptr[Scalar[sd]], d: Ptr[Float32], k: Ptr[Float32], nk: Int, cols: Int, ch: Int, mode: Int):
+    """d[i] = sum_t k[t] * s[i + (t - nk // 2) * ch], one row; SIMD interior, scalar edges mapped through bidx."""
+    var n = cols * ch
+    var ex = nk // 2
+    var e = ex * ch
+    var i = e
+    while i + WF <= n - e:
+        d.unsafe_store(i, _tap[sd, WF](s, k, nk, i - e, ch))
+        i += WF
+    for side in range(2):
+        for ii in range(0 if side == 0 else max(i, e), min(e, n) if side == 0 else n):
+            var acc = Float32(0)
+            for t in range(nk):
+                var px = bidx(ii // ch + t - ex, cols, mode)
+                if px >= 0:
+                    acc += k[t] * Float32(s[unsafe_offset=px * ch + ii % ch])
+            d[unsafe_offset=ii] = acc
+
+
 def sepfilter[sd: DType, od: DType](src: Mat[sd], kx: List[Float32], ky: List[Float32], mode: Int = 0) -> Mat[od]:
-    """Correlate with the column kernel ky and row kernel kx. Saturates and rounds like cv2 when od is integral."""
+    """Correlate with the column kernel ky and row kernel kx. Saturates and rounds like cv2 when od is integral.
+    Each worker filters bands of 8 rows: the row pass of the rows a band needs lands in a small scratch that stays
+    in cache, then the column pass reads it; the source is read in place, edges go through bidx."""
     var nx = len(kx)
     var ny = len(ky)
-    var p = pad(src, ny // 2, nx // 2, mode)
-    var tmp = Mat[F32](p.rows, src.cols, src.ch)
-    var o = Mat[od](src.rows, src.cols, src.ch)
+    var o = Mat[od](src.rows, src.cols, src.ch, False)
     var n = src.cols * src.ch
-    var ch = src.ch
-    var pp = p.ptr()
-    var pt = tmp.ptr()
+    var rows = src.rows
+    var ps = src.ptr()
     var po = o.ptr()
     var pkx = ptr_of(kx)
     var pky = ptr_of(ky)
-    var pstride = p.cols * ch
+    comptime B = 32
+    comptime NT = 8
 
-    def hrow(r: Int) {imm}:
-        var i = 0
-        while i + WF <= n:
-            pt.unsafe_store(r * n + i, _tap[sd, WF](pp, pkx, nx, r * pstride + i, ch))
-            i += WF
-        for j in range(i, n):
-            pt.unsafe_store(r * n + j, _tap[sd, 1](pp, pkx, nx, r * pstride + j, ch))
+    def task(t: Int) {imm}:
+        var scratch = List[Float32](unsafe_uninit_length=min(rows, B + ny - 1) * n)
+        var sc = ptr_of(scratch)
+        var offs = List[Int](length=ny, fill=0)
+        var po_ = ptr_of(offs)
+        var y = rows * t // NT
+        var y_end = rows * (t + 1) // NT
+        while y < y_end:
+            var ye = min(y + B, y_end)
+            var lo = rows
+            var hi = -1
+            for yy in range(y, ye):
+                for q in range(ny):
+                    var r = bidx(yy + q - ny // 2, rows, mode)
+                    if r >= 0:
+                        lo = min(lo, r)
+                        hi = max(hi, r)
+            for r in range(lo, hi + 1):
+                _hrow_f[sd](ps + r * src.cols * src.ch, sc + (r - lo) * n, pkx, nx, src.cols, src.ch, mode)
+            for yy in range(y, ye):
+                for q in range(ny):
+                    var r = bidx(yy + q - ny // 2, rows, mode)
+                    po_[unsafe_offset=q] = (r - lo) * n if r >= 0 else -1
+                var i = 0
+                while i + WF <= n:
+                    var acc = SIMD[F32, WF](0)
+                    for q in range(ny):
+                        if po_[unsafe_offset=q] >= 0:
+                            acc += sc.unsafe_load[width=WF](po_[unsafe_offset=q] + i) * pky[q]
+                    po.unsafe_store(yy * n + i, _fin[od, WF](acc))
+                    i += WF
+                for j in range(i, n):
+                    var acc = Float32(0)
+                    for q in range(ny):
+                        if po_[unsafe_offset=q] >= 0:
+                            acc += sc[unsafe_offset=po_[unsafe_offset=q] + j] * pky[q]
+                    po.unsafe_store(yy * n + j, _fin[od, 1](SIMD[F32, 1](acc)))
+            y = ye
+        _ = (len(scratch), len(offs))
 
-    par(hrow, p.rows)
-
-    def vrow(r: Int) {imm}:
-        var i = 0
-        while i + WF <= n:
-            po.unsafe_store(r * n + i, _fin[od, WF](_tap[F32, WF](pt, pky, ny, r * n + i, n)))
-            i += WF
-        for j in range(i, n):
-            po.unsafe_store(r * n + j, _fin[od, 1](_tap[F32, 1](pt, pky, ny, r * n + j, n)))
-
-    par(vrow, src.rows)
-    _ = (p.rows, tmp.rows)
+    par(task, NT)
+    _ = (nx, ny)
     return o^
 
 
@@ -194,43 +235,54 @@ def sobel[sd: DType, od: DType](src: Mat[sd], dx: Int, dy: Int, ksize: Int, scal
 
 
 def pyr_down[dt: DType](src: Mat[dt]) -> Mat[dt]:
-    """5-tap binomial blur (reflect101), then every second row and column; output ceil(n / 2)."""
+    """5-tap binomial blur (reflect101), then every second row and column; output ceil(n / 2). Per output row the
+    column pass runs on contiguous SIMD lanes into one cached row, then the row pass reads every second pixel."""
     var oc = (src.cols + 1) // 2
     var orow = (src.rows + 1) // 2
     var ch = src.ch
-    var p = pad(src, 2, 2)
-    var pp = p.ptr()
-    var tmp = Mat[F32](p.rows, oc, ch)
-    var pt = tmp.ptr()
-    var o = Mat[dt](orow, oc, ch)
+    var n = src.cols * ch
+    var o = Mat[dt](orow, oc, ch, False)
+    var ps = src.ptr()
     var po = o.ptr()
-    comptime kk = SIMD[F32, 8](1, 4, 6, 4, 1, 0, 0, 0)
+    comptime NT = 8
 
-    def hrow(r: Int) {imm}:
-        for c in range(oc):
-            for k in range(ch):
-                var base = (r * p.cols + 2 * c) * ch + k
-                var s = Float32(0)
-                comptime for t in range(5):
-                    s += kk[t] * Float32(pp[unsafe_offset=base + t * ch])
-                pt[unsafe_offset=(r * oc + c) * ch + k] = s
+    def task(t: Int) {imm}:
+        var vrow = List[Float32](unsafe_uninit_length=n)
+        var v = ptr_of(vrow)
+        for r in range(orow * t // NT, orow * (t + 1) // NT):
+            var p0 = ps + bidx(2 * r - 2, src.rows, 0) * n
+            var p1 = ps + bidx(2 * r - 1, src.rows, 0) * n
+            var p2 = ps + (2 * r) * n
+            var p3 = ps + bidx(2 * r + 1, src.rows, 0) * n
+            var p4 = ps + bidx(2 * r + 2, src.rows, 0) * n
+            var i = 0
+            while i + WF <= n:
+                var s = _ld[dt, WF](p0, i) + _ld[dt, WF](p1, i) * 4 + _ld[dt, WF](p2, i) * 6 + _ld[dt, WF](p3, i) * 4 + _ld[dt, WF](p4, i)
+                v.unsafe_store(i, s)
+                i += WF
+            for j in range(i, n):
+                v[unsafe_offset=j] = Float32(p0[unsafe_offset=j]) + Float32(p1[unsafe_offset=j]) * 4 + Float32(p2[unsafe_offset=j]) * 6 + Float32(p3[unsafe_offset=j]) * 4 + Float32(p4[unsafe_offset=j])
+            var hi = max((src.cols - 3) // 2, 0)  # columns 1..hi need no reflection
+            for c in range(oc):
+                var c0 = (2 * c - 2) * ch
+                var c1 = (2 * c - 1) * ch
+                var c3 = (2 * c + 1) * ch
+                var c4 = (2 * c + 2) * ch
+                if c < 1 or c > hi:
+                    c0 = bidx(2 * c - 2, src.cols, 0) * ch
+                    c1 = bidx(2 * c - 1, src.cols, 0) * ch
+                    c3 = bidx(2 * c + 1, src.cols, 0) * ch
+                    c4 = bidx(2 * c + 2, src.cols, 0) * ch
+                for k in range(ch):
+                    var s = v[unsafe_offset=c0 + k] + v[unsafe_offset=c1 + k] * 4 + v[unsafe_offset=2 * c * ch + k] * 6 + v[unsafe_offset=c3 + k] * 4 + v[unsafe_offset=c4 + k]
+                    comptime if dt.is_integral():
+                        s = floor(s / 256 + 0.5)
+                    else:
+                        s = s / 256
+                    po.unsafe_store(r * oc * ch + c * ch + k, _fin[dt, 1](SIMD[F32, 1](s)))
+        _ = len(vrow)
 
-    par(hrow, p.rows)
-    var n = oc * ch
-
-    def vrow(r: Int) {imm}:
-        for i in range(n):
-            var s = Float32(0)
-            comptime for t in range(5):
-                s += kk[t] * pt[unsafe_offset=(2 * r + t) * n + i]
-            comptime if dt.is_integral():
-                s = floor(s / 256 + 0.5)
-            else:
-                s = s / 256
-            po.unsafe_store(r * n + i, _fin[dt, 1](SIMD[F32, 1](s)))
-
-    par(vrow, orow)
-    _ = (p.rows, tmp.rows)
+    par(task, NT)
     return o^
 
 
@@ -266,6 +318,52 @@ def otsu[dt: DType](m: Mat[dt]) -> Int:
     return val
 
 
+def triangle[dt: DType](m: Mat[dt]) -> Int:
+    """The threshold cv2 picks for THRESH_TRIANGLE: the histogram point farthest from the line between its peak and
+    the far end of the longer tail (cv2 compares a * i + b * h[i], dropping the constant factors)."""
+    var h = List[Int](length=256, fill=0)
+    for v in m.data:
+        h[Int(v)] += 1
+    var left = 0
+    var right = 0
+    var peak = 0
+    var top = 0
+    for i in range(256):
+        if h[i] > 0:
+            left = i
+            break
+    if left > 0:
+        left -= 1
+    for i in range(255, 0, -1):
+        if h[i] > 0:
+            right = i
+            break
+    if right < 255:
+        right += 1
+    for i in range(256):
+        if h[i] > top:
+            top = h[i]
+            peak = i
+    var flipped = False
+    if peak - left < right - peak:
+        flipped = True
+        for i in range(128):
+            var t = h[i]
+            h[i] = h[255 - i]
+            h[255 - i] = t
+        left = 255 - right
+        peak = 255 - peak
+    var thresh = left
+    var dist = 0
+    for i in range(left + 1, peak + 1):
+        var d = top * i + (left - peak) * h[i]
+        if d > dist:
+            dist = d
+            thresh = i
+    thresh -= 1
+    return 255 - thresh if flipped else thresh
+
+
 def threshold[dt: DType](src: Mat[dt], thresh: Float64, maxval: Float64, kind: Int) -> Mat[dt]:
     """kind: 0 binary, 1 binary_inv, 2 trunc, 3 tozero, 4 tozero_inv (cv2 THRESH_*)."""
     var o = Mat[dt](src.rows, src.cols, src.ch)
@@ -281,10 +379,10 @@ def threshold[dt: DType](src: Mat[dt], thresh: Float64, maxval: Float64, kind: I
     var po = o.ptr()
 
     def row(r: Int) {imm}:
+        var base = r * n
         var i = 0
-        while i < n:
-            var w = W if i + W <= n else 1
-            var x = pa.unsafe_load[width=W](r * n + i) if w == W else SIMD[dt, W](pa[unsafe_offset=r * n + i])
+        while i + W <= n:
+            var x = pa.unsafe_load[width=W](base + i)
             var gt = x.gt(th)
             var z = SIMD[dt, W](0)
             var v: SIMD[dt, W]
@@ -298,11 +396,23 @@ def threshold[dt: DType](src: Mat[dt], thresh: Float64, maxval: Float64, kind: I
                 v = gt.select(x, z)
             else:
                 v = gt.select(z, x)
-            if w == W:
-                po.unsafe_store(r * n + i, v)
+            po.unsafe_store(base + i, v)
+            i += W
+        for j in range(i, n):
+            var x = pa[unsafe_offset=base + j]
+            var gt = x > th
+            var v: Scalar[dt]
+            if kind == 0:
+                v = mx if gt else Scalar[dt](0)
+            elif kind == 1:
+                v = Scalar[dt](0) if gt else mx
+            elif kind == 2:
+                v = th if gt else x
+            elif kind == 3:
+                v = x if gt else Scalar[dt](0)
             else:
-                po[unsafe_offset=r * n + i] = v[0]
-            i += w
+                v = Scalar[dt](0) if gt else x
+            po[unsafe_offset=base + j] = v
 
     par(row, src.rows)
     return o^
@@ -314,30 +424,41 @@ def threshold[dt: DType](src: Mat[dt], thresh: Float64, maxval: Float64, kind: I
 def integral[sd: DType, od: DType](src: Mat[sd]) -> Mat[od]:
     """(rows + 1) x (cols + 1) summed-area table, zero first row and column, per channel."""
     var ch = src.ch
-    var o = Mat[od](src.rows + 1, src.cols + 1, ch)
+    var o = Mat[od](src.rows + 1, src.cols + 1, ch, False)
     var pa = src.ptr()
     var po = o.ptr()
     var stride = o.cols * ch
+    # zero first row and first column (rest is overwritten)
+    for i in range(stride):
+        po[unsafe_offset=i] = Scalar[od](0)
+    for r in range(o.rows):
+        for k in range(ch):
+            po[unsafe_offset=r * stride + k] = Scalar[od](0)
 
     def hrow(r: Int) {imm}:
         for k in range(ch):
             var acc = Scalar[od](0)
+            var psrc = pa + (r * src.cols) * ch + k
+            var pdst = po + (r + 1) * stride + ch + k
             for c in range(src.cols):
-                acc += Scalar[od](pa[unsafe_offset=(r * src.cols + c) * ch + k])
-                po[unsafe_offset=(r + 1) * stride + (c + 1) * ch + k] = acc
+                acc += Scalar[od](psrc[unsafe_offset=c * ch])
+                pdst[unsafe_offset=c * ch] = acc
 
     par(hrow, src.rows)
-    var chunk = 256
-    var nchunk = (stride + chunk - 1) // chunk
 
-    def vcol(t: Int) {imm}:
-        for i in range(t * chunk, min((t + 1) * chunk, stride)):
-            var acc = Scalar[od](0)
-            for r in range(1, o.rows):
-                acc += po[unsafe_offset=r * stride + i]
-                po[unsafe_offset=r * stride + i] = acc
+    comptime W = simd_width_of[od]()
+    for r in range(1, o.rows):
+        var base = r * stride
+        var prev = (r - 1) * stride
+        var i = 0
+        while i + W <= stride:
+            var cur = po.unsafe_load[width=W](base + i)
+            var pr = po.unsafe_load[width=W](prev + i)
+            po.unsafe_store(base + i, cur + pr)
+            i += W
+        for j in range(i, stride):
+            po[unsafe_offset=base + j] += po[unsafe_offset=prev + j]
 
-    par(vcol, nchunk)
     return o^
 
 
@@ -373,65 +494,103 @@ def strel(shape: Int, k: Int) -> List[Int]:
     return out^
 
 
+@always_inline
+def _rect_hrow[is_min: Bool, dt: DType](s: Ptr[Scalar[dt]], d: Ptr[Scalar[dt]], n: Int, ch: Int, r: Int):
+    """d[i] = min (max) of s[i + dx * ch] for dx in -r..r; taps outside the row are skipped (the identity is neutral)."""
+    comptime W = simd_width_of[dt]()
+    comptime ident = Scalar[dt].MAX if is_min else Scalar[dt].MIN
+    var e = r * ch
+    var i = e
+    while i + W <= n - e:
+        var acc = s.unsafe_load[width=W](i - e)
+        for dx in range(-r + 1, r + 1):
+            var v = s.unsafe_load[width=W](i + dx * ch)
+            comptime if is_min:
+                acc = min(acc, v)
+            else:
+                acc = max(acc, v)
+        d.unsafe_store(i, acc)
+        i += W
+    for side in range(2):
+        for ii in range(0 if side == 0 else max(i, e), min(e, n) if side == 0 else n):
+            var acc = ident
+            for dx in range(-r, r + 1):
+                var j = ii + dx * ch
+                if j >= 0 and j < n:
+                    var v = s[unsafe_offset=j]
+                    comptime if is_min:
+                        if v < acc:
+                            acc = v
+                    else:
+                        if v > acc:
+                            acc = v
+            d[unsafe_offset=ii] = acc
+
+
 def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int) -> Mat[dt]:
     """erode (is_min) or dilate with a k x k structuring element, borders ignored as cv2 does."""
     var runs = strel(shape, k)
-    var r = k // 2
+    var iters2 = iters
+    var kk = k
+    if shape == 0 and iters2 > 1:
+        # iterating a rect k times equals one pass of (k - 1) * iters + 1
+        kk = (k - 1) * iters2 + 1
+        iters2 = 1
+    var r = kk // 2
     var ch = src.ch
     comptime W = simd_width_of[dt]()
     comptime ident = Scalar[dt].MAX if is_min else Scalar[dt].MIN
     var cur = Mat[dt](0, 0)
     var n = src.cols * ch
-    for it in range(iters):
-        var p = pad(src, r, r, 2, ident) if it == 0 else pad(cur, r, r, 2, ident)
-        var pp = p.ptr()
-        var o = Mat[dt](src.rows, src.cols, ch)
+    for it in range(iters2):
+        var o = Mat[dt](src.rows, src.cols, ch, False)
         var po = o.ptr()
-        var pstride = p.cols * ch
         if shape == 0:
-            # a rectangle is separable: min over the row window, then over the column window
-            var tmp = Mat[dt](p.rows, src.cols, ch)
+            # a rectangle is separable: min over the row window, then over the column window; the source is
+            # read in place and only the r edge columns and rows are clipped
+            var tmp = Mat[dt](src.rows, src.cols, ch, False)
             var pt = tmp.ptr()
+            var ps = src.ptr() if it == 0 else cur.ptr()
 
-            def hrow(y: Int) {imm}:
-                var i = 0
-                while i < n:
-                    var w = W if i + W <= n else 1
-                    var acc = SIMD[dt, W](ident)
-                    for dx in range(-r, r + 1):
-                        var v = pp.unsafe_load[width=W](y * pstride + r * ch + i + dx * ch) if w == W else SIMD[dt, W](pp[unsafe_offset=y * pstride + r * ch + i + dx * ch])
-                        comptime if is_min:
-                            acc = min(acc, v)
-                        else:
-                            acc = max(acc, v)
-                    if w == W:
-                        pt.unsafe_store(y * n + i, acc)
-                    else:
-                        pt[unsafe_offset=y * n + i] = acc[0]
-                    i += w
+            def hband(b: Int) {imm}:
+                for y in range(b * 8, min(b * 8 + 8, src.rows)):
+                    _rect_hrow[is_min, dt](ps + y * n, pt + y * n, n, ch, r)
 
-            par(hrow, p.rows)
+            par(hband, (src.rows + 7) // 8)
 
-            def vrow(y: Int) {imm}:
-                var i = 0
-                while i < n:
-                    var w = W if i + W <= n else 1
-                    var acc = SIMD[dt, W](ident)
-                    for dy in range(0, 2 * r + 1):
-                        var v = pt.unsafe_load[width=W]((y + dy) * n + i) if w == W else SIMD[dt, W](pt[unsafe_offset=(y + dy) * n + i])
-                        comptime if is_min:
-                            acc = min(acc, v)
-                        else:
-                            acc = max(acc, v)
-                    if w == W:
+            def vband(b: Int) {imm}:
+                for y in range(b * 8, min(b * 8 + 8, src.rows)):
+                    var y0 = max(y - r, 0)
+                    var y1 = min(y + r, src.rows - 1)
+                    var i = 0
+                    while i + W <= n:
+                        var acc = pt.unsafe_load[width=W](y0 * n + i)
+                        for yy in range(y0 + 1, y1 + 1):
+                            var v = pt.unsafe_load[width=W](yy * n + i)
+                            comptime if is_min:
+                                acc = min(acc, v)
+                            else:
+                                acc = max(acc, v)
                         po.unsafe_store(y * n + i, acc)
-                    else:
-                        po[unsafe_offset=y * n + i] = acc[0]
-                    i += w
+                        i += W
+                    for ii in range(i, n):
+                        var acc = pt[unsafe_offset=y0 * n + ii]
+                        for yy in range(y0 + 1, y1 + 1):
+                            var v = pt[unsafe_offset=yy * n + ii]
+                            comptime if is_min:
+                                if v < acc:
+                                    acc = v
+                            else:
+                                if v > acc:
+                                    acc = v
+                        po[unsafe_offset=y * n + ii] = acc
 
-            par(vrow, src.rows)
-            _ = (p.rows, tmp.rows)
+            par(vband, (src.rows + 7) // 8)
+            _ = (tmp.rows, cur.rows)
         else:
+            var p = pad(src, r, r, 2, ident) if it == 0 else pad(cur, r, r, 2, ident)
+            var pp = p.ptr()
+            var pstride = p.cols * ch
             var pr = ptr_of(runs)
             var nr = len(runs) // 3
 
@@ -463,7 +622,7 @@ def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int)
 # ---- cvtColor ---------------------------------------------------------------------------------------------
 
 def cvt_code(name: String) raises -> Int:
-    var names: List[String] = ["bgr2gray", "rgb2gray", "gray2bgr", "bgr2rgb", "bgr2hsv", "hsv2bgr", "bgr2ycrcb", "ycrcb2bgr"]
+    var names: List[String] = ["bgr2gray", "rgb2gray", "gray2bgr", "bgr2rgb", "bgr2hsv", "hsv2bgr", "bgr2ycrcb", "ycrcb2bgr", "bgr2lab", "lab2bgr", "bgr2luv", "luv2bgr"]
     for i in range(len(names)):
         if names[i] == name:
             return i
@@ -474,8 +633,180 @@ def _sat8(v: Float32) -> UInt8:
     return UInt8(min(max(floor(v + 0.5), 0), 255))
 
 
+def _srgb_gamma(v: Float32) -> Float32:
+    return v / 12.92 if v <= 0.04045 else Float32(((Float64(v) + 0.055) / 1.055) ** 2.4)
+
+
+def _srgb_ungamma(v: Float32) -> Float32:
+    return 12.92 * v if v <= 0.0031308 else Float32(1.055 * Float64(v) ** (1.0 / 2.4) - 0.055)
+
+
+comptime LUT_N = 4096
+
+
+def _lut[w: Int](p: Ptr[Float32], v: SIMD[F32, w]) -> SIMD[F32, w]:
+    """Linear interpolation in a LUT_N + 1 entry table over [0, 1]."""
+    var t = min(max(v, 0.0), 1.0) * Float32(LUT_N)
+    var i = min(floor(t).cast[DType.int32](), Int32(LUT_N - 1))
+    var f = t - i.cast[F32]()
+    var lo = p.unsafe_gather(i)
+    return lo + (p.unsafe_gather(i + 1) - lo) * f
+
+
+def _lab_luv_vec[dt: DType, w: Int, luv: Bool, inverse: Bool](ps: Ptr[Scalar[dt]], po: Ptr[Scalar[dt]], gam8: Ptr[Float32], gam: Ptr[Float32], cbrt_t: Ptr[Float32], ungam: Ptr[Float32]):
+    """BGR <-> Lab / Luv for w pixels (3 interleaved channels each) at ps, written to po."""
+    comptime is8 = dt == DType.uint8
+    comptime XN = Float32(0.950456)
+    comptime ZN = Float32(1.088754)
+    comptime UN = Float32(4.0 * 0.950456 / (0.950456 + 15.0 + 3.0 * 1.088754))
+    comptime VN = Float32(9.0 / (0.950456 + 15.0 + 3.0 * 1.088754))
+    comptime LT = Float32(0.008856)
+    comptime V = SIMD[F32, w]
+    comptime if not inverse:
+        var b: V
+        var g: V
+        var r: V
+        comptime if is8:
+            b = gam8.unsafe_gather(ps.strided_load[width=w](3).cast[DType.int32]())
+            g = gam8.unsafe_gather((ps + 1).strided_load[width=w](3).cast[DType.int32]())
+            r = gam8.unsafe_gather((ps + 2).strided_load[width=w](3).cast[DType.int32]())
+        else:
+            b = _lut(gam, ps.strided_load[width=w](3).cast[F32]())
+            g = _lut(gam, (ps + 1).strided_load[width=w](3).cast[F32]())
+            r = _lut(gam, (ps + 2).strided_load[width=w](3).cast[F32]())
+        var xx = 0.412453 * r + 0.357580 * g + 0.180423 * b
+        var yy = 0.212671 * r + 0.715160 * g + 0.072169 * b
+        var zz = 0.019334 * r + 0.119193 * g + 0.950227 * b
+        var fy = _lut(cbrt_t, yy)
+        var l = yy.gt(LT).select(116.0 * fy - 16.0, 903.3 * yy)
+        var c1: V
+        var c2: V
+        comptime if luv:
+            var d = Float32(52.0) / max(xx + 15.0 * yy + 3.0 * zz, V(1.1920929e-07))
+            c1 = l * (xx * d - 13.0 * UN)
+            c2 = l * (2.25 * yy * d - 13.0 * VN)
+        else:
+            c1 = 500.0 * (_lut(cbrt_t, xx / XN) - fy)
+            c2 = 200.0 * (fy - _lut(cbrt_t, zz / ZN))
+        comptime if is8:
+            var o0 = l * 2.55
+            var o1 = (c1 + 134.0) * (255.0 / 354.0) if luv else c1 + 128.0
+            var o2 = (c2 + 140.0) * (255.0 / 262.0) if luv else c2 + 128.0
+            po.strided_store[width=w](min(max(floor(o0 + 0.5), 0.0), 255.0).cast[dt](), 3)
+            (po + 1).strided_store[width=w](min(max(floor(o1 + 0.5), 0.0), 255.0).cast[dt](), 3)
+            (po + 2).strided_store[width=w](min(max(floor(o2 + 0.5), 0.0), 255.0).cast[dt](), 3)
+        else:
+            po.strided_store[width=w](l.cast[dt](), 3)
+            (po + 1).strided_store[width=w](c1.cast[dt](), 3)
+            (po + 2).strided_store[width=w](c2.cast[dt](), 3)
+    else:
+        var l = ps.strided_load[width=w](3).cast[F32]()
+        var c1 = (ps + 1).strided_load[width=w](3).cast[F32]()
+        var c2 = (ps + 2).strided_load[width=w](3).cast[F32]()
+        comptime if is8:
+            l = l * (100.0 / 255.0)
+            c1 = c1 * (354.0 / 255.0) - 134.0 if luv else c1 - 128.0
+            c2 = c2 * (262.0 / 255.0) - 140.0 if luv else c2 - 128.0
+        var xx: V
+        var yy: V
+        var zz: V
+        comptime if luv:
+            var f = (l + 16.0) * (1.0 / 116.0)
+            yy = l.gt(7.9996248).select(f * f * f, l * (1.0 / 903.3))
+            var s = 13.0 * max(l, V(1e-6))
+            var up = c1 / s + UN
+            var vp = c2 / s + VN
+            xx = l.gt(0).select(yy * 2.25 * up / vp, V(0))
+            zz = l.gt(0).select(yy * (12.0 - 3.0 * up - 20.0 * vp) / (4.0 * vp), V(0))
+        else:
+            var hi = l.gt(7.9996248)
+            var fy = hi.select((l + 16.0) * (1.0 / 116.0), 7.787 * (l * (1.0 / 903.3)) + 16.0 / 116.0)
+            yy = hi.select(fy * fy * fy, l * (1.0 / 903.3))
+            var fx = c1 * (1.0 / 500.0) + fy
+            var fz = fy - c2 * (1.0 / 200.0)
+            xx = XN * fx.le(0.20689303).select((fx - 16.0 / 116.0) * (1.0 / 7.787), fx * fx * fx)
+            zz = ZN * fz.le(0.20689303).select((fz - 16.0 / 116.0) * (1.0 / 7.787), fz * fz * fz)
+        var r = _lut(ungam, 3.240479 * xx - 1.53715 * yy - 0.498535 * zz)
+        var g = _lut(ungam, -0.969256 * xx + 1.875991 * yy + 0.041556 * zz)
+        var b = _lut(ungam, 0.055648 * xx - 0.204043 * yy + 1.057311 * zz)
+        comptime if is8:
+            po.strided_store[width=w](min(max(floor(b * 255.0 + 0.5), 0.0), 255.0).cast[dt](), 3)
+            (po + 1).strided_store[width=w](min(max(floor(g * 255.0 + 0.5), 0.0), 255.0).cast[dt](), 3)
+            (po + 2).strided_store[width=w](min(max(floor(r * 255.0 + 0.5), 0.0), 255.0).cast[dt](), 3)
+        else:
+            po.strided_store[width=w](b.cast[dt](), 3)
+            (po + 1).strided_store[width=w](g.cast[dt](), 3)
+            (po + 2).strided_store[width=w](r.cast[dt](), 3)
+
+
+def cvt_lab_luv[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
+    """BGR <-> CIE Lab / Luv (D65, sRGB gamma) with cv2's float formulas, WF pixels at a time. Gamma, cube root and
+    inverse gamma are interpolated from 4096-cell tables (8-bit input uses an exact 256-entry gamma table). 8-bit
+    images are scaled the way cv2 does (L * 255 / 100; a, b + 128; u + 134 and v + 140 stretched to 255); cv2 reaches
+    the 8-bit result through fixed-point tables, so those agree to within 1 to 2."""
+    if src.ch != 3:
+        raise Error("mojocv: cvtColor Lab/Luv wants 3 channels")
+    var o = Mat[dt](src.rows, src.cols, 3, False)
+    var ps = src.ptr()
+    var po = o.ptr()
+    var n = src.cols
+    var gam8 = List[Float32](length=256, fill=0)
+    for i in range(256):
+        gam8[i] = _srgb_gamma(Float32(i) / 255.0)
+    var gam = List[Float32](length=LUT_N + 1, fill=0)
+    var cbrt_t = List[Float32](length=LUT_N + 1, fill=0)
+    var ungam = List[Float32](length=LUT_N + 1, fill=0)
+    for i in range(LUT_N + 1):
+        var t = Float32(i) / Float32(LUT_N)
+        gam[i] = _srgb_gamma(t)
+        cbrt_t[i] = Float32(cbrt(Float64(t))) if t > 0.008856 else 7.787 * t + 16.0 / 116.0
+        ungam[i] = _srgb_ungamma(t)
+    var p8 = ptr_of(gam8)
+    var pg = ptr_of(gam)
+    var pc = ptr_of(cbrt_t)
+    var pu = ptr_of(ungam)
+    var inverse = code == 9 or code == 11
+    var luv = code == 10 or code == 11
+
+    def row(y: Int) {imm}:
+        var x = 0
+        while x < n:
+            var i = (y * n + x) * 3
+            var vec = x + WF <= n
+            # code is a runtime value: pick the comptime variant once per chunk
+            if inverse:
+                if luv:
+                    if vec:
+                        _lab_luv_vec[dt, WF, True, True](ps + i, po + i, p8, pg, pc, pu)
+                    else:
+                        _lab_luv_vec[dt, 1, True, True](ps + i, po + i, p8, pg, pc, pu)
+                else:
+                    if vec:
+                        _lab_luv_vec[dt, WF, False, True](ps + i, po + i, p8, pg, pc, pu)
+                    else:
+                        _lab_luv_vec[dt, 1, False, True](ps + i, po + i, p8, pg, pc, pu)
+            else:
+                if luv:
+                    if vec:
+                        _lab_luv_vec[dt, WF, True, False](ps + i, po + i, p8, pg, pc, pu)
+                    else:
+                        _lab_luv_vec[dt, 1, True, False](ps + i, po + i, p8, pg, pc, pu)
+                else:
+                    if vec:
+                        _lab_luv_vec[dt, WF, False, False](ps + i, po + i, p8, pg, pc, pu)
+                    else:
+                        _lab_luv_vec[dt, 1, False, False](ps + i, po + i, p8, pg, pc, pu)
+            x += WF if vec else 1
+
+    par(row, src.rows)
+    _ = (len(gam8), len(gam), len(cbrt_t), len(ungam))
+    return o^
+
+
 def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
     """code indexes CODES. 8-bit images use cv2's integer arithmetic; float images use its float formulas."""
+    if code >= 8:
+        return cvt_lab_luv(src, code)
     var oc = 1 if (code == 0 or code == 1) else 3
     var ic = 1 if code == 2 else 3
     if src.ch != ic:
@@ -486,8 +817,137 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
     var npx = src.cols
 
     def row(r: Int) {imm}:
+        comptime if dt == DType.uint8:
+            if code == 3:
+                var base = r * npx * 3
+                var qa = pa.unsafe_bitcast[UInt8]()
+                var qo = po.unsafe_bitcast[UInt8]()
+                var c = 0
+                while c + 8 < npx:
+                    var v = (qa + base + c * 3).unsafe_load[width=32]()
+                    var s = v.shuffle[2,1,0,5,4,3,8,7,6,11,10,9,14,13,12,17,16,15,20,19,18,23,22,21,24,25,26,27,28,29,30,31]()
+                    (qo + base + c * 3).unsafe_store[width=32](s)
+                    c += 8
+                for cc in range(c, npx):
+                    var i = base + cc * 3
+                    qo[i] = qa[i + 2]
+                    qo[i + 1] = qa[i + 1]
+                    qo[i + 2] = qa[i]
+                return
+        comptime if dt == DType.uint8:
+            if code == 0 or code == 1:
+                var base = r * npx * 3
+                var qa = pa.unsafe_bitcast[UInt8]()
+                var qo = po.unsafe_bitcast[UInt8]()
+                var c = 0
+                if code == 0:
+                    while c + 16 <= npx:
+                        var v0 = (qa + base + c * 3).unsafe_load[width=32]()
+                        var blue0 = SIMD[DType.uint8, 8](v0[0], v0[3], v0[6], v0[9], v0[12], v0[15], v0[18], v0[21])
+                        var green0 = SIMD[DType.uint8, 8](v0[1], v0[4], v0[7], v0[10], v0[13], v0[16], v0[19], v0[22])
+                        var red0 = SIMD[DType.uint8, 8](v0[2], v0[5], v0[8], v0[11], v0[14], v0[17], v0[20], v0[23])
+                        var y0 = (blue0.cast[DType.int32]() * 3735 + green0.cast[DType.int32]() * 19235 + red0.cast[DType.int32]() * 9798 + 16384) >> 15
+                        qo.unsafe_store(r * npx + c, y0.cast[DType.uint8]())
+                        var v1 = (qa + base + (c + 8) * 3).unsafe_load[width=32]()
+                        var blue1 = SIMD[DType.uint8, 8](v1[0], v1[3], v1[6], v1[9], v1[12], v1[15], v1[18], v1[21])
+                        var green1 = SIMD[DType.uint8, 8](v1[1], v1[4], v1[7], v1[10], v1[13], v1[16], v1[19], v1[22])
+                        var red1 = SIMD[DType.uint8, 8](v1[2], v1[5], v1[8], v1[11], v1[14], v1[17], v1[20], v1[23])
+                        var y1 = (blue1.cast[DType.int32]() * 3735 + green1.cast[DType.int32]() * 19235 + red1.cast[DType.int32]() * 9798 + 16384) >> 15
+                        qo.unsafe_store(r * npx + c + 8, y1.cast[DType.uint8]())
+                        c += 16
+                    while c + 8 <= npx:
+                        var v = (qa + base + c * 3).unsafe_load[width=32]()
+                        var blue = SIMD[DType.uint8, 8](v[0], v[3], v[6], v[9], v[12], v[15], v[18], v[21])
+                        var green = SIMD[DType.uint8, 8](v[1], v[4], v[7], v[10], v[13], v[16], v[19], v[22])
+                        var red = SIMD[DType.uint8, 8](v[2], v[5], v[8], v[11], v[14], v[17], v[20], v[23])
+                        var y = (blue.cast[DType.int32]() * 3735 + green.cast[DType.int32]() * 19235 + red.cast[DType.int32]() * 9798 + 16384) >> 15
+                        qo.unsafe_store(r * npx + c, y.cast[DType.uint8]())
+                        c += 8
+                else:
+                    while c + 16 <= npx:
+                        var v0 = (qa + base + c * 3).unsafe_load[width=32]()
+                        var blue0 = SIMD[DType.uint8, 8](v0[2], v0[5], v0[8], v0[11], v0[14], v0[17], v0[20], v0[23])
+                        var green0 = SIMD[DType.uint8, 8](v0[1], v0[4], v0[7], v0[10], v0[13], v0[16], v0[19], v0[22])
+                        var red0 = SIMD[DType.uint8, 8](v0[0], v0[3], v0[6], v0[9], v0[12], v0[15], v0[18], v0[21])
+                        var y0 = (blue0.cast[DType.int32]() * 3735 + green0.cast[DType.int32]() * 19235 + red0.cast[DType.int32]() * 9798 + 16384) >> 15
+                        qo.unsafe_store(r * npx + c, y0.cast[DType.uint8]())
+                        var v1 = (qa + base + (c + 8) * 3).unsafe_load[width=32]()
+                        var blue1 = SIMD[DType.uint8, 8](v1[2], v1[5], v1[8], v1[11], v1[14], v1[17], v1[20], v1[23])
+                        var green1 = SIMD[DType.uint8, 8](v1[1], v1[4], v1[7], v1[10], v1[13], v1[16], v1[19], v1[22])
+                        var red1 = SIMD[DType.uint8, 8](v1[0], v1[3], v1[6], v1[9], v1[12], v1[15], v1[18], v1[21])
+                        var y1 = (blue1.cast[DType.int32]() * 3735 + green1.cast[DType.int32]() * 19235 + red1.cast[DType.int32]() * 9798 + 16384) >> 15
+                        qo.unsafe_store(r * npx + c + 8, y1.cast[DType.uint8]())
+                        c += 16
+                    while c + 8 <= npx:
+                        var v = (qa + base + c * 3).unsafe_load[width=32]()
+                        var blue = SIMD[DType.uint8, 8](v[2], v[5], v[8], v[11], v[14], v[17], v[20], v[23])
+                        var green = SIMD[DType.uint8, 8](v[1], v[4], v[7], v[10], v[13], v[16], v[19], v[22])
+                        var red = SIMD[DType.uint8, 8](v[0], v[3], v[6], v[9], v[12], v[15], v[18], v[21])
+                        var y = (blue.cast[DType.int32]() * 3735 + green.cast[DType.int32]() * 19235 + red.cast[DType.int32]() * 9798 + 16384) >> 15
+                        qo.unsafe_store(r * npx + c, y.cast[DType.uint8]())
+                        c += 8
+                for cc in range(c, npx):
+                    var i = base + cc * 3
+                    var x0 = Int(qa[unsafe_offset=i])
+                    var x1 = Int(qa[unsafe_offset=i + 1])
+                    var x2 = Int(qa[unsafe_offset=i + 2])
+                    var b = x0 if code == 0 else x2
+                    var rr = x2 if code == 0 else x0
+                    qo[unsafe_offset=r * npx + cc] = UInt8((b * 3735 + x1 * 19235 + rr * 9798 + 16384) >> 15)
+                return
+        comptime if dt == DType.uint8:
+            if code == 6:
+                var base = r * npx * 3
+                var qa = pa.unsafe_bitcast[UInt8]()
+                var qo = po.unsafe_bitcast[UInt8]()
+                var c = 0
+                while c + 16 <= npx:
+                    var v0 = (qa + base + c * 3).unsafe_load[width=32]()
+                    var v1 = (qa + base + c * 3 + 32).unsafe_load[width=16]()
+                    var b16 = SIMD[DType.uint8, 16](v0[0], v0[3], v0[6], v0[9], v0[12], v0[15], v0[18], v0[21], v0[24], v0[27], v0[30], v1[1], v1[4], v1[7], v1[10], v1[13]).cast[DType.int32]()
+                    var g16 = SIMD[DType.uint8, 16](v0[1], v0[4], v0[7], v0[10], v0[13], v0[16], v0[19], v0[22], v0[25], v0[28], v0[31], v1[2], v1[5], v1[8], v1[11], v1[14]).cast[DType.int32]()
+                    var r16 = SIMD[DType.uint8, 16](v0[2], v0[5], v0[8], v0[11], v0[14], v0[17], v0[20], v0[23], v0[26], v0[29], v1[0], v1[3], v1[6], v1[9], v1[12], v1[15]).cast[DType.int32]()
+                    var y16 = (b16 * 3735 + g16 * 19235 + r16 * 9798 + 16384) >> 15
+                    var dl = SIMD[DType.int32, 16]((128 << 14) + (1 << 13))
+                    var cb16 = ((b16 - y16) * 9241 + dl) >> 14
+                    var cr16 = ((r16 - y16) * 11682 + dl) >> 14
+                    var yi = y16.clamp(0, 255).cast[DType.uint8]()
+                    var cbi = cb16.clamp(0, 255).cast[DType.uint8]()
+                    var cri = cr16.clamp(0, 255).cast[DType.uint8]()
+                    (qo + base + c * 3).unsafe_strided_store[width=16](yi, 3)
+                    (qo + base + c * 3 + 1).unsafe_strided_store[width=16](cri, 3)
+                    (qo + base + c * 3 + 2).unsafe_strided_store[width=16](cbi, 3)
+                    c += 16
+                while c + 8 <= npx:
+                    var v = (qa + base + c * 3).unsafe_load[width=32]()
+                    var b8 = SIMD[DType.uint8, 8](v[0], v[3], v[6], v[9], v[12], v[15], v[18], v[21]).cast[DType.int32]()
+                    var g8 = SIMD[DType.uint8, 8](v[1], v[4], v[7], v[10], v[13], v[16], v[19], v[22]).cast[DType.int32]()
+                    var r8 = SIMD[DType.uint8, 8](v[2], v[5], v[8], v[11], v[14], v[17], v[20], v[23]).cast[DType.int32]()
+                    var y8 = (b8 * 3735 + g8 * 19235 + r8 * 9798 + 16384) >> 15
+                    var dl8 = SIMD[DType.int32, 8]((128 << 14) + (1 << 13))
+                    var cb8 = ((b8 - y8) * 9241 + dl8) >> 14
+                    var cr8 = ((r8 - y8) * 11682 + dl8) >> 14
+                    var yi8 = y8.clamp(0, 255).cast[DType.uint8]()
+                    var cbi8 = cb8.clamp(0, 255).cast[DType.uint8]()
+                    var cri8 = cr8.clamp(0, 255).cast[DType.uint8]()
+                    (qo + base + c * 3).unsafe_strided_store[width=8](yi8, 3)
+                    (qo + base + c * 3 + 1).unsafe_strided_store[width=8](cri8, 3)
+                    (qo + base + c * 3 + 2).unsafe_strided_store[width=8](cbi8, 3)
+                    c += 8
+                for cc in range(c, npx):
+                    var i = base + cc * 3
+                    var x0 = Int(qa[unsafe_offset=i])
+                    var x1 = Int(qa[unsafe_offset=i + 1])
+                    var x2 = Int(qa[unsafe_offset=i + 2])
+                    var y = (x0 * 3735 + x1 * 19235 + x2 * 9798 + 16384) >> 15
+                    var dl = (128 << 14) + (1 << 13)
+                    qo[unsafe_offset=i] = UInt8(y)
+                    qo[unsafe_offset=i + 1] = UInt8(max(0, min(255, ((x2 - y) * 11682 + dl) >> 14)))
+                    qo[unsafe_offset=i + 2] = UInt8(max(0, min(255, ((x0 - y) * 9241 + dl) >> 14)))
+                return
         var c0 = 0
         comptime if dt == DType.uint8:
+
             # 16 pixels at a time for the channel-shuffle and gray conversions
             if code == 0 or code == 1 or code == 3:
                 var qa = pa.unsafe_bitcast[UInt8]()
@@ -645,14 +1105,34 @@ struct Taps(Movable):
     var w: List[Float32]
 
     def __init__(out self, ssize: Int, dsize: Int, scale: Float64, kind: Int):
-        """kind 0 nearest, 1 linear, 2 cubic, 3 lanczos4"""
-        self.n = 1 if kind == 0 else (2 if kind == 1 else (4 if kind == 2 else 8))
+        """kind 0 nearest, 1 linear, 2 cubic, 3 lanczos4, 4 area (scale >= 1: every source pixel weighted by the
+        part of it inside the destination cell, zero-weight padding up to n taps; when enlarging, a destination pixel sees one or two source pixels)"""
+        self.n = 1 if kind == 0 else (2 if kind == 1 else (4 if kind == 2 else (8 if kind == 3 else Int(ceil(scale)) + 2)))
         self.idx = List[Int](length=dsize * self.n, fill=0)
         self.w = List[Float32](length=dsize * self.n, fill=0)
         for d in range(dsize):
             if kind == 0:
                 self.idx[d] = min(Int(floor(Float64(d) * scale)), ssize - 1)
                 self.w[d] = 1
+                continue
+            if kind == 4:
+                var fs1 = Float64(d) * scale
+                var fs2 = fs1 + scale
+                var cell = min(scale, Float64(ssize) - fs1)
+                var s2 = min(Int(floor(fs2)), ssize - 1)
+                var s1 = min(Int(ceil(fs1)), s2)
+                var t = 0
+                if Float64(s1) - fs1 > 1e-3:
+                    self.idx[d * self.n] = s1 - 1
+                    self.w[d * self.n] = Float32((Float64(s1) - fs1) / cell)
+                    t = 1
+                for sx in range(s1, s2):
+                    self.idx[d * self.n + t] = sx
+                    self.w[d * self.n + t] = Float32(1.0 / cell)
+                    t += 1
+                if fs2 - Float64(s2) > 1e-3:
+                    self.idx[d * self.n + t] = s2
+                    self.w[d * self.n + t] = Float32(min(min(fs2 - Float64(s2), 1.0), cell) / cell)
                 continue
             var f = (Float64(d) + 0.5) * scale - 0.5
             var s = Int(floor(f))
@@ -676,57 +1156,77 @@ struct Taps(Movable):
                 self.w[d * self.n + t] = Float32(ww[t])
 
 
-def resize[dt: DType](src: Mat[dt], dw: Int, dh: Int, kind: Int) -> Mat[dt]:
+def resize[dt: DType](src: Mat[dt], dw_in: Int, dh_in: Int, kind_in: Int) -> Mat[dt]:
+    """Column taps first, on contiguous SIMD over the source width into one cached row per output row; then the row
+    taps pick (dw) pixels from that row."""
+    var dw = dw_in
+    var dh = dh_in
+    var kind = kind_in
     var tx = Taps(src.cols, dw, Float64(src.cols) / Float64(dw), kind)
     var ty = Taps(src.rows, dh, Float64(src.rows) / Float64(dh), kind)
     var ch = src.ch
-    var need = List[Bool](length=src.rows, fill=False)
-    for i in range(len(ty.idx)):
-        need[ty.idx[i]] = True
-    var tmp = Mat[F32](src.rows, dw, ch)
-    var o = Mat[dt](dh, dw, ch)
+    var o = Mat[dt](dh, dw, ch, False)
     var pa = src.ptr()
-    var pt = tmp.ptr()
     var po = o.ptr()
     var pix = ptr_of(tx.idx)
     var pwx = ptr_of(tx.w)
     var piy = ptr_of(ty.idx)
     var pwy = ptr_of(ty.w)
-    var pneed = ptr_of(need)
     var nx = tx.n
     var ny = ty.n
-    var n = dw * ch
-
-    def hrow(r: Int) {imm}:
-        if not pneed[unsafe_offset=r]:
-            return
+    var sn = src.cols * ch
+    var dn = dw * ch
+    # per output element and tap: the index into the cached column-pass row and its weight
+    var ex = List[Int32](length=nx * dn, fill=0)
+    var ew = List[Float32](length=nx * dn, fill=0)
+    for q in range(nx):
         for d in range(dw):
             for k in range(ch):
-                var s = Float32(0)
-                for t in range(nx):
-                    s += pwx[unsafe_offset=d * nx + t] * Float32(pa[unsafe_offset=(r * src.cols + pix[unsafe_offset=d * nx + t]) * ch + k])
-                pt[unsafe_offset=(r * dw + d) * ch + k] = s
+                ex[q * dn + d * ch + k] = Int32(tx.idx[d * nx + q] * ch + k)
+                ew[q * dn + d * ch + k] = tx.w[d * nx + q]
+    var pex = ptr_of(ex)
+    var pew = ptr_of(ew)
+    comptime NT = 8
 
-    par(hrow, src.rows)
+    def task(t: Int) {imm}:
+        var vrow = List[Float32](unsafe_uninit_length=sn)
+        var v = ptr_of(vrow)
+        for r in range(dh * t // NT, dh * (t + 1) // NT):
+            if kind == 0:
+                var srow = pa + piy[unsafe_offset=r * ny] * sn
+                for d in range(dw):
+                    for k in range(ch):
+                        po[unsafe_offset=(r * dw + d) * ch + k] = srow[unsafe_offset=pix[unsafe_offset=d] * ch + k]
+                continue
+            var i = 0
+            while i + WF <= sn:
+                var acc = SIMD[F32, WF](0)
+                for q in range(ny):
+                    acc += _ld[dt, WF](pa, piy[unsafe_offset=r * ny + q] * sn + i) * pwy[unsafe_offset=r * ny + q]
+                v.unsafe_store(i, acc)
+                i += WF
+            for j in range(i, sn):
+                var acc = Float32(0)
+                for q in range(ny):
+                    acc += Float32(pa[unsafe_offset=piy[unsafe_offset=r * ny + q] * sn + j]) * pwy[unsafe_offset=r * ny + q]
+                v[unsafe_offset=j] = acc
+            var dst = po + r * dn
+            var e = 0
+            while e + WF <= dn:
+                var acc = SIMD[F32, WF](0)
+                for q in range(nx):
+                    acc += v.unsafe_gather(pex.unsafe_load[width=WF](q * dn + e)) * pew.unsafe_load[width=WF](q * dn + e)
+                dst.unsafe_store(e, _fin[dt, WF](acc))
+                e += WF
+            for j in range(e, dn):
+                var acc = Float32(0)
+                for q in range(nx):
+                    acc += v[unsafe_offset=Int(pex[unsafe_offset=q * dn + j])] * pew[unsafe_offset=q * dn + j]
+                dst.unsafe_store(j, _fin[dt, 1](SIMD[F32, 1](acc)))
+        _ = len(vrow)
 
-    def vrow(r: Int) {imm}:
-        var i = 0
-        while i < n:
-            var w = WF if i + WF <= n else 1
-            var acc = SIMD[F32, WF](0)
-            for t in range(ny):
-                var row = piy[unsafe_offset=r * ny + t]
-                var x = pt.unsafe_load[width=WF](row * n + i) if w == WF else SIMD[F32, WF](pt[unsafe_offset=row * n + i])
-                acc += x * pwy[unsafe_offset=r * ny + t]
-            var z = _fin[dt, WF](acc)
-            if w == WF:
-                po.unsafe_store(r * n + i, z)
-            else:
-                po[unsafe_offset=r * n + i] = z[0]
-            i += w
-
-    par(vrow, dh)
-    _ = (tmp.rows, tx.n, ty.n, len(need))
+    par(task, NT)
+    _ = (tx.n, ty.n, len(ex), len(ew))
     return o^
 
 
@@ -787,6 +1287,39 @@ def sample[dt: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: Float64, fy: Float6
         dst[unsafe_offset=k] = Scalar[dt](acc)
 
 
+def _lin_vec[dt: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: SIMD[DType.float64, WF], fy: SIMD[DType.float64, WF], mode: Int, bv: Scalar[dt], dst: Ptr[Scalar[dt]]) -> Bool:
+    """Bilinear samples at WF positions straight into dst (WF pixels), or bv when all of them lie outside under a
+    constant border. False, with dst untouched, when any position needs the general border path."""
+    var ffx = floor(fx)
+    var ffy = floor(fy)
+    var sx = ffx.cast[DType.int32]()
+    var sy = ffy.cast[DType.int32]()
+    if mode == 2 and (Int(sx.reduce_max()) < -1 or Int(sx.reduce_min()) >= src.cols or Int(sy.reduce_max()) < -1 or Int(sy.reduce_min()) >= src.rows):
+        for i in range(WF * src.ch):
+            dst[unsafe_offset=i] = bv
+        return True
+    if sx.reduce_min() < 0 or sy.reduce_min() < 0 or Int(sx.reduce_max()) + 2 > src.cols or Int(sy.reduce_max()) + 2 > src.rows:
+        return False
+    var ch = src.ch
+    var wx1 = (fx - ffx).cast[F32]()
+    var wy1 = (fy - ffy).cast[F32]()
+    var wx0 = 1 - wx1
+    var wy0 = 1 - wy1
+    var base = (sy * Int32(src.cols) + sx) * Int32(ch)
+    var lane = SIMD[DType.int32, WF](0)
+    comptime for j in range(WF):
+        lane[j] = Int32(j * ch)
+    for k in range(ch):
+        var b = base + Int32(k)
+        var p00 = ps.unsafe_gather(b).cast[F32]()
+        var p01 = ps.unsafe_gather(b + Int32(ch)).cast[F32]()
+        var p10 = ps.unsafe_gather(b + Int32(src.cols * ch)).cast[F32]()
+        var p11 = ps.unsafe_gather(b + Int32(src.cols * ch + ch)).cast[F32]()
+        var v = wy0 * (wx0 * p00 + wx1 * p01) + wy1 * (wx0 * p10 + wx1 * p11)
+        (dst + k).unsafe_scatter(lane, _fin[dt, WF](v))
+    return True
+
+
 def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kind: Int, mode: Int, bval: Float64) -> Mat[dt]:
     """m is the inverse map (dst -> src) as a 2 x 3 matrix."""
     var o = Mat[dt](dh, dw, src.ch)
@@ -796,10 +1329,22 @@ def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kin
     var bv = Scalar[dt](bval)
 
     def row(y: Int) {imm}:
-        for x in range(dw):
-            var fx = pm[unsafe_offset=0] * Float64(x) + pm[unsafe_offset=1] * Float64(y) + pm[unsafe_offset=2]
-            var fy = pm[unsafe_offset=3] * Float64(x) + pm[unsafe_offset=4] * Float64(y) + pm[unsafe_offset=5]
+        var x = 0
+        var iota = SIMD[DType.float64, WF](0)
+        comptime for j in range(WF):
+            iota[j] = Float64(j)
+        var bx = pm[unsafe_offset=1] * Float64(y) + pm[unsafe_offset=2]
+        var by = pm[unsafe_offset=4] * Float64(y) + pm[unsafe_offset=5]
+        while x < dw:
+            if kind == 1 and x + WF <= dw:
+                var xv = iota + Float64(x)
+                if _lin_vec(src, ps, pm[unsafe_offset=0] * xv + bx, pm[unsafe_offset=3] * xv + by, mode, bv, po + (y * dw + x) * src.ch):
+                    x += WF
+                    continue
+            var fx = pm[unsafe_offset=0] * Float64(x) + bx
+            var fy = pm[unsafe_offset=3] * Float64(x) + by
             sample(src, ps, fx, fy, kind, mode, bv, po + (y * dw + x) * src.ch)
+            x += 1
 
     par(row, dh)
     _ = len(m)
@@ -815,9 +1360,15 @@ def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: 
     var pmy = my.ptr()
 
     def row(y: Int) {imm}:
-        for x in range(mx.cols):
+        var x = 0
+        while x < mx.cols:
             var i = y * mx.cols + x
+            if kind == 1 and x + WF <= mx.cols:
+                if _lin_vec(src, ps, pmx.unsafe_load[width=WF](i).cast[DType.float64](), pmy.unsafe_load[width=WF](i).cast[DType.float64](), mode, bv, po + i * src.ch):
+                    x += WF
+                    continue
             sample(src, ps, Float64(pmx[unsafe_offset=i]), Float64(pmy[unsafe_offset=i]), kind, mode, bv, po + i * src.ch)
+            x += 1
 
     par(row, mx.rows)
     _ = (mx.rows, my.rows)
@@ -827,12 +1378,21 @@ def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: 
 def blob[dt: DType](src: Mat[dt], dw: Int, dh: Int, scale: Float32, mean: List[Float32], swap: Bool) -> Mat[F32]:
     """cv2.dnn.blobFromImage with a plain resize: planes laid out as (channel * h, w), float32."""
     var r = resize(src, dw, dh, 1) if (dw != src.cols or dh != src.rows) else Mat[dt](copy=src)
-    var o = Mat[F32](r.ch * dh, dw, 1)
-    for c in range(r.ch):
-        var sc = (r.ch - 1 - c) if (swap and r.ch == 3) else c
-        for y in range(dh):
-            for x in range(dw):
-                o.data[(c * dh + y) * dw + x] = (Float32(r.data[(y * dw + x) * r.ch + sc]) - mean[c]) * scale
+    var o = Mat[F32](r.ch * dh, dw, 1, False)
+    var ch = r.ch
+    var pr = r.ptr()
+    var po = o.ptr()
+    var pm = ptr_of(mean)
+
+    def plane_row(i: Int) {imm}:
+        var c = i // dh
+        var sc = (ch - 1 - c) if (swap and ch == 3) else c
+        var src_row = pr + (i % dh) * dw * ch + sc
+        for x in range(dw):
+            po.unsafe_store(i * dw + x, (Float32(src_row[unsafe_offset=x * ch]) - pm[unsafe_offset=c]) * scale)
+
+    par(plane_row, ch * dh)
+    _ = (len(mean), r.rows)
     return o^
 
 
@@ -942,24 +1502,48 @@ def canny(src: Mat[DType.uint8], t1: Float64, t2: Float64, aperture: Int, l2: Bo
         hi = hi * hi if hi > 0 else hi
     var low = Int(floor(lo))
     var high = Int(floor(hi))
-    var mag = List[Int32](length=rows * cols, fill=0)
+    var mag = List[Int32](unsafe_uninit_length=rows * cols)
     var pmag = ptr_of(mag)
     var pdx = dx.ptr()
     var pdy = dy.ptr()
+    comptime WI = simd_width_of[DType.int32]()
 
     def mrow(y: Int) {imm}:
-        for x in range(cols):
-            var a = Int32(pdx[unsafe_offset=y * cols + x])
-            var b = Int32(pdy[unsafe_offset=y * cols + x])
-            pmag[unsafe_offset=y * cols + x] = (a * a + b * b) if l2 else (abs(a) + abs(b))
+        var i = y * cols
+        var e = i + cols
+        while i + WI <= e:
+            var a = pdx.unsafe_load[width=WI](i).cast[DType.int32]()
+            var b = pdy.unsafe_load[width=WI](i).cast[DType.int32]()
+            pmag.unsafe_store(i, (a * a + b * b) if l2 else (abs(a) + abs(b)))
+            i += WI
+        while i < e:
+            var a = Int32(pdx[unsafe_offset=i])
+            var b = Int32(pdy[unsafe_offset=i])
+            pmag[unsafe_offset=i] = (a * a + b * b) if l2 else (abs(a) + abs(b))
+            i += 1
 
     par(mrow, rows)
-    var map = Mat[DType.uint8](rows, cols, 1)  # 1 not an edge, 0 weak candidate, 3 strong
+    # 1 not an edge, 0 weak candidate, 3 strong; a one-pixel border of 1s lets the flood skip bounds checks
+    var ms = cols + 2
+    var map = Mat[DType.uint8](rows + 2, ms, 1, False)
     var pm = map.ptr()
+    for x in range(ms):
+        pm[unsafe_offset=x] = 1
+        pm[unsafe_offset=(rows + 1) * ms + x] = 1
+    for y in range(rows + 2):
+        pm[unsafe_offset=y * ms] = 1
+        pm[unsafe_offset=y * ms + cols + 1] = 1
 
     def nrow(y: Int) {imm}:
-        for x in range(cols):
+        var x = 0
+        while x < cols:
             var i = y * cols + x
+            var pi = (y + 1) * ms + x + 1
+            if x + WI <= cols and not pmag.unsafe_load[width=WI](i).gt(Int32(low)).reduce_or():
+                comptime for j in range(WI):
+                    pm[unsafe_offset=pi + j] = 1
+                x += WI
+                continue
             var m = Int(pmag[unsafe_offset=i])
             var xs = Int(pdx[unsafe_offset=i])
             var ys = Int(pdy[unsafe_offset=i])
@@ -985,40 +1569,63 @@ def canny(src: Mat[DType.uint8], t1: Float64, t2: Float64, aperture: Int, l2: Bo
                         var pa = Int(pmag[unsafe_offset=i - cols - sg]) if (y > 0 and xa >= 0 and xa < cols) else 0
                         var pb = Int(pmag[unsafe_offset=i + cols + sg]) if (y + 1 < rows and xb >= 0 and xb < cols) else 0
                         ok = m > pa and m > pb
-            pm[unsafe_offset=i] = UInt8((3 if m > high else 0) if ok else 1)
+            pm[unsafe_offset=pi] = UInt8((3 if m > high else 0) if ok else 1)
+            x += 1
 
     par(nrow, rows)
-    var stack = List[Int](capacity=1024)
-    for i in range(rows * cols):
-        if pm[unsafe_offset=i] == 3:
-            pm[unsafe_offset=i] = 2
-            stack.append(i)
-    while len(stack) > 0:
-        var i = stack.pop()
-        var y = i // cols
-        var x = i % cols
-        for ddy in range(-1, 2):
-            for ddx in range(-1, 2):
-                var ny = y + ddy
-                var nx = x + ddx
-                if ny >= 0 and ny < rows and nx >= 0 and nx < cols:
-                    var j = ny * cols + nx
-                    if pm[unsafe_offset=j] == 0 or pm[unsafe_offset=j] == 3:
-                        pm[unsafe_offset=j] = 2
-                        stack.append(j)
-    var o = Mat[DType.uint8](rows, cols, 1)
-    for i in range(rows * cols):
-        o.data[i] = 255 if pm[unsafe_offset=i] == 2 else 0
-    _ = (dx.rows, dy.rows, len(mag), map.rows)
+    var stk = List[Int32](unsafe_uninit_length=rows * cols)  # each pixel is pushed at most once
+    var stack = ptr_of(stk)
+    var sp = 0
+    comptime WB = simd_width_of[DType.uint8]()
+    for y in range(rows):
+        var row = (y + 1) * ms + 1
+        var q = 0
+        while q < cols:
+            if q + WB <= cols and not pm.unsafe_load[width=WB](row + q).eq(3).reduce_or():
+                q += WB
+                continue
+            for qq in range(q, min(q + WB, cols)):
+                if pm[unsafe_offset=row + qq] == 3:
+                    pm[unsafe_offset=row + qq] = 2
+                    stack[unsafe_offset=sp] = Int32(row + qq)
+                    sp += 1
+            q += WB
+    var neigh: List[Int] = [-ms - 1, -ms, -ms + 1, -1, 1, ms - 1, ms, ms + 1]
+    var offs = ptr_of(neigh)
+    while sp > 0:
+        sp -= 1
+        var i = Int(stack[unsafe_offset=sp])
+        comptime for k in range(8):
+            var j = i + offs[unsafe_offset=k]
+            if pm[unsafe_offset=j] == 0 or pm[unsafe_offset=j] == 3:
+                pm[unsafe_offset=j] = 2
+                stack[unsafe_offset=sp] = Int32(j)
+                sp += 1
+    var o = Mat[DType.uint8](rows, cols, 1, False)
+    var po = o.ptr()
+    for y in range(rows):
+        var row = (y + 1) * ms + 1
+        var q = 0
+        while q + WB <= cols:
+            po.unsafe_store(y * cols + q, pm.unsafe_load[width=WB](row + q).eq(2).select(SIMD[DType.uint8, WB](255), SIMD[DType.uint8, WB](0)))
+            q += WB
+        while q < cols:
+            po[unsafe_offset=y * cols + q] = 255 if pm[unsafe_offset=row + q] == 2 else 0
+            q += 1
+    _ = (dx.rows, dy.rows, len(mag), map.rows, len(neigh), len(stk))
     return o^
 
 
 # ---- findContours -----------------------------------------------------------------------------------------
 
 
-def find_contours(src: Mat[DType.uint8], external: Bool, simple: Bool) -> Tuple[Mat[DType.int32], Mat[DType.int32]]:
+def find_contours(src: Mat[DType.uint8], mode: Int, simple: Bool) -> Tuple[Mat[DType.int32], Mat[DType.int32], Mat[DType.int32]]:
     """Suzuki and Abe border following as cv2 does it: raster scan, outer and hole borders, points emitted in
-    follow order starting at the first pixel found. Returns (points (n, 2) int32, lengths (k, 1) int32)."""
+    follow order starting at the first pixel found. mode 0 external, 1 list, 2 ccomp (outer borders at the top
+    level, holes below their outer border), 3 tree. Returns (points (n, 2) int32, lengths (k, 1) int32, hierarchy
+    (k, 4) int32 as next, previous, first child, parent). Contours come out in cv2's tree order: depth first, the
+    newest sibling first."""
+    var external = mode == 0
     var w = src.cols + 2
     var h = src.rows + 2
     var img = List[Int32](length=w * h, fill=0)
@@ -1033,6 +1640,7 @@ def find_contours(src: Mat[DType.uint8], external: Bool, simple: Bool) -> Tuple[
     var lens = List[Int32]()
     var ctype: List[Int] = [1, 1]  # by border id (nbd): 1 outer, 0 hole; id 1 is the frame
     var cpar: List[Int] = [0, 1]
+    var bpar = List[Int]()  # parent border id of every border found (id - 2 indexes it), as the mode shapes the tree
     var nbd = 1
     for y in range(1, h - 1):
         var lnbd = 1
@@ -1049,6 +1657,10 @@ def find_contours(src: Mat[DType.uint8], external: Bool, simple: Bool) -> Tuple[
                 var parent = (cpar[lnbd] if tb == 1 else lnbd) if outer else (lnbd if tb == 1 else cpar[lnbd])
                 ctype.append(1 if outer else 0)
                 cpar.append(parent)
+                if mode == 1 or (mode == 2 and outer):
+                    bpar.append(1)
+                else:
+                    bpar.append(parent)
                 var keep = (not external) or (outer and parent == 1)
                 var start = len(pts)
                 var cx = x
@@ -1103,55 +1715,192 @@ def find_contours(src: Mat[DType.uint8], external: Bool, simple: Bool) -> Tuple[
             f = Int(pi[unsafe_offset=y * w + x])
             if f != 1 and f != 0:
                 lnbd = abs(f)
-    # cv2 returns the contours last found first
+    # cv2 stores contours in a tree where a new border becomes the first child of its parent, then lists the tree
+    # depth first: so children come newest first, and a node is followed by its subtree
+    var n = len(lens)
+    var kept = List[Int]()  # discovery index of every kept contour
+    for k in range(len(bpar)):
+        if not external or (ctype[k + 2] == 1 and bpar[k] == 1):
+            kept.append(k)
+    var kidx = List[Int](length=len(bpar), fill=-1)  # discovery index -> kept index
+    for i in range(len(kept)):
+        kidx[kept[i]] = i
+    var kids = List[List[Int]](length=n + 1, fill=List[Int]())  # slot n is the frame
+    for i in range(n):
+        var par = bpar[kept[i]] - 2
+        kids[n if par < 0 else kidx[par]].append(i)
+    var order = List[Int]()
+    var rank = List[Int](length=n, fill=0)
+    var hier = List[Int](length=4 * n, fill=-1)
+    # depth first from the frame: pushing in discovery order pops the newest sibling first
+    var todo = List[Int]()
+    for j in range(len(kids[n])):
+        todo.append(kids[n][j])
+    while len(todo) > 0:
+        var c = todo.pop()
+        rank[c] = len(order)
+        order.append(c)
+        for j in range(len(kids[c])):
+            todo.append(kids[c][j])
+    for p in range(n + 1):
+        var m = len(kids[p])
+        for j in range(m):
+            var c = kids[p][m - 1 - j]  # j-th newest
+            var at = rank[c]
+            hier[4 * at + 0] = rank[kids[p][m - 2 - j]] if j + 1 < m else -1
+            hier[4 * at + 1] = rank[kids[p][m - j]] if j > 0 else -1
+            hier[4 * at + 3] = rank[p] if p < n else -1
+            if j == 0 and p < n:
+                hier[4 * rank[p] + 2] = at
     var op = Mat[DType.int32](len(pts) // 2, 2, 1)
-    var ol = Mat[DType.int32](len(lens), 1, 1)
-    var src_at = len(pts)
+    var ol = Mat[DType.int32](n, 1, 1)
+    var oh = Mat[DType.int32](n, 4, 1)
+    var starts = List[Int](length=n, fill=0)
+    var acc = 0
+    for i in range(n):
+        starts[i] = acc
+        acc += 2 * Int(lens[i])
     var dst_at = 0
-    for c in range(len(lens)):
-        var k = 2 * Int(lens[len(lens) - 1 - c])
-        src_at -= k
+    for r in range(n):
+        var c = order[r]
+        var k = 2 * Int(lens[c])
         for i in range(k):
-            op.data[dst_at + i] = pts[src_at + i]
+            op.data[dst_at + i] = pts[starts[c] + i]
         dst_at += k
-        ol.data[c] = lens[len(lens) - 1 - c]
-    return (op^, ol^)
+        ol.data[r] = lens[c]
+        for q in range(4):
+            oh.data[4 * r + q] = Int32(hier[4 * r + q])
+    return (op^, ol^, oh^)
 
 
 # ---- goodFeaturesToTrack ----------------------------------------------------------------------------------
 
 
-def good_features(src: Mat[DType.uint8], max_corners: Int, quality: Float64, min_dist: Float64, block: Int) -> Mat[F32]:
-    """Shi-Tomasi: smallest eigenvalue of the windowed gradient covariance, local maxima above quality * max,
+def good_features(src: Mat[DType.uint8], max_corners: Int, quality: Float64, min_dist: Float64, block: Int, harris: Bool = False, hk: Float64 = 0.04) -> Mat[F32]:
+    """Shi-Tomasi (or Harris det - k trace^2 when `harris`): smallest eigenvalue of the windowed gradient covariance, local maxima above quality * max,
     strongest first (ties by position), thinned by a minimum distance on a grid. Returns (n, 2) float32 (x, y)."""
     var scale = Float32(1.0 / (4.0 * Float64(block) * 255.0))
     var dx = sobel[DType.uint8, F32](src, 1, 0, 3, scale)
     var dy = sobel[DType.uint8, F32](src, 0, 1, 3, scale)
-    var n = src.rows * src.cols
-    var cov = Mat[F32](src.rows, src.cols, 3)
-    for i in range(n):
-        cov.data[3 * i] = dx.data[i] * dx.data[i]
-        cov.data[3 * i + 1] = dx.data[i] * dy.data[i]
-        cov.data[3 * i + 2] = dy.data[i] * dy.data[i]
+    var rows = src.rows
+    var cols = src.cols
+    var n = rows * cols
+    var xx = Mat[F32](rows, cols, 1, False)
+    var xy = Mat[F32](rows, cols, 1, False)
+    var yy = Mat[F32](rows, cols, 1, False)
+    var pdx = dx.ptr()
+    var pdy = dy.ptr()
+    var pxx = xx.ptr()
+    var pxy = xy.ptr()
+    var pyy = yy.ptr()
+
+    def cov_rows(y: Int) {imm}:
+        var i = y * cols
+        var e = i + cols
+        while i + WF <= e:
+            var a = pdx.unsafe_load[width=WF](i)
+            var b = pdy.unsafe_load[width=WF](i)
+            pxx.unsafe_store(i, a * a)
+            pxy.unsafe_store(i, a * b)
+            pyy.unsafe_store(i, b * b)
+            i += WF
+        while i < e:
+            pxx[unsafe_offset=i] = pdx[unsafe_offset=i] * pdx[unsafe_offset=i]
+            pxy[unsafe_offset=i] = pdx[unsafe_offset=i] * pdy[unsafe_offset=i]
+            pyy[unsafe_offset=i] = pdy[unsafe_offset=i] * pdy[unsafe_offset=i]
+            i += 1
+
+    par(cov_rows, rows)
     var box = List[Float32](length=block, fill=1)
-    var sums = sepfilter[F32, F32](cov, box, box)
-    var eig = Mat[F32](src.rows, src.cols, 1)
+    var sxx = sepfilter[F32, F32](xx, box, box)
+    var sxy = sepfilter[F32, F32](xy, box, box)
+    var syy = sepfilter[F32, F32](yy, box, box)
+    var eig = Mat[F32](rows, cols, 1, False)
+    var pe = eig.ptr()
+    var p0 = sxx.ptr()
+    var p1 = sxy.ptr()
+    var p2 = syy.ptr()
+    var rowmax = List[Float32](length=rows, fill=0)
+    var prm = ptr_of(rowmax)
+    var hk32 = Float32(hk)
+
+    def eig_rows(y: Int) {imm}:
+        var i = y * cols
+        var e = i + cols
+        var m = SIMD[F32, WF](0)
+        var ms = Float32(0)
+        while i + WF <= e:
+            var a = p0.unsafe_load[width=WF](i) * 0.5
+            var b = p1.unsafe_load[width=WF](i)
+            var c = p2.unsafe_load[width=WF](i) * 0.5
+            var v = (a + c) - sqrt((a - c) * (a - c) + b * b)
+            if harris:
+                var sa = a * 2
+                var sc = c * 2
+                v = sa * sc - b * b - hk32 * (sa + sc) * (sa + sc)
+            pe.unsafe_store(i, v)
+            m = max(m, v)
+            i += WF
+        while i < e:
+            var a = p0[unsafe_offset=i] * 0.5
+            var b = p1[unsafe_offset=i]
+            var c = p2[unsafe_offset=i] * 0.5
+            var v = (a + c) - sqrt((a - c) * (a - c) + b * b)
+            if harris:
+                var sa = a * 2
+                var sc = c * 2
+                v = sa * sc - b * b - hk32 * (sa + sc) * (sa + sc)
+            pe[unsafe_offset=i] = v
+            ms = max(ms, v)
+            i += 1
+        prm[unsafe_offset=y] = max(ms, m.reduce_max())
+
+    par(eig_rows, rows)
     var best = Float32(0)
-    for i in range(n):
-        var a = sums.data[3 * i] * 0.5
-        var b = sums.data[3 * i + 1]
-        var c = sums.data[3 * i + 2] * 0.5
-        eig.data[i] = (a + c) - sqrt((a - c) * (a - c) + b * b)
-        best = max(best, eig.data[i])
+    for y in range(rows):
+        best = max(best, rowmax[y])
     var thr = Float32(Float64(best) * quality)
-    var kept = Mat[F32](src.rows, src.cols, 1)
-    for i in range(n):
-        kept.data[i] = eig.data[i] if eig.data[i] > thr else 0
-    var dil = morph[False, F32](kept, 0, 3, 1)
+    # a pixel is a candidate when above thr and not below any of its (in-image) 8 neighbours
+    var mask = Mat[DType.uint8](rows, cols, 1, False)
+    var pk = mask.ptr()
+
+    def mask_rows(y: Int) {imm}:
+        var x = 0
+        while x < cols:
+            var i = y * cols + x
+            if x == 0 or x + WF >= cols:
+                var v = pe[unsafe_offset=i]
+                var ok = v > thr
+                for ddy in range(max(y - 1, 0), min(y + 2, rows)):
+                    for ddx in range(max(x - 1, 0), min(x + 2, cols)):
+                        if pe[unsafe_offset=ddy * cols + ddx] > v:
+                            ok = False
+                pk[unsafe_offset=i] = 1 if ok else 0
+                x += 1
+                continue
+            var v = pe.unsafe_load[width=WF](i)
+            var nb = max(pe.unsafe_load[width=WF](i - 1), pe.unsafe_load[width=WF](i + 1))
+            if y > 0:
+                nb = max(nb, max(pe.unsafe_load[width=WF](i - cols - 1), max(pe.unsafe_load[width=WF](i - cols), pe.unsafe_load[width=WF](i - cols + 1))))
+            if y + 1 < rows:
+                nb = max(nb, max(pe.unsafe_load[width=WF](i + cols - 1), max(pe.unsafe_load[width=WF](i + cols), pe.unsafe_load[width=WF](i + cols + 1))))
+            var ok = v.gt(thr) & v.ge(nb)
+            comptime for j in range(WF):
+                pk[unsafe_offset=i + j] = 1 if ok[j] else 0
+            x += WF
+
+    par(mask_rows, rows)
     var cand = List[Int]()
-    for i in range(n):
-        if kept.data[i] != 0 and kept.data[i] == dil.data[i]:
-            cand.append(i)
+    comptime WB = simd_width_of[DType.uint8]()
+    var q = 0
+    while q < n:
+        if q + WB <= n and not pk.unsafe_load[width=WB](q).ne(0).reduce_or():
+            q += WB
+            continue
+        for qq in range(q, min(q + WB, n)):
+            if pk[unsafe_offset=qq] != 0:
+                cand.append(qq)
+        q += WB
 
     def stronger(p: Int, q: Int) {imm} -> Bool:
         return eig.data[p] > eig.data[q] or (eig.data[p] == eig.data[q] and p < q)
@@ -1187,6 +1936,7 @@ def good_features(src: Mat[DType.uint8], max_corners: Int, quality: Float64, min
     for i in range(len(chosen)):
         o.data[2 * i] = Float32(chosen[i] % src.cols)
         o.data[2 * i + 1] = Float32(chosen[i] // src.cols)
+    _ = (xx.rows, xy.rows, yy.rows, sxx.rows, sxy.rows, syy.rows, mask.rows, len(rowmax))
     return o^
 
 
@@ -1224,8 +1974,12 @@ def clip_line(cols: Int, rows: Int, mut x1: Int, mut y1: Int, mut x2: Int, mut y
     return (c1 | c2) == 0
 
 
-def draw_line[dt: DType](mut m: Mat[dt], px1: Int, py1: Int, px2: Int, py2: Int, color: List[Float64]):
-    """cv2.line, thickness 1, LINE_8: clip, then the error-term walk of cv2's LineIterator (left to right)."""
+def draw_line[dt: DType](mut m: Mat[dt], px1: Int, py1: Int, px2: Int, py2: Int, color: List[Float64], thickness: Int = 1, flags: Int = 3):
+    """cv2.line, LINE_8: thickness 1 clips, then walks the error term of cv2's LineIterator (left to right);
+    thicker lines are a filled rectangle with round caps (`flags` 1 start cap, 2 end cap)."""
+    if thickness > 1:
+        _thick_line(m, px1, py1, px2, py2, color, thickness, flags)
+        return
     var x1 = px1
     var y1 = py1
     var x2 = px2
@@ -1261,6 +2015,199 @@ def draw_line[dt: DType](mut m: Mat[dt], px1: Int, py1: Int, px2: Int, py2: Int,
             err -= 2 * minor
 
 
+comptime XY_SHIFT = 16
+comptime XY_ONE = 1 << 16
+
+
+def _tdiv(a: Int, b: Int) -> Int:
+    """C integer division (truncates toward zero)."""
+    var q = abs(a) // abs(b)
+    return q if (a < 0) == (b < 0) else -q
+
+
+def _put[dt: DType](mut m: Mat[dt], x: Int, y: Int, color: List[Float64]):
+    if x < 0 or y < 0 or x >= m.cols or y >= m.rows:
+        return
+    for k in range(m.ch):
+        m.set(y, x, k, Scalar[dt](color[k] if k < len(color) else 0.0))
+
+
+def _hline[dt: DType](mut m: Mat[dt], y: Int, x1: Int, x2: Int, color: List[Float64]):
+    for x in range(x1, x2 + 1):
+        _put(m, x, y, color)
+
+
+def _line2[dt: DType](mut m: Mat[dt], px1: Int, py1: Int, px2: Int, py2: Int, color: List[Float64]):
+    """cv2's Line2: a line between 16.16 fixed-point endpoints, clipped in fixed point, walked with a constant step."""
+    var x1 = px1
+    var y1 = py1
+    var x2 = px2
+    var y2 = py2
+    if not clip_line(m.cols << XY_SHIFT, m.rows << XY_SHIFT, x1, y1, x2, y2):
+        return
+    var dx = x2 - x1
+    var dy = y2 - y1
+    var ax = abs(dx)
+    var ay = abs(dy)
+    var x_step: Int
+    var y_step: Int
+    var ecount: Int
+    if ax > ay:
+        if dx < 0:
+            swap(x1, x2)
+            swap(y1, y2)
+            dy = -dy
+        x_step = XY_ONE
+        y_step = _tdiv(dy << XY_SHIFT, ax | 1)
+        ecount = (x2 - x1) >> XY_SHIFT
+    else:
+        if dy < 0:
+            swap(x1, x2)
+            swap(y1, y2)
+            dx = -dx
+        x_step = _tdiv(dx << XY_SHIFT, ay | 1)
+        y_step = XY_ONE
+        ecount = (y2 - y1) >> XY_SHIFT
+    x1 += XY_ONE >> 1
+    y1 += XY_ONE >> 1
+    while ecount >= 0:
+        _put(m, x1 >> XY_SHIFT, y1 >> XY_SHIFT, color)
+        x1 += x_step
+        y1 += y_step
+        ecount -= 1
+
+
+def _fill_convex[dt: DType](mut m: Mat[dt], vx: List[Int], vy: List[Int], color: List[Float64]):
+    """cv2's FillConvexPoly for 16.16 vertices and LINE_8: outline with Line2, then fill between the two active edges."""
+    var npts = len(vx)
+    var delta = XY_ONE >> 1
+    var imin = 0
+    var edges = npts
+    var xmin = vx[0]
+    var xmax = vx[0]
+    var ymin = vy[0]
+    var ymax = vy[0]
+    var p0x = vx[npts - 1]
+    var p0y = vy[npts - 1]
+    for i in range(npts):
+        if vy[i] < ymin:
+            ymin = vy[i]
+            imin = i
+        ymax = max(ymax, vy[i])
+        xmax = max(xmax, vx[i])
+        xmin = min(xmin, vx[i])
+        _line2(m, p0x, p0y, vx[i], vy[i], color)
+        p0x = vx[i]
+        p0y = vy[i]
+    xmin = (xmin + delta) >> XY_SHIFT
+    xmax = (xmax + delta) >> XY_SHIFT
+    ymin = (ymin + delta) >> XY_SHIFT
+    ymax = (ymax + delta) >> XY_SHIFT
+    if npts < 3 or xmax < 0 or ymax < 0 or xmin >= m.cols or ymin >= m.rows:
+        return
+    ymax = min(ymax, m.rows - 1)
+    var eidx: List[Int] = [imin, imin]
+    var eye: List[Int] = [ymin, ymin]
+    var edi: List[Int] = [1, npts - 1]
+    var ex: List[Int] = [-XY_ONE, -XY_ONE]
+    var edx: List[Int] = [0, 0]
+    var y = ymin
+    while True:
+        for i in range(2):
+            if y >= eye[i]:
+                var idx0 = eidx[i]
+                var idx = idx0 + edi[i]
+                if idx >= npts:
+                    idx -= npts
+                while edges > 0:
+                    edges -= 1
+                    var ty = (vy[idx] + delta) >> XY_SHIFT
+                    if ty > y:
+                        var xs = vx[idx0]
+                        var xe = vx[idx]
+                        eye[i] = ty
+                        edx[i] = _tdiv((xe - xs) * 2 + (ty - y), 2 * (ty - y))
+                        ex[i] = xs
+                        eidx[i] = idx
+                        break
+                    idx0 = idx
+                    idx += edi[i]
+                    if idx >= npts:
+                        idx -= npts
+                else:
+                    edges -= 1
+        if edges < 0:
+            break
+        if y >= 0:
+            var left = 0
+            var right = 1
+            if ex[0] > ex[1]:
+                left = 1
+                right = 0
+            var xx1 = (ex[left] + delta) >> XY_SHIFT
+            var xx2 = (ex[right] + delta) >> XY_SHIFT
+            if xx2 >= 0 and xx1 < m.cols:
+                _hline(m, y, max(xx1, 0), min(xx2, m.cols - 1), color)
+        ex[0] += edx[0]
+        ex[1] += edx[1]
+        y += 1
+        if y > ymax:
+            break
+
+
+def _circle_fill[dt: DType](mut m: Mat[dt], cx: Int, cy: Int, radius: Int, color: List[Float64]):
+    """cv2's filled Circle: Bresenham octant walk, each step fills two rows."""
+    var err = 0
+    var dx = radius
+    var dy = 0
+    var plus = 1
+    var minus = (radius << 1) - 1
+    while dx >= dy:
+        for pass_ in range(2):
+            var yy = cy - dy if pass_ == 0 else cy - dx
+            var yy2 = cy + dy if pass_ == 0 else cy + dx
+            var half = dx if pass_ == 0 else dy
+            var xa = max(cx - half, 0)
+            var xb = min(cx + half, m.cols - 1)
+            if xa <= xb:
+                if yy >= 0 and yy < m.rows:
+                    _hline(m, yy, xa, xb, color)
+                if yy2 >= 0 and yy2 < m.rows:
+                    _hline(m, yy2, xa, xb, color)
+        dy += 1
+        err += plus
+        plus += 2
+        var mask = 0 if err <= 0 else -1
+        err -= minus & mask
+        dx += mask
+        minus -= mask & 2
+
+
+def _thick_line[dt: DType](mut m: Mat[dt], x1: Int, y1: Int, x2: Int, y2: Int, color: List[Float64], thickness: Int, flags: Int):
+    """cv2's ThickLine for LINE_8: a rectangle around the segment, plus a filled circle at the ends flagged in `flags`."""
+    var p0x = x1 << XY_SHIFT
+    var p0y = y1 << XY_SHIFT
+    var p1x = x2 << XY_SHIFT
+    var p1y = y2 << XY_SHIFT
+    var dx = Float64(p0x - p1x) / Float64(XY_ONE)
+    var dy = Float64(p1y - p0y) / Float64(XY_ONE)
+    var r = dx * dx + dy * dy
+    var odd = thickness & 1
+    var th = thickness << (XY_SHIFT - 1)
+    if abs(r) > 2.220446049250313e-16:
+        r = (Float64(th) + Float64(odd) * Float64(XY_ONE) * 0.5) / sqrt(r)
+        var dpx = rint(dy * r)
+        var dpy = rint(dx * r)
+        var vx: List[Int] = [p0x + dpx, p0x - dpx, p1x - dpx, p1x + dpx]
+        var vy: List[Int] = [p0y + dpy, p0y - dpy, p1y - dpy, p1y + dpy]
+        _fill_convex(m, vx, vy, color)
+    for i in range(2):
+        if (flags & (i + 1)) != 0:
+            _circle_fill(m, (p0x + (XY_ONE >> 1)) >> XY_SHIFT, (p0y + (XY_ONE >> 1)) >> XY_SHIFT, (th + (XY_ONE >> 1)) >> XY_SHIFT, color)
+        p0x = p1x
+        p0y = p1y
+
+
 def draw_rect[dt: DType](mut m: Mat[dt], x1: Int, y1: Int, x2: Int, y2: Int, color: List[Float64], thick: Int):
     """cv2.rectangle: thickness 1 draws the four edges, a negative thickness fills the clipped box."""
     if thick < 0:
@@ -1269,10 +2216,11 @@ def draw_rect[dt: DType](mut m: Mat[dt], x1: Int, y1: Int, x2: Int, y2: Int, col
                 for k in range(m.ch):
                     m.set(y, x, k, Scalar[dt](color[k] if k < len(color) else 0.0))
         return
-    draw_line(m, x1, y1, x2, y1, color)
-    draw_line(m, x2, y1, x2, y2, color)
-    draw_line(m, x2, y2, x1, y2, color)
-    draw_line(m, x1, y2, x1, y1, color)
+    # a closed polyline: every segment with a round cap at its end (cv2 PolyLine)
+    draw_line(m, x1, y2, x1, y1, color, thick, 2)
+    draw_line(m, x1, y1, x2, y1, color, thick, 2)
+    draw_line(m, x2, y1, x2, y2, color, thick, 2)
+    draw_line(m, x2, y2, x1, y2, color, thick, 2)
 
 
 # ---- HOG people detector ----------------------------------------------------------------------------------
@@ -1281,9 +2229,29 @@ def draw_rect[dt: DType](mut m: Mat[dt], x1: Int, y1: Int, x2: Int, y2: Int, col
 # trilinear voting, L2-Hys block normalisation. The linear SVM (3780 weights + bias) is an input file.
 
 
+def _atan2_pos[w: Int](y: SIMD[F32, w], x: SIMD[F32, w]) -> SIMD[F32, w]:
+    """atan2(y, x) folded into [0, pi) (atan2 + pi when negative), Cephes atanf polynomial on min / max."""
+    comptime PI = Float32(3.14159265358979323846)
+    var ax = abs(x)
+    var ay = abs(y)
+    var mx = max(ax, ay)
+    var t = min(ax, ay) / mx.eq(0).select(SIMD[F32, w](1), mx)
+    var big = t.gt(0.41421357)
+    var u = big.select((t - 1) / (t + 1), t)
+    var z = u * u
+    var a = (((8.05374449538e-2 * z - 1.38776856032e-1) * z + 1.99777106478e-1) * z - 3.33329491539e-1) * z * u + u
+    a = big.select(a + PI / 4, a)
+    a = ay.gt(ax).select(PI / 2 - a, a)
+    a = x.lt(0).select(PI - a, a)
+    return y.lt(0).select(PI - a, a)  # atan2(y, x) is -a for y < 0; + pi folds it into [0, pi)
+
+
 def hog_blocks(src: Mat[DType.uint8]) -> Mat[F32]:
     """Normalised 36-vectors for every 16 x 16 block on the 8-pixel grid: (block rows, block cols, 36); cells inside
-    a block are ordered column-major (x outer) like cv2, bins fastest."""
+    a block are ordered column-major (x outer) like cv2, bins fastest.
+    The Gaussian window times the trilinear cell weight is separable, so a block's cell histograms are
+    sum_i A[cy][i] * R[row + i][cx] with R[row][cx] = sum_j B[cx][j] * V(row, x0 + j), where V(row, x) is the pixel's
+    bin vector (16 lanes, 9 used). Every image row is reduced once to R; blocks then only add 16 rows."""
     var h = src.rows
     var w = src.cols
     var nby = (h - 16) // 8 + 1
@@ -1291,119 +2259,177 @@ def hog_blocks(src: Mat[DType.uint8]) -> Mat[F32]:
     var o = Mat[F32](max(nby, 0), max(nbx, 0), 36)
     if nby <= 0 or nbx <= 0:
         return o^
-    var lut = List[Float32](length=256, fill=0)
-    for i in range(256):
-        lut[i] = sqrt(Float32(i))
-    var bin0 = Mat[DType.int32](h, w, 1)
-    var wt0 = Mat[F32](h, w, 1)
-    var wt1 = Mat[F32](h, w, 1)
-    var pb = bin0.ptr()
-    var p0 = wt0.ptr()
-    var p1 = wt1.ptr()
-    var pl = ptr_of(lut)
+    comptime L = 16
+    # A[cy][i] and B[cx][j]: window g times the weight of cell c for position i (j) inside the block
+    var wa = List[Float32](length=2 * 16, fill=0)
+    for i in range(16):
+        var f = (Float32(i) + 0.5) / 8.0 - 0.5
+        var c0 = Int(floor(f))
+        var wf = f - Float32(c0)
+        var d = Float32(i - 8)
+        var g = Float32(exp(Float64(-(d * d) / 32.0)))
+        for c in range(2):
+            if c == c0:
+                wa[c * 16 + i] = g * (1 - wf)
+            elif c == c0 + 1:
+                wa[c * 16 + i] = g * wf
+    var oh = List[Float32](length=9 * L, fill=0)
+    for b in range(9):
+        oh[b * L + b] = 1
+    var rbuf = List[Float32](unsafe_uninit_length=h * nbx * 2 * L)
+    var pr = ptr_of(rbuf)
+    var pa = ptr_of(wa)
+    var poh = ptr_of(oh)
+    var ps = src.ptr()
+    var xlim = min(w, 8 * (nbx - 1) + 16)
+    comptime NT = 8
+    comptime PI = Float32(3.14159265358979323846)
 
-    def grad(y: Int) {imm}:
-        for x in range(w):
-            var xa = bidx(x - 1, w, 0)
-            var xb = bidx(x + 1, w, 0)
-            var ya = bidx(y - 1, h, 0)
-            var yb = bidx(y + 1, h, 0)
-            var gx = pl[unsafe_offset=Int(src.at(y, xb))] - pl[unsafe_offset=Int(src.at(y, xa))]
-            var gy = pl[unsafe_offset=Int(src.at(yb, x))] - pl[unsafe_offset=Int(src.at(ya, x))]
-            var mag = sqrt(gx * gx + gy * gy)
-            var ang = atan2(Float64(gy), Float64(gx))
-            if ang < 0:
-                ang += 3.14159265358979323846
-            var fb = ang * 9.0 / 3.14159265358979323846 - 0.5
-            var b0 = Int(floor(fb))
-            var wb = Float32(fb - Float64(b0))
-            pb[unsafe_offset=y * w + x] = Int32(b0)
-            p0[unsafe_offset=y * w + x] = mag * (1 - wb)
-            p1[unsafe_offset=y * w + x] = mag * wb
+    def grad_rows(t: Int) {imm}:
+        var bb = List[Int32](length=w, fill=0)
+        var v0 = List[Float32](length=w, fill=0)
+        var v1 = List[Float32](length=w, fill=0)
+        var pbb = ptr_of(bb)
+        var pv0 = ptr_of(v0)
+        var pv1 = ptr_of(v1)
+        for y in range(h * t // NT, h * (t + 1) // NT):
+            var rc = ps + y * w
+            var ra = ps + bidx(y - 1, h, 0) * w
+            var rb = ps + bidx(y + 1, h, 0) * w
+            var x = 0
+            while x < xlim:
+                var gx: SIMD[F32, L]
+                var gy: SIMD[F32, L]
+                if x >= 1 and x + L + 1 <= w:
+                    gx = sqrt(rc.unsafe_load[width=L](x + 1).cast[F32]()) - sqrt(rc.unsafe_load[width=L](x - 1).cast[F32]())
+                    gy = sqrt(rb.unsafe_load[width=L](x).cast[F32]()) - sqrt(ra.unsafe_load[width=L](x).cast[F32]())
+                else:
+                    gx = SIMD[F32, L](0)
+                    gy = SIMD[F32, L](0)
+                    for j in range(min(L, w - x)):
+                        gx[j] = sqrt(Float32(rc[unsafe_offset=bidx(x + j + 1, w, 0)])) - sqrt(Float32(rc[unsafe_offset=bidx(x + j - 1, w, 0)]))
+                        gy[j] = sqrt(Float32(rb[unsafe_offset=x + j])) - sqrt(Float32(ra[unsafe_offset=x + j]))
+                var mag = sqrt(gx * gx + gy * gy)
+                var ang = _atan2_pos[L](gy, gx)
+                var fb = ang * (9.0 / PI) - 0.5
+                var b0f = floor(fb)
+                var wb = fb - b0f
+                var n = min(L, w - x)
+                if n == L:
+                    pbb.unsafe_store(x, b0f.cast[DType.int32]())
+                    pv0.unsafe_store(x, mag * (1 - wb))
+                    pv1.unsafe_store(x, mag * wb)
+                else:
+                    for j in range(n):
+                        pbb[unsafe_offset=x + j] = Int32(b0f[j])
+                        pv0[unsafe_offset=x + j] = mag[j] * (1 - wb[j])
+                        pv1[unsafe_offset=x + j] = mag[j] * wb[j]
+                x += L
+            var rowr = pr + y * nbx * 2 * L
+            for g in range(nbx + 1):
+                var a0 = SIMD[F32, L](0)
+                var a1 = SIMD[F32, L](0)
+                var b0v = SIMD[F32, L](0)
+                var b1v = SIMD[F32, L](0)
+                for jx in range(8):
+                    var xx = g * 8 + jx
+                    var b0 = Int(pbb[unsafe_offset=xx])
+                    var b1 = (b0 + 1) % 9
+                    b0 = ((b0 % 9) + 9) % 9
+                    var contrib = pv0[unsafe_offset=xx] * poh.unsafe_load[width=L](b0 * L) + pv1[unsafe_offset=xx] * poh.unsafe_load[width=L](b1 * L)
+                    a0 += pa[unsafe_offset=jx] * contrib
+                    a1 += pa[unsafe_offset=16 + jx] * contrib
+                    b0v += pa[unsafe_offset=jx + 8] * contrib
+                    b1v += pa[unsafe_offset=16 + jx + 8] * contrib
+                if g < nbx:
+                    rowr.unsafe_store((g * 2) * L, a0)
+                    rowr.unsafe_store((g * 2 + 1) * L, a1)
+                if g >= 1:
+                    rowr.unsafe_store(((g - 1) * 2) * L, rowr.unsafe_load[width=L](((g - 1) * 2) * L) + b0v)
+                    rowr.unsafe_store(((g - 1) * 2 + 1) * L, rowr.unsafe_load[width=L](((g - 1) * 2 + 1) * L) + b1v)
+        _ = (len(bb), len(v0), len(v1))
 
-    par(grad, h, 16)
+    par(grad_rows, NT)
     var po = o.ptr()
 
-    # per block pixel: Gaussian window times trilinear weight for each of the four neighbouring cells
-    var wtab = List[Float32](length=256 * 4, fill=0)
-    for i in range(16):
-        var fy = (Float32(i) + 0.5) / 8.0 - 0.5
-        var cy0 = Int(floor(fy))
-        var wy = fy - Float32(cy0)
-        for j in range(16):
-            var fx = (Float32(j) + 0.5) / 8.0 - 0.5
-            var cx0 = Int(floor(fx))
-            var wx = fx - Float32(cx0)
-            var di = Float32(i - 8)
-            var dj = Float32(j - 8)
-            var g = Float32(exp(Float64(-(di * di + dj * dj) / 32.0)))
-            for cyi in range(2):
-                for cxi in range(2):
-                    var cy = cy0 + cyi
-                    var cx = cx0 + cxi
-                    if cx >= 0 and cx < 2 and cy >= 0 and cy < 2:
-                        var w1 = wy if cyi == 1 else 1 - wy
-                        var w2 = wx if cxi == 1 else 1 - wx
-                        wtab[(i * 16 + j) * 4 + cx * 2 + cy] = g * w1 * w2
-    var pw = ptr_of(wtab)
+    def block_row(r: Int) {imm}:
+        var scratch = List[Float32](length=64, fill=0)
+        var sp = ptr_of(scratch)
+        for bx in range(nbx):
+            var c00 = SIMD[F32, L](0)
+            var c01 = SIMD[F32, L](0)
+            var c10 = SIMD[F32, L](0)
+            var c11 = SIMD[F32, L](0)
+            for i in range(16):
+                var at = ((r * 8 + i) * nbx + bx) * 2 * L
+                var r0 = pr.unsafe_load[width=L](at)
+                var r1 = pr.unsafe_load[width=L](at + L)
+                var a0 = pa[unsafe_offset=i]
+                var a1 = pa[unsafe_offset=16 + i]
+                c00 += a0 * r0
+                c01 += a1 * r0
+                c10 += a0 * r1
+                c11 += a1 * r1
+            # four overlapping 16-lane stores: cell k keeps lanes 0..8 of its own store at offset 9k
+            sp.unsafe_store(0, c00)
+            sp.unsafe_store(9, c01)
+            sp.unsafe_store(18, c10)
+            sp.unsafe_store(27, c11)
+            var v0 = sp.unsafe_load[width=16](0)
+            var v1 = sp.unsafe_load[width=16](16)
+            var v2 = sp.unsafe_load[width=16](32)  # lanes 4.. are junk, masked below
+            var m2 = SIMD[F32, 16](1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+            v2 = v2 * m2
+            var sc = 1.0 / (sqrt((v0 * v0 + v1 * v1 + v2 * v2).reduce_add()) + 3.6)
+            v0 = min(v0 * sc, 0.2)
+            v1 = min(v1 * sc, 0.2)
+            v2 = min(v2 * sc, 0.2)
+            var sc2 = 1.0 / (sqrt((v0 * v0 + v1 * v1 + v2 * v2).reduce_add()) + 1e-3)
+            var dst = po + (r * nbx + bx) * 36
+            dst.unsafe_store(0, v0 * sc2)
+            dst.unsafe_store(16, v1 * sc2)
+            dst.unsafe_store(32, (v2 * sc2).slice[4]())
+        _ = len(scratch)
 
-    def block(t: Int) {imm}:
-        var by = (t // nbx) * 8
-        var bx = (t % nbx) * 8
-        var hist = SIMD[F32, 64](0)
-        for i in range(16):
-            for j in range(16):
-                var idx = (by + i) * w + bx + j
-                var b0 = Int(pb[unsafe_offset=idx])
-                var b1 = (b0 + 1) % 9
-                b0 = ((b0 % 9) + 9) % 9
-                var v0 = p0[unsafe_offset=idx]
-                var v1 = p1[unsafe_offset=idx]
-                comptime for cell in range(4):
-                    var wc = pw[unsafe_offset=(i * 16 + j) * 4 + cell]
-                    hist[cell * 9 + b0] += v0 * wc
-                    hist[cell * 9 + b1] += v1 * wc
-        var sum = Float32(0)
-        for k in range(36):
-            sum += hist[k] * hist[k]
-        var sc = 1.0 / (sqrt(sum) + 3.6)
-        var sum2 = Float32(0)
-        for k in range(36):
-            hist[k] = min(hist[k] * sc, 0.2)
-            sum2 += hist[k] * hist[k]
-        var sc2 = 1.0 / (sqrt(sum2) + 1e-3)
-        for k in range(36):
-            po[unsafe_offset=t * 36 + k] = hist[k] * sc2
-
-    par(block, nby * nbx, 16)
-    _ = (bin0.rows, wt0.rows, wt1.rows, len(lut), len(wtab))
+    par(block_row, nby)
+    _ = (len(rbuf), len(wa), len(oh))
     return o^
 
 
 def hog_scores(blocks: Mat[F32], svm: Mat[F32]) -> Mat[F32]:
-    """SVM score of every 64 x 128 window on the 8-pixel grid: (window rows, window cols)."""
+    """SVM score of every 64 x 128 window on the 8-pixel grid: (window rows, window cols). The 7 blocks of one window
+    row are contiguous in `blocks`, so each of the 15 rows is one 252-float dot product against a re-laid-out SVM."""
     var ny = blocks.rows - 14
     var nx = blocks.cols - 6
-    var o = Mat[F32](max(ny, 0), max(nx, 0), 1)
+    var o = Mat[F32](max(ny, 0), max(nx, 0), 1, False)
     if ny <= 0 or nx <= 0:
         return o^
     var po = o.ptr()
     var pbk = blocks.ptr()
     var ps = svm.ptr()
     var nbx = blocks.cols
+    var sw = List[Float32](length=15 * 252, fill=0)
+    for j in range(15):
+        for i in range(7):
+            for t in range(36):
+                sw[j * 252 + i * 36 + t] = ps[unsafe_offset=(i * 15 + j) * 36 + t]
+    var psw = ptr_of(sw)
 
     def row(wy: Int) {imm}:
         for wx in range(nx):
-            var acc = ps[unsafe_offset=3780]
-            for i in range(7):
-                for j in range(15):
-                    var bo = ((wy + j) * nbx + wx + i) * 36
-                    var so = (i * 15 + j) * 36
-                    for t in range(36):
-                        acc += ps[unsafe_offset=so + t] * pbk[unsafe_offset=bo + t]
-            po[unsafe_offset=wy * nx + wx] = acc
+            var acc16 = SIMD[F32, 16](0)
+            var acc4 = SIMD[F32, 4](0)
+            for j in range(15):
+                var bo = ((wy + j) * nbx + wx) * 36
+                var so = j * 252
+                comptime for q in range(15):
+                    acc16 += psw.unsafe_load[width=16](so + q * 16) * pbk.unsafe_load[width=16](bo + q * 16)
+                comptime for q in range(3):
+                    acc4 += psw.unsafe_load[width=4](so + 240 + q * 4) * pbk.unsafe_load[width=4](bo + 240 + q * 4)
+            po[unsafe_offset=wy * nx + wx] = ps[unsafe_offset=3780] + acc16.reduce_add() + acc4.reduce_add()
 
-    par(row, ny, 16)
+    par(row, ny)
+    _ = len(sw)
     return o^
 
 
@@ -1957,6 +2983,8 @@ def run_dt[dt: DType](mut a: Args) raises -> Bool:
         comptime if dt == DType.uint8:
             if a.i("otsu", 0) == 1:
                 th = Float64(otsu(m))
+            elif a.i("tri", 0) == 1:
+                th = Float64(triangle(m))
         while a.again():
             o = threshold(m, th, a.f("maxval", 255.0), a.i("type", 0))
         save(o, a.out)
@@ -2008,15 +3036,16 @@ def run_u8(mut a: Args) raises -> Bool:
             o = canny(m, a.f("t1", 100.0), a.f("t2", 200.0), a.i("aperture", 3), a.i("l2", 0) == 1)
         save(o, a.out)
     elif a.op == "findContours":
-        var o = (Mat[DType.int32](0, 0), Mat[DType.int32](0, 0))
+        var o = (Mat[DType.int32](0, 0), Mat[DType.int32](0, 0), Mat[DType.int32](0, 0))
         while a.again():
-            o = find_contours(m, a.i("mode", 0) == 0, a.i("method", 0) == 1)
+            o = find_contours(m, a.i("mode", 0), a.i("method", 0) == 1)
         save(o[0], a.out)
         save(o[1], a.out + ".1")
+        save(o[2], a.out + ".2")
     elif a.op == "goodFeaturesToTrack":
         var o = Mat[F32](0, 0)
         while a.again():
-            o = good_features(m, a.i("maxCorners", 100), a.f("quality", 0.01), a.f("minDist", 10.0), a.i("block", 3))
+            o = good_features(m, a.i("maxCorners", 100), a.f("quality", 0.01), a.f("minDist", 10.0), a.i("block", 3), a.i("harris", 0) == 1, a.f("k", 0.04))
         save(o, a.out)
     elif a.op == "grabCut":
         var r = a.fl("rect", [0.0, 0.0, Float64(m.cols), Float64(m.rows)])
@@ -2042,7 +3071,7 @@ def run_u8(mut a: Args) raises -> Bool:
         while a.again():
             o = Mat[DType.uint8](copy=m)
             if a.op == "line":
-                draw_line(o, a.i("x1", 0), a.i("y1", 0), a.i("x2", 0), a.i("y2", 0), c)
+                draw_line(o, a.i("x1", 0), a.i("y1", 0), a.i("x2", 0), a.i("y2", 0), c, a.i("thick", 1))
             else:
                 draw_rect(o, a.i("x1", 0), a.i("y1", 0), a.i("x2", 0), a.i("y2", 0), c, a.i("thick", 1))
         save(o, a.out)

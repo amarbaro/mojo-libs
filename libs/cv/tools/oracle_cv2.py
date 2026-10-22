@@ -80,7 +80,7 @@ def Sobel(i, kv):
 @op()
 def threshold(i, kv):
     t, mv = kv_f(kv, "thresh", 127.0), kv_f(kv, "maxval", 255.0)
-    ty = kv_i(kv, "type", 0) | (cv2.THRESH_OTSU if kv_i(kv, "otsu", 0) else 0)
+    ty = kv_i(kv, "type", 0) | (cv2.THRESH_OTSU if kv_i(kv, "otsu", 0) else 0) | (cv2.THRESH_TRIANGLE if kv_i(kv, "tri", 0) else 0)
     r, o = cv2.threshold(i[0], t, mv, ty)
     return [o, np.array([[r]], np.float64)]
 @op()
@@ -96,11 +96,12 @@ def dilate(i, kv): return cv2.dilate(i[0], _se(kv), iterations=kv_i(kv, "iters",
 @op()
 def cvtColor(i, kv):
     c = {"bgr2gray": cv2.COLOR_BGR2GRAY, "rgb2gray": cv2.COLOR_RGB2GRAY, "gray2bgr": cv2.COLOR_GRAY2BGR, "bgr2rgb": cv2.COLOR_BGR2RGB,
-         "bgr2hsv": cv2.COLOR_BGR2HSV, "hsv2bgr": cv2.COLOR_HSV2BGR, "bgr2ycrcb": cv2.COLOR_BGR2YCrCb, "ycrcb2bgr": cv2.COLOR_YCrCb2BGR}
+         "bgr2hsv": cv2.COLOR_BGR2HSV, "hsv2bgr": cv2.COLOR_HSV2BGR, "bgr2ycrcb": cv2.COLOR_BGR2YCrCb, "ycrcb2bgr": cv2.COLOR_YCrCb2BGR,
+         "bgr2lab": cv2.COLOR_BGR2Lab, "lab2bgr": cv2.COLOR_Lab2BGR, "bgr2luv": cv2.COLOR_BGR2Luv, "luv2bgr": cv2.COLOR_Luv2BGR}
     return cv2.cvtColor(i[0], c[kv["code"]])
 
 
-INTERP = [cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_LANCZOS4]
+INTERP = [cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_LANCZOS4, cv2.INTER_AREA]
 BORDER = [cv2.BORDER_REFLECT_101, cv2.BORDER_REPLICATE, cv2.BORDER_CONSTANT]  # border=0 reflect101, 1 replicate, 2 constant
 
 
@@ -135,18 +136,19 @@ def Canny(i, kv):
     return cv2.Canny(i[0], kv_f(kv, "t1", 100.0), kv_f(kv, "t2", 200.0), apertureSize=kv_i(kv, "aperture", 3), L2gradient=bool(kv_i(kv, "l2", 0)))
 @op()
 def findContours(i, kv):
-    cs, _ = cv2.findContours(i[0], [cv2.RETR_EXTERNAL, cv2.RETR_LIST][kv_i(kv, "mode", 0)], [cv2.CHAIN_APPROX_NONE, cv2.CHAIN_APPROX_SIMPLE][kv_i(kv, "method", 0)])
+    cs, hi = cv2.findContours(i[0], [cv2.RETR_EXTERNAL, cv2.RETR_LIST, cv2.RETR_CCOMP, cv2.RETR_TREE][kv_i(kv, "mode", 0)], [cv2.CHAIN_APPROX_NONE, cv2.CHAIN_APPROX_SIMPLE][kv_i(kv, "method", 0)])
     pts = np.concatenate([c.reshape(-1, 2) for c in cs]) if cs else np.zeros((0, 2), np.int32)
-    return [pts.astype(np.int32), np.array([[len(c)] for c in cs], np.int32).reshape(-1, 1)]
+    hier = np.zeros((0, 4), np.int32) if hi is None else hi.reshape(-1, 4).astype(np.int32)
+    return [pts.astype(np.int32), np.array([[len(c)] for c in cs], np.int32).reshape(-1, 1), hier]
 @op()
 def goodFeaturesToTrack(i, kv):
-    r = cv2.goodFeaturesToTrack(i[0], kv_i(kv, "maxCorners", 100), kv_f(kv, "quality", 0.01), kv_f(kv, "minDist", 10.0), blockSize=kv_i(kv, "block", 3))
+    r = cv2.goodFeaturesToTrack(i[0], kv_i(kv, "maxCorners", 100), kv_f(kv, "quality", 0.01), kv_f(kv, "minDist", 10.0), blockSize=kv_i(kv, "block", 3), useHarrisDetector=bool(kv_i(kv, "harris", 0)), k=kv_f(kv, "k", 0.04))
     return np.zeros((0, 2), np.float32) if r is None else r.reshape(-1, 2).astype(np.float32)
 @op()
 def line(i, kv):
     im = i[0].copy()
     c = tuple(kv_l(kv, "color", [255, 255, 255]))
-    return cv2.line(im, (kv_i(kv, "x1", 0), kv_i(kv, "y1", 0)), (kv_i(kv, "x2", 0), kv_i(kv, "y2", 0)), c, 1)
+    return cv2.line(im, (kv_i(kv, "x1", 0), kv_i(kv, "y1", 0)), (kv_i(kv, "x2", 0), kv_i(kv, "y2", 0)), c, kv_i(kv, "thick", 1))
 @op()
 def rectangle(i, kv):
     im = i[0].copy()
@@ -218,7 +220,10 @@ def estimateAffine2D(i, kv):
     return [m, inl.reshape(-1, 1).astype(np.uint8)]
 @op()
 def solvePnP(i, kv):
-    ok, r, t = cv2.solvePnP(i[0], i[1], i[2], i[3] if i[3].size else None, flags=cv2.SOLVEPNP_ITERATIVE)
+    flag = cv2.SOLVEPNP_EPNP if kv_i(kv, "epnp", 0) else cv2.SOLVEPNP_ITERATIVE
+    ok, r, t = cv2.solvePnP(i[0], i[1], i[2], i[3] if i[3].size else None, flags=flag)
+    if kv_i(kv, "epnp", 0):
+        r, t = cv2.solvePnPRefineLM(i[0], i[1], i[2], i[3], r, t)
     return [r.reshape(3, 1), t.reshape(3, 1)]
 @op()
 def solvePnPRansac(i, kv):
@@ -228,6 +233,13 @@ def solvePnPRansac(i, kv):
 @op()
 def findEssentialMat(i, kv):
     E, m = cv2.findEssentialMat(i[0], i[1], i[2], method=cv2.RANSAC, prob=kv_f(kv, "prob", 0.999), threshold=kv_f(kv, "thresh", 1.0))
+    if len(i[0]) == 5:
+        models = E.reshape(-1, 3, 3)
+        models = models / np.linalg.norm(models, axis=(1, 2))[:, None, None]
+        for e in models:
+            if e.flat[np.argmax(np.abs(e))] < 0:
+                e *= -1
+        return [models[np.argsort(models[:, 0, 0])].reshape(-1, 3), m.reshape(-1, 1).astype(np.uint8)]
     E = E[:3] / np.linalg.norm(E[:3])
     if E.flat[np.argmax(np.abs(E))] < 0:
         E = -E
@@ -240,7 +252,7 @@ def recoverPose(i, kv):
 @op()
 def stereoRectify(i, kv):
     R1, R2, P1, P2, Q, _, _ = cv2.stereoRectify(i[0], i[1], i[2], i[3], (kv_i(kv, "w", 640), kv_i(kv, "h", 480)), i[4], i[5],
-                                                 flags=cv2.CALIB_ZERO_DISPARITY if kv_i(kv, "zero", 1) else 0)
+                                                 flags=cv2.CALIB_ZERO_DISPARITY if kv_i(kv, "zero", 1) else 0, alpha=kv_f(kv, "alpha", -1.0))
     return [R1, R2, P1, P2, Q]
 
 
@@ -385,6 +397,9 @@ def make_fixtures(d):
     fx["hdg2"] = cv2.cvtColor(fx["hd2"], cv2.COLOR_BGR2GRAY)
     fx["sm"], fx["sm2"] = fx["hd"][300:570, 400:880].copy(), fx["hd2"][300:570, 400:880].copy()
     fx["smg"], fx["smg2"] = fx["hdg"][300:570, 400:880].copy(), fx["hdg2"][300:570, 400:880].copy()
+    fx["sm_lab"], fx["sm_luv"] = cv2.cvtColor(fx["sm"], cv2.COLOR_BGR2Lab), cv2.cvtColor(fx["sm"], cv2.COLOR_BGR2Luv)
+    smf = fx["sm"].astype(np.float32) / 255
+    fx["sm_lab_f"], fx["sm_luv_f"] = cv2.cvtColor(smf, cv2.COLOR_BGR2Lab), cv2.cvtColor(smf, cv2.COLOR_BGR2Luv)
     fx["bin"] = (fx["smg"] < 128).astype(np.uint8) * 255
     fx["binhd"] = (fx["hdg"] < 128).astype(np.uint8) * 255
     shapes = np.zeros((60, 80), np.uint8)
@@ -441,6 +456,9 @@ def make_fixtures(d):
     for q in (q2, q2n):
         q[:12] = rng.uniform(0, 640, (12, 2))  # gross outliers
     fx["ess_p1"], fx["ess_p2"], fx["ess_p2n"] = q1, q2, q2n
+    fx["ess_six1"], fx["ess_six2"] = q1[12:18].copy(), q2[12:18].copy()
+    fx["ess_five1"], fx["ess_five2"] = q1[12:17].copy(), q2[12:17].copy()
+    fx["ess_clean1"], fx["ess_clean2"] = q1[12:].copy(), q2[12:].copy()
     tn = tv2.reshape(3)
     fx["pose_E"] = np.array([[0, -tn[2], tn[1]], [tn[2], 0, -tn[0]], [-tn[1], tn[0], 0]]) @ cv2.Rodrigues(rv2)[0]
     fx["pose_mask"] = np.concatenate([np.zeros(12), np.ones(48)]).reshape(-1, 1).astype(np.uint8)
@@ -456,6 +474,9 @@ def make_fixtures(d):
     outp[:3] = rng.uniform(0, 640, (3, 2))
     fx["pnp_img_pl_out"] = np.vstack([outp, cv2.projectPoints(fx["pnp_obj_pl"][:6], rvp, tvp, Kc, fx["d4"])[0].reshape(-1, 2)])
     fx["pnp_obj_pl2"] = np.vstack([fx["pnp_obj_pl"], fx["pnp_obj_pl"][:6]])
+    fx["pnp_four"] = np.array([[-1., -1., 0.], [1., -1., .3], [0., 1., -.2], [.2, .1, 1.]])
+    fx["pnp_four_img"] = cv2.projectPoints(fx["pnp_four"], rvp, tvp, Kc, fx["d4"])[0].reshape(-1, 2)
+    fx["pnp_img_noise"] = fx["pnp_img"] + np.random.default_rng(103).normal(0, .2, (40, 2))
     Af = np.array([[0.9, -0.3, 12.0], [0.25, 1.1, -7.0]])
     pa = rng.uniform(0, 300, (80, 2))
     pb = pa @ Af[:, :2].T + Af[:, 2]
@@ -463,6 +484,7 @@ def make_fixtures(d):
     fx["aff_from"], fx["aff_to"] = pa, pb
     fx["Rst"] = cv2.Rodrigues(np.array([0.01, -0.02, 0.005]))[0]
     fx["Tst"] = np.array([[-0.12], [0.003], [0.002]])
+    fx["Tstv"] = np.array([[0.003], [-0.12], [0.002]])
     fx["K2"] = np.array([[820, 0, 315], [0, 830, 245], [0, 0, 1.0]])
     fx["dst1"] = np.array([[-0.2], [0.05], [0], [0], [0]])
     fx["dst2"] = np.array([[-0.1], [0.02], [0], [0], [0]])

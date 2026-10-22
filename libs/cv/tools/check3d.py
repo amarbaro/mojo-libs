@@ -31,6 +31,13 @@ def check(row, fx):
     expect = dict(t[7:].split("=") for t in rest if t.startswith("expect:"))
     kv = dict(a.split("=") for a in args)
     ins = [WORK / f"{n}.mcv" for n in ins_s.split(",") if n != "-"]
+    for path in ins:
+        if not path.exists() and path.name.startswith("mesh_") and path.name.endswith((".v.mcv", ".f.mcv")):
+            stem = path.name.rsplit(".", 2)[0]
+            code, stdout, stderr = ours("mesh", WORK / f"{stem}.v.mcv", [WORK / f"ms_{stem[5:]}.mcv"],
+                                       [f"faces={WORK / (stem + '.f.mcv')}"])
+            if code != 0:
+                return False, f"mesh fixture failed: {(stdout + stderr).strip()[:200]}"
     out = WORK / f"{name}.ours.mcv"
     if op in oracle3d.CUSTOM:
         return oracle3d.CUSTOM[op](dict(name=name, ins=ins, args=args, expect=expect, work=WORK, mcv=mcv,

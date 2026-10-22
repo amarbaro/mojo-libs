@@ -1015,6 +1015,11 @@ def check_step_read(ctx):
     """Our reader on a numpy-side edited copy of a good file: accepted layouts and rejected corruptions."""
     import re
     mcv, work, name, variant = ctx["mcv"], ctx["work"], ctx["name"], ctx["expect"]["variant"]
+    if not all((work / f"mesh_one.{suffix}.mcv").exists() for suffix in ("v", "f")):
+        code, so, se = ctx["run3"]("mesh", work / "mesh_one.v.mcv", [work / "ms_one.mcv"],
+                                    [f"faces={work / 'mesh_one.f.mcv'}"])
+        if code != 0:
+            return False, f"mesh fixture failed: {(so + se).strip()[:200]}"
     base = (work / "step_base.stp")
     if not base.exists():
         code, so, se = ctx["run3"]("step", base, [work / "mesh_one.v.mcv", work / "mesh_one.f.mcv"], [])
