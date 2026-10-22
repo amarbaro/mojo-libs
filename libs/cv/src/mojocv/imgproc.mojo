@@ -917,56 +917,72 @@ struct Taps(Movable):
 
 
 def resize[dt: DType](src: Mat[dt], dw: Int, dh: Int, kind: Int) -> Mat[dt]:
+    """Column taps first, on contiguous SIMD over the source width into one cached row per output row; then the row
+    taps pick (dw) pixels from that row."""
     var tx = Taps(src.cols, dw, Float64(src.cols) / Float64(dw), kind)
     var ty = Taps(src.rows, dh, Float64(src.rows) / Float64(dh), kind)
     var ch = src.ch
-    var need = List[Bool](length=src.rows, fill=False)
-    for i in range(len(ty.idx)):
-        need[ty.idx[i]] = True
-    var tmp = Mat[F32](src.rows, dw, ch)
-    var o = Mat[dt](dh, dw, ch)
+    var o = Mat[dt](dh, dw, ch, False)
     var pa = src.ptr()
-    var pt = tmp.ptr()
     var po = o.ptr()
     var pix = ptr_of(tx.idx)
     var pwx = ptr_of(tx.w)
     var piy = ptr_of(ty.idx)
     var pwy = ptr_of(ty.w)
-    var pneed = ptr_of(need)
     var nx = tx.n
     var ny = ty.n
-    var n = dw * ch
-
-    def hrow(r: Int) {imm}:
-        if not pneed[unsafe_offset=r]:
-            return
+    var sn = src.cols * ch
+    var dn = dw * ch
+    # per output element and tap: the index into the cached column-pass row and its weight
+    var ex = List[Int32](length=nx * dn, fill=0)
+    var ew = List[Float32](length=nx * dn, fill=0)
+    for q in range(nx):
         for d in range(dw):
             for k in range(ch):
-                var s = Float32(0)
-                for t in range(nx):
-                    s += pwx[unsafe_offset=d * nx + t] * Float32(pa[unsafe_offset=(r * src.cols + pix[unsafe_offset=d * nx + t]) * ch + k])
-                pt[unsafe_offset=(r * dw + d) * ch + k] = s
+                ex[q * dn + d * ch + k] = Int32(tx.idx[d * nx + q] * ch + k)
+                ew[q * dn + d * ch + k] = tx.w[d * nx + q]
+    var pex = ptr_of(ex)
+    var pew = ptr_of(ew)
+    comptime NT = 8
 
-    par(hrow, src.rows)
+    def task(t: Int) {imm}:
+        var vrow = List[Float32](unsafe_uninit_length=sn)
+        var v = ptr_of(vrow)
+        for r in range(dh * t // NT, dh * (t + 1) // NT):
+            if kind == 0:
+                var srow = pa + piy[unsafe_offset=r * ny] * sn
+                for d in range(dw):
+                    for k in range(ch):
+                        po[unsafe_offset=(r * dw + d) * ch + k] = srow[unsafe_offset=pix[unsafe_offset=d] * ch + k]
+                continue
+            var i = 0
+            while i + WF <= sn:
+                var acc = SIMD[F32, WF](0)
+                for q in range(ny):
+                    acc += _ld[dt, WF](pa, piy[unsafe_offset=r * ny + q] * sn + i) * pwy[unsafe_offset=r * ny + q]
+                v.unsafe_store(i, acc)
+                i += WF
+            for j in range(i, sn):
+                var acc = Float32(0)
+                for q in range(ny):
+                    acc += Float32(pa[unsafe_offset=piy[unsafe_offset=r * ny + q] * sn + j]) * pwy[unsafe_offset=r * ny + q]
+                v[unsafe_offset=j] = acc
+            var dst = po + r * dn
+            var e = 0
+            while e + WF <= dn:
+                var acc = SIMD[F32, WF](0)
+                for q in range(nx):
+                    acc += v.unsafe_gather(pex.unsafe_load[width=WF](q * dn + e)) * pew.unsafe_load[width=WF](q * dn + e)
+                dst.unsafe_store(e, _fin[dt, WF](acc))
+                e += WF
+            for j in range(e, dn):
+                var acc = Float32(0)
+                for q in range(nx):
+                    acc += v[unsafe_offset=Int(pex[unsafe_offset=q * dn + j])] * pew[unsafe_offset=q * dn + j]
+                dst.unsafe_store(j, _fin[dt, 1](SIMD[F32, 1](acc)))
 
-    def vrow(r: Int) {imm}:
-        var i = 0
-        while i < n:
-            var w = WF if i + WF <= n else 1
-            var acc = SIMD[F32, WF](0)
-            for t in range(ny):
-                var row = piy[unsafe_offset=r * ny + t]
-                var x = pt.unsafe_load[width=WF](row * n + i) if w == WF else SIMD[F32, WF](pt[unsafe_offset=row * n + i])
-                acc += x * pwy[unsafe_offset=r * ny + t]
-            var z = _fin[dt, WF](acc)
-            if w == WF:
-                po.unsafe_store(r * n + i, z)
-            else:
-                po[unsafe_offset=r * n + i] = z[0]
-            i += w
-
-    par(vrow, dh)
-    _ = (tmp.rows, tx.n, ty.n, len(need))
+    par(task, NT)
+    _ = (tx.n, ty.n, len(ex), len(ew))
     return o^
 
 
@@ -1027,6 +1043,39 @@ def sample[dt: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: Float64, fy: Float6
         dst[unsafe_offset=k] = Scalar[dt](acc)
 
 
+def _lin_vec[dt: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: SIMD[DType.float64, WF], fy: SIMD[DType.float64, WF], mode: Int, bv: Scalar[dt], dst: Ptr[Scalar[dt]]) -> Bool:
+    """Bilinear samples at WF positions straight into dst (WF pixels), or bv when all of them lie outside under a
+    constant border. False, with dst untouched, when any position needs the general border path."""
+    var ffx = floor(fx)
+    var ffy = floor(fy)
+    var sx = ffx.cast[DType.int32]()
+    var sy = ffy.cast[DType.int32]()
+    if mode == 2 and (Int(sx.reduce_max()) < -1 or Int(sx.reduce_min()) >= src.cols or Int(sy.reduce_max()) < -1 or Int(sy.reduce_min()) >= src.rows):
+        for i in range(WF * src.ch):
+            dst[unsafe_offset=i] = bv
+        return True
+    if sx.reduce_min() < 0 or sy.reduce_min() < 0 or Int(sx.reduce_max()) + 2 > src.cols or Int(sy.reduce_max()) + 2 > src.rows:
+        return False
+    var ch = src.ch
+    var wx1 = (fx - ffx).cast[F32]()
+    var wy1 = (fy - ffy).cast[F32]()
+    var wx0 = 1 - wx1
+    var wy0 = 1 - wy1
+    var base = (sy * Int32(src.cols) + sx) * Int32(ch)
+    var lane = SIMD[DType.int32, WF](0)
+    comptime for j in range(WF):
+        lane[j] = Int32(j * ch)
+    for k in range(ch):
+        var b = base + Int32(k)
+        var p00 = ps.unsafe_gather(b).cast[F32]()
+        var p01 = ps.unsafe_gather(b + Int32(ch)).cast[F32]()
+        var p10 = ps.unsafe_gather(b + Int32(src.cols * ch)).cast[F32]()
+        var p11 = ps.unsafe_gather(b + Int32(src.cols * ch + ch)).cast[F32]()
+        var v = wy0 * (wx0 * p00 + wx1 * p01) + wy1 * (wx0 * p10 + wx1 * p11)
+        (dst + k).unsafe_scatter(lane, _fin[dt, WF](v))
+    return True
+
+
 def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kind: Int, mode: Int, bval: Float64) -> Mat[dt]:
     """m is the inverse map (dst -> src) as a 2 x 3 matrix."""
     var o = Mat[dt](dh, dw, src.ch)
@@ -1036,10 +1085,22 @@ def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kin
     var bv = Scalar[dt](bval)
 
     def row(y: Int) {imm}:
-        for x in range(dw):
-            var fx = pm[unsafe_offset=0] * Float64(x) + pm[unsafe_offset=1] * Float64(y) + pm[unsafe_offset=2]
-            var fy = pm[unsafe_offset=3] * Float64(x) + pm[unsafe_offset=4] * Float64(y) + pm[unsafe_offset=5]
+        var x = 0
+        var iota = SIMD[DType.float64, WF](0)
+        comptime for j in range(WF):
+            iota[j] = Float64(j)
+        var bx = pm[unsafe_offset=1] * Float64(y) + pm[unsafe_offset=2]
+        var by = pm[unsafe_offset=4] * Float64(y) + pm[unsafe_offset=5]
+        while x < dw:
+            if kind == 1 and x + WF <= dw:
+                var xv = iota + Float64(x)
+                if _lin_vec(src, ps, pm[unsafe_offset=0] * xv + bx, pm[unsafe_offset=3] * xv + by, mode, bv, po + (y * dw + x) * src.ch):
+                    x += WF
+                    continue
+            var fx = pm[unsafe_offset=0] * Float64(x) + bx
+            var fy = pm[unsafe_offset=3] * Float64(x) + by
             sample(src, ps, fx, fy, kind, mode, bv, po + (y * dw + x) * src.ch)
+            x += 1
 
     par(row, dh)
     _ = len(m)
@@ -1055,9 +1116,15 @@ def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: 
     var pmy = my.ptr()
 
     def row(y: Int) {imm}:
-        for x in range(mx.cols):
+        var x = 0
+        while x < mx.cols:
             var i = y * mx.cols + x
+            if kind == 1 and x + WF <= mx.cols:
+                if _lin_vec(src, ps, pmx.unsafe_load[width=WF](i).cast[DType.float64](), pmy.unsafe_load[width=WF](i).cast[DType.float64](), mode, bv, po + i * src.ch):
+                    x += WF
+                    continue
             sample(src, ps, Float64(pmx[unsafe_offset=i]), Float64(pmy[unsafe_offset=i]), kind, mode, bv, po + i * src.ch)
+            x += 1
 
     par(row, mx.rows)
     _ = (mx.rows, my.rows)
@@ -1067,12 +1134,21 @@ def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: 
 def blob[dt: DType](src: Mat[dt], dw: Int, dh: Int, scale: Float32, mean: List[Float32], swap: Bool) -> Mat[F32]:
     """cv2.dnn.blobFromImage with a plain resize: planes laid out as (channel * h, w), float32."""
     var r = resize(src, dw, dh, 1) if (dw != src.cols or dh != src.rows) else Mat[dt](copy=src)
-    var o = Mat[F32](r.ch * dh, dw, 1)
-    for c in range(r.ch):
-        var sc = (r.ch - 1 - c) if (swap and r.ch == 3) else c
-        for y in range(dh):
-            for x in range(dw):
-                o.data[(c * dh + y) * dw + x] = (Float32(r.data[(y * dw + x) * r.ch + sc]) - mean[c]) * scale
+    var o = Mat[F32](r.ch * dh, dw, 1, False)
+    var ch = r.ch
+    var pr = r.ptr()
+    var po = o.ptr()
+    var pm = ptr_of(mean)
+
+    def plane_row(i: Int) {imm}:
+        var c = i // dh
+        var sc = (ch - 1 - c) if (swap and ch == 3) else c
+        var src_row = pr + (i % dh) * dw * ch + sc
+        for x in range(dw):
+            po.unsafe_store(i * dw + x, (Float32(src_row[unsafe_offset=x * ch]) - pm[unsafe_offset=c]) * scale)
+
+    par(plane_row, ch * dh)
+    _ = (len(mean), r.rows)
     return o^
 
 
