@@ -1175,6 +1175,231 @@ def draw_rect[dt: DType](mut m: Mat[dt], x1: Int, y1: Int, x2: Int, y2: Int, col
     draw_line(m, x1, y2, x1, y1, color)
 
 
+# ---- HOG people detector ----------------------------------------------------------------------------------
+# Dalal and Triggs 2005 with the OpenCV defaults: 64 x 128 window, 16 x 16 blocks every 8 pixels, 8 x 8 cells, 9
+# unsigned orientation bins, square-root gamma, [-1 0 1] gradients (reflect101), Gaussian block window of sigma 4 ((block w + block h) / 8),
+# trilinear voting, L2-Hys block normalisation. The linear SVM (3780 weights + bias) is an input file.
+
+
+def hog_blocks(src: Mat[DType.uint8]) -> Mat[F32]:
+    """Normalised 36-vectors for every 16 x 16 block on the 8-pixel grid: (block rows, block cols, 36); cells inside
+    a block are ordered column-major (x outer) like cv2, bins fastest."""
+    var h = src.rows
+    var w = src.cols
+    var nby = (h - 16) // 8 + 1
+    var nbx = (w - 16) // 8 + 1
+    var o = Mat[F32](max(nby, 0), max(nbx, 0), 36)
+    if nby <= 0 or nbx <= 0:
+        return o^
+    var lut = List[Float32](length=256, fill=0)
+    for i in range(256):
+        lut[i] = sqrt(Float32(i))
+    var bin0 = Mat[DType.int32](h, w, 1)
+    var wt0 = Mat[F32](h, w, 1)
+    var wt1 = Mat[F32](h, w, 1)
+    var pb = bin0.ptr()
+    var p0 = wt0.ptr()
+    var p1 = wt1.ptr()
+    var pl = ptr_of(lut)
+
+    def grad(y: Int) {imm}:
+        for x in range(w):
+            var xa = bidx(x - 1, w, 0)
+            var xb = bidx(x + 1, w, 0)
+            var ya = bidx(y - 1, h, 0)
+            var yb = bidx(y + 1, h, 0)
+            var gx = pl[unsafe_offset=Int(src.at(y, xb))] - pl[unsafe_offset=Int(src.at(y, xa))]
+            var gy = pl[unsafe_offset=Int(src.at(yb, x))] - pl[unsafe_offset=Int(src.at(ya, x))]
+            var mag = sqrt(gx * gx + gy * gy)
+            var ang = atan2(Float64(gy), Float64(gx))
+            if ang < 0:
+                ang += 3.14159265358979323846
+            var fb = ang * 9.0 / 3.14159265358979323846 - 0.5
+            var b0 = Int(floor(fb))
+            var wb = Float32(fb - Float64(b0))
+            pb[unsafe_offset=y * w + x] = Int32(b0)
+            p0[unsafe_offset=y * w + x] = mag * (1 - wb)
+            p1[unsafe_offset=y * w + x] = mag * wb
+
+    parallelize(grad, h)
+    var po = o.ptr()
+
+    def block(t: Int) {imm}:
+        var by = (t // nbx) * 8
+        var bx = (t % nbx) * 8
+        var hist = SIMD[F32, 64](0)
+        for i in range(16):
+            var fy = (Float32(i) + 0.5) / 8.0 - 0.5
+            var cy0 = Int(floor(fy))
+            var wy = fy - Float32(cy0)
+            for j in range(16):
+                var fx = (Float32(j) + 0.5) / 8.0 - 0.5
+                var cx0 = Int(floor(fx))
+                var wx = fx - Float32(cx0)
+                var di = Float32(i - 8)
+                var dj = Float32(j - 8)
+                var g = Float32(exp(Float64(-(di * di + dj * dj) / 32.0)))
+                var idx = (by + i) * w + bx + j
+                var b0 = Int(pb[unsafe_offset=idx])
+                var b1 = (b0 + 1) % 9
+                b0 = ((b0 % 9) + 9) % 9
+                var v0 = p0[unsafe_offset=idx] * g
+                var v1 = p1[unsafe_offset=idx] * g
+                for cyi in range(2):
+                    var cy = cy0 + cyi
+                    var w1 = wy if cyi == 1 else 1 - wy
+                    for cxi in range(2):
+                        var cx = cx0 + cxi
+                        var w2 = wx if cxi == 1 else 1 - wx
+                        if cx >= 0 and cx < 2 and cy >= 0 and cy < 2:
+                            var cell = cx * 2 + cy
+                            hist[cell * 9 + b0] += v0 * w1 * w2
+                            hist[cell * 9 + b1] += v1 * w1 * w2
+        var sum = Float32(0)
+        for k in range(36):
+            sum += hist[k] * hist[k]
+        var sc = 1.0 / (sqrt(sum) + 3.6)
+        var sum2 = Float32(0)
+        for k in range(36):
+            hist[k] = min(hist[k] * sc, 0.2)
+            sum2 += hist[k] * hist[k]
+        var sc2 = 1.0 / (sqrt(sum2) + 1e-3)
+        for k in range(36):
+            po[unsafe_offset=t * 36 + k] = hist[k] * sc2
+
+    parallelize(block, nby * nbx)
+    _ = (bin0.rows, wt0.rows, wt1.rows, len(lut))
+    return o^
+
+
+def hog_scores(blocks: Mat[F32], svm: Mat[F32]) -> Mat[F32]:
+    """SVM score of every 64 x 128 window on the 8-pixel grid: (window rows, window cols)."""
+    var ny = blocks.rows - 14
+    var nx = blocks.cols - 6
+    var o = Mat[F32](max(ny, 0), max(nx, 0), 1)
+    if ny <= 0 or nx <= 0:
+        return o^
+    var po = o.ptr()
+    var pbk = blocks.ptr()
+    var ps = svm.ptr()
+    var nbx = blocks.cols
+
+    def row(wy: Int) {imm}:
+        for wx in range(nx):
+            var acc = ps[unsafe_offset=3780]
+            for i in range(7):
+                for j in range(15):
+                    var bo = ((wy + j) * nbx + wx + i) * 36
+                    var so = (i * 15 + j) * 36
+                    for t in range(36):
+                        acc += ps[unsafe_offset=so + t] * pbk[unsafe_offset=bo + t]
+            po[unsafe_offset=wy * nx + wx] = acc
+
+    parallelize(row, ny)
+    return o^
+
+
+def group_rects(r: List[Int], thresh: Int) -> List[Int]:
+    """cv2.groupRectangles(eps = 0.2): cluster similar boxes, average each cluster, drop clusters of at most
+    `thresh` boxes and small boxes sitting inside a larger supported one. r holds x, y, w, h per box."""
+    var n = len(r) // 4
+    var out = List[Int]()
+    if thresh <= 0 or n == 0:
+        for v in r:
+            out.append(v)
+        return out^
+    var parent = List[Int](length=n, fill=0)
+    for i in range(n):
+        parent[i] = i
+
+    def find(mut p: List[Int], i: Int) -> Int:
+        var k = i
+        while p[k] != k:
+            p[k] = p[p[k]]
+            k = p[k]
+        return k
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            var delta = 0.2 * Float64(min(r[4 * i + 2], r[4 * j + 2]) + min(r[4 * i + 3], r[4 * j + 3])) * 0.5
+            if (Float64(abs(r[4 * i] - r[4 * j])) <= delta and Float64(abs(r[4 * i + 1] - r[4 * j + 1])) <= delta
+                    and Float64(abs(r[4 * i] + r[4 * i + 2] - r[4 * j] - r[4 * j + 2])) <= delta
+                    and Float64(abs(r[4 * i + 1] + r[4 * i + 3] - r[4 * j + 1] - r[4 * j + 3])) <= delta):
+                var a = find(parent, i)
+                var b = find(parent, j)
+                if a != b:
+                    parent[b] = a
+    var cls = List[Int](length=n, fill=-1)
+    var nc = 0
+    var sums = List[Int]()
+    var cnt = List[Int]()
+    for i in range(n):
+        var root = find(parent, i)
+        if cls[root] < 0:
+            cls[root] = nc
+            nc += 1
+            for _ in range(4):
+                sums.append(0)
+            cnt.append(0)
+        var c = cls[root]
+        for k in range(4):
+            sums[4 * c + k] += r[4 * i + k]
+        cnt[c] += 1
+    var avg = List[Int](length=4 * nc, fill=0)
+    for c in range(nc):
+        for k in range(4):
+            avg[4 * c + k] = rint(Float64(Float32(sums[4 * c + k]) * (1.0 / Float32(cnt[c]))))
+    for i in range(nc):
+        if cnt[i] <= thresh:
+            continue
+        var inside = False
+        for j in range(nc):
+            if j == i or cnt[j] <= thresh:
+                continue
+            var dx = Int(Float64(avg[4 * j + 2]) * 0.2 + 0.5)
+            var dy = Int(Float64(avg[4 * j + 3]) * 0.2 + 0.5)
+            if (avg[4 * i] >= avg[4 * j] - dx and avg[4 * i + 1] >= avg[4 * j + 1] - dy
+                    and avg[4 * i] + avg[4 * i + 2] <= avg[4 * j] + avg[4 * j + 2] + dx
+                    and avg[4 * i + 1] + avg[4 * i + 3] <= avg[4 * j + 1] + avg[4 * j + 3] + dy
+                    and (cnt[j] > max(3, cnt[i]) or cnt[i] < 3)):
+                inside = True
+        if not inside:
+            for k in range(4):
+                out.append(avg[4 * i + k])
+    return out^
+
+
+def hog_detect(src: Mat[DType.uint8], svm: Mat[F32], hit: Float32, scale0: Float64, group: Int) -> Mat[DType.int32]:
+    """HOGDescriptor.detectMultiScale with winStride 8 and no padding: (n, 4) boxes x, y, w, h."""
+    var scales = List[Float64]()
+    var sc = Float64(1)
+    for _ in range(64):
+        scales.append(sc)
+        if rint(Float64(src.cols) / sc) < 64 or rint(Float64(src.rows) / sc) < 128 or scale0 <= 1.0:
+            break
+        sc *= scale0
+    var found = List[Int]()
+    for s in scales:
+        var w = rint(Float64(src.cols) / s)
+        var h = rint(Float64(src.rows) / s)
+        if w < 64 or h < 128:
+            continue
+        var lvl = Mat[DType.uint8](copy=src) if (w == src.cols and h == src.rows) else resize(src, w, h, 1)
+        var sc_ = hog_scores(hog_blocks(lvl), svm)
+        for wy in range(sc_.rows):
+            for wx in range(sc_.cols):
+                if sc_.at(wy, wx) >= hit:
+                    found.append(rint(Float64(wx * 8) * s))
+                    found.append(rint(Float64(wy * 8) * s))
+                    found.append(rint(64.0 * s))
+                    found.append(rint(128.0 * s))
+    var g = group_rects(found, group)
+    var o = Mat[DType.int32](len(g) // 4, 4, 1)
+    for i in range(len(g)):
+        o.data[i] = Int32(g[i])
+    return o^
+
+
 # ---- CLI --------------------------------------------------------------------------------------------------
 
 
@@ -1299,6 +1524,18 @@ def run_u8(mut a: Args) raises -> Bool:
         while a.again():
             o = good_features(m, a.i("maxCorners", 100), a.f("quality", 0.01), a.f("minDist", 10.0), a.i("block", 3))
         save(o, a.out)
+    elif a.op == "HOGScores":
+        var svm = load[F32](a.ins[1])
+        var o = Mat[F32](0, 0)
+        while a.again():
+            o = hog_scores(hog_blocks(m), svm)
+        save(o, a.out)
+    elif a.op == "detectMultiScale":
+        var svm = load[F32](a.ins[1])
+        var o = Mat[DType.int32](0, 0)
+        while a.again():
+            o = hog_detect(m, svm, Float32(a.f("hit", 0.0)), a.f("scale", 1.05), a.i("group", 2))
+        save(o, a.out)
     elif a.op == "line" or a.op == "rectangle":
         var c = a.fl("color", [255.0, 255.0, 255.0])
         var o = Mat[DType.uint8](copy=m)
@@ -1315,7 +1552,18 @@ def run_u8(mut a: Args) raises -> Bool:
 
 
 def run(mut a: Args) raises -> Bool:
-    if a.op in ["connectedComponentsWithStats", "Canny", "findContours", "goodFeaturesToTrack", "line", "rectangle"]:
+    if a.op == "groupRectangles":
+        var m = load[DType.int32](a.ins[0])
+        var rl = List[Int]()
+        for v in m.data:
+            rl.append(Int(v))
+        var g = group_rects(rl, a.i("thresh", 2))
+        var o = Mat[DType.int32](len(g) // 4, 4, 1)
+        for i in range(len(g)):
+            o.data[i] = Int32(g[i])
+        save(o, a.out)
+        return True
+    if a.op in ["connectedComponentsWithStats", "Canny", "findContours", "goodFeaturesToTrack", "line", "rectangle", "HOGScores", "detectMultiScale"]:
         return run_u8(a)
     if not (a.op in ["GaussianBlur", "pyrDown", "Sobel", "threshold", "integral", "erode", "dilate", "cvtColor", "resize", "warpAffine", "remap", "blobFromImage"]):
         return False

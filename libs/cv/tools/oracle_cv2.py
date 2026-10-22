@@ -278,6 +278,31 @@ def ORB(i, kv):
     return np.array(rows, np.float32)
 
 
+PY4 = os.environ.get("MCV_PY4", "/home/mario/.cache/vpython-root.1000/store/uv_venv-a7iu7r892a2vi0aj6osrpia0u4/contents/bin/python3.11")
+HOG_OPS = ("HOGScores", "detectMultiScale", "groupRectangles")  # cv2 5.0 dropped HOGDescriptor: these run under cv2 4.8.1 (PY4)
+
+
+def _hog(svm):
+    h = cv2.HOGDescriptor()
+    h.setSVMDetector(svm.reshape(-1, 1).astype(np.float32))
+    return h
+@op()
+def HOGScores(i, kv):
+    d = _hog(i[1]).compute(i[0], (8, 8), (0, 0)).reshape(-1, 3780)
+    nx = (i[0].shape[1] - 64) // 8 + 1
+    return (d @ i[1].ravel()[:3780] + i[1].ravel()[3780]).reshape(-1, nx).astype(np.float32)
+@op()
+def detectMultiScale(i, kv):
+    r, _ = _hog(i[1]).detectMultiScale(i[0], hitThreshold=kv_f(kv, "hit", 0.0), winStride=(8, 8), padding=(0, 0), scale=kv_f(kv, "scale", 1.05), groupThreshold=kv_i(kv, "group", 2))
+    return np.array(r, np.int32).reshape(-1, 4)
+
+
+@op()
+def groupRectangles(i, kv):
+    r, _ = cv2.groupRectangles(i[0].reshape(-1, 4).tolist(), kv_i(kv, "thresh", 2), 0.2)
+    return np.array(r, np.int32).reshape(-1, 4)
+
+
 # ---- compare ----------------------------------------------------------------------------------------------
 def compare(ours, ref, spec):
     if ours.shape != ref.shape and not spec.startswith(("orb", "pts", "cnt")):
@@ -491,6 +516,15 @@ def make_fixtures(d):
         fx["mapy" + nm] = (yy + 9 * np.cos(xx / 23) - 0.21).astype(np.float32)
     fx["mapxo"] = rng.uniform(-3, 16, (7, 13)).astype(np.float32)
     fx["mapyo"] = rng.uniform(-3, 10, (7, 13)).astype(np.float32)
+    try:
+        hog_ = cv2.HOGDescriptor if hasattr(cv2, "HOGDescriptor") else None
+        raw = subprocess.run([PY4, "-c", "import cv2,sys,numpy as np;sys.path.insert(0,%r);import mcv;h=cv2.HOGDescriptor();h.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector());r,_=h.detectMultiScale(mcv.load(%r),hitThreshold=-1.0,winStride=(8,8),padding=(0,0),scale=1.05,groupThreshold=0);mcv.save(np.array(r,np.int32).reshape(-1,4),%r)" % (os.path.join(ROOT, "tools"), os.path.join(d, "hdg.mcv"), os.path.join(d, "hog_raw.mcv"))], capture_output=True)
+    except Exception:
+        pass
+    # the default people detector (3780 weights + bias) only exists in cv2 4.x
+    sv = subprocess.run([PY4, "-c", "import cv2,sys;sys.stdout.buffer.write(cv2.HOGDescriptor_getDefaultPeopleDetector().astype('<f4').tobytes())"], capture_output=True)
+    if sv.returncode == 0 and len(sv.stdout) == 3781 * 4:
+        fx["hog_svm"] = np.frombuffer(sv.stdout, "<f4").reshape(-1, 1).copy()
     for n, a in fx.items():
         mcv.save(a, os.path.join(d, n + ".mcv"))
 
@@ -559,7 +593,7 @@ def suite(files, bench):
                 if os.path.exists(g):
                     os.remove(g)
         try:
-            tr = subprocess.run([sys.executable, "-I", __file__, opn, r, *paths, *kvs_b], capture_output=True, text=True)
+            tr = subprocess.run([PY4 if opn in HOG_OPS else sys.executable, "-I", __file__, opn, r, *paths, *kvs_b], capture_output=True, text=True)
             to = subprocess.run([exe, opn, o, *paths, *kvs_b], capture_output=True, text=True)
             msg, ok = "", True
             if tr.returncode:

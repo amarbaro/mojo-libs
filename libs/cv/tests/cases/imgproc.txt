@@ -92,3 +92,12 @@ line_out_sm      line sm x1=-50 y1=-30 x2=-10 y2=400 color=255,0,0 => exact
 line_hor_odd     line odd x1=12 y1=3 x2=0 y2=3 color=1,2,3 => exact
 rect_edge_sm     rectangle sm x1=10 y1=20 x2=300 y2=200 color=0,0,255 thick=1 => exact
 rect_fill_odd    rectangle odd x1=-3 y1=2 x2=8 y2=9 color=9,8,7 thick=-1 => exact
+hog_scores_smg   HOGScores smg hog_svm => max:0.01
+hog_scores_hdg   HOGScores hdg hog_svm => max:0.01
+hog_raw_smg      detectMultiScale smg hog_svm hit=-1.5 group=0 => pts:1:0.99
+hog_raw_hdg      detectMultiScale hdg hog_svm hit=-1.0 group=0 => pts:1:0.99
+hog_group_smg    detectMultiScale smg hog_svm hit=-2.0 group=2 => pts:2:0.99
+hog_group_smg2   detectMultiScale smg2 hog_svm hit=-1.8 group=2 => pts:2:0.99
+hog_group_hdg    detectMultiScale hdg hog_svm hit=-1.0 group=2 => pts:2:0.97
+hog_none         detectMultiScale smg hog_svm hit=1.0 group=2 => cnt:0
+group_rects_hdg  groupRectangles hog_raw thresh=2 => pts:0.5:1.0
