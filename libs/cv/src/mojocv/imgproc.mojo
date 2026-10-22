@@ -2,6 +2,8 @@
 # padded copy of the source, so every inner loop is a plain contiguous SIMD loop over the flattened row
 # (pixel i of channel c sits at i * ch + c, so a horizontal tap at dx is a load at offset dx * ch).
 from std.sys.info import simd_width_of
+from std.utils import IndexList
+from std.sys.intrinsics import gather
 from std.math import sqrt, exp, floor, ceil, cos, sin, atan2, cbrt
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args, DTS, peek_code, par
@@ -205,10 +207,65 @@ def deriv_kernel(n: Int, order: Int) -> List[Float32]:
     return k^
 
 
+def _binom5_u8[dt: DType](src: Mat[dt]) -> Mat[dt]:
+    """GaussianBlur 5x5 with the 1-4-6-4-1 kernel on uint8 in integers like cv2 (reflect101): per output row the column
+    pass sums five source rows in uint16 into a padded scratch row (4080 at most), the row pass sums five shifted
+    loads (65280 at most, no overflow) and (v + 128) >> 8 rounds half up."""
+    comptime WU = simd_width_of[DType.uint16]()
+    comptime U16 = DType.uint16
+    var o = Mat[dt](src.rows, src.cols, src.ch, False)
+    var n = src.cols * src.ch
+    var ch = src.ch
+    var rows = src.rows
+    var cols = src.cols
+    var ps = src.ptr()
+    var po = o.ptr()
+    comptime NT = 8
+
+    def task(t: Int) {imm}:
+        var scratch = List[UInt16](unsafe_uninit_length=n + 4 * ch + WU)
+        var sc = ptr_of(scratch) + 2 * ch
+        for y in range(rows * t // NT, rows * (t + 1) // NT):
+            var r0 = ps + bidx(y - 2, rows, 0) * n
+            var r1 = ps + bidx(y - 1, rows, 0) * n
+            var r2 = ps + y * n
+            var r3 = ps + bidx(y + 1, rows, 0) * n
+            var r4 = ps + bidx(y + 2, rows, 0) * n
+            var i = 0
+            while i + WU <= n:
+                var v = r0.unsafe_load[width=WU](i).cast[U16]() + r4.unsafe_load[width=WU](i).cast[U16]() + 4 * (r1.unsafe_load[width=WU](i).cast[U16]() + r3.unsafe_load[width=WU](i).cast[U16]()) + 6 * r2.unsafe_load[width=WU](i).cast[U16]()
+                sc.unsafe_store(i, v)
+                i += WU
+            for j in range(i, n):
+                sc[unsafe_offset=j] = UInt16(r0[unsafe_offset=j]) + UInt16(r4[unsafe_offset=j]) + 4 * (UInt16(r1[unsafe_offset=j]) + UInt16(r3[unsafe_offset=j])) + 6 * UInt16(r2[unsafe_offset=j])
+            for k in range(ch):
+                sc[unsafe_offset=k - ch] = sc[unsafe_offset=ch + k]
+                sc[unsafe_offset=k - 2 * ch] = sc[unsafe_offset=2 * ch + k]
+                sc[unsafe_offset=n + k] = sc[unsafe_offset=n - 2 * ch + k]
+                sc[unsafe_offset=n + ch + k] = sc[unsafe_offset=n - 3 * ch + k]
+            var dst = po + y * n
+            i = 0
+            while i + WU <= n:
+                var v = sc.unsafe_load[width=WU](i - 2 * ch) + sc.unsafe_load[width=WU](i + 2 * ch) + 4 * (sc.unsafe_load[width=WU](i - ch) + sc.unsafe_load[width=WU](i + ch)) + 6 * sc.unsafe_load[width=WU](i)
+                dst.unsafe_store(i, ((v + 128) >> 8).cast[dt]())
+                i += WU
+            for j in range(i, n):
+                var v = sc[unsafe_offset=j - 2 * ch] + sc[unsafe_offset=j + 2 * ch] + 4 * (sc[unsafe_offset=j - ch] + sc[unsafe_offset=j + ch]) + 6 * sc[unsafe_offset=j]
+                dst[unsafe_offset=j] = Scalar[dt]((v + 128) >> 8)
+        _ = len(scratch)
+
+    par(task, NT)
+    _ = (rows, cols)
+    return o^
+
+
 def gaussian_blur[dt: DType](src: Mat[dt], ksize: Int, sigma: Float64) -> Mat[dt]:
     var n = ksize
     if n <= 0:
         n = Int(sigma * (3.0 if dt == DType.uint8 else 4.0) * 2 + 1.0 + 0.5) | 1
+    comptime if dt == DType.uint8:
+        if n == 5 and sigma <= 0 and src.cols >= 3 and src.rows >= 3:
+            return _binom5_u8(src)
     var k = gauss_kernel(n, sigma)
     return sepfilter[dt, dt](src, k, k)
 
@@ -234,9 +291,86 @@ def sobel[sd: DType, od: DType](src: Mat[sd], dx: Int, dy: Int, ksize: Int, scal
 # ---- pyrDown ----------------------------------------------------------------------------------------------
 
 
+def _tap_mask[n: Int, ch: Int, t: Int]() -> IndexList[n]:
+    """Shuffle mask for pyrDown tap t: output pixel j reads pixel 2j + t of the window (lanes past the (n // ch - 3) // 2
+    pixels that fit read lane 0)."""
+    var m = IndexList[n]()
+    for j in range(n):
+        m[j] = (j // ch * 2 + t) * ch + j % ch if j < (n // ch - 3) // 2 * ch else 0
+    return m
+
+
+def _pyr_u8[dt: DType, ch: Int](src: Mat[dt]) -> Mat[dt]:
+    """pyrDown on uint8 in integers: the column pass sums five rows in uint16 into a padded scratch row, then 64-lane
+    windows of it give every output pixel its five taps with five shuffles ((v + 128) >> 8, half up like cv2)."""
+    comptime SW = 64
+    comptime PO = (SW // ch - 3) // 2
+    comptime M0 = _tap_mask[SW, ch, 0]()
+    comptime M1 = _tap_mask[SW, ch, 1]()
+    comptime M2 = _tap_mask[SW, ch, 2]()
+    comptime M3 = _tap_mask[SW, ch, 3]()
+    comptime M4 = _tap_mask[SW, ch, 4]()
+    comptime WU = simd_width_of[DType.uint16]()
+    comptime U16 = DType.uint16
+    var oc = (src.cols + 1) // 2
+    var orow = (src.rows + 1) // 2
+    var rows = src.rows
+    var n = src.cols * ch
+    var o = Mat[dt](orow, oc, ch, False)
+    var ps = src.ptr()
+    var po = o.ptr()
+    comptime NT = 8
+
+    def task(t: Int) {imm}:
+        var scratch = List[UInt16](unsafe_uninit_length=n + 4 * ch + SW)
+        var sc = ptr_of(scratch) + 2 * ch
+        for r in range(orow * t // NT, orow * (t + 1) // NT):
+            var r0 = ps + bidx(2 * r - 2, rows, 0) * n
+            var r1 = ps + bidx(2 * r - 1, rows, 0) * n
+            var r2 = ps + 2 * r * n
+            var r3 = ps + bidx(2 * r + 1, rows, 0) * n
+            var r4 = ps + bidx(2 * r + 2, rows, 0) * n
+            var i = 0
+            while i + WU <= n:
+                var v = r0.unsafe_load[width=WU](i).cast[U16]() + r4.unsafe_load[width=WU](i).cast[U16]() + 4 * (r1.unsafe_load[width=WU](i).cast[U16]() + r3.unsafe_load[width=WU](i).cast[U16]()) + 6 * r2.unsafe_load[width=WU](i).cast[U16]()
+                sc.unsafe_store(i, v)
+                i += WU
+            for j in range(i, n):
+                sc[unsafe_offset=j] = UInt16(r0[unsafe_offset=j]) + UInt16(r4[unsafe_offset=j]) + 4 * (UInt16(r1[unsafe_offset=j]) + UInt16(r3[unsafe_offset=j])) + 6 * UInt16(r2[unsafe_offset=j])
+            for k in range(ch):
+                sc[unsafe_offset=k - ch] = sc[unsafe_offset=ch + k]
+                sc[unsafe_offset=k - 2 * ch] = sc[unsafe_offset=2 * ch + k]
+                sc[unsafe_offset=n + k] = sc[unsafe_offset=n - 2 * ch + k]
+                sc[unsafe_offset=n + ch + k] = sc[unsafe_offset=n - 3 * ch + k]
+            var dst = po + r * oc * ch
+            var c = 0
+            while c * ch + SW // 2 <= oc * ch:
+                var w = sc.unsafe_load[width=SW]((2 * c - 2) * ch)
+                var v = w.shuffle[M0]() + w.shuffle[M4]() + 4 * (w.shuffle[M1]() + w.shuffle[M3]()) + 6 * w.shuffle[M2]()
+                dst.unsafe_store(c * ch, ((v.slice[SW // 2]() + 128) >> 8).cast[dt]())
+                c += PO
+            for q in range(c, oc):
+                for k in range(ch):
+                    var b = 2 * q * ch + k
+                    var v = sc[unsafe_offset=b - 2 * ch] + sc[unsafe_offset=b + 2 * ch] + 4 * (sc[unsafe_offset=b - ch] + sc[unsafe_offset=b + ch]) + 6 * sc[unsafe_offset=b]
+                    dst[unsafe_offset=q * ch + k] = Scalar[dt]((v + 128) >> 8)
+        _ = len(scratch)
+
+    par(task, NT)
+    return o^
+
+
 def pyr_down[dt: DType](src: Mat[dt]) -> Mat[dt]:
     """5-tap binomial blur (reflect101), then every second row and column; output ceil(n / 2). Per output row the
     column pass runs on contiguous SIMD lanes into one cached row, then the row pass reads every second pixel."""
+    comptime if dt == DType.uint8:
+        if src.cols >= 3 and src.rows >= 3:
+            if src.ch == 1:
+                return _pyr_u8[dt, 1](src)
+            elif src.ch == 3:
+                return _pyr_u8[dt, 3](src)
+            elif src.ch == 4:
+                return _pyr_u8[dt, 4](src)
     var oc = (src.cols + 1) // 2
     var orow = (src.rows + 1) // 2
     var ch = src.ch
@@ -1156,12 +1290,66 @@ struct Taps(Movable):
                 self.w[d * self.n + t] = Float32(ww[t])
 
 
+def _pair_mask[n: Int, ch: Int, odd: Int]() -> IndexList[n]:
+    """Shuffle mask taking pixel 2p + odd of interleaved pixels for output pixel p, for the n // (2 * ch) pixels a
+    vector of n bytes holds (the rest of the lanes read lane 0)."""
+    var m = IndexList[n]()
+    for j in range(n):
+        m[j] = (j // ch) * 2 * ch + odd * ch + j % ch if j < n // (2 * ch) * ch else 0
+    return m
+
+
+def _half_rows[dt: DType, ch: Int](pa: Ptr[Scalar[dt]], po: Ptr[Scalar[dt]], dw: Int, r0: Int, r1: Int):
+    """Output rows r0..r1 of the exact 2x linear shrink: the mean of each 2x2 block, rounded half up (cv2's INTER_AREA
+    fast path). One 64-byte load per source row, added in uint16, even and odd pixels picked with one shuffle each;
+    the store is n // 2 bytes wide, so a block may write up to ch - 1 bytes past its pixels (the next block or the
+    scalar tail overwrites them)."""
+    comptime SW = 64
+    comptime P = SW // (2 * ch)
+    comptime G = SW // 2 - P * ch
+    comptime me = _pair_mask[SW, ch, 0]()
+    comptime mo = _pair_mask[SW, ch, 1]()
+    var sn = 2 * dw * ch
+    for r in range(r0, r1):
+        var a = pa + 2 * r * sn
+        var b = a + sn
+        var o = po + r * dw * ch
+        var p = 0
+        while p + P + (1 if G > 0 else 0) <= dw:
+            var s = a.unsafe_load[width=SW](2 * p * ch).cast[DType.uint16]() + b.unsafe_load[width=SW](2 * p * ch).cast[DType.uint16]()
+            var v = (s.shuffle[me]().slice[SW // 2]() + s.shuffle[mo]().slice[SW // 2]() + 2) >> 2
+            o.unsafe_store(p * ch, v.cast[dt]())
+            p += P
+        for q in range(p, dw):
+            for k in range(ch):
+                var i = 2 * q * ch + k
+                o[unsafe_offset=q * ch + k] = Scalar[dt]((UInt16(a[unsafe_offset=i]) + UInt16(a[unsafe_offset=i + ch]) + UInt16(b[unsafe_offset=i]) + UInt16(b[unsafe_offset=i + ch]) + 2) >> 2)
+
+
 def resize[dt: DType](src: Mat[dt], dw_in: Int, dh_in: Int, kind_in: Int) -> Mat[dt]:
     """Column taps first, on contiguous SIMD over the source width into one cached row per output row; then the row
     taps pick (dw) pixels from that row."""
     var dw = dw_in
     var dh = dh_in
     var kind = kind_in
+    comptime if dt == DType.uint8:
+        if kind == 1 and src.cols == 2 * dw and src.rows == 2 * dh and (src.ch == 1 or src.ch == 3 or src.ch == 4):
+            var o = Mat[dt](dh, dw, src.ch, False)
+            var pa = src.ptr()
+            var po = o.ptr()
+            var ch = src.ch
+
+            def half(t: Int) {imm}:
+                if ch == 1:
+                    _half_rows[dt, 1](pa, po, dw, dh * t // 8, dh * (t + 1) // 8)
+                elif ch == 3:
+                    _half_rows[dt, 3](pa, po, dw, dh * t // 8, dh * (t + 1) // 8)
+                else:
+                    _half_rows[dt, 4](pa, po, dw, dh * t // 8, dh * (t + 1) // 8)
+
+            par(half, 8)
+            _ = len(src.data)
+            return o^
     var tx = Taps(src.cols, dw, Float64(src.cols) / Float64(dw), kind)
     var ty = Taps(src.rows, dh, Float64(src.rows) / Float64(dh), kind)
     var ch = src.ch
@@ -1287,22 +1475,94 @@ def sample[dt: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: Float64, fy: Float6
         dst[unsafe_offset=k] = Scalar[dt](acc)
 
 
-def _lin_vec[dt: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: SIMD[DType.float64, WF], fy: SIMD[DType.float64, WF], mode: Int, bv: Scalar[dt], dst: Ptr[Scalar[dt]]) -> Bool:
+def _ilv_mask[ch: Int]() -> IndexList[4 * WF]:
+    var m = IndexList[4 * WF]()
+    for i in range(4 * WF):
+        m[i] = (i % ch) * WF + i // ch if i < ch * WF else 0
+    return m
+
+
+def _words3(t: SIMD[DType.int, WF]) -> Tuple[SIMD[DType.uint32, WF], SIMD[DType.uint32, WF]]:
+    """Two pixels of 3 channels (6 bytes, read as 8) at each of WF byte addresses, as the low and high 32 bits."""
+    var m = SIMD[DType.bool, WF // 2](fill=True)
+    var z = SIMD[DType.uint64, WF // 2](0)
+    var a = gather[alignment=1](t.slice[WF // 2](), m, z)
+    var b = gather[alignment=1](t.slice[WF // 2, offset = WF // 2](), m, z)
+    var lo = rebind[SIMD[DType.uint32, WF]](a.cast[DType.uint32]().join(b.cast[DType.uint32]()))
+    var hi = rebind[SIMD[DType.uint32, WF]]((a >> 32).cast[DType.uint32]().join((b >> 32).cast[DType.uint32]()))
+    return (lo, hi)
+
+
+def _ab3[k: Int](lo: SIMD[DType.uint32, WF], hi: SIMD[DType.uint32, WF]) -> Tuple[SIMD[F32, WF], SIMD[F32, WF]]:
+    """Channel k of the left and the right pixel of _words3."""
+    comptime if k == 0:
+        return ((lo & 255).cast[F32](), (lo >> 24).cast[F32]())
+    elif k == 1:
+        return (((lo >> 8) & 255).cast[F32](), (hi & 255).cast[F32]())
+    else:
+        return (((lo >> 16) & 255).cast[F32](), ((hi >> 8) & 255).cast[F32]())
+
+
+def _lin_u8[dt: DType, ch: Int](ps: Ptr[Scalar[dt]], size: Int, cols: Int, sx: SIMD[DType.int32, WF], sy: SIMD[DType.int32, WF], wx1: SIMD[F32, WF], wy1: SIMD[F32, WF], dst: Ptr[Scalar[dt]], wide: Bool, safe: Bool) -> Bool:
+    """uint8 bilinear, ch 1 or 3. ch 3: one 8-byte gather per source row and pixel holds both columns of all three
+    channels (4 gathers of 8 lanes per WF pixels, 12 before); ch 1: two 4-byte gathers hold both columns. The
+    channels are interleaved with one shuffle and stored as one 4 * WF-byte write when `wide` (the 16 bytes past the
+    pixels belong to the next block or are the caller's to spare). False, nothing written, when a wide read could
+    pass the end of the source."""
+    var a = (sy.cast[DType.int]() * cols + sx.cast[DType.int]()) * ch + Int(ps)
+    if not safe and Int(a.reduce_max()) - Int(ps) + (7 if ch == 3 else 3) + cols * ch >= size:
+        return False
+    var wx0 = 1 - wx1
+    var wy0 = 1 - wy1
+    var row = SIMD[DType.int, WF](cols * ch)
+    comptime if ch == 3:
+        var res = SIMD[dt, 4 * WF](0)
+        var r0 = _words3(a)
+        var r1 = _words3(a + row)
+        comptime for k in range(3):
+            var p0 = _ab3[k](r0[0], r0[1])
+            var p1 = _ab3[k](r1[0], r1[1])
+            res = res.insert[offset = k * WF](_fin[dt, WF](wy0 * (wx0 * p0[0] + wx1 * p0[1]) + wy1 * (wx0 * p1[0] + wx1 * p1[1])))
+        if wide:
+            dst.unsafe_store(0, res.shuffle[_ilv_mask[3]()]())
+        else:
+            comptime for k in range(3):
+                (dst + k).unsafe_scatter(SIMD[DType.int32, WF](0, 3, 6, 9, 12, 15, 18, 21, 24, 27, 30, 33, 36, 39, 42, 45), res.slice[WF, offset = k * WF]())
+    else:
+        var m = SIMD[DType.bool, WF](fill=True)
+        var w0 = gather[alignment=1](a, m, SIMD[DType.uint32, WF](0))
+        var w1 = gather[alignment=1](a + row, m, SIMD[DType.uint32, WF](0))
+        var v = wy0 * (wx0 * (w0 & 255).cast[F32]() + wx1 * ((w0 >> 8) & 255).cast[F32]()) + wy1 * (wx0 * (w1 & 255).cast[F32]() + wx1 * ((w1 >> 8) & 255).cast[F32]())
+        dst.unsafe_store(0, _fin[dt, WF](v))
+    return True
+
+
+def _lin_vec[dt: DType, ct: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: SIMD[ct, WF], fy: SIMD[ct, WF], mode: Int, bv: Scalar[dt], dst: Ptr[Scalar[dt]], wide: Bool = False, safe: Bool = False) -> Bool:
     """Bilinear samples at WF positions straight into dst (WF pixels), or bv when all of them lie outside under a
-    constant border. False, with dst untouched, when any position needs the general border path."""
+    constant border. False, with dst untouched, when any position needs the general border path. Coordinates in
+    float32 (remap: the fraction of a float32 is exact) or float64 (warp). `safe`: the caller
+    proved 0 <= x < cols - 1 and 0 <= y < rows - 2 for every lane, so none of the checks run."""
     var ffx = floor(fx)
     var ffy = floor(fy)
     var sx = ffx.cast[DType.int32]()
     var sy = ffy.cast[DType.int32]()
-    if mode == 2 and (Int(sx.reduce_max()) < -1 or Int(sx.reduce_min()) >= src.cols or Int(sy.reduce_max()) < -1 or Int(sy.reduce_min()) >= src.rows):
-        for i in range(WF * src.ch):
-            dst[unsafe_offset=i] = bv
-        return True
-    if sx.reduce_min() < 0 or sy.reduce_min() < 0 or Int(sx.reduce_max()) + 2 > src.cols or Int(sy.reduce_max()) + 2 > src.rows:
+    var bad = sx.lt(0) | sy.lt(0) | (sx + 2).gt(Int32(src.cols)) | (sy + 2).gt(Int32(src.rows))
+    if not safe and bad.reduce_or():
+        if mode == 2 and (Int(sx.reduce_max()) < -1 or Int(sx.reduce_min()) >= src.cols or Int(sy.reduce_max()) < -1 or Int(sy.reduce_min()) >= src.rows):
+            for i in range(WF * src.ch):
+                dst[unsafe_offset=i] = bv
+            return True
         return False
     var ch = src.ch
     var wx1 = (fx - ffx).cast[F32]()
     var wy1 = (fy - ffy).cast[F32]()
+    comptime if dt == DType.uint8:
+        if ch == 3:
+            if _lin_u8[dt, 3](ps, src.rows * src.cols * ch, src.cols, sx, sy, wx1, wy1, dst, wide, safe):
+                return True
+        elif ch == 1:
+            if _lin_u8[dt, 1](ps, src.rows * src.cols, src.cols, sx, sy, wx1, wy1, dst, wide, safe):
+                return True
     var wx0 = 1 - wx1
     var wy0 = 1 - wy1
     var base = (sy * Int32(src.cols) + sx) * Int32(ch)
@@ -1320,9 +1580,22 @@ def _lin_vec[dt: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: SIMD[DType.float6
     return True
 
 
+def _span(a: Float64, b: Float64, lo: Float64, hi: Float64, n: Int) -> Tuple[Int, Int]:
+    """The x in [0, n) with lo <= a * x + b < hi, one pixel narrower on each side to absorb rounding."""
+    if abs(a) < 1e-9:
+        return (0, n) if (b >= lo + 1e-6 and b < hi - 1e-6) else (0, 0)
+    var t1 = (lo - b) / a
+    var t2 = (hi - b) / a
+    if a < 0:
+        var t = t1
+        t1 = t2
+        t2 = t
+    return (max(Int(ceil(max(t1, -1.0))) + 1, 0), min(Int(floor(min(t2, Float64(n) + 1))) - 1, n))
+
+
 def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kind: Int, mode: Int, bval: Float64) -> Mat[dt]:
     """m is the inverse map (dst -> src) as a 2 x 3 matrix."""
-    var o = Mat[dt](dh, dw, src.ch)
+    var o = Mat[dt](dh, dw, src.ch, False)
     var pm = ptr_of(m)
     var po = o.ptr()
     var ps = src.ptr()
@@ -1335,10 +1608,17 @@ def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kin
             iota[j] = Float64(j)
         var bx = pm[unsafe_offset=1] * Float64(y) + pm[unsafe_offset=2]
         var by = pm[unsafe_offset=4] * Float64(y) + pm[unsafe_offset=5]
+        var xlo = 0
+        var xhi = 0
+        if kind == 1:
+            var sx_ = _span(pm[unsafe_offset=0], bx, 0.0, Float64(src.cols - 1), dw)
+            var sy_ = _span(pm[unsafe_offset=3], by, 0.0, Float64(src.rows - 2), dw)
+            xlo = max(sx_[0], sy_[0])
+            xhi = min(sx_[1], sy_[1])
         while x < dw:
             if kind == 1 and x + WF <= dw:
                 var xv = iota + Float64(x)
-                if _lin_vec(src, ps, pm[unsafe_offset=0] * xv + bx, pm[unsafe_offset=3] * xv + by, mode, bv, po + (y * dw + x) * src.ch):
+                if _lin_vec(src, ps, pm[unsafe_offset=0] * xv + bx, pm[unsafe_offset=3] * xv + by, mode, bv, po + (y * dw + x) * src.ch, x + WF + 6 <= dw, x >= xlo and x + WF <= xhi):
                     x += WF
                     continue
             var fx = pm[unsafe_offset=0] * Float64(x) + bx
@@ -1346,13 +1626,20 @@ def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kin
             sample(src, ps, fx, fy, kind, mode, bv, po + (y * dw + x) * src.ch)
             x += 1
 
-    par(row, dh)
+    comptime NT = 8
+
+    def band(t: Int) {imm}:
+        for b in range(t, (dh + 7) // 8, NT):
+            for y in range(b * 8, min(b * 8 + 8, dh)):
+                row(y)
+
+    par(band, NT)
     _ = len(m)
     return o^
 
 
 def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: Int, bval: Float64) -> Mat[dt]:
-    var o = Mat[dt](mx.rows, mx.cols, src.ch)
+    var o = Mat[dt](mx.rows, mx.cols, src.ch, False)
     var po = o.ptr()
     var ps = src.ptr()
     var bv = Scalar[dt](bval)
@@ -1364,13 +1651,20 @@ def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: 
         while x < mx.cols:
             var i = y * mx.cols + x
             if kind == 1 and x + WF <= mx.cols:
-                if _lin_vec(src, ps, pmx.unsafe_load[width=WF](i).cast[DType.float64](), pmy.unsafe_load[width=WF](i).cast[DType.float64](), mode, bv, po + i * src.ch):
+                if _lin_vec(src, ps, pmx.unsafe_load[width=WF](i), pmy.unsafe_load[width=WF](i), mode, bv, po + i * src.ch, x + WF + 6 <= mx.cols):
                     x += WF
                     continue
             sample(src, ps, Float64(pmx[unsafe_offset=i]), Float64(pmy[unsafe_offset=i]), kind, mode, bv, po + i * src.ch)
             x += 1
 
-    par(row, mx.rows)
+    comptime NT = 8
+
+    def band(t: Int) {imm}:
+        for b in range(t, (mx.rows + 7) // 8, NT):
+            for y in range(b * 8, min(b * 8 + 8, mx.rows)):
+                row(y)
+
+    par(band, NT)
     _ = (mx.rows, my.rows)
     return o^
 

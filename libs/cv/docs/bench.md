@@ -22,9 +22,13 @@ Inputs are the same `.mcv` fixtures (`hd*` = 1920x1080 crops of a real screensho
   two runs of this table (a quiet run and a loaded run of the same binary are both kept in the lane report). Rows that
   sit near 1.0 can land on either side. `tools/abbench.py` runs old, new and cv2 back to back per row, which is the
   fair comparison under load.
-- Still slower than cv2 on 1080p in the latest run: flip, pyrDown, 8-bit threshold (cv2 reaches ~25 GB/s on a 2 MB
-  plane), the colour conversions (swap, HSV, YCrCb, Lab, Luv), resize shrink and nearest, remap, Canny (the hysteresis
-  flood is serial) and warpAffine in quiet runs. HOG detection, ORB, goodFeaturesToTrack, blobFromImage, Otsu,
+- Lane f2b (2026-10-22) took five rows below cv2 (`tools/abbench.py`, min of 5, ms ours old / ours new / cv2):
+  resize_down_lin_hd 0.31 / 0.04 / 0.08, gauss5_hd 0.40 / 0.13 / 0.30, pyrdown_hd 0.43 / 0.10 / 0.31, warp_rot_hd
+  1.60 / 0.65 / 0.91, remap_lin_hd 1.89 / 0.89 / 0.96. The tables below were taken before it and are not regenerated
+  (the box was loaded at the end of the lane); read those five rows through this line. Details: `exchange/lane-f2b-report.md`.
+- Still slower than cv2 on 1080p in the latest run: flip, 8-bit threshold (cv2 reaches ~25 GB/s on a 2 MB
+  plane), the colour conversions (swap, HSV, YCrCb, Lab, Luv), resize nearest, Canny (the hysteresis
+  flood is serial). HOG detection, ORB, goodFeaturesToTrack, blobFromImage, Otsu,
   Triangle, area resize and `convert` beat cv2.
 - Point-set ops (projectPoints, estimateAffine2D, stereoRectify) take microseconds on both sides; 0.00 ms entries are
   below the timer's resolution, not a result.
