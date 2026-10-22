@@ -3,3 +3,4 @@
 .bin/
 tests/fixtures/*.mcv
 __pycache__/
+tests/fixtures/.made

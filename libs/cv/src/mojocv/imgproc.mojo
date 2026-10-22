@@ -12,6 +12,11 @@ comptime F32 = DType.float32
 comptime WF = simd_width_of[DType.float32]()
 
 
+def rint(x: Float64) -> Int:
+    """Round half to even, like cvRound."""
+    return Int(x.__round__())
+
+
 def ptr_of[T: Copyable & Movable](l: List[T]) -> Ptr[T]:
     return Ptr[T](unsafe_from_address=Int(l.unsafe_ptr()))
 
@@ -523,6 +528,214 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
     return o^
 
 
+# ---- resize -----------------------------------------------------------------------------------------------
+
+
+def cubic_w(x: Float64) -> SIMD[DType.float64, 4]:
+    """cv2 bicubic weights for the taps -1, 0, 1, 2 around a sample at fraction x, A = -0.75."""
+    comptime A = -0.75
+    var w0 = ((A * (x + 1) - 5 * A) * (x + 1) + 8 * A) * (x + 1) - 4 * A
+    var w1 = ((A + 2) * x - (A + 3)) * x * x + 1
+    var w2 = ((A + 2) * (1 - x) - (A + 3)) * (1 - x) * (1 - x) + 1
+    return SIMD[DType.float64, 4](w0, w1, w2, 1.0 - w0 - w1 - w2)
+
+
+def lanczos_w(x: Float64) -> SIMD[DType.float64, 8]:
+    """cv2 Lanczos4 weights for the taps -3 .. 4 around a sample at fraction x."""
+    var c = SIMD[DType.float64, 8](0)
+    if x < 1.1920929e-07:
+        c[3] = 1
+        return c
+    comptime s45 = 0.70710678118654752440084436210485
+    var cs = SIMD[DType.float64, 16](1, 0, -s45, -s45, 0, 1, s45, -s45, -1, 0, s45, s45, 0, -1, -s45, s45)
+    var pi = 3.14159265358979323846
+    var y0 = -(x + 3) * pi * 0.25
+    var s0 = sin(y0)
+    var c0 = cos(y0)
+    var sum = Float64(0)
+    for i in range(8):
+        var y = -(x + 3 - Float64(i)) * pi * 0.25
+        c[i] = Float64(Float32((cs[2 * i] * s0 + cs[2 * i + 1] * c0) / (y * y)))
+        sum += c[i]
+    return c * Float64(Float32(1.0 / sum))
+
+
+struct Taps(Movable):
+    """For each output index: `n` source indices (clamped) and weights."""
+
+    var n: Int
+    var idx: List[Int]
+    var w: List[Float32]
+
+    def __init__(out self, ssize: Int, dsize: Int, scale: Float64, kind: Int):
+        """kind 0 nearest, 1 linear, 2 cubic, 3 lanczos4"""
+        self.n = 1 if kind == 0 else (2 if kind == 1 else (4 if kind == 2 else 8))
+        self.idx = List[Int](length=dsize * self.n, fill=0)
+        self.w = List[Float32](length=dsize * self.n, fill=0)
+        for d in range(dsize):
+            if kind == 0:
+                self.idx[d] = min(Int(floor(Float64(d) * scale)), ssize - 1)
+                self.w[d] = 1
+                continue
+            var f = (Float64(d) + 0.5) * scale - 0.5
+            var s = Int(floor(f))
+            f -= Float64(s)
+            if kind == 1 and s < 0:
+                f = 0
+                s = 0
+            var half = self.n // 2 - 1
+            var ww = SIMD[DType.float64, 8](0)
+            if kind == 1:
+                ww[0] = 1 - f
+                ww[1] = f
+            elif kind == 2:
+                var c = cubic_w(f)
+                for t in range(4):
+                    ww[t] = c[t]
+            else:
+                ww = lanczos_w(f)
+            for t in range(self.n):
+                self.idx[d * self.n + t] = min(max(s - half + t, 0), ssize - 1)
+                self.w[d * self.n + t] = Float32(ww[t])
+
+
+def resize[dt: DType](src: Mat[dt], dw: Int, dh: Int, kind: Int) -> Mat[dt]:
+    var tx = Taps(src.cols, dw, Float64(src.cols) / Float64(dw), kind)
+    var ty = Taps(src.rows, dh, Float64(src.rows) / Float64(dh), kind)
+    var ch = src.ch
+    var need = List[Bool](length=src.rows, fill=False)
+    for i in range(len(ty.idx)):
+        need[ty.idx[i]] = True
+    var tmp = Mat[F32](src.rows, dw, ch)
+    var o = Mat[dt](dh, dw, ch)
+    var pa = src.ptr()
+    var pt = tmp.ptr()
+    var po = o.ptr()
+    var pix = ptr_of(tx.idx)
+    var pwx = ptr_of(tx.w)
+    var piy = ptr_of(ty.idx)
+    var pwy = ptr_of(ty.w)
+    var pneed = ptr_of(need)
+    var nx = tx.n
+    var ny = ty.n
+    var n = dw * ch
+
+    def hrow(r: Int) {imm}:
+        if not pneed[unsafe_offset=r]:
+            return
+        for d in range(dw):
+            for k in range(ch):
+                var s = Float32(0)
+                for t in range(nx):
+                    s += pwx[unsafe_offset=d * nx + t] * Float32(pa[unsafe_offset=(r * src.cols + pix[unsafe_offset=d * nx + t]) * ch + k])
+                pt[unsafe_offset=(r * dw + d) * ch + k] = s
+
+    parallelize(hrow, src.rows)
+
+    def vrow(r: Int) {imm}:
+        var i = 0
+        while i < n:
+            var w = WF if i + WF <= n else 1
+            var acc = SIMD[F32, WF](0)
+            for t in range(ny):
+                var row = piy[unsafe_offset=r * ny + t]
+                var x = pt.unsafe_load[width=WF](row * n + i) if w == WF else SIMD[F32, WF](pt[unsafe_offset=row * n + i])
+                acc += x * pwy[unsafe_offset=r * ny + t]
+            var z = _fin[dt, WF](acc)
+            if w == WF:
+                po.unsafe_store(r * n + i, z)
+            else:
+                po[unsafe_offset=r * n + i] = z[0]
+            i += w
+
+    parallelize(vrow, dh)
+    _ = (tmp.rows, tx.n, ty.n, len(need))
+    return o^
+
+
+# ---- warpAffine / remap -----------------------------------------------------------------------------------
+# cv2 5.0 interpolates at the exact float position (the 1/32 fixed-point tables are gone), so one sampler serves both.
+
+
+def border_px[dt: DType](src: Mat[dt], y: Int, x: Int, k: Int, mode: Int, bval: Scalar[dt]) -> Scalar[dt]:
+    var yy = bidx(y, src.rows, mode)
+    var xx = bidx(x, src.cols, mode)
+    if yy < 0 or xx < 0:
+        return bval
+    return src.data[(yy * src.cols + xx) * src.ch + k]
+
+
+def sample[dt: DType](src: Mat[dt], fx: Float64, fy: Float64, kind: Int, mode: Int, bval: Scalar[dt], dst: Ptr[Scalar[dt]]):
+    """Write the interpolated pixel at (fx, fy) (kind 0 nearest, 1 linear, 2 cubic) to dst[0 .. ch)."""
+    var n = 1 if kind == 0 else (2 if kind == 1 else 4)
+    var off = 0 if kind != 2 else 1
+    var sx = Int(floor(fx + 0.5)) if kind == 0 else Int(floor(fx))
+    var sy = Int(floor(fy + 0.5)) if kind == 0 else Int(floor(fy))
+    var wx = SIMD[DType.float64, 4](1, 0, 0, 0)
+    var wy = SIMD[DType.float64, 4](1, 0, 0, 0)
+    if kind == 1:
+        wx = SIMD[DType.float64, 4](1 - (fx - Float64(sx)), fx - Float64(sx), 0, 0)
+        wy = SIMD[DType.float64, 4](1 - (fy - Float64(sy)), fy - Float64(sy), 0, 0)
+    elif kind == 2:
+        wx = cubic_w(fx - Float64(sx))
+        wy = cubic_w(fy - Float64(sy))
+    for k in range(src.ch):
+        var acc = Float64(0)
+        for a in range(n):
+            for b in range(n):
+                acc += wy[a] * wx[b] * Float64(border_px(src, sy + a - off, sx + b - off, k, mode, bval))
+        comptime if dt.is_integral():
+            acc = max(Float64(Scalar[dt].MIN), min(Float64(Scalar[dt].MAX), acc.__round__()))
+        dst[unsafe_offset=k] = Scalar[dt](acc)
+
+
+def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kind: Int, mode: Int, bval: Float64) -> Mat[dt]:
+    """m is the inverse map (dst -> src) as a 2 x 3 matrix."""
+    var o = Mat[dt](dh, dw, src.ch)
+    var pm = ptr_of(m)
+    var po = o.ptr()
+    var bv = Scalar[dt](bval)
+
+    def row(y: Int) {imm}:
+        for x in range(dw):
+            var fx = pm[unsafe_offset=0] * Float64(x) + pm[unsafe_offset=1] * Float64(y) + pm[unsafe_offset=2]
+            var fy = pm[unsafe_offset=3] * Float64(x) + pm[unsafe_offset=4] * Float64(y) + pm[unsafe_offset=5]
+            sample(src, fx, fy, kind, mode, bv, po + (y * dw + x) * src.ch)
+
+    parallelize(row, dh)
+    _ = len(m)
+    return o^
+
+
+def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: Int, bval: Float64) -> Mat[dt]:
+    var o = Mat[dt](mx.rows, mx.cols, src.ch)
+    var po = o.ptr()
+    var bv = Scalar[dt](bval)
+    var pmx = mx.ptr()
+    var pmy = my.ptr()
+
+    def row(y: Int) {imm}:
+        for x in range(mx.cols):
+            var i = y * mx.cols + x
+            sample(src, Float64(pmx[unsafe_offset=i]), Float64(pmy[unsafe_offset=i]), kind, mode, bv, po + i * src.ch)
+
+    parallelize(row, mx.rows)
+    _ = (mx.rows, my.rows)
+    return o^
+
+
+def blob[dt: DType](src: Mat[dt], dw: Int, dh: Int, scale: Float32, mean: List[Float32], swap: Bool) -> Mat[F32]:
+    """cv2.dnn.blobFromImage with a plain resize: planes laid out as (channel * h, w), float32."""
+    var r = resize(src, dw, dh, 1) if (dw != src.cols or dh != src.rows) else Mat[dt](copy=src)
+    var o = Mat[F32](r.ch * dh, dw, 1)
+    for c in range(r.ch):
+        var sc = (r.ch - 1 - c) if (swap and r.ch == 3) else c
+        for y in range(dh):
+            for x in range(dw):
+                o.data[(c * dh + y) * dw + x] = (Float32(r.data[(y * dw + x) * r.ch + sc]) - mean[c]) * scale
+    return o^
+
+
 # ---- CLI --------------------------------------------------------------------------------------------------
 
 
@@ -549,6 +762,41 @@ def run_dt[dt: DType](mut a: Args) raises -> Bool:
             while a.again():
                 o = sobel[dt, dt](m, a.i("dx", 1), a.i("dy", 0), a.i("ksize", 3), Float32(a.f("scale", 1.0)))
             save(o, a.out)
+    elif a.op == "resize":
+        var o = Mat[dt](0, 0)
+        var kind = a.i("interp", 1)
+        while a.again():
+            o = resize(m, a.i("w", m.cols), a.i("h", m.rows), kind)
+        save(o, a.out)
+    elif a.op == "warpAffine":
+        var f = a.fl("M", [1.0, 0.0, 0.0, 0.0, 1.0, 0.0])
+        var inv = f.copy()
+        if a.i("inv", 0) == 0:
+            var d = f[0] * f[4] - f[1] * f[3]
+            d = 1.0 / d if d != 0 else 0.0
+            inv = [f[4] * d, -f[1] * d, 0.0, -f[3] * d, f[0] * d, 0.0]
+            inv[2] = -inv[0] * f[2] - inv[1] * f[5]
+            inv[5] = -inv[3] * f[2] - inv[4] * f[5]
+        var o = Mat[dt](0, 0)
+        while a.again():
+            o = warp_affine(m, inv, a.i("w", m.cols), a.i("h", m.rows), a.i("interp", 1), a.i("border", 2), a.f("bval", 0.0))
+        save(o, a.out)
+    elif a.op == "remap":
+        var mx = load[F32](a.ins[1])
+        var my = load[F32](a.ins[2])
+        var o = Mat[dt](0, 0)
+        while a.again():
+            o = remap(m, mx, my, a.i("interp", 1), a.i("border", 2), a.f("bval", 0.0))
+        save(o, a.out)
+    elif a.op == "blobFromImage":
+        var mean = a.fl("mean", [0.0, 0.0, 0.0])
+        var mf = List[Float32]()
+        for v in mean:
+            mf.append(Float32(v))
+        var o = Mat[F32](0, 0)
+        while a.again():
+            o = blob(m, a.i("w", m.cols), a.i("h", m.rows), Float32(a.f("scale", 1.0)), mf, a.i("swap", 0) == 1)
+        save(o, a.out)
     elif a.op == "threshold":
         var th = a.f("thresh", 127.0)
         var o = Mat[dt](0, 0)
@@ -592,7 +840,7 @@ def run_dt[dt: DType](mut a: Args) raises -> Bool:
 
 
 def run(mut a: Args) raises -> Bool:
-    if not (a.op in ["GaussianBlur", "pyrDown", "Sobel", "threshold", "integral", "erode", "dilate", "cvtColor"]):
+    if not (a.op in ["GaussianBlur", "pyrDown", "Sobel", "threshold", "integral", "erode", "dilate", "cvtColor", "resize", "warpAffine", "remap", "blobFromImage"]):
         return False
     var code = peek_code(a.ins[0])
     comptime for i in range(2):

@@ -43,3 +43,26 @@ cvt_hsv2bgr_odd  cvtColor odd code=hsv2bgr => max:1
 cvt_ycrcb_hd     cvtColor hd code=bgr2ycrcb => max:1
 cvt_ycrcb2bgr_sm cvtColor sm code=ycrcb2bgr => max:1
 cvt_gray_f32     cvtColor f32 code=bgr2gray => max:0.01
+resize_down_lin_hd resize hd w=960 h=540 interp=1 => max:1
+resize_up_lin_sm   resize sm w=913 h=401 interp=1 => max:1
+resize_nn_hd       resize hd w=640 h=360 interp=0 => exact
+resize_nn_odd      resize odd w=29 h=17 interp=0 => exact
+resize_cub_sm      resize sm w=700 h=333 interp=2 => max:2
+resize_cub_hdg     resize hdg w=800 h=450 interp=2 => max:2
+resize_lan_sm      resize sm w=300 h=151 interp=3 => max:2
+resize_lan_hdg     resize hdg w=2500 h=1300 interp=3 => max:2
+resize_lin_one     resize one w=5 h=3 interp=1 => max:1
+resize_lin_f32     resize f32 w=40 h=20 interp=1 => max:0.01
+warp_rot_hd        warpAffine hd M=0.9396926,-0.3420201,300.5,0.3420201,0.9396926,-200.25 interp=1 => max:1
+warp_nn_sm         warpAffine sm M=1.3,0.1,-20,-0.2,0.8,15 interp=0 => exact
+warp_cub_smg       warpAffine smg M=0.7,-0.5,200,0.5,0.7,-60 interp=2 => max:1
+warp_rep_odd       warpAffine odd M=1,0.2,2,-0.1,1.1,-1 interp=1 border=1 => max:1
+warp_inv_g1        warpAffine g1 M=0.9,0.2,1.5,-0.2,0.9,0.5 interp=1 inv=1 w=12 h=7 bval=77 => max:1
+warp_f32           warpAffine f32 M=0.9,0.2,1.5,-0.2,0.9,0.5 interp=1 => max:0.5
+remap_lin_hd       remap hd mapx mapy interp=1 => max:1
+remap_nn_sm        remap sm mapxs mapys interp=0 => exact
+remap_cub_smg      remap smg mapxs mapys interp=2 => max:1
+remap_odd_const    remap odd mapxo mapyo interp=1 bval=9 => max:1
+remap_odd_refl     remap odd mapxo mapyo interp=1 border=0 => max:1
+blob_sm            blobFromImage sm w=224 h=224 scale=0.017 mean=104,117,123 swap=1 => max:0.02
+blob_hd            blobFromImage hd w=320 h=180 scale=1 mean=0,0,0 => max:1

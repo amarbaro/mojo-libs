@@ -100,6 +100,32 @@ def cvtColor(i, kv):
     return cv2.cvtColor(i[0], c[kv["code"]])
 
 
+INTERP = [cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_LANCZOS4]
+BORDER = [cv2.BORDER_REFLECT_101, cv2.BORDER_REPLICATE, cv2.BORDER_CONSTANT]  # border=0 reflect101, 1 replicate, 2 constant
+
+
+def kv_l(kv, k, d=None):
+    return [float(x) for x in kv[k].split(",")] if k in kv else d
+@op()
+def resize(i, kv):
+    h, w = i[0].shape[:2]
+    return cv2.resize(i[0], (kv_i(kv, "w", w), kv_i(kv, "h", h)), interpolation=INTERP[kv_i(kv, "interp", 1)])
+@op()
+def warpAffine(i, kv):
+    h, w = i[0].shape[:2]
+    fl = INTERP[kv_i(kv, "interp", 1)] | (cv2.WARP_INVERSE_MAP if kv_i(kv, "inv", 0) else 0)
+    return cv2.warpAffine(i[0], np.array(kv_l(kv, "M", [1, 0, 0, 0, 1, 0])).reshape(2, 3), (kv_i(kv, "w", w), kv_i(kv, "h", h)), flags=fl,
+                          borderMode=BORDER[kv_i(kv, "border", 2)], borderValue=(kv_f(kv, "bval", 0.0),) * 4)
+@op()
+def remap(i, kv):
+    return cv2.remap(i[0], i[1], i[2], INTERP[kv_i(kv, "interp", 1)], borderMode=BORDER[kv_i(kv, "border", 2)], borderValue=(kv_f(kv, "bval", 0.0),) * 4)
+@op()
+def blobFromImage(i, kv):
+    h, w = i[0].shape[:2]
+    b = cv2.dnn.blobFromImage(i[0], kv_f(kv, "scale", 1.0), (kv_i(kv, "w", w), kv_i(kv, "h", h)), tuple(kv_l(kv, "mean", [0, 0, 0])), bool(kv_i(kv, "swap", 0)), False)
+    return b.reshape(-1, b.shape[3])
+
+
 # ---- compare ----------------------------------------------------------------------------------------------
 def compare(ours, ref, spec):
     if ours.shape != ref.shape:
@@ -169,6 +195,12 @@ def make_fixtures(d):
     fx["f32b"] = (rng.standard_normal((9, 17, 3)) * 300).astype(np.float32)
     fx["f64"] = rng.standard_normal((8, 5)) * 1e3
     fx["half"] = np.array([[-2.5, -1.5, -0.5, 0.5, 1.5, 2.5, 254.5, 255.5, 300.0, -7.0]], np.float32)
+    for nm, (hh, ww) in {"": (1080, 1920), "s": (270, 480)}.items():
+        yy, xx = np.mgrid[0:hh, 0:ww].astype(np.float32)
+        fx["mapx" + nm] = (xx + 12 * np.sin(yy / 17) + 0.37).astype(np.float32)
+        fx["mapy" + nm] = (yy + 9 * np.cos(xx / 23) - 0.21).astype(np.float32)
+    fx["mapxo"] = rng.uniform(-3, 16, (7, 13)).astype(np.float32)
+    fx["mapyo"] = rng.uniform(-3, 10, (7, 13)).astype(np.float32)
     for n, a in fx.items():
         mcv.save(a, os.path.join(d, n + ".mcv"))
 

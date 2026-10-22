@@ -49,6 +49,15 @@ struct Args(Movable):
     def i(self, k: String, d: Int) raises -> Int:
         return atol(self.kv[k]) if k in self.kv else d
 
+    def fl(self, k: String, d: List[Float64]) raises -> List[Float64]:
+        """A comma list such as M=1,0,0,0,1,0."""
+        if k not in self.kv:
+            return d.copy()
+        var out = List[Float64]()
+        for t in self.kv[k].split(","):
+            out.append(atof(String(t)))
+        return out^
+
     def s(self, k: String, d: String) raises -> String:
         return self.kv[k] if k in self.kv else d
 
