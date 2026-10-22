@@ -399,21 +399,28 @@ def strel(shape: Int, k: Int) -> List[Int]:
 def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int) -> Mat[dt]:
     """erode (is_min) or dilate with a k x k structuring element, borders ignored as cv2 does."""
     var runs = strel(shape, k)
-    var r = k // 2
+    var iters2 = iters
+    var kk = k
+    if shape == 0 and iters2 > 1:
+        kk = (k - 1) * iters2 + 1
+        iters2 = 1
+    var r = kk // 2
     var ch = src.ch
     comptime W = simd_width_of[dt]()
     comptime ident = Scalar[dt].MAX if is_min else Scalar[dt].MIN
     var cur = Mat[dt](0, 0)
     var n = src.cols * ch
-    for it in range(iters):
+    for it in range(iters2):
+        # use kk for kernel size in rect path? strel uses k for runs (non-rect). For rect, k not used except r. r updated.
+        var k = kk
         var p = pad(src, r, r, 2, ident) if it == 0 else pad(cur, r, r, 2, ident)
         var pp = p.ptr()
-        var o = Mat[dt](src.rows, src.cols, ch)
+        var o = Mat[dt](src.rows, src.cols, ch, False)
         var po = o.ptr()
         var pstride = p.cols * ch
         if shape == 0:
             # a rectangle is separable: min over the row window, then over the column window
-            var tmp = Mat[dt](p.rows, src.cols, ch)
+            var tmp = Mat[dt](p.rows, src.cols, ch, False)
             var pt = tmp.ptr()
 
             def hrow(y: Int) {imm}:
