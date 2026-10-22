@@ -101,7 +101,7 @@ def cvtColor(i, kv):
     return cv2.cvtColor(i[0], c[kv["code"]])
 
 
-INTERP = [cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_LANCZOS4]
+INTERP = [cv2.INTER_NEAREST, cv2.INTER_LINEAR, cv2.INTER_CUBIC, cv2.INTER_LANCZOS4, cv2.INTER_AREA]
 BORDER = [cv2.BORDER_REFLECT_101, cv2.BORDER_REPLICATE, cv2.BORDER_CONSTANT]  # border=0 reflect101, 1 replicate, 2 constant
 
 

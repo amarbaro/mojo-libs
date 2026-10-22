@@ -2,7 +2,7 @@
 # padded copy of the source, so every inner loop is a plain contiguous SIMD loop over the flattened row
 # (pixel i of channel c sits at i * ch + c, so a horizontal tap at dx is a load at offset dx * ch).
 from std.sys.info import simd_width_of
-from std.math import sqrt, exp, floor, cos, sin, atan2, cbrt
+from std.math import sqrt, exp, floor, ceil, cos, sin, atan2, cbrt
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args, DTS, peek_code, par
 from std.math import log as log_
@@ -1066,14 +1066,34 @@ struct Taps(Movable):
     var w: List[Float32]
 
     def __init__(out self, ssize: Int, dsize: Int, scale: Float64, kind: Int):
-        """kind 0 nearest, 1 linear, 2 cubic, 3 lanczos4"""
-        self.n = 1 if kind == 0 else (2 if kind == 1 else (4 if kind == 2 else 8))
+        """kind 0 nearest, 1 linear, 2 cubic, 3 lanczos4, 4 area (scale >= 1: every source pixel weighted by the
+        part of it inside the destination cell, zero-weight padding up to n taps; when enlarging, a destination pixel sees one or two source pixels)"""
+        self.n = 1 if kind == 0 else (2 if kind == 1 else (4 if kind == 2 else (8 if kind == 3 else Int(ceil(scale)) + 2)))
         self.idx = List[Int](length=dsize * self.n, fill=0)
         self.w = List[Float32](length=dsize * self.n, fill=0)
         for d in range(dsize):
             if kind == 0:
                 self.idx[d] = min(Int(floor(Float64(d) * scale)), ssize - 1)
                 self.w[d] = 1
+                continue
+            if kind == 4:
+                var fs1 = Float64(d) * scale
+                var fs2 = fs1 + scale
+                var cell = min(scale, Float64(ssize) - fs1)
+                var s2 = min(Int(floor(fs2)), ssize - 1)
+                var s1 = min(Int(ceil(fs1)), s2)
+                var t = 0
+                if Float64(s1) - fs1 > 1e-3:
+                    self.idx[d * self.n] = s1 - 1
+                    self.w[d * self.n] = Float32((Float64(s1) - fs1) / cell)
+                    t = 1
+                for sx in range(s1, s2):
+                    self.idx[d * self.n + t] = sx
+                    self.w[d * self.n + t] = Float32(1.0 / cell)
+                    t += 1
+                if fs2 - Float64(s2) > 1e-3:
+                    self.idx[d * self.n + t] = s2
+                    self.w[d * self.n + t] = Float32(min(min(fs2 - Float64(s2), 1.0), cell) / cell)
                 continue
             var f = (Float64(d) + 0.5) * scale - 0.5
             var s = Int(floor(f))
@@ -1097,9 +1117,12 @@ struct Taps(Movable):
                 self.w[d * self.n + t] = Float32(ww[t])
 
 
-def resize[dt: DType](src: Mat[dt], dw: Int, dh: Int, kind: Int) -> Mat[dt]:
+def resize[dt: DType](src: Mat[dt], dw_in: Int, dh_in: Int, kind_in: Int) -> Mat[dt]:
     """Column taps first, on contiguous SIMD over the source width into one cached row per output row; then the row
     taps pick (dw) pixels from that row."""
+    var dw = dw_in
+    var dh = dh_in
+    var kind = kind_in
     var tx = Taps(src.cols, dw, Float64(src.cols) / Float64(dw), kind)
     var ty = Taps(src.rows, dh, Float64(src.rows) / Float64(dh), kind)
     var ch = src.ch
