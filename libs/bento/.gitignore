@@ -2,3 +2,4 @@
 .work
 build
 exchange
+__pycache__/
