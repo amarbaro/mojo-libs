@@ -315,6 +315,8 @@ OPS = {"voxelize": voxelize, "unvoxelize": unvoxelize, "occupied": occupied, "oh
 
 def fixtures():
     """name -> ndarray; written as .mcv by the driver."""
+    global rng
+    rng = np.random.default_rng(20261022)  # same arrays on every call
     fx = {}
     pts = rng.uniform(-8, 8, (500, 3))
     fx["pts500"] = pts

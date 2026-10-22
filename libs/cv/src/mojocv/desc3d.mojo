@@ -5,6 +5,7 @@
 # flipped by a mirror.
 # A descriptor is 64 bits, stored as 8 little-endian bytes: describe gives N x 8 uint8, match gives N x 2 int32.
 from std.bit import pop_count
+from max.algorithm import parallelize
 from mojocv.mat import Mat
 from mojocv.octree import splitmix
 
@@ -82,16 +83,30 @@ def match_desc(a: Mat[DType.uint8], b: Mat[DType.uint8]) raises -> Mat[DType.int
     """For each descriptor of a: [index of the nearest descriptor in b by Hamming distance, that distance]."""
     if a.cols != 8 or b.cols != 8 or a.ch != 1 or b.ch != 1 or b.rows < 1:
         raise Error("mojocv: match wants N x 8 and M x 8 uint8 descriptors with M >= 1")
-    var out = Mat[DType.int32](a.rows, 2)
+    var wa = List[UInt64]()
+    var wb = List[UInt64]()
     for i in range(a.rows):
-        var wa = _word(a, i)
-        var best = 65
-        var arg = 0
-        for j in range(b.rows):
-            var h = Int(pop_count(wa ^ _word(b, j)))
-            if h < best:
-                best = h
-                arg = j
-        out.data[i * 2] = Int32(arg)
-        out.data[i * 2 + 1] = Int32(best)
+        wa.append(_word(a, i))
+    for j in range(b.rows):
+        wb.append(_word(b, j))
+    var out = Mat[DType.int32](a.rows, 2)
+    var na = a.rows
+    var nb = b.rows
+    var po = out.ptr()
+
+    def rows_work(c: Int) {imm}:
+        var per = (na + 63) // 64
+        for i in range(c * per, min(na, (c + 1) * per)):
+            var w = wa[i]
+            var best = 65
+            var arg = 0
+            for j in range(nb):
+                var h = Int(pop_count(w ^ wb[j]))
+                if h < best:  # strict: the lowest index wins a tie
+                    best = h
+                    arg = j
+            po[i * 2] = Int32(arg)
+            po[i * 2 + 1] = Int32(best)
+
+    parallelize(rows_work, 64)
     return out^

@@ -39,7 +39,7 @@ def _spec(op: String) -> String:
     if op == "voxelize" or op == "unvoxelize" or op == "occupied":
         return "1 1 size"
     if op == "ohash":
-        return "1 1 depth"
+        return "1 1 depth reps"
     if op == "odiff":
         return "2 2 depth reps"
     if op == "static":
@@ -133,7 +133,12 @@ def dispatch3d(args: List[String]) raises -> Bool:
     elif op == "occupied":
         save(occupied(load[DType.float64](ins[0]), _f(kv, "size", 1.0)), out)
     elif op == "ohash":
-        var t = Octree(load[DType.int32](ins[0]), _i(kv, "depth", 6))
+        var cells = load[DType.int32](ins[0])
+        var t = Octree(cells, _i(kv, "depth", 6))
+        for _ in range(reps):
+            var t0 = Int(perf_counter_ns())
+            t = Octree(cells, _i(kv, "depth", 6))
+            _lap(t0, best)
         var h = Mat[DType.uint8](1, 8)
         for i in range(8):
             h.data[i] = UInt8((t.root_hash() >> UInt64(8 * i)) & 0xFF)
