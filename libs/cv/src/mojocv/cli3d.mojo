@@ -1,6 +1,7 @@
 # 3D / time / CAD / CAE ops for the mojo-cv CLI: `mojo-cv3d OP OUT IN... [k=v]`. src/main.mojo (lane L2D) calls
 # dispatch3d for any op it does not know. Every op reads and writes .mcv files; scalars are printed too.
 from std.sys import argv
+from std.time import perf_counter_ns
 from std.collections import Dict
 from mojocv.mat import Mat, load, save
 from mojocv.voxel import voxelize, unvoxelize, occupied
@@ -8,6 +9,7 @@ from mojocv.align import umeyama
 from mojocv.wavelet import haar3, compress
 from mojocv.desc3d import describe, match_desc
 from mojocv.tapvid import tapvid
+from mojocv.phasecorr import phase_corr
 from mojocv.octree import Octree, walk, walk_cells
 
 
@@ -78,6 +80,18 @@ def dispatch3d(args: List[String]) raises -> Bool:
             load[DType.uint8](ins[3]), _f(kv, "focal", 500.0), _i(kv, "metric", 0) != 0,
         )
         print("tapvid apd=", r.data[0], "oa=", r.data[1], "aj=", r.data[2])
+        save(r, out)
+    elif op == "phasecorr":
+        var a = load[DType.float64](ins[0])
+        var b = load[DType.float64](ins[1])
+        var r = phase_corr(a, b, _i(kv, "window", 0) != 0)
+        var best = Int.MAX
+        for _ in range(_i(kv, "reps", 0)):  # best-of-reps in this process, for docs/bench.md
+            var t0 = Int(perf_counter_ns())
+            r = phase_corr(a, b, _i(kv, "window", 0) != 0)
+            best = min(best, Int(perf_counter_ns()) - t0)
+        if best != Int.MAX:
+            print("phasecorr best_ms=", Float64(best) / 1e6)
         save(r, out)
     else:
         return False

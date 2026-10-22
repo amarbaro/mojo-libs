@@ -42,6 +42,8 @@ def check(row, fx):
     mcv.save(want, WORK / f"{name}.mcv")
     if "equals" in expect:
         want = mcv.load(WORK / f"{expect['equals']}.mcv")
+    if "cols" in expect:
+        got, want = got[:, : int(expect["cols"])], want[:, : int(expect["cols"])]
     if got.shape != want.shape or got.dtype != want.dtype:
         return False, f"shape/dtype {got.shape} {got.dtype} vs {want.shape} {want.dtype}"
     diff = float(np.max(np.abs(got.astype(np.float64) - want.astype(np.float64)))) if got.size else 0.0

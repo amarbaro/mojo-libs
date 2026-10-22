@@ -145,6 +145,31 @@ def tapvid(ins, kv):
     return np.array([[apd, (gv == pv).mean(), aj]])
 
 
+def _frac(rm, r0, rp, n):
+    nb = max(rm, rp)
+    if r0 <= 0 or nb <= 0:
+        return 0.0
+    rho = nb / r0
+    fr = n / np.pi * np.arctan(rho * np.sin(np.pi / n) / (1 + rho * np.cos(np.pi / n)))
+    return fr if rp >= rm else -fr
+
+
+def phasecorr(ins, kv):
+    a, b = ins
+    rows, cols = a.shape
+    if int(kv.get("window", 0)):
+        w = np.outer(0.5 * (1 - np.cos(2 * np.pi * np.arange(rows) / (rows - 1))),
+                     0.5 * (1 - np.cos(2 * np.pi * np.arange(cols) / (cols - 1))))
+        a, b = a * w, b * w
+    c = np.fft.fft2(b) * np.conj(np.fft.fft2(a))
+    r = np.real(np.fft.ifft2(c / (np.abs(c) + 1e-12)))
+    py, px = np.unravel_index(np.argmax(r), r.shape)
+    sg = lambda i, n: i - n if i > (n - 1) // 2 else i
+    dx = sg(px, cols) + _frac(r[py, (px - 1) % cols], r[py, px], r[py, (px + 1) % cols], cols)
+    dy = sg(py, rows) + _frac(r[(py - 1) % rows, px], r[py, px], r[(py + 1) % rows, px], rows)
+    return np.array([[dx, dy, r[py, px]]])
+
+
 def umeyama(ins, kv):
     x, y = ins
     mx, my = x.mean(0), y.mean(0)
@@ -163,7 +188,7 @@ def umeyama(ins, kv):
 
 OPS = {"voxelize": voxelize, "unvoxelize": unvoxelize, "occupied": occupied, "ohash": ohash, "odiff": odiff,
        "static": static, "umeyama": umeyama, "haar3f": haar3f, "haar3i": haar3i,
-       "haar3c": haar3c, "tapvid": tapvid, "describe": describe, "match": match}
+       "haar3c": haar3c, "tapvid": tapvid, "phasecorr": phasecorr, "describe": describe, "match": match}
 
 
 def fixtures():
@@ -193,6 +218,7 @@ def fixtures():
     fx.update(wavelet_fixtures())
     fx.update(desc_fixtures())
     fx.update(tap_fixtures())
+    fx.update(pc_fixtures())
     return fx
 
 
@@ -296,3 +322,32 @@ def tap_fixtures():
         "tp_c_truth": np.array([[1.0, 0.5, 1 / 3]]),
         "tp_zero": np.zeros((4, 1), np.uint8),
     }
+
+
+def fshift(img, dy, dx):
+    """Periodic (Fourier) translation by a fractional amount: b(x) = a(x - d)."""
+    ky = np.fft.fftfreq(img.shape[0])[:, None]
+    kx = np.fft.fftfreq(img.shape[1])[None, :]
+    return np.real(np.fft.ifft2(np.fft.fft2(img) * np.exp(-2j * np.pi * (ky * dy + kx * dx))))
+
+
+def pc_fixtures():
+    rs = np.random.default_rng(19)
+    fx = {}
+    for tag, shp in (("", (64, 96)), ("odd", (45, 60)), ("prime", (31, 37))):
+        a = rs.random(shp)
+        dy, dx = 5 % shp[0], -7
+        fx["pc_a" + tag] = a
+        fx["pc_b" + tag] = np.roll(a, (dy, dx), (0, 1))
+        fx["pc_t" + tag] = np.array([[dx, dy if dy <= (shp[0] - 1) // 2 else dy - shp[0], 1.0]])
+    a = rs.random((65, 97))
+    fx["pc_af"] = a
+    fx["pc_bf"] = fshift(a, 2.5, -3.25)
+    fx["pc_tf"] = np.array([[-3.25, 2.5]])
+    fx["pc_bf2"] = fshift(a, 0.77, -0.3)
+    fx["pc_tf2"] = np.array([[-0.3, 0.77]])
+    fx["pc_bnoise"] = np.roll(a, (3, 4), (0, 1)) + 0.2 * rs.random((65, 97))
+    fx["pc_zero"] = np.zeros((16, 16))
+    fx["pc_zt"] = np.zeros((1, 3))
+    fx["pc_small"] = rs.random((8, 8))
+    return fx
