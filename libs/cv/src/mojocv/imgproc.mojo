@@ -498,6 +498,23 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
     var npx = src.cols
 
     def row(r: Int) {imm}:
+        comptime if dt == DType.uint8:
+            if code == 3:
+                var base = r * npx * 3
+                var qa = pa.unsafe_bitcast[UInt8]()
+                var qo = po.unsafe_bitcast[UInt8]()
+                var c = 0
+                while c + 8 < npx:
+                    var v = (qa + base + c * 3).unsafe_load[width=32]()
+                    var s = v.shuffle[2,1,0,5,4,3,8,7,6,11,10,9,14,13,12,17,16,15,20,19,18,23,22,21,24,25,26,27,28,29,30,31]()
+                    (qo + base + c * 3).unsafe_store[width=32](s)
+                    c += 8
+                for cc in range(c, npx):
+                    var i = base + cc * 3
+                    qo[i] = qa[i + 2]
+                    qo[i + 1] = qa[i + 1]
+                    qo[i + 2] = qa[i]
+                return
         var c0 = 0
         comptime if dt == DType.uint8:
             # 16 pixels at a time for the channel-shuffle and gray conversions
@@ -613,7 +630,16 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
                     po[unsafe_offset=j + 1] = pa[unsafe_offset=i + 1]
                     po[unsafe_offset=j + 2] = x0
 
-    par(row, src.rows)
+    def band(b: Int) {imm}:
+        var chunk = (src.rows + 7) // 8
+        var r0 = b * chunk
+        var r1 = r0 + chunk
+        if r1 > src.rows:
+            r1 = src.rows
+        for r in range(r0, r1):
+            row(r)
+
+    par(band, 8)
     return o^
 
 
