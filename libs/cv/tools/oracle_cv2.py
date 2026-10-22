@@ -187,6 +187,31 @@ def calcOpticalFlowFarneback(i, kv):
                                         kv_i(kv, "iters", 3), kv_i(kv, "polyN", 5), kv_f(kv, "polySigma", 1.2), 0)
 
 
+# ---- calib3d (all arrays float64; points are (n, 2) or (n, 3)) --------------------------------------------
+@op()
+def Rodrigues(i, kv): return cv2.Rodrigues(i[0])[0]
+@op()
+def projectPoints(i, kv): return cv2.projectPoints(i[0], i[1], i[2], i[3], i[4])[0].reshape(-1, 2)
+@op()
+def fisheye_projectPoints(i, kv): return cv2.fisheye.projectPoints(i[0].reshape(-1, 1, 3), i[1], i[2], i[3], i[4])[0].reshape(-1, 2)
+@op()
+def undistortPoints(i, kv):
+    R = i[3] if len(i) > 3 else None
+    P = i[4] if len(i) > 4 else None
+    return cv2.undistortPoints(i[0].reshape(-1, 1, 2), i[1], i[2], R=R, P=P).reshape(-1, 2)
+@op()
+def fisheye_undistortPoints(i, kv):
+    R = i[3] if len(i) > 3 else None
+    P = i[4] if len(i) > 4 else None
+    return cv2.fisheye.undistortPoints(i[0].reshape(-1, 1, 2), i[1], i[2], R=R, P=P).reshape(-1, 2)
+@op()
+def initUndistortRectifyMap(i, kv):
+    return list(cv2.initUndistortRectifyMap(i[0], i[1], i[2], i[3], (kv_i(kv, "w", 640), kv_i(kv, "h", 480)), cv2.CV_32FC1))
+@op()
+def fisheye_initUndistortRectifyMap(i, kv):
+    return list(cv2.fisheye.initUndistortRectifyMap(i[0], i[1], i[2], i[3], (kv_i(kv, "w", 640), kv_i(kv, "h", 480)), cv2.CV_32FC1))
+
+
 # ---- compare ----------------------------------------------------------------------------------------------
 def compare(ours, ref, spec):
     if ours.shape != ref.shape:
@@ -266,6 +291,27 @@ def make_fixtures(d):
     db[:150] = da[:150] ^ (rng.random((150, 32)) < 0.02).astype(np.uint8)  # 150 near copies of the first 150 queries
     fx["desc_a"], fx["desc_b"] = da, db
     fx["desc_one"] = da[:1].copy()
+    # calib3d inputs
+    fx["K"] = np.array([[800, 0, 320], [0, 790, 240], [0, 0, 1.0]])
+    fx["Kb"] = np.array([[1000, 0, 500], [0, 1000, 400], [0, 0, 1.0]])
+    fx["d4"] = np.array([[-0.2], [0.05], [0.001], [-0.002]])
+    fx["d5"] = np.array([[-0.25], [0.08], [0.001], [-0.002], [-0.02]])
+    fx["d8"] = np.array([[-0.2], [0.05], [0.001], [-0.002], [0.01], [0.1], [-0.05], [0.02]])
+    fx["d12"] = np.array([[-0.2], [0.05], [0.001], [-0.002], [0.01], [0.1], [-0.05], [0.02], [0.001], [-0.0005], [0.0008], [0.0002]])
+    fx["dz"] = np.zeros((5, 1))
+    fx["dfe"] = np.array([[-0.05], [0.01], [-0.002], [0.0003]])
+    fx["obj3"] = np.column_stack([rng.uniform(-1, 1, 30), rng.uniform(-1, 1, 30), rng.uniform(3, 6, 30)])
+    fx["rv"] = np.array([[0.1], [-0.2], [0.05]])
+    fx["tv"] = np.array([[0.1], [-0.05], [0.3]])
+    fx["rv0"] = np.zeros((3, 1))
+    fx["pix"] = np.vstack([rng.uniform(0, 640, 40), rng.uniform(0, 480, 40)]).T
+    fx["Rr"] = cv2.Rodrigues(np.array([0.02, -0.03, 0.01]))[0]
+    fx["Pn"] = np.array([[700, 0, 330, 0], [0, 700, 250, 0], [0, 0, 1, 0.0]])
+    fx["rod_v"] = np.array([[0.3], [-0.7], [0.5]])
+    fx["rod_v0"] = np.array([[0.0], [0.0], [0.0]])
+    fx["rod_m"] = cv2.Rodrigues(np.array([0.3, -0.7, 0.5]))[0]
+    fx["rod_mpi"] = cv2.Rodrigues(np.array([2.2214414691, 2.2214414691, 0.0]))[0]
+    fx["rod_mid"] = np.eye(3)
     fx["odd"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["odd2"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["one"] = np.array([[[200, 0, 77]]], np.uint8)

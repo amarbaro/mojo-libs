@@ -1,0 +1,21 @@
+# calib3d: camera model and geometry, float64 arrays
+rod_vec          Rodrigues rod_v => max:1e-12
+rod_zero         Rodrigues rod_v0 => max:1e-12
+rod_mat          Rodrigues rod_m => max:1e-9
+rod_mat_pi       Rodrigues rod_mpi => max:1e-6
+rod_mat_id       Rodrigues rod_mid => max:1e-12
+proj_d4          projectPoints obj3 rv tv K d4 => max:1e-9
+proj_d5          projectPoints obj3 rv tv K d5 => max:1e-9
+proj_d8          projectPoints obj3 rv0 tv K d8 => max:1e-9
+proj_d12         projectPoints obj3 rv tv K d12 => max:1e-9
+proj_nodist      projectPoints obj3 rv tv K dz => max:1e-9
+fproj            fisheye_projectPoints obj3 rv tv K dfe => max:1e-9
+undist_d4        undistortPoints pix K d4 => max:1e-9
+undist_d8        undistortPoints pix K d8 => max:1e-9
+undist_rp        undistortPoints pix K d5 Rr Pn => max:1e-9
+undist_zero      undistortPoints pix K dz => max:1e-12
+fundist          fisheye_undistortPoints pix K dfe => max:1e-9
+fundist_rp       fisheye_undistortPoints pix K dfe Rr Pn => max:1e-9
+rectmap_d5       initUndistortRectifyMap K d5 Rr Pn w=640 h=480 => max:0.001, max:0.001
+rectmap_id       initUndistortRectifyMap K dz Rr K w=64 h=48 => max:0.001, max:0.001
+frectmap         fisheye_initUndistortRectifyMap K dfe Rr Pn w=320 h=240 => max:0.001, max:0.001
