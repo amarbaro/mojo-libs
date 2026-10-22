@@ -63,8 +63,24 @@ def static(ins, kv):
     return np.array([(*c, int(all(c in s for s in sets))) for c in allc], dtype=np.int32).reshape(-1, 4)
 
 
+def umeyama(ins, kv):
+    x, y = ins
+    mx, my = x.mean(0), y.mean(0)
+    xc, yc = x - mx, y - my
+    u, d, vt = np.linalg.svd(yc.T @ xc / len(x))
+    sgn = np.ones(3)
+    if np.linalg.det(u) * np.linalg.det(vt) < 0:
+        sgn[2] = -1
+    r = u @ np.diag(sgn) @ vt
+    c = (d * sgn).sum() / (xc ** 2).sum(1).mean() if int(kv.get("scale", 1)) else 1.0
+    m = np.eye(4)
+    m[:3, :3] = c * r
+    m[:3, 3] = my - c * r @ mx
+    return m
+
+
 OPS = {"voxelize": voxelize, "unvoxelize": unvoxelize, "occupied": occupied, "ohash": ohash, "odiff": odiff,
-       "static": static}
+       "static": static, "umeyama": umeyama}
 
 
 def fixtures():
@@ -90,4 +106,41 @@ def fixtures():
     fx["frame0"] = np.vstack([room, [[3, 3, 5], [3, 3, 6]]]).astype(np.int32)
     fx["frame1"] = np.vstack([room, [[4, 3, 5], [4, 3, 6]]]).astype(np.int32)
     fx["frame2"] = np.vstack([room[:-1], [[5, 3, 5], [5, 3, 6]]]).astype(np.int32)
+    fx.update(align_fixtures())
+    return fx
+
+
+def _rot(rs):
+    q, r = np.linalg.qr(rs.normal(size=(3, 3)))
+    q = q * np.sign(np.diag(r))
+    return q if np.linalg.det(q) > 0 else q * np.array([1, 1, -1])
+
+
+def _sim(s, r, t):
+    m = np.eye(4)
+    m[:3, :3] = s * r
+    m[:3, 3] = t
+    return m
+
+
+def align_fixtures():
+    rs = np.random.default_rng(7)
+    fx = {}
+    src = rs.normal(size=(200, 3)) * [3, 2, 1]
+    truth = _sim(1.7, _rot(rs), [4.0, -2.5, 0.75])
+    fx["al_src"] = src
+    fx["al_truth"] = truth
+    fx["al_dst"] = src @ truth[:3, :3].T + truth[:3, 3]
+    fx["al_dst_noisy"] = fx["al_dst"] + rs.normal(size=(200, 3)) * 0.05
+    plane = src.copy()
+    plane[:, 2] = 0
+    truth2 = _sim(0.6, _rot(rs), [-1.0, 0.5, 2.0])
+    fx["al_plane"] = plane
+    fx["al_plane_truth"] = truth2
+    fx["al_plane_dst"] = plane @ truth2[:3, :3].T + truth2[:3, 3]
+    fx["al_mirror_dst"] = src * [-1, 1, 1]
+    fx["al_line"] = np.outer(np.arange(10.0), [1, 2, 3])
+    fx["al_few"] = src[:3]
+    fx["al_few_dst"] = fx["al_dst"][:3]
+    fx["al_one"] = src[:1]
     return fx

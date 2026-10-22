@@ -4,6 +4,7 @@ from std.sys import argv
 from std.collections import Dict
 from mojocv.mat import Mat, load, save
 from mojocv.voxel import voxelize, unvoxelize, occupied
+from mojocv.align import umeyama
 from mojocv.octree import Octree, walk, walk_cells
 
 
@@ -54,6 +55,8 @@ def dispatch3d(args: List[String]) raises -> Bool:
         var w = walk(_trees(ins, depth), op == "static")
         print(op, "visited=", w.visited, "dense=", 1 << (3 * depth), "out=", len(w.keys))
         save(walk_cells(w, op == "static"), out)
+    elif op == "umeyama":
+        save(umeyama(load[DType.float64](ins[0]), load[DType.float64](ins[1]), _i(kv, "scale", 1) != 0), out)
     else:
         return False
     return True
