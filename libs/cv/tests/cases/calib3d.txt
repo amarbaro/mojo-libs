@@ -45,3 +45,5 @@ aruco_none       aruco_detect st_l => exact, exact
 fproj_zero_rot   fisheye_projectPoints obj3 rv0 tv K dfe => max:1e-9
 frectmap_small   fisheye_initUndistortRectifyMap K dfe Rr K w=32 h=24 => max:0.001, max:0.001
 pnp_ransac_pl    solvePnPRansac pnp_obj_pl2 pnp_img_pl_out K d4 thresh=2 => max:1e-5, max:1e-5, exact
+pnp_epnp_four    solvePnP pnp_four pnp_four_img K d4 epnp=1 => max:1e-6, max:1e-6
+pnp_epnp_noise   solvePnP pnp_obj pnp_img_noise K d4 => max:1e-6, max:1e-6

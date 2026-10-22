@@ -218,7 +218,10 @@ def estimateAffine2D(i, kv):
     return [m, inl.reshape(-1, 1).astype(np.uint8)]
 @op()
 def solvePnP(i, kv):
-    ok, r, t = cv2.solvePnP(i[0], i[1], i[2], i[3] if i[3].size else None, flags=cv2.SOLVEPNP_ITERATIVE)
+    flag = cv2.SOLVEPNP_EPNP if kv_i(kv, "epnp", 0) else cv2.SOLVEPNP_ITERATIVE
+    ok, r, t = cv2.solvePnP(i[0], i[1], i[2], i[3] if i[3].size else None, flags=flag)
+    if kv_i(kv, "epnp", 0):
+        r, t = cv2.solvePnPRefineLM(i[0], i[1], i[2], i[3], r, t)
     return [r.reshape(3, 1), t.reshape(3, 1)]
 @op()
 def solvePnPRansac(i, kv):
@@ -456,6 +459,9 @@ def make_fixtures(d):
     outp[:3] = rng.uniform(0, 640, (3, 2))
     fx["pnp_img_pl_out"] = np.vstack([outp, cv2.projectPoints(fx["pnp_obj_pl"][:6], rvp, tvp, Kc, fx["d4"])[0].reshape(-1, 2)])
     fx["pnp_obj_pl2"] = np.vstack([fx["pnp_obj_pl"], fx["pnp_obj_pl"][:6]])
+    fx["pnp_four"] = np.array([[-1., -1., 0.], [1., -1., .3], [0., 1., -.2], [.2, .1, 1.]])
+    fx["pnp_four_img"] = cv2.projectPoints(fx["pnp_four"], rvp, tvp, Kc, fx["d4"])[0].reshape(-1, 2)
+    fx["pnp_img_noise"] = fx["pnp_img"] + np.random.default_rng(103).normal(0, .2, (40, 2))
     Af = np.array([[0.9, -0.3, 12.0], [0.25, 1.1, -7.0]])
     pa = rng.uniform(0, 300, (80, 2))
     pb = pa @ Af[:, :2].T + Af[:, 2]

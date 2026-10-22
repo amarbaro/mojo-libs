@@ -44,8 +44,8 @@ ArUco ids; within 1 grey level are resize, warp, remap, blob, YCrCb, HSV to BGR;
 - **findEssentialMat** draws eight-point models (MSAC cost) where cv2 draws five-point sets; on consistent data both give
   the same E. E is returned with unit Frobenius norm and the largest entry positive (cv2's is normalised the same way
   by the oracle). Noisy data agree only loosely (row `ess_noisy`).
-- **solvePnP**: homography (coplanar) or 3x4 DLT start, then Levenberg-Marquardt on the pixel error with distortion.
-  No EPnP. RANSAC samples 6 points (4 coplanar), 100 iterations, adaptive.
+- **solvePnP**: EPnP control points with Gauss-Newton distance refinement, then damped Gauss-Newton on pixel error.
+  RANSAC samples four points, 100 iterations, adaptive. See `docs/f34.md`.
 - **stereoRectify**: default alpha (-1) and horizontal baseline only; cv2 5.0 averages the two focal lengths.
 - **StereoSGBM**: own SGM (Birchfield-Tomasi cost, box window, eight paths, parabola refinement, left-right and
   uniqueness checks), not cv2's pre-filtered 5-path pipeline: 94 to 95 percent of pixels agree within one disparity.

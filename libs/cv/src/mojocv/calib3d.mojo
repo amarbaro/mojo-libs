@@ -525,80 +525,154 @@ def is_planar(obj: Mx) -> Bool:
     return lo <= 1e-9 * hi
 
 
-def pose_dlt(obj: Mx, nrm: Mx, idx: List[Int]) -> Tuple[Mx, Mx]:
-    """Initial pose from normalized image points by a plane homography (coplanar) or the 3 x 4 DLT. Returns (R, t)."""
+def pose_epnp(obj: Mx, nrm: Mx, idx: List[Int]) -> Tuple[Mx, Mx]:
+    """EPnP control points, distance constraints and Gauss-Newton beta refinement (Lepetit 2009)."""
     var n = len(idx)
-    var sub = mx(n, 3)
-    for t in range(n):
-        for k in range(3):
-            sub.set(t, k, 0, obj.at(idx[t], k))
-    if is_planar(sub):
-        var c = List[Float64](length=3, fill=0)
-        for t in range(n):
-            for k in range(3):
-                c[k] += sub.at(t, k) / Float64(n)
-        var cov = mx(3, 3)
-        for t in range(n):
+    var center = mx(1, 3)
+    var op = obj.ptr()
+    var cp = center.ptr()
+    for i in idx:
+        for c in range(3):
+            cp[c] += op[i * 3 + c] / Float64(n)
+    var cov = mx(3, 3)
+    for i in idx:
+        for r in range(3):
+            for c in range(3):
+                cov.data[r * 3 + c] += (op[i * 3 + r] - cp[r]) * (op[i * 3 + c] - cp[c])
+    var eig = eigh(cov)
+    var smallest = eig[0][0]
+    var largest = eig[0][2]
+    var nc = 3 if smallest < largest * 1e-10 else 4
+    var controls = mx(nc, 3)
+    var alpha = mx(n, nc)
+    var ap = alpha.ptr()
+    for c in range(3):
+        controls.data[c] = cp[c]
+    for j in range(1, nc):
+        var scale = sqrt(max(eig[0][3 - j] / Float64(n), 1e-30))
+        for c in range(3):
+            controls.data[3 * j + c] = cp[c] + eig[1].at(c, 3 - j) * scale
+        for i in range(n):
+            for c in range(3):
+                ap[i * nc + j] += (op[idx[i] * 3 + c] - cp[c]) * eig[1].at(c, 3 - j) / scale
+    var a = mx(2 * n, 3 * nc)
+    var mp = a.ptr()
+    var np = nrm.ptr()
+    for i in range(n):
+        ap[i * nc] = 1.0
+        for j in range(1, nc):
+            ap[i * nc] -= ap[i * nc + j]
+        for j in range(nc):
+            var v = ap[i * nc + j]
+            mp[(2 * i) * 3 * nc + 3 * j] = v
+            mp[(2 * i + 1) * 3 * nc + 3 * j + 1] = v
+            mp[(2 * i) * 3 * nc + 3 * j + 2] = -v * np[idx[i] * 2]
+            mp[(2 * i + 1) * 3 * nc + 3 * j + 2] = -v * np[idx[i] * 2 + 1]
+    var nulls = eigh(mm(mt(a), a))
+    var nb = 2 if nc == 3 else 4
+    var pairs = nc * (nc - 1) // 2
+    var dv = mx(pairs * 3, nb)
+    var rho = mx(pairs, 1)
+    var pair = 0
+    for i in range(nc):
+        for j in range(i + 1, nc):
+            for c in range(3):
+                var delta = controls.data[3 * i + c] - controls.data[3 * j + c]
+                rho.data[pair] += delta * delta
+                for b in range(nb):
+                    dv.set(pair * 3 + c, b, 0, nulls[1].at(3 * i + c, b) - nulls[1].at(3 * j + c, b))
+            pair += 1
+    var best_cost = Float64(1e300)
+    var best_r = ident(3)
+    var best_t = mx(3, 1)
+    # Solve the linearized distance equations for 1, 2, 3 null vectors,
+    # plus the four-vector first-row approximation; refine all beta weights.
+    for init in range(1, nb + 1):
+        var cols = init * (init + 1) // 2 if init < 4 else 4
+        var l = mx(pairs, cols)
+        for p in range(pairs):
+            var col = 0
+            for b in range(init):
+                for c in range(b, init):
+                    if init == 4 and b != 0:
+                        continue
+                    for k in range(3):
+                        l.data[p * cols + col] += dv.at(p * 3 + k, b) * dv.at(p * 3 + k, c) * (1.0 if b == c else 2.0)
+                    col += 1
+        var ls = solve(mm(mt(l), l), mm(mt(l), rho))
+        var beta = mx(nb, 1)
+        beta.data[0] = sqrt(abs(ls.data[0]))
+        if beta.data[0] < 1e-15:
+            continue
+        for b in range(1, init):
+            beta.data[b] = ls.data[b] / beta.data[0]
+        for iteration in range(15):
+            var j = mx(pairs, nb)
+            var res = mx(pairs, 1)
+            for p in range(pairs):
+                res.data[p] = rho.data[p]
+                for c in range(3):
+                    var v = Float64(0)
+                    for b in range(nb):
+                        v += dv.at(p * 3 + c, b) * beta.data[b]
+                    res.data[p] -= v * v
+                    for b in range(nb):
+                        j.data[p * nb + b] += 2 * v * dv.at(p * 3 + c, b)
+            var delta = solve(mm(mt(j), j), mm(mt(j), res))
+            for b in range(nb):
+                beta.data[b] += delta.data[b]
+            if fnorm(delta) < 1e-10:
+                break
+        var cc = mx(nc, 3)
+        for i in range(nc * 3):
+            for b in range(nb):
+                cc.data[i] += nulls[1].at(i, b) * beta.data[b]
+        var camera = mm(alpha, cc)
+        var sign = 1.0 if camera.data[2] > 0 else -1.0
+        camera = mscale(camera, sign)
+        var mean = mx(3, 1)
+        for i in range(n):
+            for c in range(3):
+                mean.data[c] += camera.data[i * 3 + c] / Float64(n)
+        var h = mx(3, 3)
+        for i in range(n):
             for r in range(3):
-                for q in range(3):
-                    cov.data[r * 3 + q] += (sub.at(t, r) - c[r]) * (sub.at(t, q) - c[q])
-        var ev = eigh(cov)
-        var e1 = fl(ev[1].at(0, 2), ev[1].at(1, 2), ev[1].at(2, 2))
-        var e2 = fl(ev[1].at(0, 1), ev[1].at(1, 1), ev[1].at(2, 1))
-        var e3 = cross(e1, e2)
-        var a = mx(2 * n, 9)
-        for t in range(n):
-            var d = fl(sub.at(t, 0) - c[0], sub.at(t, 1) - c[1], sub.at(t, 2) - c[2])
-            var u = d[0] * e1[0] + d[1] * e1[1] + d[2] * e1[2]
-            var v = d[0] * e2[0] + d[1] * e2[1] + d[2] * e2[2]
-            var x = nrm.at(idx[t], 0)
-            var y = nrm.at(idx[t], 1)
-            var r0 = fl(u, v, 1.0, 0.0, 0.0, 0.0, -x * u, -x * v, -x)
-            var r1 = fl(0.0, 0.0, 0.0, u, v, 1.0, -y * u, -y * v, -y)
-            for k in range(9):
-                a.set(2 * t, k, 0, r0[k])
-                a.set(2 * t + 1, k, 0, r1[k])
-        var h = null_vector(a)
-        var l1 = sqrt(h[0] * h[0] + h[3] * h[3] + h[6] * h[6])
-        var lam = 1.0 / l1
-        if h[8] < 0:
-            lam = -lam
-        var rp = mx_from(fl(h[0] * lam, h[1] * lam, 0.0, h[3] * lam, h[4] * lam, 0.0, h[6] * lam, h[7] * lam, 0.0), 3, 3)
-        var r1v = fl(rp.at(0, 0), rp.at(1, 0), rp.at(2, 0))
-        var r2v = fl(rp.at(0, 1), rp.at(1, 1), rp.at(2, 1))
-        var r3v = cross(r1v, r2v)
-        for k in range(3):
-            rp.set(k, 2, 0, r3v[k])
-        rp = polar_rotation(rp)
-        var tp = fl(h[2] * lam, h[5] * lam, h[8] * lam)
-        var eb = mx_from(fl(e1[0], e2[0], e3[0], e1[1], e2[1], e3[1], e1[2], e2[2], e3[2]), 3, 3)
-        var rt = mm(rp, mt(eb))
-        var tv = mx(3, 1)
-        for k in range(3):
-            tv.set(k, 0, 0, tp[k] - (rt.at(k, 0) * c[0] + rt.at(k, 1) * c[1] + rt.at(k, 2) * c[2]))
-        return (rt^, tv^)
-    var a = mx(2 * n, 12)
-    for t in range(n):
-        var o = fl(obj.at(idx[t], 0), obj.at(idx[t], 1), obj.at(idx[t], 2), 1.0)
-        var x = nrm.at(idx[t], 0)
-        var y = nrm.at(idx[t], 1)
-        for k in range(4):
-            a.set(2 * t, k, 0, o[k])
-            a.set(2 * t, 8 + k, 0, -x * o[k])
-            a.set(2 * t + 1, 4 + k, 0, o[k])
-            a.set(2 * t + 1, 8 + k, 0, -y * o[k])
-    var p = null_vector(a)
-    var m = mx_from(fl(p[0], p[1], p[2], p[4], p[5], p[6], p[8], p[9], p[10]), 3, 3)
-    var sgn = 1.0 if det3(m) > 0 else -1.0
-    m = mscale(m, sgn)
-    var r = polar_rotation(m)
-    var lam = 0.0
-    for i in range(3):
-        for j in range(3):
-            lam += r.at(i, j) * m.at(i, j)
-    lam /= 3.0
-    var tv = mx_from(fl(sgn * p[3] / lam, sgn * p[7] / lam, sgn * p[11] / lam), 3, 1)
-    return (r^, tv^)
+                for c in range(3):
+                    h.data[r * 3 + c] += (camera.data[i * 3 + r] - mean.data[r]) * (op[idx[i] * 3 + c] - cp[c])
+        var svd = svd3(h)
+        var u = Mx(copy=svd[0])
+        var v = Mx(copy=svd[2])
+        var rot = mm(u, mt(v))
+        if det3(rot) < 0:
+            for c in range(3):
+                u.data[c * 3 + 2] = -u.data[c * 3 + 2]
+            rot = mm(u, mt(v))
+        var t = mx(3, 1)
+        for r in range(3):
+            t.data[r] = mean.data[r]
+            for c in range(3):
+                t.data[r] -= rot.at(r, c) * cp[c]
+        var cost = Float64(0)
+        for i in idx:
+            var xyz = fl(t.data[0], t.data[1], t.data[2])
+            for r in range(3):
+                for c in range(3):
+                    xyz[r] += rot.at(r, c) * op[i * 3 + c]
+            if xyz[2] <= 0:
+                cost += 1e100
+            for c in range(2):
+                var e = xyz[c] / xyz[2] - np[i * 2 + c]
+                cost += e * e
+        if cost < best_cost:
+            best_cost = cost
+            best_r = rot^
+            best_t = t^
+    _ = obj.rows
+    _ = center.rows
+    _ = alpha.rows
+    _ = a.rows
+    _ = nrm.rows
+    return (best_r^, best_t^)
 
 
 def pose_residual(obj: Mx, img: Mx, k: Mx, d: Mx, rv: List[Float64], tv: List[Float64]) -> List[Float64]:
@@ -672,7 +746,7 @@ def solve_pnp(obj: Mx, img: Mx, k: Mx, d: Mx) -> Tuple[List[Float64], List[Float
     var idx = List[Int]()
     for i in range(obj.rows):
         idx.append(i)
-    var pose = pose_dlt(obj, nrm, idx)
+    var pose = pose_epnp(obj, nrm, idx)
     var rv = rodrigues_mat(pose[0])
     ref pt = pose[1]
     var tv = fl(pt.data[0], pt.data[1], pt.data[2])
@@ -684,7 +758,7 @@ def solve_pnp_ransac(obj: Mx, img: Mx, k: Mx, d: Mx, thresh: Float64, max_iters:
     var n = obj.rows
     var nrm = undistort_points(img, k, d, ident(3), mx(0, 0), False)
     var planar = is_planar(obj)
-    var m = 4 if planar else 6
+    var m = 4
     var rng = Rng()
     var best_in = List[Int]()
     var iters = max_iters
@@ -702,7 +776,7 @@ def solve_pnp_ransac(obj: Mx, img: Mx, k: Mx, d: Mx, thresh: Float64, max_iters:
             idx.append(s[t])
         if is_planar(sub) != planar:
             continue
-        var pose = pose_dlt(obj, nrm, idx)
+        var pose = pose_epnp(obj, nrm, idx)
         var pr = project_points(obj, mx_from(rodrigues_mat(pose[0]), 3, 1), pose[1], k, d, False)
         var inl = List[Int]()
         for i in range(n):
