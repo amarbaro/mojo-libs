@@ -26,6 +26,9 @@ def burst(frames: List[Mat[DType.float64]], shifts: Mat[DType.float64], scale: I
     for i in range(len(frames)):
         if not frames[i].same_shape(frames[0]) or frames[i].ch != 1:
             raise Error("mojocv: burst wants single-channel frames of one size")
+    for k in range(len(frames) * 2):
+        if not (abs(shifts.data[k]) < 1.0e6):  # also rejects NaN, which would make Int(floor(.)) undefined
+            raise Error("mojocv: burst shifts must be finite and below 1e6 pixels")
     var hr = rows * scale
     var hc = cols * scale
     var num = List[Float64](length=hr * hc, fill=0.0)

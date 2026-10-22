@@ -54,8 +54,8 @@ def haar3[inverse: Bool](v: Mat[DType.float64], levels: Int = 0) raises -> Mat[D
     var n = _check(v)
     var full = levels_of(n)
     var nl = levels if levels > 0 else full
-    if nl > full:
-        raise Error("mojocv: haar3 levels exceed log2(n)")
+    if levels < 0 or nl > full:
+        raise Error("mojocv: haar3 levels must be between 1 and log2(n) (0 = all)")
     var out = Mat[DType.float64](v.rows, v.cols, v.ch)
     out.data = v.data.copy()
     var tmp = List[Float64](length=n, fill=0.0)

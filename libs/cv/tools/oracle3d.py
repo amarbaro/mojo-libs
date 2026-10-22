@@ -496,6 +496,7 @@ def burst_fixtures():
         frames[f"bs_f{t}"] = np.roll(hr, (sy, sx), (0, 1))[::2, ::2].copy()
     # np.roll content by +s means frame(x) = hr(2x - s): the shift of frame t in LR pixels is s / 2
     frames["bs_shifts"] = np.array([[0, 0], [0.5, 0], [0, 0.5], [0.5, 0.5]])
+    frames["bs_nan"] = np.array([[0, 0], [np.nan, 0], [0, 0.5], [0.5, 0.5]])
     frames["bs_hr"] = hr
     # broadband frames (all spectrum bins informative, odd sizes: exact Fourier shifts) for the registration rows
     r0 = rs.random((13, 17))

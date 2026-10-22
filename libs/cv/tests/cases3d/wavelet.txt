@@ -11,3 +11,4 @@ haar_c_thr    haar3c 1e-12 wv_blob32 thr=0.05 expect:kept_frac_lt=0.2
 haar_c_all    haar3c 1e-12 wv_rand8 thr=1000
 haar_bad6     haar3f 0 wv_bad6 expect:raises=1
 haar_lvbig    haar3f 0 wv_rand8 levels=4 expect:raises=1
+haar_neglv    haar3f 0 wv_rand8 levels=-1 expect:raises=1
