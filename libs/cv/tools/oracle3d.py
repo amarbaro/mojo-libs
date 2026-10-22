@@ -568,6 +568,9 @@ def mesh_invariants(v, f):
 def check_mesh(ctx):
     cells = ctx["mcv"].load(ctx["ins"][0])
     out, faces = ctx["work"] / f"{ctx['name']}.v.mcv", ctx["work"] / f"{ctx['name']}.f.mcv"
+    if "raises" in ctx["expect"]:  # option faces=PATH left out
+        code, stdout, stderr = ctx["run"](out, ctx["ins"], ctx["args"])
+        return code != 0, ("" if code != 0 else "accepted a missing faces= option")
     code, stdout, stderr = ctx["run"](out, ctx["ins"], ctx["args"] + [f"faces={faces}"])
     if code != 0:
         return False, f"exit {code}: {(stdout + stderr).strip()[:200]}"

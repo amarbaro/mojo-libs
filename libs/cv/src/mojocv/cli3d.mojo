@@ -34,6 +34,79 @@ def _trees(ins: List[String], depth: Int) raises -> List[Octree]:
     return ts^
 
 
+def _spec(op: String) -> String:
+    """`min_inputs max_inputs allowed_keys...` per op; "" for an op this module does not own."""
+    if op == "voxelize" or op == "unvoxelize" or op == "occupied":
+        return "1 1 size"
+    if op == "ohash":
+        return "1 1 depth"
+    if op == "odiff":
+        return "2 2 depth reps"
+    if op == "static":
+        return "1 64 depth reps"
+    if op == "umeyama":
+        return "2 2 scale reps"
+    if op == "haar3f" or op == "haar3i":
+        return "1 1 levels"
+    if op == "haar3c":
+        return "1 1 thr levels reps"
+    if op == "describe":
+        return "1 1 k reps"
+    if op == "match":
+        return "2 2 reps"
+    if op == "tapvid":
+        return "4 4 focal metric"
+    if op == "phasecorr":
+        return "2 2 window reps"
+    if op == "burst":
+        return "1 65 scale shifts window reps"
+    if op == "nurbs_fit":
+        return "1 1 nu nv p q reps"
+    if op == "nurbs_eval":
+        return "1 1 p q m n reps"
+    if op == "mesh":
+        return "1 1 faces reps"
+    if op == "glb":
+        return "2 3"
+    if op == "glb_read":
+        return "1 1 faces normals colors"
+    if op == "step":
+        return "2 2"
+    if op == "step_surface":
+        return "1 1 p q"
+    if op == "step_read":
+        return "1 1 faces net lenient"
+    if op == "stress":
+        return "1 1"
+    if op == "colormap":
+        return "1 1 lo hi"
+    return ""
+
+
+def _validate(op: String, ins: List[String], kv: Dict[String, String]) raises:
+    var parts = _spec(op).split(" ")
+    var lo = Int(parts[0])
+    var hi = Int(parts[1])
+    if len(ins) < lo or len(ins) > hi:
+        raise Error(String("mojocv: ", op, " takes ", lo, " to ", hi, " inputs, got ", len(ins)))
+    for item in kv.items():
+        var ok = False
+        for i in range(2, len(parts)):
+            ok = ok or parts[i] == item.key
+        if not ok:
+            raise Error(String("mojocv: ", op, " has no option '", item.key, "'"))
+
+
+def _req(kv: Dict[String, String], name: String) raises -> String:
+    if name not in kv:
+        raise Error(String("mojocv: missing option ", name, "=PATH"))
+    return kv[name]
+
+
+def _lap(t0: Int, mut best: Int):
+    best = min(best, Int(perf_counter_ns()) - t0)
+
+
 def dispatch3d(args: List[String]) raises -> Bool:
     """Args = OP OUT IN... [k=v...]; True when the op belongs to this module set."""
     if len(args) < 2:
@@ -48,6 +121,11 @@ def dispatch3d(args: List[String]) raises -> Bool:
             kv[String(args[i][byte=:eq])] = String(args[i][byte=eq + 1 :])
         else:
             ins.append(args[i])
+    if _spec(op).byte_length() == 0:
+        return False
+    _validate(op, ins, kv)
+    var reps = _i(kv, "reps", 0)  # reps=N: repeat the compute step in-process, print the best time (loading excluded)
+    var best = Int.MAX
     if op == "voxelize":
         save(voxelize(load[DType.float64](ins[0]), _f(kv, "size", 1.0)), out)
     elif op == "unvoxelize":
@@ -63,23 +141,52 @@ def dispatch3d(args: List[String]) raises -> Bool:
         save(h, out)
     elif op == "odiff" or op == "static":
         var depth = _i(kv, "depth", 6)
-        var w = walk(_trees(ins, depth), op == "static")
+        var ts = _trees(ins, depth)
+        var w = walk(ts, op == "static")
+        for _ in range(reps):
+            var t0 = Int(perf_counter_ns())
+            w = walk(ts, op == "static")
+            _lap(t0, best)
         print(op, "visited=", w.visited, "dense=", 1 << (3 * depth), "out=", len(w.keys))
         save(walk_cells(w, op == "static"), out)
     elif op == "umeyama":
-        save(umeyama(load[DType.float64](ins[0]), load[DType.float64](ins[1]), _i(kv, "scale", 1) != 0), out)
+        var a = load[DType.float64](ins[0])
+        var b = load[DType.float64](ins[1])
+        var r = umeyama(a, b, _i(kv, "scale", 1) != 0)
+        for _ in range(reps):
+            var t0 = Int(perf_counter_ns())
+            r = umeyama(a, b, _i(kv, "scale", 1) != 0)
+            _lap(t0, best)
+        save(r, out)
     elif op == "haar3f" or op == "haar3i":
         var v = load[DType.float64](ins[0])
         save(haar3[False](v, _i(kv, "levels", 0)) if op == "haar3f" else haar3[True](v, _i(kv, "levels", 0)), out)
     elif op == "haar3c":
         var v = load[DType.float64](ins[0])
         var r = compress(v, _f(kv, "thr", 0.0), _i(kv, "levels", 0))
+        for _ in range(reps):
+            var t0 = Int(perf_counter_ns())
+            r = compress(v, _f(kv, "thr", 0.0), _i(kv, "levels", 0))
+            _lap(t0, best)
         print("haar3c kept=", r[1], "of=", v.size())
         save(r[0], out)
     elif op == "describe":
-        save(describe(load[DType.float64](ins[0]), _i(kv, "k", 16)), out)
+        var p = load[DType.float64](ins[0])
+        var r = describe(p, _i(kv, "k", 16))
+        for _ in range(reps):
+            var t0 = Int(perf_counter_ns())
+            r = describe(p, _i(kv, "k", 16))
+            _lap(t0, best)
+        save(r, out)
     elif op == "match":
-        save(match_desc(load[DType.uint8](ins[0]), load[DType.uint8](ins[1])), out)
+        var a = load[DType.uint8](ins[0])
+        var b = load[DType.uint8](ins[1])
+        var r = match_desc(a, b)
+        for _ in range(reps):
+            var t0 = Int(perf_counter_ns())
+            r = match_desc(a, b)
+            _lap(t0, best)
+        save(r, out)
     elif op == "tapvid":
         var r = tapvid(
             load[DType.float64](ins[0]), load[DType.uint8](ins[1]), load[DType.float64](ins[2]),
@@ -91,13 +198,10 @@ def dispatch3d(args: List[String]) raises -> Bool:
         var a = load[DType.float64](ins[0])
         var b = load[DType.float64](ins[1])
         var r = phase_corr(a, b, _i(kv, "window", 0) != 0)
-        var best = Int.MAX
-        for _ in range(_i(kv, "reps", 0)):  # best-of-reps in this process, for docs/bench.md
+        for _ in range(reps):
             var t0 = Int(perf_counter_ns())
             r = phase_corr(a, b, _i(kv, "window", 0) != 0)
-            best = min(best, Int(perf_counter_ns()) - t0)
-        if best != Int.MAX:
-            print("phasecorr best_ms=", Float64(best) / 1e6)
+            _lap(t0, best)
         save(r, out)
     elif op == "burst":
         # IN... = frames, then (shifts=1) a T x 2 float64 file of known [dx, dy]; otherwise phase correlation finds them
@@ -108,23 +212,40 @@ def dispatch3d(args: List[String]) raises -> Bool:
         var sh = load[DType.float64](ins[nf]) if nf < len(ins) else register(frames, _i(kv, "window", 0) != 0)
         for t in range(sh.rows):
             print("burst shift", t, sh.data[t * 2], sh.data[t * 2 + 1])
-        save(burst(frames, sh, _i(kv, "scale", 2)), out)
+        var r = burst(frames, sh, _i(kv, "scale", 2))
+        for _ in range(reps):
+            var t0 = Int(perf_counter_ns())
+            r = burst(frames, sh, _i(kv, "scale", 2))
+            _lap(t0, best)
+        save(r, out)
     elif op == "nurbs_fit":
-        save(fit_surface(load[DType.float64](ins[0]), _i(kv, "nu", 6), _i(kv, "nv", 6), _i(kv, "p", 3), _i(kv, "q", 3)), out)
+        var g = load[DType.float64](ins[0])
+        var r = fit_surface(g, _i(kv, "nu", 6), _i(kv, "nv", 6), _i(kv, "p", 3), _i(kv, "q", 3))
+        for _ in range(reps):
+            var t0 = Int(perf_counter_ns())
+            r = fit_surface(g, _i(kv, "nu", 6), _i(kv, "nv", 6), _i(kv, "p", 3), _i(kv, "q", 3))
+            _lap(t0, best)
+        save(r, out)
     elif op == "nurbs_eval":
-        save(
-            eval_surface(
-                load[DType.float64](ins[0]), _i(kv, "p", 3), _i(kv, "q", 3), _i(kv, "m", 16), _i(kv, "n", 16)
-            ),
-            out,
-        )
+        var net = load[DType.float64](ins[0])
+        var r = eval_surface(net, _i(kv, "p", 3), _i(kv, "q", 3), _i(kv, "m", 16), _i(kv, "n", 16))
+        for _ in range(reps):
+            var t0 = Int(perf_counter_ns())
+            r = eval_surface(net, _i(kv, "p", 3), _i(kv, "q", 3), _i(kv, "m", 16), _i(kv, "n", 16))
+            _lap(t0, best)
+        save(r, out)
     elif op == "mesh":
         # OUT = vertices (V x 3 float64), faces=PATH = triangles (F x 3 int32)
-        var m = voxel_mesh(load[DType.int32](ins[0]))
+        var cells = load[DType.int32](ins[0])
+        var m = voxel_mesh(cells)
+        for _ in range(reps):
+            var t0 = Int(perf_counter_ns())
+            m = voxel_mesh(cells)
+            _lap(t0, best)
         var ec = edges_euler(m)
         print("mesh V=", m.verts.rows, "E=", ec[0], "F=", m.faces.rows, "chi=", ec[1])
         save(m.verts, out)
-        save(m.faces, kv["faces"])
+        save(m.faces, _req(kv, "faces"))
     elif op == "glb":
         # OUT.glb = IN vertices (V x 3 float64), IN faces (F x 3 int32), optional IN colors (V x 3 float64 in [0, 1])
         var colors = load[DType.float64](ins[2]) if len(ins) > 2 else Mat[DType.float64](0, 3)
@@ -134,7 +255,7 @@ def dispatch3d(args: List[String]) raises -> Bool:
         var g = read_glb(ins[0])
         print("glb_read V=", g.verts.rows, "F=", g.faces.rows, "normals=", g.normals.rows, "colors=", g.colors.rows)
         save(g.verts, out)
-        save(g.faces, kv["faces"])
+        save(g.faces, _req(kv, "faces"))
         if "normals" in kv and g.normals.rows > 0:
             save(g.normals, kv["normals"])
         if "colors" in kv and g.colors.rows > 0:
@@ -148,7 +269,7 @@ def dispatch3d(args: List[String]) raises -> Bool:
         var d = read_step(ins[0], _i(kv, "lenient", 0) == 0)
         print("step_read V=", d.verts.rows, "F=", d.faces.rows, "net=", d.net.rows, "x", d.net.cols, "p=", d.p, "q=", d.q)
         save(d.verts, out)
-        save(d.faces, kv["faces"])
+        save(d.faces, _req(kv, "faces"))
         if "net" in kv and d.net.rows > 0:
             save(d.net, kv["net"])
     elif op == "stress":
@@ -165,6 +286,8 @@ def dispatch3d(args: List[String]) raises -> Bool:
         save(colormap(v, lo, hi), out)
     else:
         return False
+    if reps > 0:
+        print("time best_ms=", Float64(best) / 1e6, "reps=", reps)
     return True
 
 
