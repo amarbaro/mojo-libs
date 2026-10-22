@@ -158,6 +158,7 @@ def sepfilter[sd: DType, od: DType](src: Mat[sd], kx: List[Float32], ky: List[Fl
                             acc += sc[unsafe_offset=po_[unsafe_offset=q] + j] * pky[q]
                     po.unsafe_store(yy * n + j, _fin[od, 1](SIMD[F32, 1](acc)))
             y = ye
+        _ = (len(scratch), len(offs))
 
     par(task, NT)
     _ = (nx, ny)
@@ -279,6 +280,7 @@ def pyr_down[dt: DType](src: Mat[dt]) -> Mat[dt]:
                     else:
                         s = s / 256
                     po.unsafe_store(r * oc * ch + c * ch + k, _fin[dt, 1](SIMD[F32, 1](s)))
+        _ = len(vrow)
 
     par(task, NT)
     return o^
@@ -980,6 +982,7 @@ def resize[dt: DType](src: Mat[dt], dw: Int, dh: Int, kind: Int) -> Mat[dt]:
                 for q in range(nx):
                     acc += v[unsafe_offset=Int(pex[unsafe_offset=q * dn + j])] * pew[unsafe_offset=q * dn + j]
                 dst.unsafe_store(j, _fin[dt, 1](SIMD[F32, 1](acc)))
+        _ = len(vrow)
 
     par(task, NT)
     _ = (tx.n, ty.n, len(ex), len(ew))
