@@ -1729,9 +1729,29 @@ def draw_rect[dt: DType](mut m: Mat[dt], x1: Int, y1: Int, x2: Int, y2: Int, col
 # trilinear voting, L2-Hys block normalisation. The linear SVM (3780 weights + bias) is an input file.
 
 
+def _atan2_pos[w: Int](y: SIMD[F32, w], x: SIMD[F32, w]) -> SIMD[F32, w]:
+    """atan2(y, x) folded into [0, pi) (atan2 + pi when negative), Cephes atanf polynomial on min / max."""
+    comptime PI = Float32(3.14159265358979323846)
+    var ax = abs(x)
+    var ay = abs(y)
+    var mx = max(ax, ay)
+    var t = min(ax, ay) / mx.eq(0).select(SIMD[F32, w](1), mx)
+    var big = t.gt(0.41421357)
+    var u = big.select((t - 1) / (t + 1), t)
+    var z = u * u
+    var a = (((8.05374449538e-2 * z - 1.38776856032e-1) * z + 1.99777106478e-1) * z - 3.33329491539e-1) * z * u + u
+    a = big.select(a + PI / 4, a)
+    a = ay.gt(ax).select(PI / 2 - a, a)
+    a = x.lt(0).select(PI - a, a)
+    return y.lt(0).select(PI - a, a)  # atan2(y, x) is -a for y < 0; + pi folds it into [0, pi)
+
+
 def hog_blocks(src: Mat[DType.uint8]) -> Mat[F32]:
     """Normalised 36-vectors for every 16 x 16 block on the 8-pixel grid: (block rows, block cols, 36); cells inside
-    a block are ordered column-major (x outer) like cv2, bins fastest."""
+    a block are ordered column-major (x outer) like cv2, bins fastest.
+    The Gaussian window times the trilinear cell weight is separable, so a block's cell histograms are
+    sum_i A[cy][i] * R[row + i][cx] with R[row][cx] = sum_j B[cx][j] * V(row, x0 + j), where V(row, x) is the pixel's
+    bin vector (16 lanes, 9 used). Every image row is reduced once to R; blocks then only add 16 rows."""
     var h = src.rows
     var w = src.cols
     var nby = (h - 16) // 8 + 1
@@ -1739,119 +1759,177 @@ def hog_blocks(src: Mat[DType.uint8]) -> Mat[F32]:
     var o = Mat[F32](max(nby, 0), max(nbx, 0), 36)
     if nby <= 0 or nbx <= 0:
         return o^
-    var lut = List[Float32](length=256, fill=0)
-    for i in range(256):
-        lut[i] = sqrt(Float32(i))
-    var bin0 = Mat[DType.int32](h, w, 1)
-    var wt0 = Mat[F32](h, w, 1)
-    var wt1 = Mat[F32](h, w, 1)
-    var pb = bin0.ptr()
-    var p0 = wt0.ptr()
-    var p1 = wt1.ptr()
-    var pl = ptr_of(lut)
+    comptime L = 16
+    # A[cy][i] and B[cx][j]: window g times the weight of cell c for position i (j) inside the block
+    var wa = List[Float32](length=2 * 16, fill=0)
+    for i in range(16):
+        var f = (Float32(i) + 0.5) / 8.0 - 0.5
+        var c0 = Int(floor(f))
+        var wf = f - Float32(c0)
+        var d = Float32(i - 8)
+        var g = Float32(exp(Float64(-(d * d) / 32.0)))
+        for c in range(2):
+            if c == c0:
+                wa[c * 16 + i] = g * (1 - wf)
+            elif c == c0 + 1:
+                wa[c * 16 + i] = g * wf
+    var oh = List[Float32](length=9 * L, fill=0)
+    for b in range(9):
+        oh[b * L + b] = 1
+    var rbuf = List[Float32](unsafe_uninit_length=h * nbx * 2 * L)
+    var pr = ptr_of(rbuf)
+    var pa = ptr_of(wa)
+    var poh = ptr_of(oh)
+    var ps = src.ptr()
+    var xlim = min(w, 8 * (nbx - 1) + 16)
+    comptime NT = 8
+    comptime PI = Float32(3.14159265358979323846)
 
-    def grad(y: Int) {imm}:
-        for x in range(w):
-            var xa = bidx(x - 1, w, 0)
-            var xb = bidx(x + 1, w, 0)
-            var ya = bidx(y - 1, h, 0)
-            var yb = bidx(y + 1, h, 0)
-            var gx = pl[unsafe_offset=Int(src.at(y, xb))] - pl[unsafe_offset=Int(src.at(y, xa))]
-            var gy = pl[unsafe_offset=Int(src.at(yb, x))] - pl[unsafe_offset=Int(src.at(ya, x))]
-            var mag = sqrt(gx * gx + gy * gy)
-            var ang = atan2(Float64(gy), Float64(gx))
-            if ang < 0:
-                ang += 3.14159265358979323846
-            var fb = ang * 9.0 / 3.14159265358979323846 - 0.5
-            var b0 = Int(floor(fb))
-            var wb = Float32(fb - Float64(b0))
-            pb[unsafe_offset=y * w + x] = Int32(b0)
-            p0[unsafe_offset=y * w + x] = mag * (1 - wb)
-            p1[unsafe_offset=y * w + x] = mag * wb
+    def grad_rows(t: Int) {imm}:
+        var bb = List[Int32](length=w, fill=0)
+        var v0 = List[Float32](length=w, fill=0)
+        var v1 = List[Float32](length=w, fill=0)
+        var pbb = ptr_of(bb)
+        var pv0 = ptr_of(v0)
+        var pv1 = ptr_of(v1)
+        for y in range(h * t // NT, h * (t + 1) // NT):
+            var rc = ps + y * w
+            var ra = ps + bidx(y - 1, h, 0) * w
+            var rb = ps + bidx(y + 1, h, 0) * w
+            var x = 0
+            while x < xlim:
+                var gx: SIMD[F32, L]
+                var gy: SIMD[F32, L]
+                if x >= 1 and x + L + 1 <= w:
+                    gx = sqrt(rc.unsafe_load[width=L](x + 1).cast[F32]()) - sqrt(rc.unsafe_load[width=L](x - 1).cast[F32]())
+                    gy = sqrt(rb.unsafe_load[width=L](x).cast[F32]()) - sqrt(ra.unsafe_load[width=L](x).cast[F32]())
+                else:
+                    gx = SIMD[F32, L](0)
+                    gy = SIMD[F32, L](0)
+                    for j in range(min(L, w - x)):
+                        gx[j] = sqrt(Float32(rc[unsafe_offset=bidx(x + j + 1, w, 0)])) - sqrt(Float32(rc[unsafe_offset=bidx(x + j - 1, w, 0)]))
+                        gy[j] = sqrt(Float32(rb[unsafe_offset=x + j])) - sqrt(Float32(ra[unsafe_offset=x + j]))
+                var mag = sqrt(gx * gx + gy * gy)
+                var ang = _atan2_pos[L](gy, gx)
+                var fb = ang * (9.0 / PI) - 0.5
+                var b0f = floor(fb)
+                var wb = fb - b0f
+                var n = min(L, w - x)
+                if n == L:
+                    pbb.unsafe_store(x, b0f.cast[DType.int32]())
+                    pv0.unsafe_store(x, mag * (1 - wb))
+                    pv1.unsafe_store(x, mag * wb)
+                else:
+                    for j in range(n):
+                        pbb[unsafe_offset=x + j] = Int32(b0f[j])
+                        pv0[unsafe_offset=x + j] = mag[j] * (1 - wb[j])
+                        pv1[unsafe_offset=x + j] = mag[j] * wb[j]
+                x += L
+            var rowr = pr + y * nbx * 2 * L
+            for g in range(nbx + 1):
+                var a0 = SIMD[F32, L](0)
+                var a1 = SIMD[F32, L](0)
+                var b0v = SIMD[F32, L](0)
+                var b1v = SIMD[F32, L](0)
+                for jx in range(8):
+                    var xx = g * 8 + jx
+                    var b0 = Int(pbb[unsafe_offset=xx])
+                    var b1 = (b0 + 1) % 9
+                    b0 = ((b0 % 9) + 9) % 9
+                    var contrib = pv0[unsafe_offset=xx] * poh.unsafe_load[width=L](b0 * L) + pv1[unsafe_offset=xx] * poh.unsafe_load[width=L](b1 * L)
+                    a0 += pa[unsafe_offset=jx] * contrib
+                    a1 += pa[unsafe_offset=16 + jx] * contrib
+                    b0v += pa[unsafe_offset=jx + 8] * contrib
+                    b1v += pa[unsafe_offset=16 + jx + 8] * contrib
+                if g < nbx:
+                    rowr.unsafe_store((g * 2) * L, a0)
+                    rowr.unsafe_store((g * 2 + 1) * L, a1)
+                if g >= 1:
+                    rowr.unsafe_store(((g - 1) * 2) * L, rowr.unsafe_load[width=L](((g - 1) * 2) * L) + b0v)
+                    rowr.unsafe_store(((g - 1) * 2 + 1) * L, rowr.unsafe_load[width=L](((g - 1) * 2 + 1) * L) + b1v)
+        _ = (len(bb), len(v0), len(v1))
 
-    par(grad, h, 16)
+    par(grad_rows, NT)
     var po = o.ptr()
 
-    # per block pixel: Gaussian window times trilinear weight for each of the four neighbouring cells
-    var wtab = List[Float32](length=256 * 4, fill=0)
-    for i in range(16):
-        var fy = (Float32(i) + 0.5) / 8.0 - 0.5
-        var cy0 = Int(floor(fy))
-        var wy = fy - Float32(cy0)
-        for j in range(16):
-            var fx = (Float32(j) + 0.5) / 8.0 - 0.5
-            var cx0 = Int(floor(fx))
-            var wx = fx - Float32(cx0)
-            var di = Float32(i - 8)
-            var dj = Float32(j - 8)
-            var g = Float32(exp(Float64(-(di * di + dj * dj) / 32.0)))
-            for cyi in range(2):
-                for cxi in range(2):
-                    var cy = cy0 + cyi
-                    var cx = cx0 + cxi
-                    if cx >= 0 and cx < 2 and cy >= 0 and cy < 2:
-                        var w1 = wy if cyi == 1 else 1 - wy
-                        var w2 = wx if cxi == 1 else 1 - wx
-                        wtab[(i * 16 + j) * 4 + cx * 2 + cy] = g * w1 * w2
-    var pw = ptr_of(wtab)
+    def block_row(r: Int) {imm}:
+        var scratch = List[Float32](length=64, fill=0)
+        var sp = ptr_of(scratch)
+        for bx in range(nbx):
+            var c00 = SIMD[F32, L](0)
+            var c01 = SIMD[F32, L](0)
+            var c10 = SIMD[F32, L](0)
+            var c11 = SIMD[F32, L](0)
+            for i in range(16):
+                var at = ((r * 8 + i) * nbx + bx) * 2 * L
+                var r0 = pr.unsafe_load[width=L](at)
+                var r1 = pr.unsafe_load[width=L](at + L)
+                var a0 = pa[unsafe_offset=i]
+                var a1 = pa[unsafe_offset=16 + i]
+                c00 += a0 * r0
+                c01 += a1 * r0
+                c10 += a0 * r1
+                c11 += a1 * r1
+            # four overlapping 16-lane stores: cell k keeps lanes 0..8 of its own store at offset 9k
+            sp.unsafe_store(0, c00)
+            sp.unsafe_store(9, c01)
+            sp.unsafe_store(18, c10)
+            sp.unsafe_store(27, c11)
+            var v0 = sp.unsafe_load[width=16](0)
+            var v1 = sp.unsafe_load[width=16](16)
+            var v2 = sp.unsafe_load[width=16](32)  # lanes 4.. are junk, masked below
+            var m2 = SIMD[F32, 16](1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+            v2 = v2 * m2
+            var sc = 1.0 / (sqrt((v0 * v0 + v1 * v1 + v2 * v2).reduce_add()) + 3.6)
+            v0 = min(v0 * sc, 0.2)
+            v1 = min(v1 * sc, 0.2)
+            v2 = min(v2 * sc, 0.2)
+            var sc2 = 1.0 / (sqrt((v0 * v0 + v1 * v1 + v2 * v2).reduce_add()) + 1e-3)
+            var dst = po + (r * nbx + bx) * 36
+            dst.unsafe_store(0, v0 * sc2)
+            dst.unsafe_store(16, v1 * sc2)
+            dst.unsafe_store(32, (v2 * sc2).slice[4]())
+        _ = len(scratch)
 
-    def block(t: Int) {imm}:
-        var by = (t // nbx) * 8
-        var bx = (t % nbx) * 8
-        var hist = SIMD[F32, 64](0)
-        for i in range(16):
-            for j in range(16):
-                var idx = (by + i) * w + bx + j
-                var b0 = Int(pb[unsafe_offset=idx])
-                var b1 = (b0 + 1) % 9
-                b0 = ((b0 % 9) + 9) % 9
-                var v0 = p0[unsafe_offset=idx]
-                var v1 = p1[unsafe_offset=idx]
-                comptime for cell in range(4):
-                    var wc = pw[unsafe_offset=(i * 16 + j) * 4 + cell]
-                    hist[cell * 9 + b0] += v0 * wc
-                    hist[cell * 9 + b1] += v1 * wc
-        var sum = Float32(0)
-        for k in range(36):
-            sum += hist[k] * hist[k]
-        var sc = 1.0 / (sqrt(sum) + 3.6)
-        var sum2 = Float32(0)
-        for k in range(36):
-            hist[k] = min(hist[k] * sc, 0.2)
-            sum2 += hist[k] * hist[k]
-        var sc2 = 1.0 / (sqrt(sum2) + 1e-3)
-        for k in range(36):
-            po[unsafe_offset=t * 36 + k] = hist[k] * sc2
-
-    par(block, nby * nbx, 16)
-    _ = (bin0.rows, wt0.rows, wt1.rows, len(lut), len(wtab))
+    par(block_row, nby)
+    _ = (len(rbuf), len(wa), len(oh))
     return o^
 
 
 def hog_scores(blocks: Mat[F32], svm: Mat[F32]) -> Mat[F32]:
-    """SVM score of every 64 x 128 window on the 8-pixel grid: (window rows, window cols)."""
+    """SVM score of every 64 x 128 window on the 8-pixel grid: (window rows, window cols). The 7 blocks of one window
+    row are contiguous in `blocks`, so each of the 15 rows is one 252-float dot product against a re-laid-out SVM."""
     var ny = blocks.rows - 14
     var nx = blocks.cols - 6
-    var o = Mat[F32](max(ny, 0), max(nx, 0), 1)
+    var o = Mat[F32](max(ny, 0), max(nx, 0), 1, False)
     if ny <= 0 or nx <= 0:
         return o^
     var po = o.ptr()
     var pbk = blocks.ptr()
     var ps = svm.ptr()
     var nbx = blocks.cols
+    var sw = List[Float32](length=15 * 252, fill=0)
+    for j in range(15):
+        for i in range(7):
+            for t in range(36):
+                sw[j * 252 + i * 36 + t] = ps[unsafe_offset=(i * 15 + j) * 36 + t]
+    var psw = ptr_of(sw)
 
     def row(wy: Int) {imm}:
         for wx in range(nx):
-            var acc = ps[unsafe_offset=3780]
-            for i in range(7):
-                for j in range(15):
-                    var bo = ((wy + j) * nbx + wx + i) * 36
-                    var so = (i * 15 + j) * 36
-                    for t in range(36):
-                        acc += ps[unsafe_offset=so + t] * pbk[unsafe_offset=bo + t]
-            po[unsafe_offset=wy * nx + wx] = acc
+            var acc16 = SIMD[F32, 16](0)
+            var acc4 = SIMD[F32, 4](0)
+            for j in range(15):
+                var bo = ((wy + j) * nbx + wx) * 36
+                var so = j * 252
+                comptime for q in range(15):
+                    acc16 += psw.unsafe_load[width=16](so + q * 16) * pbk.unsafe_load[width=16](bo + q * 16)
+                comptime for q in range(3):
+                    acc4 += psw.unsafe_load[width=4](so + 240 + q * 4) * pbk.unsafe_load[width=4](bo + 240 + q * 4)
+            po[unsafe_offset=wy * nx + wx] = ps[unsafe_offset=3780] + acc16.reduce_add() + acc4.reduce_add()
 
-    par(row, ny, 16)
+    par(row, ny)
+    _ = len(sw)
     return o^
 
 
