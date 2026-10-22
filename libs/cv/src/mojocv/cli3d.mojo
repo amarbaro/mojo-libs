@@ -13,6 +13,7 @@ from mojocv.phasecorr import phase_corr
 from mojocv.burst import burst, register
 from mojocv.nurbs import eval_surface, fit_surface
 from mojocv.mesh import voxel_mesh, edges_euler
+from mojocv.glb import write_glb, read_glb
 from mojocv.octree import Octree, walk, walk_cells
 
 
@@ -122,6 +123,20 @@ def dispatch3d(args: List[String]) raises -> Bool:
         print("mesh V=", m.verts.rows, "E=", ec[0], "F=", m.faces.rows, "chi=", ec[1])
         save(m.verts, out)
         save(m.faces, kv["faces"])
+    elif op == "glb":
+        # OUT.glb = IN vertices (V x 3 float64), IN faces (F x 3 int32), optional IN colors (V x 3 float64 in [0, 1])
+        var colors = load[DType.float64](ins[2]) if len(ins) > 2 else Mat[DType.float64](0, 3)
+        write_glb(load[DType.float64](ins[0]), load[DType.int32](ins[1]), colors, out)
+    elif op == "glb_read":
+        # IN.glb -> OUT = vertices; faces=PATH, and normals=PATH / colors=PATH when the file has them
+        var g = read_glb(ins[0])
+        print("glb_read V=", g.verts.rows, "F=", g.faces.rows, "normals=", g.normals.rows, "colors=", g.colors.rows)
+        save(g.verts, out)
+        save(g.faces, kv["faces"])
+        if "normals" in kv and g.normals.rows > 0:
+            save(g.normals, kv["normals"])
+        if "colors" in kv and g.colors.rows > 0:
+            save(g.colors, kv["colors"])
     else:
         return False
     return True

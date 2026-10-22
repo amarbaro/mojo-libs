@@ -567,7 +567,207 @@ def check_mesh(ctx):
     return not bad, "; ".join(bad)
 
 
-CUSTOM = {"mesh": check_mesh}
+def make_glb(v, f, idx="u32", interleave=False, normals=None, colors=None, no_index=False, mode=4, mutate=None):
+    """An independent numpy GLB writer with the layout variants the Mojo reader must accept (and, mutated, reject)."""
+    import json, struct
+    v32 = v.astype("<f4")
+    views, accs, blob = [], [], bytearray()
+
+    def add(data, target, stride=None):
+        while len(blob) % 4:
+            blob.append(0)
+        views.append(dict(buffer=0, byteOffset=len(blob), byteLength=len(data), **({"byteStride": stride} if stride else {}),
+                          target=target))
+        blob.extend(data)
+        return len(views) - 1
+
+    attrs = {}
+    if interleave:  # positions and normals share one strided bufferView
+        nrm = normals if normals is not None else np.zeros_like(v)
+        inter = np.concatenate([v32, nrm.astype("<f4")], axis=1)
+        bv = add(inter.tobytes(), 34962, 24)
+        accs.append(dict(bufferView=bv, byteOffset=0, componentType=5126, count=len(v), type="VEC3",
+                         min=v32.min(0).tolist(), max=v32.max(0).tolist()))
+        accs.append(dict(bufferView=bv, byteOffset=12, componentType=5126, count=len(v), type="VEC3"))
+        attrs = {"POSITION": 0, "NORMAL": 1}
+    else:
+        bv = add(v32.tobytes(), 34962)
+        accs.append(dict(bufferView=bv, componentType=5126, count=len(v), type="VEC3", min=v32.min(0).tolist(),
+                         max=v32.max(0).tolist()))
+        attrs = {"POSITION": 0}
+        if normals is not None:
+            accs.append(dict(bufferView=add(normals.astype("<f4").tobytes(), 34962), componentType=5126, count=len(v), type="VEC3"))
+            attrs["NORMAL"] = len(accs) - 1
+    if colors is not None:
+        accs.append(dict(bufferView=add(colors.astype("<f4").tobytes(), 34962), componentType=5126, count=len(v), type="VEC3"))
+        attrs["COLOR_0"] = len(accs) - 1
+    prim = dict(attributes=attrs, mode=mode)
+    if not no_index:
+        dt, ct = {"u32": ("<u4", 5125), "u16": ("<u2", 5123), "u8": ("u1", 5121)}[idx]
+        accs.append(dict(bufferView=add(f.astype(dt).ravel().tobytes(), 34963), componentType=ct, count=f.size, type="SCALAR"))
+        prim["indices"] = len(accs) - 1
+    doc = dict(asset=dict(version="2.0"), scene=0, scenes=[dict(nodes=[0])], nodes=[dict(mesh=0)],
+               meshes=[dict(primitives=[prim])], buffers=[dict(byteLength=len(blob))], bufferViews=views, accessors=accs)
+    if mutate:
+        mutate(doc, blob)
+    js = json.dumps(doc).encode()
+    js += b" " * (-len(js) % 4)
+    while len(blob) % 4:
+        blob.append(0)
+    return (struct.pack("<III", 0x46546C67, 2, 12 + 8 + len(js) + 8 + len(blob)) + struct.pack("<II", len(js), 0x4E4F534A) + js
+            + struct.pack("<II", len(blob), 0x004E4942) + bytes(blob))
+
+
+def parse_glb(raw):
+    """Independent strict reader/validator for GLBs this lane writes; returns (arrays dict, problems list)."""
+    import json, struct
+    bad = []
+    magic, ver, length = struct.unpack_from("<III", raw, 0)
+    if magic != 0x46546C67 or ver != 2 or length != len(raw):
+        bad.append("header")
+    jl, jt = struct.unpack_from("<II", raw, 12)
+    if jt != 0x4E4F534A or jl % 4:
+        bad.append("json chunk")
+    doc = json.loads(raw[20:20 + jl])
+    bl, bt = struct.unpack_from("<II", raw, 20 + jl)
+    if bt != 0x004E4942 or bl % 4 or 28 + jl + bl != len(raw):
+        bad.append("bin chunk")
+    blob = raw[28 + jl:28 + jl + bl]
+    if doc["asset"]["version"] != "2.0" or doc["buffers"][0]["byteLength"] != len(blob):
+        bad.append("asset/buffer")
+    out = {}
+    cts = {5126: "<f4", 5125: "<u4", 5123: "<u2", 5121: "u1"}
+    for k, a in enumerate(doc["accessors"]):
+        bv = doc["bufferViews"][a["bufferView"]]
+        n = {"SCALAR": 1, "VEC3": 3}[a["type"]]
+        dt = np.dtype(cts[a["componentType"]])
+        if bv["byteOffset"] % 4 or a.get("byteOffset", 0) % dt.itemsize or bv["byteOffset"] + bv["byteLength"] > len(blob):
+            bad.append(f"accessor {k} alignment/range")
+        out[k] = np.frombuffer(blob, dt, a["count"] * n, bv["byteOffset"] + a.get("byteOffset", 0)).reshape(a["count"], n)
+        if "min" in a and (not np.array_equal(out[k].min(0), a["min"]) or not np.array_equal(out[k].max(0), a["max"])):
+            bad.append(f"accessor {k} min/max")
+    prim = doc["meshes"][0]["primitives"][0]
+    res = dict(pos=out[prim["attributes"]["POSITION"]].astype(np.float64), idx=out[prim["indices"]].reshape(-1, 3).astype(np.int64),
+               nrm=out[prim["attributes"]["NORMAL"]].astype(np.float64) if "NORMAL" in prim["attributes"] else None,
+               col=out[prim["attributes"]["COLOR_0"]].astype(np.float64) if "COLOR_0" in prim["attributes"] else None)
+    if res["idx"].max() >= len(res["pos"]) or prim.get("mode") != 4:
+        bad.append("indices/mode")
+    return res, bad
+
+
+def vertex_normals(v, f):
+    c = np.cross(v[f[:, 1]] - v[f[:, 0]], v[f[:, 2]] - v[f[:, 0]])
+    n = np.zeros_like(v)
+    for k in range(3):
+        np.add.at(n, f[:, k], c)
+    ln = np.linalg.norm(n, axis=1, keepdims=True)
+    return np.where(ln > 0, n / np.maximum(ln, 1e-300), 0.0)
+
+
+def check_glb(ctx):
+    mcv, work, name = ctx["mcv"], ctx["work"], ctx["name"]
+    v, f = mcv.load(ctx["ins"][0]), mcv.load(ctx["ins"][1]).astype(np.int64)
+    ins = list(ctx["ins"])
+    col = None
+    if "colors" in ctx["expect"]:
+        col = np.random.default_rng(5).random((len(v), 3))
+        mcv.save(col, work / f"{name}.col.mcv")
+        ins.append(work / f"{name}.col.mcv")
+    out = work / f"{name}.glb"
+    code, stdout, stderr = ctx["run"](out, ins, ctx["args"])
+    if code != 0:
+        return False, f"exit {code}: {(stdout + stderr).strip()[:200]}"
+    res, bad = parse_glb(out.read_bytes())
+    v32 = v.astype("<f4").astype(np.float64)
+    if not np.array_equal(res["pos"], v32):
+        bad.append("positions differ from float32 input")
+    if not np.array_equal(res["idx"], f):
+        bad.append("indices differ")
+    if np.abs(res["nrm"] - vertex_normals(v32, f)).max() > 1e-6:
+        bad.append("normals differ from the area-weighted numpy normals")
+    if col is not None and not np.array_equal(res["col"], col.astype("<f4").astype(np.float64)):
+        bad.append("colors differ")
+    # and back through the Mojo reader
+    rv, rf, rn, rc = (work / f"{name}.r{k}.mcv" for k in "vfnc")
+    code, stdout, stderr = ctx["run3"]("glb_read", rv, [out], [f"faces={rf}", f"normals={rn}", f"colors={rc}"])
+    if code != 0:
+        bad.append(f"own reader failed: {(stdout + stderr).strip()[:150]}")
+    else:
+        if not np.array_equal(mcv.load(rv), v32) or not np.array_equal(mcv.load(rf), f):
+            bad.append("round trip through the Mojo reader changed vertices or faces")
+        if np.abs(mcv.load(rn) - res["nrm"]).max() > 0:
+            bad.append("round trip normals differ")
+        if col is not None and not np.array_equal(mcv.load(rc), res["col"]):
+            bad.append("round trip colors differ")
+    print(f"     {name}: {out.stat().st_size} bytes, V={len(v)} F={len(f)}, validator problems: {bad if bad else 'none'}")
+    return not bad, "; ".join(bad)
+
+
+def check_glb_read(ctx):
+    """A GLB made by the numpy writer (a layout variant, or a corrupted one) goes through the Mojo reader."""
+    mcv, work, name, variant = ctx["mcv"], ctx["work"], ctx["name"], ctx["expect"]["variant"]
+    rs = np.random.default_rng(3)
+    v = rs.normal(size=(40, 3))
+    f = np.stack([rs.permutation(40)[:3] for _ in range(30)])
+    nrm, col = rs.normal(size=(40, 3)), rs.random((40, 3))
+    if variant == "noindex":
+        v, nrm, col = v[:39], nrm[:39], col[:39]  # sequential triangles need a multiple of 3
+    kw, mut = {}, None
+    if variant in ("u16", "u8"):
+        kw["idx"] = variant
+    elif variant == "stride":
+        kw.update(interleave=True, normals=nrm)
+    elif variant == "noindex":
+        kw["no_index"] = True
+    elif variant == "all":
+        kw.update(normals=nrm, colors=col)
+    elif variant == "idx_oob":
+        mut = lambda d, b: b.__setitem__(slice(d["bufferViews"][-1]["byteOffset"], d["bufferViews"][-1]["byteOffset"] + 4), (999).to_bytes(4, "little"))
+    elif variant == "acc_oob":
+        mut = lambda d, b: d["accessors"][0].__setitem__("count", 10 ** 6)
+    elif variant == "norm_count":
+        kw["normals"] = nrm[:39]
+    elif variant == "lines":
+        kw["mode"] = 1
+    elif variant == "no_pos":
+        mut = lambda d, b: d["meshes"][0]["primitives"][0]["attributes"].pop("POSITION")
+    raw = make_glb(v, f, mutate=mut, **kw)
+    if variant == "bad_magic":
+        raw = b"glTX" + raw[4:]
+    elif variant == "truncated":
+        raw = raw[:len(raw) // 2]
+    elif variant == "badlen":
+        raw = raw[:8] + (len(raw) + 4).to_bytes(4, "little") + raw[12:]
+    elif variant == "json_bad":
+        jl = int.from_bytes(raw[12:16], "little")
+        raw = raw[:20] + b"{" * jl + raw[20 + jl:]
+    elif variant == "empty":
+        raw = b""
+    path = work / f"{name}.glb"
+    path.write_bytes(raw)
+    rv, rf, rn, rc = (work / f"{name}.r{k}.mcv" for k in "vfnc")
+    code, stdout, stderr = ctx["run"](rv, [path], [f"faces={rf}", f"normals={rn}", f"colors={rc}"])
+    if "raises" in ctx["expect"]:
+        return code != 0, ("" if code != 0 else "accepted a corrupt GLB")
+    if code != 0:
+        return False, f"exit {code}: {(stdout + stderr).strip()[:200]}"
+    bad = []
+    if not np.array_equal(mcv.load(rv), v.astype("<f4").astype(np.float64)):
+        bad.append("vertices")
+    if variant == "noindex":
+        if not np.array_equal(mcv.load(rf), np.arange(39).reshape(-1, 3)):
+            bad.append("sequential faces")
+    elif not np.array_equal(mcv.load(rf), f):
+        bad.append("faces")
+    if variant in ("stride",) and not np.array_equal(mcv.load(rn), nrm.astype("<f4").astype(np.float64)):
+        bad.append("strided normals")
+    if variant == "all" and (not np.array_equal(mcv.load(rn), nrm.astype("<f4").astype(np.float64))
+                              or not np.array_equal(mcv.load(rc), col.astype("<f4").astype(np.float64))):
+        bad.append("normals/colors")
+    return not bad, "; ".join(bad)
+
+
+CUSTOM = {"mesh": check_mesh, "glb": check_glb, "glb_read": check_glb_read}
 
 
 def mesh_fixtures():

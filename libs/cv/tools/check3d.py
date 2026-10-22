@@ -30,11 +30,12 @@ def check(row, fx):
     args = [t for t in rest if not t.startswith("expect:")]
     expect = dict(t[7:].split("=") for t in rest if t.startswith("expect:"))
     kv = dict(a.split("=") for a in args)
-    ins = [WORK / f"{n}.mcv" for n in ins_s.split(",")]
+    ins = [WORK / f"{n}.mcv" for n in ins_s.split(",") if n != "-"]
     out = WORK / f"{name}.ours.mcv"
     if op in oracle3d.CUSTOM:
         return oracle3d.CUSTOM[op](dict(name=name, ins=ins, args=args, expect=expect, work=WORK, mcv=mcv,
-                                        run=lambda o, i, a: ours(op, o, i, a)))
+                                        run=lambda o, i, a: ours(op, o, i, a),
+                                        run3=lambda p, o, i, a: ours(p, o, i, a)))
     code, stdout, stderr = ours(op, out, ins, args)
     if "raises" in expect:
         return (code != 0), ("expected a failure, got exit 0" if code == 0 else "")
