@@ -10,6 +10,7 @@ from mojocv.wavelet import haar3, compress
 from mojocv.desc3d import describe, match_desc
 from mojocv.tapvid import tapvid
 from mojocv.phasecorr import phase_corr
+from mojocv.burst import burst, register
 from mojocv.octree import Octree, walk, walk_cells
 
 
@@ -93,6 +94,16 @@ def dispatch3d(args: List[String]) raises -> Bool:
         if best != Int.MAX:
             print("phasecorr best_ms=", Float64(best) / 1e6)
         save(r, out)
+    elif op == "burst":
+        # IN... = frames, then (shifts=1) a T x 2 float64 file of known [dx, dy]; otherwise phase correlation finds them
+        var frames = List[Mat[DType.float64]]()
+        var nf = len(ins) - (1 if _i(kv, "shifts", 0) != 0 else 0)
+        for i in range(nf):
+            frames.append(load[DType.float64](ins[i]))
+        var sh = load[DType.float64](ins[nf]) if nf < len(ins) else register(frames, _i(kv, "window", 0) != 0)
+        for t in range(sh.rows):
+            print("burst shift", t, sh.data[t * 2], sh.data[t * 2 + 1])
+        save(burst(frames, sh, _i(kv, "scale", 2)), out)
     else:
         return False
     return True

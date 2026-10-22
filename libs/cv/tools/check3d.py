@@ -42,6 +42,9 @@ def check(row, fx):
     mcv.save(want, WORK / f"{name}.mcv")
     if "equals" in expect:
         want = mcv.load(WORK / f"{expect['equals']}.mcv")
+    if "crop" in expect:
+        c = int(expect["crop"])
+        got, want = got[c:-c, c:-c], want[c:-c, c:-c]
     if "cols" in expect:
         got, want = got[:, : int(expect["cols"])], want[:, : int(expect["cols"])]
     if got.shape != want.shape or got.dtype != want.dtype:

@@ -170,6 +170,35 @@ def phasecorr(ins, kv):
     return np.array([[dx, dy, r[py, px]]])
 
 
+def burst(ins, kv):
+    nf = len(ins) - (1 if int(kv.get("shifts", 0)) else 0)
+    frames = ins[:nf]
+    sc = int(kv.get("scale", 2))
+    sh = ins[nf] if nf < len(ins) else np.array(
+        [[0.0, 0.0]] + [phasecorr([frames[0], fr], kv)[0, :2] for fr in frames[1:]])
+    h, w = frames[0].shape
+    num, den = np.zeros((h * sc, w * sc)), np.zeros((h * sc, w * sc))
+    yy, xx = np.mgrid[0:h, 0:w]
+    for fr, (dx, dy) in zip(frames, sh):
+        px, py = (xx - dx) * sc, (yy - dy) * sc
+        x0, y0 = np.floor(px).astype(int), np.floor(py).astype(int)
+        fx, fy = px - x0, py - y0
+        for j in (0, 1):
+            for i in (0, 1):
+                wgt = (fx if i else 1 - fx) * (fy if j else 1 - fy)
+                gx, gy = x0 + i, y0 + j
+                ok = (gx >= 0) & (gx < w * sc) & (gy >= 0) & (gy < h * sc)
+                np.add.at(num, (gy[ok], gx[ok]), (wgt * fr)[ok])
+                np.add.at(den, (gy[ok], gx[ok]), wgt[ok])
+    gy, gx = np.mgrid[0:h * sc, 0:w * sc]
+    sx, sy = np.minimum(gx / sc, w - 1), np.minimum(gy / sc, h - 1)
+    ix, iy = np.minimum(sx.astype(int), w - 2), np.minimum(sy.astype(int), h - 2)
+    ax, ay = sx - ix, sy - iy
+    r = frames[0]
+    fill = (1 - ay) * ((1 - ax) * r[iy, ix] + ax * r[iy, ix + 1]) + ay * ((1 - ax) * r[iy + 1, ix] + ax * r[iy + 1, ix + 1])
+    return np.where(den > 1e-9, num / np.maximum(den, 1e-300), fill)
+
+
 def umeyama(ins, kv):
     x, y = ins
     mx, my = x.mean(0), y.mean(0)
@@ -188,7 +217,7 @@ def umeyama(ins, kv):
 
 OPS = {"voxelize": voxelize, "unvoxelize": unvoxelize, "occupied": occupied, "ohash": ohash, "odiff": odiff,
        "static": static, "umeyama": umeyama, "haar3f": haar3f, "haar3i": haar3i,
-       "haar3c": haar3c, "tapvid": tapvid, "phasecorr": phasecorr, "describe": describe, "match": match}
+       "haar3c": haar3c, "tapvid": tapvid, "phasecorr": phasecorr, "burst": burst, "describe": describe, "match": match}
 
 
 def fixtures():
@@ -219,6 +248,7 @@ def fixtures():
     fx.update(desc_fixtures())
     fx.update(tap_fixtures())
     fx.update(pc_fixtures())
+    fx.update(burst_fixtures())
     return fx
 
 
@@ -351,3 +381,27 @@ def pc_fixtures():
     fx["pc_zt"] = np.zeros((1, 3))
     fx["pc_small"] = rs.random((8, 8))
     return fx
+
+
+def burst_fixtures():
+    """A smooth periodic fine image H and four LR frames sampled half an LR pixel apart (each fine pixel is hit once)."""
+    rs = np.random.default_rng(23)
+    h, w = 24, 32
+    spec = np.zeros((h, w), complex)
+    for ky in range(-3, 4):
+        for kx in range(-3, 4):
+            if (ky, kx) != (0, 0):
+                spec[ky % h, kx % w] = rs.normal() + 1j * rs.normal()
+    hr = np.real(np.fft.ifft2(spec)) * h * w / 20 + 0.5
+    frames = {}
+    for t, (sx, sy) in enumerate([(0, 0), (1, 0), (0, 1), (1, 1)]):  # shifts in fine pixels
+        frames[f"bs_f{t}"] = np.roll(hr, (sy, sx), (0, 1))[::2, ::2].copy()
+    # np.roll content by +s means frame(x) = hr(2x - s): the shift of frame t in LR pixels is s / 2
+    frames["bs_shifts"] = np.array([[0, 0], [0.5, 0], [0, 0.5], [0.5, 0.5]])
+    frames["bs_hr"] = hr
+    # broadband frames (all spectrum bins informative, odd sizes: exact Fourier shifts) for the registration rows
+    r0 = rs.random((13, 17))
+    for t, (sx, sy) in enumerate([(0, 0), (0.5, 0), (0, 0.5), (0.5, 0.5)]):
+        frames[f"bs_r{t}"] = fshift(r0, sy, sx)
+    frames["bs_rn"] = frames["bs_r3"] + 0.05 * rs.random((13, 17))
+    return frames
