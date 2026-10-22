@@ -35,7 +35,11 @@ b3() {
   timeout 60 .work/batch_threads
 }
 
-items=("$@"); [ ${#items[@]} -gt 0 ] || items=(b1 b3)
+b5() {
+  tests/gate-store.sh
+}
+
+items=("$@"); [ ${#items[@]} -gt 0 ] || items=(b1 b3 b5)
 for it in "${items[@]}"; do
   { "$it"; echo "exit $?"; } 2>&1 | tee .work/$it-gate.txt | tail -40
   rc=$(tail -1 .work/$it-gate.txt | cut -d' ' -f2)
