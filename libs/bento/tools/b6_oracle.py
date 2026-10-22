@@ -142,8 +142,14 @@ def sse(port):
             except httpx.HTTPError:
                 pass
         assert ok, "workers still held 5 s after 8 clients left mid-stream"
-        idle = [s for s in c.get("/metrics").text.splitlines() if s.startswith("bentoml_service_request_in_progress") and 'endpoint="/slow"' in s]
-        assert idle and idle[0].endswith(" 0.0"), "in_progress for /slow: %r" % idle
+        # the last abandoned stream is noticed on its next write, a few ms after /add answers: poll, don't read once
+        t2 = time.time()
+        while True:
+            idle = [s for s in c.get("/metrics").text.splitlines() if s.startswith("bentoml_service_request_in_progress") and 'endpoint="/slow"' in s]
+            if (idle and idle[0].endswith(" 0.0")) or time.time() - t2 > 5:
+                break
+            time.sleep(0.05)
+        assert idle and idle[0].endswith(" 0.0"), "in_progress for /slow still not 0 after 5 s: %r" % idle
     print("b6 sse: httpx-sse parsed 6 events equal to those sent; first of 6 slow items after %.0f ms, last after %.0f ms; 8 mid-stream disconnects freed the workers in %.2f s" % (arrivals[0] * 1000, arrivals[-1] * 1000, time.time() - t1))
     return 0
 
