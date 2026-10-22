@@ -130,6 +130,21 @@ def match(ins, kv):
     return np.stack([idx, ham[np.arange(len(a)), idx]], 1).astype(np.int32)
 
 
+def tapvid(ins, kv):
+    gt, gv, pr, pv = ins[0], ins[1].reshape(-1) != 0, ins[2], ins[3].reshape(-1) != 0
+    err = np.linalg.norm(pr - gt, axis=1)
+    apd = aj = 0.0
+    for k in range(5):
+        delta = 0.01 * 4.0 ** k if int(kv.get("metric", 0)) else 2.0 ** k * gt[:, 2] / f(kv, "focal", 500.0)
+        close = err < delta
+        tp = (gv & pv & close).sum()
+        fp = (pv & ~(gv & close)).sum()
+        fn = (gv & ~(pv & close)).sum()
+        apd += (gv & close).sum() / gv.sum() / 5
+        aj += tp / (tp + fp + fn) / 5
+    return np.array([[apd, (gv == pv).mean(), aj]])
+
+
 def umeyama(ins, kv):
     x, y = ins
     mx, my = x.mean(0), y.mean(0)
@@ -148,7 +163,7 @@ def umeyama(ins, kv):
 
 OPS = {"voxelize": voxelize, "unvoxelize": unvoxelize, "occupied": occupied, "ohash": ohash, "odiff": odiff,
        "static": static, "umeyama": umeyama, "haar3f": haar3f, "haar3i": haar3i,
-       "haar3c": haar3c, "describe": describe, "match": match}
+       "haar3c": haar3c, "tapvid": tapvid, "describe": describe, "match": match}
 
 
 def fixtures():
@@ -177,6 +192,7 @@ def fixtures():
     fx.update(align_fixtures())
     fx.update(wavelet_fixtures())
     fx.update(desc_fixtures())
+    fx.update(tap_fixtures())
     return fx
 
 
@@ -258,4 +274,25 @@ def desc_fixtures():
         "ds_noisy_truth": np.stack([np.argsort(perm), np.full(n, 3)], 1).astype(np.int32),
         "ds_one": da[:1],
         "ds_empty": np.zeros((0, 8), np.uint8),
+    }
+
+
+def tap_fixtures():
+    rs = np.random.default_rng(17)
+    m = 400
+    gt = np.column_stack([rs.normal(size=(m, 2)), rs.uniform(5, 15, m)])
+    gv = (rs.random(m) < 0.7).astype(np.uint8)
+    flip = rs.random(m) < 0.1
+    one = np.ones((4, 1), np.uint8)
+    z10 = np.column_stack([rs.normal(size=(4, 2)), np.full(4, 10.0)])
+    return {
+        "tp_gt": gt, "tp_gv": gv.reshape(-1, 1),
+        "tp_pred": gt + rs.normal(size=(m, 3)) * 0.1,
+        "tp_pv": (gv ^ flip).astype(np.uint8).reshape(-1, 1),
+        "tp_perfect": np.array([[1.0, 1.0, 1.0]]),
+        "tp_z10": z10, "tp_z10_off": z10 + [0.05, 0, 0], "tp_one": one,
+        "tp_z10_truth": np.array([[0.6, 1.0, 0.6]]),
+        "tp_c_gv": np.array([[1], [1], [0], [0]], np.uint8), "tp_c_pv": np.array([[1], [0], [1], [0]], np.uint8),
+        "tp_c_truth": np.array([[1.0, 0.5, 1 / 3]]),
+        "tp_zero": np.zeros((4, 1), np.uint8),
     }

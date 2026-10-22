@@ -7,6 +7,7 @@ from mojocv.voxel import voxelize, unvoxelize, occupied
 from mojocv.align import umeyama
 from mojocv.wavelet import haar3, compress
 from mojocv.desc3d import describe, match_desc
+from mojocv.tapvid import tapvid
 from mojocv.octree import Octree, walk, walk_cells
 
 
@@ -71,6 +72,13 @@ def dispatch3d(args: List[String]) raises -> Bool:
         save(describe(load[DType.float64](ins[0]), _i(kv, "k", 16)), out)
     elif op == "match":
         save(match_desc(load[DType.uint8](ins[0]), load[DType.uint8](ins[1])), out)
+    elif op == "tapvid":
+        var r = tapvid(
+            load[DType.float64](ins[0]), load[DType.uint8](ins[1]), load[DType.float64](ins[2]),
+            load[DType.uint8](ins[3]), _f(kv, "focal", 500.0), _i(kv, "metric", 0) != 0,
+        )
+        print("tapvid apd=", r.data[0], "oa=", r.data[1], "aj=", r.data[2])
+        save(r, out)
     else:
         return False
     return True

@@ -25,6 +25,8 @@ def ours(op, out, ins, args):
 
 def check(row, fx):
     name, op, tol, ins_s, *rest = row.split()
+    if name in fx:
+        return False, "row name collides with a fixture of the same name"
     args = [t for t in rest if not t.startswith("expect:")]
     expect = dict(t[7:].split("=") for t in rest if t.startswith("expect:"))
     kv = dict(a.split("=") for a in args)
