@@ -180,12 +180,53 @@ def flip[dt: DType](a: Mat[dt], code: Int) -> Mat[dt]:
 
 def rotate[dt: DType](a: Mat[dt], code: Int) -> Mat[dt]:
     """cv2.rotate: 0 is 90 clockwise, 1 is 180, 2 is 90 counter-clockwise; code 3 is transpose."""
+    comptime if dt == DType.uint8:
+        if code == 3 and a.ch == 1:
+            var o = Mat[dt](a.cols, a.rows, 1)
+            var pa = a.ptr().unsafe_bitcast[UInt8]()
+            var po = o.ptr().unsafe_bitcast[UInt8]()
+            var rows = a.rows
+            var cols = a.cols
+
+            def band(b: Int) {imm}:
+                var r0 = b * 8
+                var r1 = r0 + 8
+                if r1 > rows:
+                    r1 = rows
+                var cblk = (cols + 7) // 8
+                for cb in range(cblk):
+                    var c0 = cb * 8
+                    var c1 = c0 + 8
+                    if c1 > cols:
+                        c1 = cols
+                    var full = (r1 - r0 == 8) and (c1 - c0 == 8)
+                    if full:
+                        var rvec0 = (pa + (r0 + 0) * cols + c0).unsafe_load[width=8]()
+                        var rvec1 = (pa + (r0 + 1) * cols + c0).unsafe_load[width=8]()
+                        var rvec2 = (pa + (r0 + 2) * cols + c0).unsafe_load[width=8]()
+                        var rvec3 = (pa + (r0 + 3) * cols + c0).unsafe_load[width=8]()
+                        var rvec4 = (pa + (r0 + 4) * cols + c0).unsafe_load[width=8]()
+                        var rvec5 = (pa + (r0 + 5) * cols + c0).unsafe_load[width=8]()
+                        var rvec6 = (pa + (r0 + 6) * cols + c0).unsafe_load[width=8]()
+                        var rvec7 = (pa + (r0 + 7) * cols + c0).unsafe_load[width=8]()
+                        for i in range(8):
+                            var out = SIMD[DType.uint8, 8](rvec0[i], rvec1[i], rvec2[i], rvec3[i], rvec4[i], rvec5[i], rvec6[i], rvec7[i])
+                            (po + (c0 + i) * rows + r0).unsafe_store[width=8](out)
+                    else:
+                        for r in range(r0, r1):
+                            var srow = r * cols
+                            for c in range(c0, c1):
+                                po[c * rows + r] = pa[srow + c]
+
+            par(band, (rows + 7) // 8)
+            return o^
+
     var swap = code != 1
     var o = Mat[dt](a.cols if swap else a.rows, a.rows if swap else a.cols, a.ch)
     var ch = a.ch
     var pa = a.ptr()
     var po = o.ptr()
-    comptime T = 32
+    comptime T = 64
 
     def tile(t: Int) {imm}:
         var tc = (a.cols + T - 1) // T
