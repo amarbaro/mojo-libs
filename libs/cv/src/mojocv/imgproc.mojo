@@ -587,6 +587,56 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
                     var rr = x2 if code == 0 else x0
                     qo[unsafe_offset=r * npx + cc] = UInt8((b * 3735 + x1 * 19235 + rr * 9798 + 16384) >> 15)
                 return
+        comptime if dt == DType.uint8:
+            if code == 6:
+                var base = r * npx * 3
+                var qa = pa.unsafe_bitcast[UInt8]()
+                var qo = po.unsafe_bitcast[UInt8]()
+                var c = 0
+                while c + 16 <= npx:
+                    var v0 = (qa + base + c * 3).unsafe_load[width=32]()
+                    var v1 = (qa + base + c * 3 + 32).unsafe_load[width=16]()
+                    var b16 = SIMD[DType.uint8, 16](v0[0], v0[3], v0[6], v0[9], v0[12], v0[15], v0[18], v0[21], v0[24], v0[27], v0[30], v1[1], v1[4], v1[7], v1[10], v1[13]).cast[DType.int32]()
+                    var g16 = SIMD[DType.uint8, 16](v0[1], v0[4], v0[7], v0[10], v0[13], v0[16], v0[19], v0[22], v0[25], v0[28], v0[31], v1[2], v1[5], v1[8], v1[11], v1[14]).cast[DType.int32]()
+                    var r16 = SIMD[DType.uint8, 16](v0[2], v0[5], v0[8], v0[11], v0[14], v0[17], v0[20], v0[23], v0[26], v0[29], v1[0], v1[3], v1[6], v1[9], v1[12], v1[15]).cast[DType.int32]()
+                    var y16 = (b16 * 3735 + g16 * 19235 + r16 * 9798 + 16384) >> 15
+                    var dl = SIMD[DType.int32, 16]((128 << 14) + (1 << 13))
+                    var cb16 = ((b16 - y16) * 9241 + dl) >> 14
+                    var cr16 = ((r16 - y16) * 11682 + dl) >> 14
+                    var yi = y16.clamp(0, 255).cast[DType.uint8]()
+                    var cbi = cb16.clamp(0, 255).cast[DType.uint8]()
+                    var cri = cr16.clamp(0, 255).cast[DType.uint8]()
+                    (qo + base + c * 3).unsafe_strided_store[width=16](yi, 3)
+                    (qo + base + c * 3 + 1).unsafe_strided_store[width=16](cri, 3)
+                    (qo + base + c * 3 + 2).unsafe_strided_store[width=16](cbi, 3)
+                    c += 16
+                while c + 8 <= npx:
+                    var v = (qa + base + c * 3).unsafe_load[width=32]()
+                    var b8 = SIMD[DType.uint8, 8](v[0], v[3], v[6], v[9], v[12], v[15], v[18], v[21]).cast[DType.int32]()
+                    var g8 = SIMD[DType.uint8, 8](v[1], v[4], v[7], v[10], v[13], v[16], v[19], v[22]).cast[DType.int32]()
+                    var r8 = SIMD[DType.uint8, 8](v[2], v[5], v[8], v[11], v[14], v[17], v[20], v[23]).cast[DType.int32]()
+                    var y8 = (b8 * 3735 + g8 * 19235 + r8 * 9798 + 16384) >> 15
+                    var dl8 = SIMD[DType.int32, 8]((128 << 14) + (1 << 13))
+                    var cb8 = ((b8 - y8) * 9241 + dl8) >> 14
+                    var cr8 = ((r8 - y8) * 11682 + dl8) >> 14
+                    var yi8 = y8.clamp(0, 255).cast[DType.uint8]()
+                    var cbi8 = cb8.clamp(0, 255).cast[DType.uint8]()
+                    var cri8 = cr8.clamp(0, 255).cast[DType.uint8]()
+                    (qo + base + c * 3).unsafe_strided_store[width=8](yi8, 3)
+                    (qo + base + c * 3 + 1).unsafe_strided_store[width=8](cri8, 3)
+                    (qo + base + c * 3 + 2).unsafe_strided_store[width=8](cbi8, 3)
+                    c += 8
+                for cc in range(c, npx):
+                    var i = base + cc * 3
+                    var x0 = Int(qa[unsafe_offset=i])
+                    var x1 = Int(qa[unsafe_offset=i + 1])
+                    var x2 = Int(qa[unsafe_offset=i + 2])
+                    var y = (x0 * 3735 + x1 * 19235 + x2 * 9798 + 16384) >> 15
+                    var dl = (128 << 14) + (1 << 13)
+                    qo[unsafe_offset=i] = UInt8(y)
+                    qo[unsafe_offset=i + 1] = UInt8(max(0, min(255, ((x2 - y) * 11682 + dl) >> 14)))
+                    qo[unsafe_offset=i + 2] = UInt8(max(0, min(255, ((x0 - y) * 9241 + dl) >> 14)))
+                return
         var c0 = 0
         comptime if dt == DType.uint8:
 
