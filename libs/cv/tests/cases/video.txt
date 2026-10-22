@@ -1,0 +1,6 @@
+# video: sub-pixel corners and sparse optical flow
+subpix_sm        cornerSubPix lk_prev sp_pts win=5 maxIter=30 eps=0.01 => max:0.05
+subpix_win3      cornerSubPix lk_prev sp_pts win=3 maxIter=50 eps=0.001 => max:0.05
+subpix_edge      cornerSubPix lk_prev lk_pts win=7 => max:0.05
+lk_sm            calcOpticalFlowPyrLK lk_prev lk_next lk_pts win=21 maxLevel=3 => max:0.1, exact, max:1
+lk_sm_win9       calcOpticalFlowPyrLK lk_prev lk_next lk_pts win=9 maxLevel=2 => frac:0.1:0.95, exact, frac:1:0.95

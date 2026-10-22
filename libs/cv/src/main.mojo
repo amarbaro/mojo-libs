@@ -1,10 +1,12 @@
 from mojocv.core import Args, run as run_core
 from mojocv.imgproc import run as run_imgproc
+from mojocv.features import run as run_features
+from mojocv.video import run as run_video
 
 
 def main() raises:
     var a = Args()
-    var ok = run_core(a) or run_imgproc(a)
+    var ok = run_core(a) or run_imgproc(a) or run_features(a) or run_video(a)
     if not ok:
         print("FAIL main: unknown op", a.op)
         raise Error("unknown op " + a.op)

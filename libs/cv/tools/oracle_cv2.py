@@ -154,6 +154,33 @@ def rectangle(i, kv):
     return cv2.rectangle(im, (kv_i(kv, "x1", 0), kv_i(kv, "y1", 0)), (kv_i(kv, "x2", 0), kv_i(kv, "y2", 0)), c, kv_i(kv, "thick", 1))
 
 
+@op()
+def bfmatch(i, kv):
+    m = cv2.BFMatcher(cv2.NORM_HAMMING).match(i[0], i[1])
+    return np.array([[x.trainIdx, int(x.distance)] for x in m], np.int32).reshape(-1, 2)
+@op()
+def knnmatch(i, kv):
+    k = cv2.BFMatcher(cv2.NORM_HAMMING).knnMatch(i[0], i[1], k=2)
+    tab = np.array([[m[0].trainIdx, int(m[0].distance), m[1].trainIdx, int(m[1].distance)] for m in k], np.int32).reshape(-1, 4)
+    r = kv_f(kv, "ratio", 0.75)
+    good = np.array([[q, m[0].trainIdx, int(m[0].distance)] for q, m in enumerate(k) if m[0].distance < r * m[1].distance], np.int32).reshape(-1, 3)
+    return [tab, good]
+
+
+@op()
+def cornerSubPix(i, kv):
+    w = kv_i(kv, "win", 5)
+    z = kv_i(kv, "zero", -1)
+    crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_COUNT, kv_i(kv, "maxIter", 30), kv_f(kv, "eps", 0.01))
+    return cv2.cornerSubPix(i[0], i[1].reshape(-1, 1, 2).copy(), (w, w), (z, z), crit).reshape(-1, 2)
+@op()
+def calcOpticalFlowPyrLK(i, kv):
+    w = kv_i(kv, "win", 21)
+    crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_COUNT, kv_i(kv, "maxCount", 30), kv_f(kv, "eps", 0.01))
+    nxt, st, err = cv2.calcOpticalFlowPyrLK(i[0], i[1], i[2].reshape(-1, 1, 2).copy(), None, winSize=(w, w), maxLevel=kv_i(kv, "maxLevel", 3), criteria=crit)
+    return [nxt.reshape(-1, 2), st.reshape(-1, 1), err.reshape(-1, 1)]
+
+
 # ---- compare ----------------------------------------------------------------------------------------------
 def compare(ours, ref, spec):
     if ours.shape != ref.shape:
@@ -222,6 +249,17 @@ def make_fixtures(d):
     fx["shapes"] = shapes
     fx["blank"] = np.zeros((9, 11), np.uint8)
     fx["full"] = np.full((9, 11), 255, np.uint8)
+    M = np.array([[1, 0, 2.6], [0, 1, 1.7]], np.float64)
+    hm = cv2.warpAffine(fx["hdg"], M, (1920, 1080), flags=cv2.INTER_LINEAR)
+    fx["lk_prev"], fx["lk_next"] = fx["smg"].copy(), hm[300:570, 400:880].copy()
+    gp = cv2.goodFeaturesToTrack(fx["smg"], 120, 0.05, 10).reshape(-1, 2).astype(np.float32)
+    fx["lk_pts"] = np.vstack([gp, np.array([[3, 3], [476, 266]], np.float32)])
+    fx["sp_pts"] = gp[:80] + rng.uniform(-1.2, 1.2, (80, 2)).astype(np.float32)
+    da = rng.integers(0, 256, (200, 32), dtype=np.uint8)
+    db = rng.integers(0, 256, (300, 32), dtype=np.uint8)
+    db[:150] = da[:150] ^ (rng.random((150, 32)) < 0.02).astype(np.uint8)  # 150 near copies of the first 150 queries
+    fx["desc_a"], fx["desc_b"] = da, db
+    fx["desc_one"] = da[:1].copy()
     fx["odd"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["odd2"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["one"] = np.array([[[200, 0, 77]]], np.uint8)
