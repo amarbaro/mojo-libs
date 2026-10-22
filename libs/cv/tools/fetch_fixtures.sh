@@ -9,50 +9,55 @@ PY="${MCV_PY:-$HOME/iTools/video/camera-motion/v/bin/python}"
 if [ ! -d "$REAL/data/imgs/leftcamera" ]; then
   (cd "$REAL" && kaggle datasets download -d danielwe14/stereocamera-chessboard-pictures -p . --unzip)
 fi
-# aruco markers (svg)
-if [ ! -d "$REAL/ArucoMarkers" ]; then
-  (cd "$REAL" && kaggle datasets download -d crsuthikshnkumar/aruco-marker-data-set -p . --unzip)
+# real ArUco photos
+if [ ! -d "$REAL/aruco_yolo" ]; then
+  mkdir -p "$REAL/aruco_yolo"
+  (cd "$REAL/aruco_yolo" && kaggle datasets download -d rahul14112003/aruco-yolo -p . --unzip)
 fi
 
-# convert 5 chessboard photos to gray .mcv
 $PY - "$REAL" <<'PY'
-import cv2, sys, os
+import cv2, sys, os, glob, shutil
 real=sys.argv[1]
+sys.path.insert(0, os.path.join(real,'..','..','tools'))
+import mcv, numpy as np
+
+# 5 chessboard photos
 names=[1,10,11,12,13]
 for i,n in enumerate(names):
     p=os.path.join(real,'data','imgs','leftcamera',f'Im_L_{n}.png')
     im=cv2.imread(p,cv2.IMREAD_GRAYSCALE)
     assert im is not None, p
-    import importlib.util
-    spec=importlib.util.spec_from_file_location('mcv', os.path.join(real,'..','..','tools','mcv.py'))
-    # fallback: append tools to path
-    sys.path.insert(0, os.path.join(real,'..','..','tools'))
-    import mcv
     mcv.save(im, os.path.join(real, f'chess_{i}.mcv'))
-    objp=__import__('numpy').zeros((11*7,3),dtype=__import__('numpy').float64)
-    objp[:,:2]=__import__('numpy').mgrid[0:11,0:7].T.reshape(-1,2)
-    K=__import__('numpy').array([[800,0,im.shape[1]//2],[0,800,im.shape[0]//2],[0,0,1]],dtype=__import__('numpy').float64)
-    dist=__import__('numpy').zeros((5,1),dtype=__import__('numpy').float64)
-    gray=im
-    ok,corners=cv2.findChessboardCorners(gray,(11,7))
+    objp=np.zeros((11*7,3),dtype=np.float64)
+    objp[:,:2]=np.mgrid[0:11,0:7].T.reshape(-1,2)
+    K=np.array([[800,0,im.shape[1]//2],[0,800,im.shape[0]//2],[0,0,1]],dtype=np.float64)
+    dist=np.zeros((5,1),dtype=np.float64)
+    ok,corners=cv2.findChessboardCorners(im,(11,7))
     assert ok
     mcv.save(objp, os.path.join(real, f'pnp_obj_{i}.mcv'))
-    mcv.save(corners.reshape(-1,2).astype(__import__('numpy').float64), os.path.join(real, f'pnp_img_{i}.mcv'))
+    mcv.save(corners.reshape(-1,2).astype(np.float64), os.path.join(real, f'pnp_img_{i}.mcv'))
     mcv.save(K, os.path.join(real, f'pnp_K_{i}.mcv'))
     mcv.save(dist, os.path.join(real, f'pnp_d_{i}.mcv'))
-# aruco markers
-import subprocess
-for i in range(5):
-    svg=os.path.join(real,'ArucoMarkers','4x4',f'4x4_1000-{i}.svg')
-    png=os.path.join(real,f'aruco_{i}.png')
-    if not os.path.exists(png):
-        subprocess.run(['rsvg-convert','-w','200','-h','200',svg,'-o',png],check=True)
-    im=cv2.imread(png,cv2.IMREAD_GRAYSCALE)
-    im2=cv2.copyMakeBorder(im,20,20,20,20,cv2.BORDER_CONSTANT,value=255)
-    mcv.save(im2, os.path.join(real, f'aruco_{i}.mcv'))
+
+# 5 real ArUco photos
+imgs=sorted(glob.glob(os.path.join(real,'aruco_yolo','valid','images','*.jpg')))
+chosen=[]
+for p in imgs:
+    im=cv2.imread(p,cv2.IMREAD_GRAYSCALE)
+    det=cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50), cv2.aruco.DetectorParameters())
+    corners,ids,_=det.detectMarkers(im)
+    if ids is not None and len(ids)>=1:
+        chosen.append(p)
+    if len(chosen)>=5: break
+assert len(chosen)==5, len(chosen)
+for i,p in enumerate(chosen):
+    im=cv2.imread(p,cv2.IMREAD_GRAYSCALE)
+    mcv.save(im, os.path.join(real, f'aruco_{i}.mcv'))
+
 # one video frame
 frame=os.path.join(real,'frame0.png')
 if not os.path.exists(frame):
+    import subprocess
     subprocess.run(['ffmpeg','-y','-i',os.path.expanduser('~/Videos/obs.space/2026-01-25 15-05-00.mkv'),'-vf','scale=640:360,format=gray','-frames:v','1',frame],check=True,stderr=subprocess.DEVNULL)
 im=cv2.imread(frame,cv2.IMREAD_GRAYSCALE)
 mcv.save(im, os.path.join(real,'frame0.mcv'))
