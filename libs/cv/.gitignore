@@ -1,0 +1,4 @@
+.venv
+.work/
+.bin/
+tests/fixtures/*.mcv
