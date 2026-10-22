@@ -452,6 +452,10 @@ def make_fixtures(d):
     out = fx["pnp_img"].copy()
     out[:12] = rng.uniform(0, 640, (12, 2))
     fx["pnp_img_out"] = out
+    outp = fx["pnp_img_pl"].copy()
+    outp[:3] = rng.uniform(0, 640, (3, 2))
+    fx["pnp_img_pl_out"] = np.vstack([outp, cv2.projectPoints(fx["pnp_obj_pl"][:6], rvp, tvp, Kc, fx["d4"])[0].reshape(-1, 2)])
+    fx["pnp_obj_pl2"] = np.vstack([fx["pnp_obj_pl"], fx["pnp_obj_pl"][:6]])
     Af = np.array([[0.9, -0.3, 12.0], [0.25, 1.1, -7.0]])
     pa = rng.uniform(0, 300, (80, 2))
     pb = pa @ Af[:, :2].T + Af[:, 2]

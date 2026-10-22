@@ -1281,37 +1281,45 @@ def hog_blocks(src: Mat[DType.uint8]) -> Mat[F32]:
     parallelize(grad, h)
     var po = o.ptr()
 
+    # per block pixel: Gaussian window times trilinear weight for each of the four neighbouring cells
+    var wtab = List[Float32](length=256 * 4, fill=0)
+    for i in range(16):
+        var fy = (Float32(i) + 0.5) / 8.0 - 0.5
+        var cy0 = Int(floor(fy))
+        var wy = fy - Float32(cy0)
+        for j in range(16):
+            var fx = (Float32(j) + 0.5) / 8.0 - 0.5
+            var cx0 = Int(floor(fx))
+            var wx = fx - Float32(cx0)
+            var di = Float32(i - 8)
+            var dj = Float32(j - 8)
+            var g = Float32(exp(Float64(-(di * di + dj * dj) / 32.0)))
+            for cyi in range(2):
+                for cxi in range(2):
+                    var cy = cy0 + cyi
+                    var cx = cx0 + cxi
+                    if cx >= 0 and cx < 2 and cy >= 0 and cy < 2:
+                        var w1 = wy if cyi == 1 else 1 - wy
+                        var w2 = wx if cxi == 1 else 1 - wx
+                        wtab[(i * 16 + j) * 4 + cx * 2 + cy] = g * w1 * w2
+    var pw = ptr_of(wtab)
+
     def block(t: Int) {imm}:
         var by = (t // nbx) * 8
         var bx = (t % nbx) * 8
         var hist = SIMD[F32, 64](0)
         for i in range(16):
-            var fy = (Float32(i) + 0.5) / 8.0 - 0.5
-            var cy0 = Int(floor(fy))
-            var wy = fy - Float32(cy0)
             for j in range(16):
-                var fx = (Float32(j) + 0.5) / 8.0 - 0.5
-                var cx0 = Int(floor(fx))
-                var wx = fx - Float32(cx0)
-                var di = Float32(i - 8)
-                var dj = Float32(j - 8)
-                var g = Float32(exp(Float64(-(di * di + dj * dj) / 32.0)))
                 var idx = (by + i) * w + bx + j
                 var b0 = Int(pb[unsafe_offset=idx])
                 var b1 = (b0 + 1) % 9
                 b0 = ((b0 % 9) + 9) % 9
-                var v0 = p0[unsafe_offset=idx] * g
-                var v1 = p1[unsafe_offset=idx] * g
-                for cyi in range(2):
-                    var cy = cy0 + cyi
-                    var w1 = wy if cyi == 1 else 1 - wy
-                    for cxi in range(2):
-                        var cx = cx0 + cxi
-                        var w2 = wx if cxi == 1 else 1 - wx
-                        if cx >= 0 and cx < 2 and cy >= 0 and cy < 2:
-                            var cell = cx * 2 + cy
-                            hist[cell * 9 + b0] += v0 * w1 * w2
-                            hist[cell * 9 + b1] += v1 * w1 * w2
+                var v0 = p0[unsafe_offset=idx]
+                var v1 = p1[unsafe_offset=idx]
+                comptime for cell in range(4):
+                    var wc = pw[unsafe_offset=(i * 16 + j) * 4 + cell]
+                    hist[cell * 9 + b0] += v0 * wc
+                    hist[cell * 9 + b1] += v1 * wc
         var sum = Float32(0)
         for k in range(36):
             sum += hist[k] * hist[k]
@@ -1325,7 +1333,7 @@ def hog_blocks(src: Mat[DType.uint8]) -> Mat[F32]:
             po[unsafe_offset=t * 36 + k] = hist[k] * sc2
 
     parallelize(block, nby * nbx)
-    _ = (bin0.rows, wt0.rows, wt1.rows, len(lut))
+    _ = (bin0.rows, wt0.rows, wt1.rows, len(lut), len(wtab))
     return o^
 
 
@@ -1945,7 +1953,9 @@ def run_dt[dt: DType](mut a: Args) raises -> Bool:
 def run_u8(mut a: Args) raises -> Bool:
     var m = load[DType.uint8](a.ins[0])
     if a.op == "connectedComponentsWithStats":
-        var o = components(m, a.i("connectivity", 8))
+        var o = (Mat[DType.int32](0, 0), Mat[DType.int32](0, 0), Mat[DType.float64](0, 0))
+        while a.again():
+            o = components(m, a.i("connectivity", 8))
         save(o[0], a.out)
         save(o[1], a.out + ".1")
         save(o[2], a.out + ".2")
@@ -1955,7 +1965,9 @@ def run_u8(mut a: Args) raises -> Bool:
             o = canny(m, a.f("t1", 100.0), a.f("t2", 200.0), a.i("aperture", 3), a.i("l2", 0) == 1)
         save(o, a.out)
     elif a.op == "findContours":
-        var o = find_contours(m, a.i("mode", 0) == 0, a.i("method", 0) == 1)
+        var o = (Mat[DType.int32](0, 0), Mat[DType.int32](0, 0))
+        while a.again():
+            o = find_contours(m, a.i("mode", 0) == 0, a.i("method", 0) == 1)
         save(o[0], a.out)
         save(o[1], a.out + ".1")
     elif a.op == "goodFeaturesToTrack":
@@ -2002,7 +2014,9 @@ def run(mut a: Args) raises -> Bool:
         var rl = List[Int]()
         for v in m.data:
             rl.append(Int(v))
-        var g = group_rects(rl, a.i("thresh", 2))
+        var g = List[Int]()
+        while a.again():
+            g = group_rects(rl, a.i("thresh", 2))
         var o = Mat[DType.int32](len(g) // 4, 4, 1)
         for i in range(len(g)):
             o.data[i] = Int32(g[i])

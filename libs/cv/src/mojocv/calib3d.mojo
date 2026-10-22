@@ -1641,11 +1641,13 @@ def aruco_detect(img: Mat[DType.uint8]) -> Tuple[Mat[DType.int32], Mat[F32]]:
 def run(mut a: Args) raises -> Bool:
     if a.op == "Rodrigues":
         var m = load[F64](a.ins[0])
-        if m.size() == 3:
-            save(rodrigues_vec(fl(m.data[0], m.data[1], m.data[2])), a.out)
-        else:
-            var v = rodrigues_vec_from(m)
-            save(mx_from(v, 3, 1), a.out)
+        var o = mx(0, 0)
+        while a.again():
+            if m.size() == 3:
+                o = rodrigues_vec(fl(m.data[0], m.data[1], m.data[2]))
+            else:
+                o = mx_from(rodrigues_vec_from(m), 3, 1)
+        save(o, a.out)
     elif a.op == "projectPoints" or a.op == "fisheye_projectPoints":
         var obj = load[F64](a.ins[0])
         var o = mx(0, 0)

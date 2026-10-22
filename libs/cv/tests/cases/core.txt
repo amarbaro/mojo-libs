@@ -22,3 +22,7 @@ convert_f32_u8_half convert half to=0 => exact
 convert_f32_i16_scale convert f32 to=4 alpha=3.7 beta=-12.25 => max:1
 convert_f64_i32  convert f64 to=2 alpha=1000 => exact
 convert_u8_u8_one convert one to=0 alpha=1.5 beta=0.5 => exact
+bitwise_and_odd  bitwise_and odd odd2 => exact
+bitwise_or_hd    bitwise_or hd hd2 => exact
+bitwise_xor_hd   bitwise_xor hd hd2 => exact
+bitwise_xor_i16  bitwise_xor i16 i16b => exact
