@@ -281,10 +281,10 @@ def threshold[dt: DType](src: Mat[dt], thresh: Float64, maxval: Float64, kind: I
     var po = o.ptr()
 
     def row(r: Int) {imm}:
+        var base = r * n
         var i = 0
-        while i < n:
-            var w = W if i + W <= n else 1
-            var x = pa.unsafe_load[width=W](r * n + i) if w == W else SIMD[dt, W](pa[unsafe_offset=r * n + i])
+        while i + W <= n:
+            var x = pa.unsafe_load[width=W](base + i)
             var gt = x.gt(th)
             var z = SIMD[dt, W](0)
             var v: SIMD[dt, W]
@@ -298,11 +298,23 @@ def threshold[dt: DType](src: Mat[dt], thresh: Float64, maxval: Float64, kind: I
                 v = gt.select(x, z)
             else:
                 v = gt.select(z, x)
-            if w == W:
-                po.unsafe_store(r * n + i, v)
+            po.unsafe_store(base + i, v)
+            i += W
+        for j in range(i, n):
+            var x = pa[unsafe_offset=base + j]
+            var gt = x > th
+            var v: Scalar[dt]
+            if kind == 0:
+                v = mx if gt else Scalar[dt](0)
+            elif kind == 1:
+                v = Scalar[dt](0) if gt else mx
+            elif kind == 2:
+                v = th if gt else x
+            elif kind == 3:
+                v = x if gt else Scalar[dt](0)
             else:
-                po[unsafe_offset=r * n + i] = v[0]
-            i += w
+                v = Scalar[dt](0) if gt else x
+            po[unsafe_offset=base + j] = v
 
     par(row, src.rows)
     return o^
