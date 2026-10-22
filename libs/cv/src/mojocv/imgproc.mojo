@@ -1529,8 +1529,8 @@ def find_contours(src: Mat[DType.uint8], external: Bool, simple: Bool) -> Tuple[
 # ---- goodFeaturesToTrack ----------------------------------------------------------------------------------
 
 
-def good_features(src: Mat[DType.uint8], max_corners: Int, quality: Float64, min_dist: Float64, block: Int) -> Mat[F32]:
-    """Shi-Tomasi: smallest eigenvalue of the windowed gradient covariance, local maxima above quality * max,
+def good_features(src: Mat[DType.uint8], max_corners: Int, quality: Float64, min_dist: Float64, block: Int, harris: Bool = False, hk: Float64 = 0.04) -> Mat[F32]:
+    """Shi-Tomasi (or Harris det - k trace^2 when `harris`): smallest eigenvalue of the windowed gradient covariance, local maxima above quality * max,
     strongest first (ties by position), thinned by a minimum distance on a grid. Returns (n, 2) float32 (x, y)."""
     var scale = Float32(1.0 / (4.0 * Float64(block) * 255.0))
     var dx = sobel[DType.uint8, F32](src, 1, 0, 3, scale)
@@ -1575,6 +1575,7 @@ def good_features(src: Mat[DType.uint8], max_corners: Int, quality: Float64, min
     var p2 = syy.ptr()
     var rowmax = List[Float32](length=rows, fill=0)
     var prm = ptr_of(rowmax)
+    var hk32 = Float32(hk)
 
     def eig_rows(y: Int) {imm}:
         var i = y * cols
@@ -1586,6 +1587,10 @@ def good_features(src: Mat[DType.uint8], max_corners: Int, quality: Float64, min
             var b = p1.unsafe_load[width=WF](i)
             var c = p2.unsafe_load[width=WF](i) * 0.5
             var v = (a + c) - sqrt((a - c) * (a - c) + b * b)
+            if harris:
+                var sa = a * 2
+                var sc = c * 2
+                v = sa * sc - b * b - hk32 * (sa + sc) * (sa + sc)
             pe.unsafe_store(i, v)
             m = max(m, v)
             i += WF
@@ -1594,6 +1599,10 @@ def good_features(src: Mat[DType.uint8], max_corners: Int, quality: Float64, min
             var b = p1[unsafe_offset=i]
             var c = p2[unsafe_offset=i] * 0.5
             var v = (a + c) - sqrt((a - c) * (a - c) + b * b)
+            if harris:
+                var sa = a * 2
+                var sc = c * 2
+                v = sa * sc - b * b - hk32 * (sa + sc) * (sa + sc)
             pe[unsafe_offset=i] = v
             ms = max(ms, v)
             i += 1
@@ -2590,7 +2599,7 @@ def run_u8(mut a: Args) raises -> Bool:
     elif a.op == "goodFeaturesToTrack":
         var o = Mat[F32](0, 0)
         while a.again():
-            o = good_features(m, a.i("maxCorners", 100), a.f("quality", 0.01), a.f("minDist", 10.0), a.i("block", 3))
+            o = good_features(m, a.i("maxCorners", 100), a.f("quality", 0.01), a.f("minDist", 10.0), a.i("block", 3), a.i("harris", 0) == 1, a.f("k", 0.04))
         save(o, a.out)
     elif a.op == "grabCut":
         var r = a.fl("rect", [0.0, 0.0, Float64(m.cols), Float64(m.rows)])

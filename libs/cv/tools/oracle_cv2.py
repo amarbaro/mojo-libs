@@ -140,7 +140,7 @@ def findContours(i, kv):
     return [pts.astype(np.int32), np.array([[len(c)] for c in cs], np.int32).reshape(-1, 1)]
 @op()
 def goodFeaturesToTrack(i, kv):
-    r = cv2.goodFeaturesToTrack(i[0], kv_i(kv, "maxCorners", 100), kv_f(kv, "quality", 0.01), kv_f(kv, "minDist", 10.0), blockSize=kv_i(kv, "block", 3))
+    r = cv2.goodFeaturesToTrack(i[0], kv_i(kv, "maxCorners", 100), kv_f(kv, "quality", 0.01), kv_f(kv, "minDist", 10.0), blockSize=kv_i(kv, "block", 3), useHarrisDetector=bool(kv_i(kv, "harris", 0)), k=kv_f(kv, "k", 0.04))
     return np.zeros((0, 2), np.float32) if r is None else r.reshape(-1, 2).astype(np.float32)
 @op()
 def line(i, kv):
