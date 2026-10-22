@@ -250,7 +250,7 @@ def recoverPose(i, kv):
 @op()
 def stereoRectify(i, kv):
     R1, R2, P1, P2, Q, _, _ = cv2.stereoRectify(i[0], i[1], i[2], i[3], (kv_i(kv, "w", 640), kv_i(kv, "h", 480)), i[4], i[5],
-                                                 flags=cv2.CALIB_ZERO_DISPARITY if kv_i(kv, "zero", 1) else 0)
+                                                 flags=cv2.CALIB_ZERO_DISPARITY if kv_i(kv, "zero", 1) else 0, alpha=kv_f(kv, "alpha", -1.0))
     return [R1, R2, P1, P2, Q]
 
 
@@ -479,6 +479,7 @@ def make_fixtures(d):
     fx["aff_from"], fx["aff_to"] = pa, pb
     fx["Rst"] = cv2.Rodrigues(np.array([0.01, -0.02, 0.005]))[0]
     fx["Tst"] = np.array([[-0.12], [0.003], [0.002]])
+    fx["Tstv"] = np.array([[0.003], [-0.12], [0.002]])
     fx["K2"] = np.array([[820, 0, 315], [0, 830, 245], [0, 0, 1.0]])
     fx["dst1"] = np.array([[-0.2], [0.05], [0], [0], [0]])
     fx["dst2"] = np.array([[-0.1], [0.02], [0], [0], [0]])

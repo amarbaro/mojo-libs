@@ -46,7 +46,8 @@ ArUco ids; within 1 grey level are resize, warp, remap, blob, YCrCb, HSV to BGR;
   particular degree-ten polynomial elimination. Noisy data retain the existing loose row `ess_noisy`.
 - **solvePnP**: EPnP control points with Gauss-Newton distance refinement, then damped Gauss-Newton on pixel error.
   RANSAC samples four points, 100 iterations, adaptive. See `docs/f34.md`.
-- **stereoRectify**: default alpha (-1) and horizontal baseline only; cv2 5.0 averages the two focal lengths.
+- **stereoRectify**: horizontal and vertical baselines, alpha -1 (default) or [0, 1]; nine-point-per-edge
+  bounds interpolate between valid-pixel cropping and complete-image retention.
 - **StereoSGBM**: own SGM (Birchfield-Tomasi cost, box window, eight paths, parabola refinement, left-right and
   uniqueness checks), not cv2's pre-filtered 5-path pipeline: 94 to 95 percent of pixels agree within one disparity.
 - **findChessboardCorners**: set of corners matches; order is "cols axis right, rows axis down", cv2 sometimes starts
@@ -59,8 +60,7 @@ ArUco ids; within 1 grey level are resize, warp, remap, blob, YCrCb, HSV to BGR;
 ## Not implemented
 
 cvtColor Lab/Luv/YUV, resize INTER_AREA, threshold triangle, Harris in goodFeaturesToTrack, findContours hierarchy
-(tree/ccomp), thick lines (> 1 px) and thick rectangles, anisotropic or even erode kernels, vertical stereo rectify,
-stereoRectify alpha in [0, 1], GPU kernels (every op is CPU; `gpu-wait` was not needed).
+(tree/ccomp), thick lines (> 1 px) and thick rectangles, anisotropic or even erode kernels, GPU kernels (every op is CPU; `gpu-wait` was not needed).
 
 ## Speed
 

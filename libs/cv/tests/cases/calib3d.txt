@@ -51,3 +51,7 @@ ess_five_minimal findEssentialMat ess_six1 ess_six2 K thresh=0.01 => max:1e-5, e
 ess_five_clean   findEssentialMat ess_clean1 ess_clean2 K thresh=0.01 => max:1e-6, exact
 # Exactly five matches: ten algebraic roots, six real essential matrices, four complex roots excluded.
 ess_five_roots   findEssentialMat ess_five1 ess_five2 K thresh=0.01 => max:1e-6, exact
+rect_alpha0      stereoRectify K dst1 K2 dst2 Rst Tst w=640 h=480 alpha=0 => max:1e-9, max:1e-9, max:1e-3, max:1e-3, max:1e-3
+rect_alpha1      stereoRectify K dst1 K2 dst2 Rst Tst w=640 h=480 alpha=1 => max:1e-9, max:1e-9, max:1e-3, max:1e-3, max:1e-3
+rect_vertical    stereoRectify K dst1 K2 dst2 Rst Tstv w=640 h=480 zero=0 => max:1e-9, max:1e-9, max:1e-3, max:1e-3, max:1e-3
+rect_vertical_a  stereoRectify K dst1 K2 dst2 Rst Tstv w=640 h=480 zero=0 alpha=0.5 => max:1e-9, max:1e-9, max:1e-3, max:1e-3, max:1e-3

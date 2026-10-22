@@ -1147,8 +1147,8 @@ def recover_pose(e: Mx, p1: Mx, p2: Mx, k: Mx, mask: Mat[DType.uint8], has_mask:
 # ---- stereoRectify ----------------------------------------------------------------------------------------
 
 
-def stereo_rectify(k1: Mx, d1: Mx, k2: Mx, d2: Mx, rm: Mx, t: Mx, w: Int, h: Int, zero_disp: Bool) -> List[Mx]:
-    """Bouguet's rectification with cv2's default alpha (-1), horizontal baseline: R1, R2, P1, P2, Q."""
+def stereo_rectify(k1: Mx, d1: Mx, k2: Mx, d2: Mx, rm: Mx, t: Mx, w: Int, h: Int, zero_disp: Bool, alpha: Float64 = -1.0) -> List[Mx]:
+    """Bouguet rectification, horizontal/vertical baselines, alpha in [-1, 1]: R1, R2, P1, P2, Q."""
     var om = rodrigues_mat(rm)
     var half = rodrigues_vec(fl(-0.5 * om[0], -0.5 * om[1], -0.5 * om[2]))
     var tv = List[Float64](length=3, fill=0)
@@ -1199,6 +1199,47 @@ def stereo_rectify(k1: Mx, d1: Mx, k2: Mx, d2: Mx, rm: Mx, t: Mx, w: Int, h: Int
     else:
         cx[0] = (cx[0] + cx[1]) * 0.5
         cx[1] = cx[0]
+    if alpha >= 0:
+        # Sample the transformed border at nine positions per side. The inner
+        # rectangle excludes invalid pixels; the outer rectangle retains them all.
+        var grid = mx(81, 2)
+        for y in range(9):
+            for x in range(9):
+                grid.set(y * 9 + x, 0, 0, Float64(x * (w - 1)) / 8.0)
+                grid.set(y * 9 + x, 1, 0, Float64(y * (h - 1)) / 8.0)
+        var s0 = Float64(0)
+        var s1 = Float64(1e300)
+        for camera in range(2):
+            var proj = ident(3)
+            proj.set(0, 0, 0, f)
+            proj.set(1, 1, 0, f)
+            proj.set(0, 2, 0, cx[camera])
+            proj.set(1, 2, 0, cy[camera])
+            var pixels = undistort_points(grid, k1 if camera == 0 else k2, d1 if camera == 0 else d2, r1 if camera == 0 else r2, proj, False)
+            var inner = fl(-1e300, -1e300, 1e300, 1e300)
+            var outer = fl(1e300, 1e300, -1e300, -1e300)
+            for y in range(9):
+                for x in range(9):
+                    var u = pixels.at(y * 9 + x, 0)
+                    var v = pixels.at(y * 9 + x, 1)
+                    outer[0] = min(outer[0], u)
+                    outer[1] = min(outer[1], v)
+                    outer[2] = max(outer[2], u)
+                    outer[3] = max(outer[3], v)
+                    if x == 0:
+                        inner[0] = max(inner[0], u)
+                    if y == 0:
+                        inner[1] = max(inner[1], v)
+                    if x == 8:
+                        inner[2] = min(inner[2], u)
+                    if y == 8:
+                        inner[3] = min(inner[3], v)
+            for side in range(4):
+                var center = cx[camera] if side % 2 == 0 else cy[camera]
+                var edge = 0.0 if side < 2 else Float64(w - 1 if side == 2 else h - 1)
+                s0 = max(s0, (edge - center) / (inner[side] - center))
+                s1 = min(s1, (edge - center) / (outer[side] - center))
+        f *= (1.0 - min(alpha, 1.0)) * s0 + min(alpha, 1.0) * s1
     var p1 = mx(3, 4)
     p1.set(0, 0, 0, f)
     p1.set(1, 1, 0, f)
@@ -1216,7 +1257,7 @@ def stereo_rectify(k1: Mx, d1: Mx, k2: Mx, d2: Mx, rm: Mx, t: Mx, w: Int, h: Int
     q.set(1, 3, 0, -cy[0])
     q.set(2, 3, 0, f)
     q.set(3, 2, 0, -1.0 / t2.data[idx])
-    q.set(3, 3, 0, (cx[0] - cx[1]) / t2.data[idx])
+    q.set(3, 3, 0, ((cx[0] - cx[1]) if idx == 0 else (cy[0] - cy[1])) / t2.data[idx])
     var out = List[Mx]()
     out.append(r1^)
     out.append(r2^)
@@ -2003,7 +2044,7 @@ def run(mut a: Args) raises -> Bool:
         var t = load[F64](a.ins[5])
         var o = List[Mx]()
         while a.again():
-            o = stereo_rectify(k1, d1, k2, d2, rm, t, a.i("w", 640), a.i("h", 480), a.i("zero", 1) == 1)
+            o = stereo_rectify(k1, d1, k2, d2, rm, t, a.i("w", 640), a.i("h", 480), a.i("zero", 1) == 1, a.f("alpha", -1.0))
         for i in range(5):
             save(o[i], a.out if i == 0 else a.out + "." + String(i))
     else:
