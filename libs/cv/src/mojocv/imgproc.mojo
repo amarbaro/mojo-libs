@@ -469,7 +469,7 @@ def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int)
                                     acc = v
                         pt[unsafe_offset=y * n + ii] = acc
 
-            par(hrow, p.rows)
+            par(hband, (p.rows + 7) // 8)
 
             def vband(b: Int) {imm}:
                 var r0 = b * 8
