@@ -6,6 +6,7 @@ from mojocv.mat import Mat, load, save
 from mojocv.voxel import voxelize, unvoxelize, occupied
 from mojocv.align import umeyama
 from mojocv.wavelet import haar3, compress
+from mojocv.desc3d import describe, match_desc
 from mojocv.octree import Octree, walk, walk_cells
 
 
@@ -66,6 +67,10 @@ def dispatch3d(args: List[String]) raises -> Bool:
         var r = compress(v, _f(kv, "thr", 0.0), _i(kv, "levels", 0))
         print("haar3c kept=", r[1], "of=", v.size())
         save(r[0], out)
+    elif op == "describe":
+        save(describe(load[DType.float64](ins[0]), _i(kv, "k", 16)), out)
+    elif op == "match":
+        save(match_desc(load[DType.uint8](ins[0]), load[DType.uint8](ins[1])), out)
     else:
         return False
     return True

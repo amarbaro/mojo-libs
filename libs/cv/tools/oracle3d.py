@@ -96,6 +96,40 @@ def haar3c(ins, kv):
     return _haar(c, True, kv.get("levels", 0))
 
 
+def describe(ins, kv):
+    p, k = ins[0], int(kv.get("k", 16))
+    n = len(p)
+    tri = []
+    for j in range(64):
+        a, b, c = (int(splitmix(np.array([3 * j + t]))[0] % U64(k)) for t in range(3))
+        while b == a:
+            b = (b + 1) % k
+        while c in (a, b):
+            c = (c + 1) % k
+        tri.append((a, b, c))
+    out = np.zeros((n, 8), np.uint8)
+    for i in range(n):
+        d = p - p[i]
+        d2 = (d[:, 0] * d[:, 0] + d[:, 1] * d[:, 1]) + d[:, 2] * d[:, 2]
+        d2[i] = np.inf
+        nb = np.lexsort((np.arange(n), d2))[:k]
+        bits = 0
+        for j, (a, b, c) in enumerate(tri):
+            u, v, w = p[nb[a]] - p[i], p[nb[b]] - p[i], p[nb[c]] - p[i]
+            cx, cy, cz = u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]
+            if (cx * w[0] + cy * w[1]) + cz * w[2] > 0:
+                bits |= 1 << j
+        out[i] = np.frombuffer(bits.to_bytes(8, "little"), np.uint8)
+    return out
+
+
+def match(ins, kv):
+    a, b = ins
+    ham = np.unpackbits(a[:, None, :] ^ b[None, :, :], axis=2).sum(2)
+    idx = ham.argmin(1)  # first minimum = lowest index on ties
+    return np.stack([idx, ham[np.arange(len(a)), idx]], 1).astype(np.int32)
+
+
 def umeyama(ins, kv):
     x, y = ins
     mx, my = x.mean(0), y.mean(0)
@@ -114,7 +148,7 @@ def umeyama(ins, kv):
 
 OPS = {"voxelize": voxelize, "unvoxelize": unvoxelize, "occupied": occupied, "ohash": ohash, "odiff": odiff,
        "static": static, "umeyama": umeyama, "haar3f": haar3f, "haar3i": haar3i,
-       "haar3c": haar3c}
+       "haar3c": haar3c, "describe": describe, "match": match}
 
 
 def fixtures():
@@ -142,6 +176,7 @@ def fixtures():
     fx["frame2"] = np.vstack([room[:-1], [[5, 3, 5], [5, 3, 6]]]).astype(np.int32)
     fx.update(align_fixtures())
     fx.update(wavelet_fixtures())
+    fx.update(desc_fixtures())
     return fx
 
 
@@ -192,4 +227,35 @@ def wavelet_fixtures():
         "wv_const_coef": np.pad(np.full((1, 1, 1), 3.0 * 16 ** 1.5), ((0, 15),) * 3),
         "wv_n2": rs.normal(size=(2, 2, 2)),
         "wv_bad6": rs.normal(size=(6, 6, 6)),
+    }
+
+
+def desc_fixtures():
+    """A cloud whose descriptors are pairwise >= 7 bits apart, so 3 planted bit flips cannot change the match."""
+    for seed in range(13, 200):
+        rs = np.random.default_rng(seed)
+        n = 100
+        p = rs.normal(size=(n, 3))
+        da = describe([p], {})
+        ham = np.unpackbits(da[:, None, :] ^ da[None, :, :], axis=2).sum(2)
+        np.fill_diagonal(ham, 99)
+        if ham.min() >= 7:
+            break
+    t = _sim(2.5, _rot(rs), [1.0, -3.0, 0.5])
+    perm = rs.permutation(n)
+    db = da[perm].copy()
+    for i in range(n):  # three flipped bits per descriptor
+        for bit in rs.choice(64, 3, replace=False):
+            db[i, bit // 8] ^= 1 << (bit % 8)
+    return {
+        "ds_pts": p,
+        "ds_pts_moved": p @ t[:3, :3].T + t[:3, 3],
+        "ds_few": p[:10],
+        "ds_pts_mirror": p * [-1, 1, 1],
+        "ds_desc_not": np.bitwise_not(da),
+        "ds_ident": np.stack([np.arange(n), np.zeros(n)], 1).astype(np.int32),
+        "ds_noisy": db,
+        "ds_noisy_truth": np.stack([np.argsort(perm), np.full(n, 3)], 1).astype(np.int32),
+        "ds_one": da[:1],
+        "ds_empty": np.zeros((0, 8), np.uint8),
     }

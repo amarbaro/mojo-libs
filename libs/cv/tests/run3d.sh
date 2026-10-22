@@ -4,6 +4,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 PY=${PY:-$HOME/iTools/video/camera-motion/v/bin/python}
 mkdir -p .bin .work
-.venv/bin/mojo build -I src src/mojocv/cli3d.mojo -o .bin/mojo-cv3d 2>&1 | grep -E "error" && { echo "FAIL build: mojo build"; exit 1; } || true
+rm -f .bin/mojo-cv3d
+if ! log=$(.venv/bin/mojo build -I src src/mojocv/cli3d.mojo -o .bin/mojo-cv3d 2>&1); then
+  echo "$log" | grep -E "error" | head -20
+  echo "FAIL build: mojo build"; exit 1
+fi
 test -x .bin/mojo-cv3d || { echo "FAIL build: no binary"; exit 1; }
 PYTHONDONTWRITEBYTECODE=1 "$PY" -I tools/check3d.py tests/cases3d/*.txt
