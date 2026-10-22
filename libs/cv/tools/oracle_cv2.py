@@ -231,6 +231,13 @@ def solvePnPRansac(i, kv):
 @op()
 def findEssentialMat(i, kv):
     E, m = cv2.findEssentialMat(i[0], i[1], i[2], method=cv2.RANSAC, prob=kv_f(kv, "prob", 0.999), threshold=kv_f(kv, "thresh", 1.0))
+    if len(i[0]) == 5:
+        models = E.reshape(-1, 3, 3)
+        models = models / np.linalg.norm(models, axis=(1, 2))[:, None, None]
+        for e in models:
+            if e.flat[np.argmax(np.abs(e))] < 0:
+                e *= -1
+        return [models[np.argsort(models[:, 0, 0])].reshape(-1, 3), m.reshape(-1, 1).astype(np.uint8)]
     E = E[:3] / np.linalg.norm(E[:3])
     if E.flat[np.argmax(np.abs(E))] < 0:
         E = -E
@@ -444,6 +451,9 @@ def make_fixtures(d):
     for q in (q2, q2n):
         q[:12] = rng.uniform(0, 640, (12, 2))  # gross outliers
     fx["ess_p1"], fx["ess_p2"], fx["ess_p2n"] = q1, q2, q2n
+    fx["ess_six1"], fx["ess_six2"] = q1[12:18].copy(), q2[12:18].copy()
+    fx["ess_five1"], fx["ess_five2"] = q1[12:17].copy(), q2[12:17].copy()
+    fx["ess_clean1"], fx["ess_clean2"] = q1[12:].copy(), q2[12:].copy()
     tn = tv2.reshape(3)
     fx["pose_E"] = np.array([[0, -tn[2], tn[1]], [tn[2], 0, -tn[0]], [-tn[1], tn[0], 0]]) @ cv2.Rodrigues(rv2)[0]
     fx["pose_mask"] = np.concatenate([np.zeros(12), np.ones(48)]).reshape(-1, 1).astype(np.uint8)

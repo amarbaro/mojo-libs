@@ -832,43 +832,168 @@ def svd3(e: Mx) -> Tuple[Mx, List[Float64], Mx]:
     return (u^, s^, v^)
 
 
-def hartley(x: Mx, idx: List[Int]) -> Mx:
-    """Similarity (3 x 3) taking x[idx] to zero mean and mean distance sqrt(2)."""
-    var cx = Float64(0)
-    var cy = Float64(0)
-    for i in idx:
-        cx += x.at(i, 0) / Float64(len(idx))
-        cy += x.at(i, 1) / Float64(len(idx))
-    var md = Float64(0)
-    for i in idx:
-        md += sqrt((x.at(i, 0) - cx) ** 2 + (x.at(i, 1) - cy) ** 2) / Float64(len(idx))
-    var s = 1.4142135623730951 / md if md > 0 else 1.0
-    return mx_from(fl(s, 0.0, -s * cx, 0.0, s, -s * cy, 0.0, 0.0, 1.0), 3, 3)
+def real_eigenvalues(matrix: Mx) -> List[Float64]:
+    """Real roots of a small nonsymmetric matrix via Hessenberg shifted QR."""
+    var h = Mx(copy=matrix)
+    var n = h.rows
+    for k in range(n - 2):
+        var v = mx(n, 1)
+        var norm = Float64(0)
+        for i in range(k + 1, n):
+            v.data[i] = h.at(i, k)
+            norm += v.data[i] * v.data[i]
+        norm = sqrt(norm)
+        if norm < 1e-30:
+            continue
+        v.data[k + 1] += norm if v.data[k + 1] >= 0 else -norm
+        var vn = fnorm(v)
+        v = mscale(v, 1.0 / vn)
+        for j in range(n):
+            var dot = Float64(0)
+            for i in range(k + 1, n):
+                dot += v.data[i] * h.at(i, j)
+            for i in range(k + 1, n):
+                h.data[i * n + j] -= 2 * v.data[i] * dot
+        for i in range(n):
+            var dot = Float64(0)
+            for j in range(k + 1, n):
+                dot += v.data[j] * h.at(i, j)
+            for j in range(k + 1, n):
+                h.data[i * n + j] -= 2 * v.data[j] * dot
+    var roots = List[Float64]()
+    var m = n
+    var iteration = 0
+    while m > 0 and iteration < 1200:
+        iteration += 1
+        if m == 1 or abs(h.at(m - 1, m - 2)) < 1e-12 * (1 + abs(h.at(m - 1, m - 1)) + abs(h.at(m - 2, m - 2))):
+            roots.append(h.at(m - 1, m - 1))
+            m -= 1
+            continue
+        var a = h.at(m - 2, m - 2)
+        var b = h.at(m - 2, m - 1)
+        var c = h.at(m - 1, m - 2)
+        var d = h.at(m - 1, m - 1)
+        var disc = (a - d) * (a - d) + 4 * b * c
+        if m == 2 or abs(h.at(m - 2, m - 3)) < 1e-12 * (1 + abs(a) + abs(h.at(m - 3, m - 3))):
+            if disc >= 0:
+                roots.append((a + d + sqrt(disc)) * 0.5)
+                roots.append((a + d - sqrt(disc)) * 0.5)
+            m -= 2
+            continue
+        var shift = (a + d) * 0.5
+        if disc >= 0:
+            var root = sqrt(disc) * 0.5
+            var v1 = shift + root
+            var v2 = shift - root
+            shift = v1 if abs(v1 - d) < abs(v2 - d) else v2
+        if iteration % 30 == 0:
+            shift = d + abs(c)
+        var r = mx(m, m)
+        var q = ident(m)
+        for i in range(m):
+            for j in range(m):
+                r.set(i, j, 0, h.at(i, j) - (shift if i == j else 0.0))
+        for k in range(m - 1):
+            var x = r.at(k, k)
+            var y = r.at(k + 1, k)
+            var norm = sqrt(x * x + y * y)
+            if norm < 1e-30:
+                continue
+            var co = x / norm
+            var si = y / norm
+            for j in range(k, m):
+                var top = r.at(k, j)
+                var bot = r.at(k + 1, j)
+                r.set(k, j, 0, co * top + si * bot)
+                r.set(k + 1, j, 0, -si * top + co * bot)
+            for i in range(m):
+                var left = q.at(i, k)
+                var right = q.at(i, k + 1)
+                q.set(i, k, 0, co * left + si * right)
+                q.set(i, k + 1, 0, -si * left + co * right)
+        var next = mm(r, q)
+        for i in range(m):
+            for j in range(m):
+                h.set(i, j, 0, next.at(i, j) + (shift if i == j else 0.0))
+    return roots^
 
 
-def essential_8pt(x1: Mx, x2: Mx, idx: List[Int]) -> Mx:
-    var n = len(idx)
-    var t1 = hartley(x1, idx)
-    var t2 = hartley(x2, idx)
-    var a = mx(n, 9)
-    for t in range(n):
-        var i = idx[t]
-        var p = t1.at(0, 0) * x1.at(i, 0) + t1.at(0, 2)
-        var q = t1.at(1, 1) * x1.at(i, 1) + t1.at(1, 2)
-        var r = t2.at(0, 0) * x2.at(i, 0) + t2.at(0, 2)
-        var s = t2.at(1, 1) * x2.at(i, 1) + t2.at(1, 2)
-        var row = fl(r * p, r * q, r, s * p, s * q, s, p, q, 1.0)
-        for c in range(9):
-            a.set(t, c, 0, row[c])
-    var e = mm(mm(mt(t2), mx_from(null_vector(a), 3, 3)), t1)
-    var f = svd3(e)
-    var s0 = f[1][0]
-    var s1 = f[1][1]
-    var sv = (s0 + s1) * 0.5
-    var d = mx(3, 3)
-    d.set(0, 0, 0, sv)
-    d.set(1, 1, 0, sv)
-    return mm(mm(f[0], d), mt(f[2]))
+def cubic_term(mut coefficients: Mx, row: Int, basis: Mx, ia: Int, ib: Int, ic: Int, scale: Float64, columns: List[Int]):
+    var codes = SIMD[DType.int32, 4](16, 4, 1, 0)
+    var bp = basis.ptr()
+    var out = coefficients.ptr() + row * 20
+    for a in range(4):
+        for b in range(4):
+            for c in range(4):
+                var code = Int(codes[a] + codes[b] + codes[c])
+                out[columns[code]] += scale * bp[ia * 9 + a] * bp[ib * 9 + b] * bp[ic * 9 + c]
+    _ = basis.rows
+    _ = coefficients.rows
+
+
+def essential_5pt(x1: Mx, x2: Mx, idx: List[Int]) -> List[Mx]:
+    """Five-point cubic essential constraints, eliminated to multiplication by z."""
+    var a = mx(5, 9)
+    for i in range(5):
+        var p = idx[i]
+        var u = fl(x1.at(p, 0), x1.at(p, 1), 1.0)
+        var v = fl(x2.at(p, 0), x2.at(p, 1), 1.0)
+        for r in range(3):
+            for c in range(3):
+                a.set(i, 3 * r + c, 0, v[r] * u[c])
+    var eig = eigh(mm(mt(a), a))
+    var basis = Mx(copy=eig[1])
+    # Cubics first, then x2,xy,y2,xz,yz,z2,x,y,z,1.
+    var codes: List[Int] = [48, 36, 24, 12, 33, 21, 9, 18, 6, 3, 32, 20, 8, 17, 5, 2, 16, 4, 1, 0]
+    var columns = List[Int](length=64, fill=0)
+    for i in range(20):
+        columns[codes[i]] = i
+    var eq = mx(10, 20)
+    for r in range(3):
+        for c in range(3):
+            for k in range(3):
+                for l in range(3):
+                    cubic_term(eq, 3 * r + c, basis, 3 * r + k, 3 * l + k, 3 * l + c, 2.0, columns)
+                    cubic_term(eq, 3 * r + c, basis, 3 * k + l, 3 * k + l, 3 * r + c, -1.0, columns)
+    for c in range(3):
+        cubic_term(eq, 9, basis, c, 3 + (c + 1) % 3, 6 + (c + 2) % 3, 1.0, columns)
+        cubic_term(eq, 9, basis, c, 3 + (c + 2) % 3, 6 + (c + 1) % 3, -1.0, columns)
+    var lhs = mx(10, 10)
+    var rhs = mx(10, 10)
+    for i in range(10):
+        for j in range(10):
+            lhs.set(i, j, 0, eq.at(i, j))
+            rhs.set(i, j, 0, -eq.at(i, j + 10))
+    var reduced = solve(lhs, rhs)
+    var action = mx(10, 10)
+    for i in range(6):
+        for j in range(10):
+            action.set(i, j, 0, reduced.at(i + 4, j))
+    action.set(6, 3, 0, 1.0)
+    action.set(7, 4, 0, 1.0)
+    action.set(8, 5, 0, 1.0)
+    action.set(9, 8, 0, 1.0)
+    var roots = real_eigenvalues(action)
+    var out = List[Mx]()
+    for z in roots:
+        var shifted = Mx(copy=action)
+        for i in range(10):
+            shifted.data[i * 10 + i] -= z
+        var v = null_vector(shifted)
+        if abs(v[9]) < 1e-12:
+            continue
+        var x = v[6] / v[9]
+        var y = v[7] / v[9]
+        var e = mx(3, 3)
+        for i in range(9):
+            e.data[i] = basis.at(i, 0) * x + basis.at(i, 1) * y + basis.at(i, 2) * z + basis.at(i, 3)
+        var norm = fnorm(e)
+        e = mscale(e, 1.0 / norm)
+        var eet = mm(e, mt(e))
+        var cubic = madd(mscale(mm(eet, e), 2.0), e, -1.0)
+        if fnorm(cubic) < 1e-5 and abs(det3(e)) < 1e-5:
+            out.append(e^)
+    return out^
 
 
 def sampson(e: Mx, x1: Mx, x2: Mx, i: Int) -> Float64:
@@ -895,11 +1020,35 @@ def normalize_pixels(p: Mx, k: Mx) -> Mx:
 
 
 def find_essential(p1: Mx, p2: Mx, k: Mx, thresh: Float64, conf: Float64) -> Tuple[Mx, Mat[DType.uint8]]:
-    """RANSAC over eight-point models, refit on the inliers; E is scaled to unit Frobenius norm with its largest
-    entry positive. (cv2 draws minimal five-point sets; on consistent data both land on the same E.)"""
+    """RANSAC over all real five-point essential models; unit Frobenius norm, largest entry positive."""
     var n = p1.rows
     var x1 = normalize_pixels(p1, k)
     var x2 = normalize_pixels(p2, k)
+    if n == 5:
+        var idx: List[Int] = [0, 1, 2, 3, 4]
+        var models = essential_5pt(x1, x2, idx)
+        var order = List[Int]()
+        for j in range(len(models)):
+            ref e = models[j]
+            var big = 0
+            for c in range(9):
+                if abs(e.data[c]) > abs(e.data[big]):
+                    big = c
+            e = mscale(e, (1.0 if e.data[big] > 0 else -1.0) / fnorm(e))
+            order.append(j)
+        def first(i: Int, j: Int) {imm} -> Bool:
+            var left = models[i].data[0]
+            var right = models[j].data[0]
+            return left < right
+        sort(Span(order), first)
+        var stacked = mx(3 * len(models), 3)
+        for j in range(len(models)):
+            for c in range(9):
+                stacked.data[j * 9 + c] = models[order[j]].data[c]
+        var mask = Mat[DType.uint8](n, 1)
+        for i in range(n):
+            mask.data[i] = 1
+        return (stacked^, mask^)
     var f = (k.at(0, 0) + k.at(1, 1)) * 0.5
     var t2 = (thresh / f) * (thresh / f)
     var rng = Rng()
@@ -910,19 +1059,21 @@ def find_essential(p1: Mx, p2: Mx, k: Mx, thresh: Float64, conf: Float64) -> Tup
     var it = 0
     while it < iters:
         it += 1
-        var e = essential_8pt(x1, x2, rng.sample(n, 8))
-        var cnt = 0
-        var cost = Float64(0)
-        for i in range(n):
-            var er = sampson(e, x1, x2, i)
-            cost += min(er, t2)
-            if er <= t2:
-                cnt += 1
-        if cost < best_cost:
-            best_n = cnt
-            best_cost = cost
-            best_e = e^
-            iters = ransac_iters(cnt, n, 8, conf, 1000)
+        var models = essential_5pt(x1, x2, rng.sample(n, 5))
+        for model_index in range(len(models)):
+            ref e = models[model_index]
+            var cnt = 0
+            var cost = Float64(0)
+            for i in range(n):
+                var er = sampson(e, x1, x2, i)
+                cost += min(er, t2)
+                if er <= t2:
+                    cnt += 1
+            if cost < best_cost:
+                best_n = cnt
+                best_cost = cost
+                best_e = Mx(copy=e)
+                iters = ransac_iters(cnt, n, 5, conf, 1000)
     var e = best_e^
     var mask = Mat[DType.uint8](n, 1, 1)
     for i in range(n):

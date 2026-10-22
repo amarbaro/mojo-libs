@@ -41,9 +41,9 @@ ArUco ids; within 1 grey level are resize, warp, remap, blob, YCrCb, HSV to BGR;
 - **Gray weights**: cv2 5.0 computes 8-bit gray with 15-bit weights (3735, 19235, 9798), not the older 14-bit ones; fitted
   on all 16.7M colours.
 - **Warps and remaps** interpolate at the exact float position in cv2 5.0 (no 1/32 tables); so do we.
-- **findEssentialMat** draws eight-point models (MSAC cost) where cv2 draws five-point sets; on consistent data both give
-  the same E. E is returned with unit Frobenius norm and the largest entry positive (cv2's is normalised the same way
-  by the oracle). Noisy data agree only loosely (row `ess_noisy`).
+- **findEssentialMat** draws five-point models, solves the essential cubic constraints using a 10x10 action
+  matrix, and scores all real solutions by MSAC. This uses an action-matrix root solve rather than Nister's
+  particular degree-ten polynomial elimination. Noisy data retain the existing loose row `ess_noisy`.
 - **solvePnP**: EPnP control points with Gauss-Newton distance refinement, then damped Gauss-Newton on pixel error.
   RANSAC samples four points, 100 iterations, adaptive. See `docs/f34.md`.
 - **stereoRectify**: default alpha (-1) and horizontal baseline only; cv2 5.0 averages the two focal lengths.
