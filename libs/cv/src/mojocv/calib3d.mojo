@@ -1000,6 +1000,156 @@ def stereo_rectify(k1: Mx, d1: Mx, k2: Mx, d2: Mx, rm: Mx, t: Mx, w: Int, h: Int
     return out^
 
 
+# ---- StereoSGBM -------------------------------------------------------------------------------------------
+
+
+def bt_cost(l: Mat[DType.uint8], r: Mat[DType.uint8], y: Int, x: Int, xr: Int) -> Int:
+    """Birchfield-Tomasi dissimilarity of l(y, x) and r(y, xr), insensitive to half-pixel sampling."""
+    var w = r.cols
+    var lc = Int(l.at(y, x))
+    var rc = Int(r.at(y, xr))
+    var rm = (rc + Int(r.at(y, max(xr - 1, 0)))) // 2
+    var rp = (rc + Int(r.at(y, min(xr + 1, w - 1)))) // 2
+    var rmin = min(rc, min(rm, rp))
+    var rmax = max(rc, max(rm, rp))
+    var c1 = max(0, max(lc - rmax, rmin - lc))
+    var lw = l.cols
+    var lm = (lc + Int(l.at(y, max(x - 1, 0)))) // 2
+    var lp = (lc + Int(l.at(y, min(x + 1, lw - 1)))) // 2
+    var lmin = min(lc, min(lm, lp))
+    var lmax = max(lc, max(lm, lp))
+    var c2 = max(0, max(rc - lmax, lmin - rc))
+    return min(c1, c2)
+
+
+def stereo_sgm(l: Mat[DType.uint8], r: Mat[DType.uint8], min_d: Int, nd: Int, block: Int, p1: Int, p2: Int, lr_max: Int, uniq: Int) -> Mat[DType.int16]:
+    """Semi-global matching (Hirschmuller 2008): BT pixel cost summed over a block x block window, eight path
+    directions, winner-takes-all with cv2's parabola refinement, left-right and uniqueness checks. Disparities are
+    returned times 16; invalid pixels hold (min_d - 1) * 16, as in cv2.StereoSGBM."""
+    var h = l.rows
+    var w = l.cols
+    var min_x = max(min_d + nd, 0)
+    var max_x = w + min(min_d, 0)
+    var o = Mat[DType.int16](h, w, 1)
+    var inval = Int16((min_d - 1) * 16)
+    for i in range(o.size()):
+        o.data[i] = inval
+    if max_x <= min_x:
+        return o^
+    var cw = max_x - min_x
+    var pc = Mat[DType.int32](h, cw, nd)
+    var cp = pc.ptr()
+
+    def cost_row(y: Int) {imm}:
+        for x in range(cw):
+            for d in range(nd):
+                cp[unsafe_offset=(y * cw + x) * nd + d] = Int32(bt_cost(l, r, y, x + min_x, x + min_x - min_d - d))
+
+    parallelize(cost_row, h)
+    var half = block // 2
+    var agg = Mat[DType.int32](h, cw, nd)
+    var ap = agg.ptr()
+
+    def win_row(y: Int) {imm}:
+        for x in range(cw):
+            for d in range(nd):
+                var acc = Int32(0)
+                for dy in range(-half, half + 1):
+                    var yy = min(max(y + dy, 0), h - 1)
+                    for dx in range(-half, half + 1):
+                        var xx = min(max(x + dx, 0), cw - 1)
+                        acc += cp[unsafe_offset=(yy * cw + xx) * nd + d]
+                ap[unsafe_offset=(y * cw + x) * nd + d] = acc
+
+    if block > 1:
+        parallelize(win_row, h)
+        cp = ap
+    var total = Mat[DType.int32](h, cw, nd)
+    var tp = total.ptr()
+    var dirs_x = SIMD[DType.int32, 8](1, -1, 0, 0, 1, -1, 1, -1)
+    var dirs_y = SIMD[DType.int32, 8](0, 0, 1, -1, 1, 1, -1, -1)
+    var parts = List[Mat[DType.int32]]()
+    for _ in range(8):
+        parts.append(Mat[DType.int32](h, cw, nd))
+
+    def path(k: Int) {imm}:
+        var dx = Int(dirs_x[k])
+        var dy = Int(dirs_y[k])
+        var lr = parts[k].ptr()
+        for yi in range(h):
+            var y = yi if dy >= 0 else h - 1 - yi
+            for xi in range(cw):
+                var x = xi if dx >= 0 else cw - 1 - xi
+                var px = x - dx
+                var py = y - dy
+                var base = (y * cw + x) * nd
+                if px < 0 or px >= cw or py < 0 or py >= h:
+                    for d in range(nd):
+                        lr[unsafe_offset=base + d] = cp[unsafe_offset=base + d]
+                    continue
+                var pb = (py * cw + px) * nd
+                var mn = lr[unsafe_offset=pb]
+                for d in range(1, nd):
+                    mn = min(mn, lr[unsafe_offset=pb + d])
+                for d in range(nd):
+                    var v = lr[unsafe_offset=pb + d]
+                    if d > 0:
+                        v = min(v, lr[unsafe_offset=pb + d - 1] + Int32(p1))
+                    if d + 1 < nd:
+                        v = min(v, lr[unsafe_offset=pb + d + 1] + Int32(p1))
+                    v = min(v, mn + Int32(p2))
+                    lr[unsafe_offset=base + d] = cp[unsafe_offset=base + d] + v - mn
+
+    parallelize(path, 8)
+    for k in range(8):
+        var pk = parts[k].ptr()
+        for i in range(h * cw * nd):
+            tp[unsafe_offset=i] += pk[unsafe_offset=i]
+    _ = (len(parts), pc.rows, agg.rows)
+    var d2 = List[Int](length=h * cw, fill=-1)
+    var m2 = List[Int](length=h * cw, fill=1 << 30)
+    var dl = List[Int](length=h * cw, fill=-1)
+    for y in range(h):
+        for x in range(cw):
+            var base = (y * cw + x) * nd
+            var best = 1 << 30
+            var bd = 0
+            for d in range(nd):
+                var c = Int(tp[unsafe_offset=base + d])
+                if c < best:
+                    best = c
+                    bd = d
+                var xr = x - d - min_d
+                if xr >= 0 and xr < cw and c < m2[y * cw + xr]:
+                    m2[y * cw + xr] = c
+                    d2[y * cw + xr] = d
+            var ok = True
+            if uniq > 0:
+                for d in range(nd):
+                    if abs(d - bd) > 1 and Int(tp[unsafe_offset=base + d]) * 100 <= best * (100 + uniq) - 0 and Int(tp[unsafe_offset=base + d]) * 100 < best * (100 + uniq):
+                        ok = False
+            dl[y * cw + x] = bd if ok else -1
+    for y in range(h):
+        for x in range(cw):
+            var bd = dl[y * cw + x]
+            if bd < 0:
+                continue
+            if lr_max >= 0:
+                var xr = x - bd - min_d
+                if xr < 0 or xr >= cw or abs(d2[y * cw + xr] - bd) > lr_max:
+                    continue
+            var v = (bd + min_d) * 16
+            if bd > 0 and bd + 1 < nd:
+                var base = (y * cw + x) * nd
+                var pp = Int(tp[unsafe_offset=base + bd - 1])
+                var nn = Int(tp[unsafe_offset=base + bd + 1])
+                var cc = Int(tp[unsafe_offset=base + bd])
+                var den = max(pp + nn - 2 * cc, 1)
+                v += ((pp - nn) * 16 + den) // (den * 2)
+            o.set(y, x + min_x, 0, Int16(v))
+    return o^
+
+
 def run(mut a: Args) raises -> Bool:
     if a.op == "Rodrigues":
         var m = load[F64](a.ins[0])
@@ -1038,6 +1188,14 @@ def run(mut a: Args) raises -> Bool:
             o = init_undistort_rectify_map(k, d, rr, p, a.i("w", 640), a.i("h", 480), a.op == "fisheye_initUndistortRectifyMap")
         save(o[0], a.out)
         save(o[1], a.out + ".1")
+    elif a.op == "StereoSGBM":
+        var l = load[DType.uint8](a.ins[0])
+        var r = load[DType.uint8](a.ins[1])
+        var o = Mat[DType.int16](0, 0)
+        var b = a.i("block", 5)
+        while a.again():
+            o = stereo_sgm(l, r, a.i("minDisp", 0), a.i("numDisp", 32), b, a.i("P1", 8 * b * b), a.i("P2", 32 * b * b), a.i("lrMax", 0), a.i("uniq", 0))
+        save(o, a.out)
     elif a.op == "estimateAffine2D":
         var f = load[F64](a.ins[0])
         var t = load[F64](a.ins[1])

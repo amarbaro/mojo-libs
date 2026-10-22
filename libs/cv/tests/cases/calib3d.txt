@@ -32,3 +32,6 @@ rect_nozd        stereoRectify K dst1 K2 dst2 Rst Tst w=640 h=480 zero=0 => max:
 ess_noisy        findEssentialMat ess_p1 ess_p2n K thresh=1.5 => max:0.15, frac:0:0.85
 pose_masked      recoverPose pose_E ess_p1 ess_p2 K pose_mask => max:1e-9, max:1e-9, exact
 pose_all         recoverPose pose_E ess_p1 ess_p2n K => max:1e-9, max:1e-9, frac:12:0.8
+sgbm_dots        StereoSGBM st_l st_r minDisp=0 numDisp=32 block=5 => frac:16:0.9
+sgbm_block3      StereoSGBM st_l st_r minDisp=0 numDisp=32 block=3 lrMax=1 uniq=10 => frac:16:0.9
+sgbm_mind        StereoSGBM st_l st_r minDisp=2 numDisp=16 block=5 => frac:16:0.9

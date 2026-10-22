@@ -244,6 +244,14 @@ def stereoRectify(i, kv):
     return [R1, R2, P1, P2, Q]
 
 
+@op()
+def StereoSGBM(i, kv):
+    b = kv_i(kv, "block", 5)
+    sg = cv2.StereoSGBM_create(minDisparity=kv_i(kv, "minDisp", 0), numDisparities=kv_i(kv, "numDisp", 32), blockSize=b, P1=kv_i(kv, "P1", 8 * b * b),
+                               P2=kv_i(kv, "P2", 32 * b * b), disp12MaxDiff=kv_i(kv, "lrMax", 0), uniquenessRatio=kv_i(kv, "uniq", 0))
+    return sg.compute(i[0], i[1])
+
+
 # ---- compare ----------------------------------------------------------------------------------------------
 def compare(ours, ref, spec):
     if ours.shape != ref.shape:
@@ -376,6 +384,18 @@ def make_fixtures(d):
     fx["K2"] = np.array([[820, 0, 315], [0, 830, 245], [0, 0, 1.0]])
     fx["dst1"] = np.array([[-0.2], [0.05], [0], [0], [0]])
     fx["dst2"] = np.array([[-0.1], [0.02], [0], [0], [0]])
+    H, W = 120, 200
+    base = cv2.GaussianBlur(rng.integers(0, 256, (H, W + 60), dtype=np.uint8), (0, 0), 1.2)
+    dm = np.full((H, W), 6, np.int32)
+    dm[30:90, 70:150] = 14
+    SL = base[:, 30:30 + W].copy()
+    SR = np.zeros((H, W), np.uint8)
+    for yy in range(H):
+        for xx in range(W):
+            xr_ = xx - dm[yy, xx]
+            if 0 <= xr_ < W:
+                SR[yy, xr_] = SL[yy, xx]
+    fx["st_l"], fx["st_r"] = SL, SR
     fx["odd"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["odd2"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["one"] = np.array([[[200, 0, 77]]], np.uint8)
