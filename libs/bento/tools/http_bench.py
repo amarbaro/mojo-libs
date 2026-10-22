@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Keep-alive request rate: http_bench.py PORT [PROCS=8] [SECONDS=3] [PIPELINE=1]. Each process holds one
-connection, sends PIPELINE GETs, reads PIPELINE responses, repeats. Prints requests/s."""
+"""Keep-alive request rate: http_bench.py PORT [PROCS=8] [SECONDS=3] [PIPELINE=1] [PATH BODY]. Each process holds
+one connection, sends PIPELINE requests (GET /bench, or POST PATH with BODY), reads the responses, repeats.
+Prints requests/s."""
 import multiprocessing as mp
 import socket
 import sys
@@ -9,7 +10,7 @@ import time
 REQ = b"GET /bench HTTP/1.1\r\nHost: x\r\n\r\n"
 
 
-def client(port, secs, depth, q):
+def client(port, secs, depth, q, REQ=REQ):
     s = socket.create_connection(("127.0.0.1", port))
     s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
     n, end = 0, time.time() + secs
@@ -37,8 +38,11 @@ if __name__ == "__main__":
     procs = int(sys.argv[2]) if len(sys.argv) > 2 else 8
     secs = float(sys.argv[3]) if len(sys.argv) > 3 else 3
     depth = int(sys.argv[4]) if len(sys.argv) > 4 else 1
+    if len(sys.argv) > 6:
+        b = sys.argv[6].encode()
+        REQ = b"POST %s HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: %d\r\n\r\n%s" % (sys.argv[5].encode(), len(b), b)
     q = mp.Queue()
-    ps = [mp.Process(target=client, args=(port, secs, depth, q)) for _ in range(procs)]
+    ps = [mp.Process(target=client, args=(port, secs, depth, q, REQ)) for _ in range(procs)]
     for p in ps:
         p.start()
     total = sum(q.get() for _ in ps)
