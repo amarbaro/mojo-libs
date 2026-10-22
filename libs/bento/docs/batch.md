@@ -18,12 +18,15 @@ cancel a head job whose estimated latency `w0 + o_a * n + o_b` passes `max_laten
 fits `duration = o_a * n + o_b` over the last 50 batches (`numpy.linalg.lstsq`; when every `n` is equal it returns the
 minimum-norm solution, which is ported too) and refreshes at most once per 5 s.
 
+`max_inflight` is the semaphore count of BentoML's `NonBlockSema` (its `shared_sema`): 1 runs one batch at a time, as BentoML does;
+2 lets the next batch start while one runs, for a backend that queues admitted work (the baro engine). The gate replays at 1.
+
 Not ported: splitting one job across two batches (`split_job`, needs a tensor container; every item counts as 1) and
 `shared_sema` between dispatchers.
 
 ## API
 
-`Batcher[In, Out](run_batch, max_latency_ms=10000, max_batch_size=32)`; `submit(item) raises -> Out` blocks the calling
+`Batcher[In, Out](run_batch, max_latency_ms=10000, max_batch_size=32, max_inflight=1)`; `submit(item) raises -> Out` blocks the calling
 thread; `close()`; `stats() -> (batches, items)`. `run_batch` is a plain `def(List[In]) thin raises -> List[Out]`
 (carry context in `In`). It raises: every item of that batch raises its message. A queued item that passes `max_latency_ms`
 raises `batcher: overloaded (waited longer than max_latency)` (BentoML answers those with its fallback, HTTP 503);

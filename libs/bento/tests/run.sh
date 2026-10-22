@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PY=.work/oracle-venv/bin/python
-[ -x "$PY" ] || { echo "FAIL setup: $PY missing; uv venv .work/oracle-venv && uv pip install -p $PY bentoml h11 prometheus_client httpx"; exit 1; }
+[ -x "$PY" ] || { echo "FAIL setup: $PY missing; uv venv .work/oracle-venv && uv pip install -p $PY bentoml h11 prometheus_client httpx httpx-sse"; exit 1; }
 mkdir -p .work
 pid=""; port=""; bento_port=""; bento_pid=""
 trap 'cleanup' EXIT
@@ -82,9 +82,18 @@ b6() {
   $PY tools/b6_oracle.py sse "$port"
 }
 
+b8() {
+  tests/gate-baro-fake.sh
+}
+
+# GPU, ~25 min under gpu-wait: not in the default list
+b8live() {
+  tests/gate-baro-live.sh
+}
+
 if [ "${1:-}" = --run ]; then "$2"; exit; fi  # one item in its own process: set -e stays on inside it, and its servers die with it
 
-items=("$@"); [ ${#items[@]} -gt 0 ] || items=(b1 b2 b3 b4 b5 b6)
+items=("$@"); [ ${#items[@]} -gt 0 ] || items=(b1 b2 b3 b4 b5 b6 b8)
 for it in "${items[@]}"; do
   if bash "$0" --run "$it" > ".work/$it-gate.txt" 2>&1; then rc=0; else rc=$?; fi
   echo "exit $rc" >> ".work/$it-gate.txt"
