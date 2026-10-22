@@ -15,6 +15,7 @@ from mojocv.nurbs import eval_surface, fit_surface
 from mojocv.mesh import voxel_mesh, edges_euler
 from mojocv.glb import write_glb, read_glb
 from mojocv.step import write_step_mesh, write_step_surface, read_step
+from mojocv.cae import stress_measures, colormap
 from mojocv.octree import Octree, walk, walk_cells
 
 
@@ -150,6 +151,18 @@ def dispatch3d(args: List[String]) raises -> Bool:
         save(d.faces, kv["faces"])
         if "net" in kv and d.net.rows > 0:
             save(d.net, kv["net"])
+    elif op == "stress":
+        save(stress_measures(load[DType.float64](ins[0])), out)
+    elif op == "colormap":
+        var v = load[DType.float64](ins[0])
+        var lo = _f(kv, "lo", 1e300)  # a missing end is the field's own min or max
+        var hi = _f(kv, "hi", -1e300)
+        for x in v.data:
+            if "lo" not in kv:
+                lo = min(lo, x)
+            if "hi" not in kv:
+                hi = max(hi, x)
+        save(colormap(v, lo, hi), out)
     else:
         return False
     return True

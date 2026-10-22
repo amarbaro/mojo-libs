@@ -286,9 +286,31 @@ def umeyama(ins, kv):
     return m
 
 
+def stress(ins, kv):
+    s = ins[0]
+    out = np.zeros((len(s), 6))
+    for k, (xx, yy, zz, xy, yz, xz) in enumerate(s):
+        m = np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
+        w = np.linalg.eigvalsh(m)[::-1]
+        vm = np.sqrt(0.5 * ((xx - yy) ** 2 + (yy - zz) ** 2 + (zz - xx) ** 2) + 3 * (xy ** 2 + yz ** 2 + xz ** 2))
+        out[k] = [(xx + yy + zz) / 3, vm, *w, (w[0] - w[2]) / 2]
+    return out
+
+
+_STOPS = np.array([[0, 0, 1], [0, 1, 1], [0, 1, 0], [1, 1, 0], [1, 0, 0]], float)
+
+
+def colormap(ins, kv):
+    v = ins[0].reshape(-1)
+    lo = float(kv["lo"]) if "lo" in kv else v.min()
+    hi = float(kv["hi"]) if "hi" in kv else v.max()
+    t = np.clip((v - lo) / (hi - lo), 0, 1)
+    return np.stack([np.interp(t, np.linspace(0, 1, 5), _STOPS[:, c]) for c in range(3)], axis=1)
+
+
 OPS = {"voxelize": voxelize, "unvoxelize": unvoxelize, "occupied": occupied, "ohash": ohash, "odiff": odiff,
        "static": static, "umeyama": umeyama, "haar3f": haar3f, "haar3i": haar3i,
-       "haar3c": haar3c, "tapvid": tapvid, "phasecorr": phasecorr, "nurbs_eval": nurbs_eval, "nurbs_fit": nurbs_fit, "burst": burst, "describe": describe, "match": match}
+       "haar3c": haar3c, "tapvid": tapvid, "phasecorr": phasecorr, "nurbs_eval": nurbs_eval, "nurbs_fit": nurbs_fit, "stress": stress, "colormap": colormap, "burst": burst, "describe": describe, "match": match}
 
 
 def fixtures():
@@ -322,6 +344,7 @@ def fixtures():
     fx.update(burst_fixtures())
     fx.update(nurbs_fixtures())
     fx.update(mesh_fixtures())
+    fx.update(cae_fixtures())
     return fx
 
 
@@ -765,6 +788,26 @@ def check_glb_read(ctx):
                               or not np.array_equal(mcv.load(rc), col.astype("<f4").astype(np.float64))):
         bad.append("normals/colors")
     return not bad, "; ".join(bad)
+
+
+def cae_fixtures():
+    rs = np.random.default_rng(37)
+    special = np.array([[120, 0, 0, 0, 0, 0], [0, 0, 0, 70, 0, 0], [-30, -30, -30, 0, 0, 0], [100, 50, 0, 0, 0, 0],
+                        [80, 20, 0, 30, 0, 0]], float)
+    r2 = np.sqrt(30 ** 2 + 30 ** 2)
+    truth = np.array([[40, 120, 120, 0, 0, 60],
+                      [0, 70 * np.sqrt(3), 70, 0, -70, 70],
+                      [-30, 0, -30, -30, -30, 0],
+                      [50, np.sqrt(7500), 100, 50, 0, 50],
+                      [100 / 3, np.sqrt(7900), 50 + r2, 0.0 + 50 - r2, 0, (50 + r2) / 2]], float)
+    truth[4, 3], truth[4, 4] = 50 - r2, 0.0  # sigma_z = 0 is the smallest of (92.43, 7.57, 0)
+    truth[4] = [100 / 3, np.sqrt(7900), 50 + r2, 50 - r2, 0.0, (50 + r2) / 2]
+    near = np.array([[10, 10.0001, 10, 0.0001, 0, 0.00005], [5, 5, 5, 1e-9, 0, 0]], float)
+    stops = np.array([0, .25, .5, .75, 1.0]).reshape(-1, 1)
+    return {"cae_rand": rs.normal(size=(500, 6)) * 50, "cae_special": special, "cae_special_truth": truth,
+            "cae_near": near, "cae_empty": np.zeros((0, 6)), "cae_bad": np.zeros((3, 5)),
+            "cm_vals": rs.normal(size=(200, 1)) * 30, "cm_stops": stops, "cm_stops_truth": _STOPS,
+            "cm_flat": np.full((4, 1), 7.0)}
 
 
 # ---- STEP: an independent Part 21 parser and the checks built on it ----
