@@ -1564,6 +1564,19 @@ def aruco_detect(img: Mat[DType.uint8]) -> Tuple[Mat[DType.int32], Mat[F32]]:
                 t = qy[1]
                 qy[1] = qy[3]
                 qy[3] = t
+            # canonicalize starting vertex: topmost (min y, then min x), preserving cyclic order
+            var si = 0
+            for k in range(1, 4):
+                if qy[k] < qy[si] or (qy[k] == qy[si] and qx[k] < qx[si]):
+                    si = k
+            if si != 0:
+                var nqx = List[Float64]()
+                var nqy = List[Float64]()
+                for k in range(4):
+                    nqx.append(qx[(si + k) % 4])
+                    nqy.append(qy[(si + k) % 4])
+                qx = nqx^
+                qy = nqy^
             var peri = Float64(0)
             var mind = 1e30
             for k in range(4):
@@ -1582,11 +1595,14 @@ def aruco_detect(img: Mat[DType.uint8]) -> Tuple[Mat[DType.int32], Mat[F32]]:
             if code < 0:
                 continue
             var rot = code // 100
+            var sh = 0
+            if rot % 2 == 1:
+                sh = 2
             ids.append(code % 100)
             peris.append(peri)
             for k in range(4):
-                cs.append(qx[(k + rot) % 4])
-                cs.append(qy[(k + rot) % 4])
+                cs.append(qx[(k + rot + sh) % 4])
+                cs.append(qy[(k + rot + sh) % 4])
     # the same marker shows up at several window sizes and as its inner border: keep the largest of each cluster
     var byp = List[Int]()
     for i in range(len(ids)):
