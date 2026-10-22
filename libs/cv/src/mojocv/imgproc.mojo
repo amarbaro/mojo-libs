@@ -6,7 +6,7 @@ from std.utils import IndexList
 from std.sys.intrinsics import gather
 from std.math import sqrt, exp, floor, ceil, cos, sin, atan2, cbrt
 from mojocv.mat import Mat, load, save
-from mojocv.core import Args, DTS, peek_code, par
+from mojocv.core import Args, DTS, peek_code, par, par_dyn
 from std.math import log as log_
 
 comptime Ptr = MutPointer[_, MutAnyOrigin]
@@ -1670,6 +1670,26 @@ def _lin_vec[dt: DType, ct: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: SIMD[c
             for i in range(WF * src.ch):
                 dst[unsafe_offset=i] = bv
             return True
+        comptime if dt == DType.uint8:
+            # an edge block: clamped coordinates through the vector sampler, then only the lanes that really
+            # touch the border are redone one by one
+            if (src.ch == 3 or src.ch == 1) and src.cols >= 2 and src.rows >= 3:
+                var sxc = sx.clamp(0, Int32(src.cols - 2))
+                var syc = sy.clamp(0, Int32(src.rows - 3))
+                var ok = False
+                if src.ch == 3:
+                    ok = _lin_u8[dt, 3](ps, src.rows * src.cols * 3, src.cols, sxc, syc, (fx - ffx).cast[F32](), (fy - ffy).cast[F32](), dst, False, False)
+                else:
+                    ok = _lin_u8[dt, 1](ps, src.rows * src.cols, src.cols, sxc, syc, (fx - ffx).cast[F32](), (fy - ffy).cast[F32](), dst, False, False)
+                if ok:
+                    var gone = sx.lt(-1) | sx.ge(Int32(src.cols)) | sy.lt(-1) | sy.ge(Int32(src.rows))
+                    for i in range(WF):
+                        if mode == 2 and gone[i]:
+                            for k in range(src.ch):
+                                dst[unsafe_offset=i * src.ch + k] = bv
+                        elif bad[i]:
+                            sample(src, ps, Float64(fx[i]), Float64(fy[i]), 1, mode, bv, dst + i * src.ch)
+                    return True
         return False
     var ch = src.ch
     var wx1 = (fx - ffx).cast[F32]()
@@ -1744,14 +1764,11 @@ def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kin
             sample(src, ps, fx, fy, kind, mode, bv, po + (y * dw + x) * src.ch)
             x += 1
 
-    comptime NT = 8
+    def band(b: Int) {imm}:
+        for y in range(b * 4, min(b * 4 + 4, dh)):
+            row(y)
 
-    def band(t: Int) {imm}:
-        for b in range(t, (dh + 7) // 8, NT):
-            for y in range(b * 8, min(b * 8 + 8, dh)):
-                row(y)
-
-    par(band, NT)
+    par_dyn(band, (dh + 3) // 4)
     _ = len(m)
     return o^
 
@@ -1775,14 +1792,11 @@ def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: 
             sample(src, ps, Float64(pmx[unsafe_offset=i]), Float64(pmy[unsafe_offset=i]), kind, mode, bv, po + i * src.ch)
             x += 1
 
-    comptime NT = 8
+    def band(b: Int) {imm}:
+        for y in range(b * 4, min(b * 4 + 4, mx.rows)):
+            row(y)
 
-    def band(t: Int) {imm}:
-        for b in range(t, (mx.rows + 7) // 8, NT):
-            for y in range(b * 8, min(b * 8 + 8, mx.rows)):
-                row(y)
-
-    par(band, NT)
+    par_dyn(band, (mx.rows + 3) // 4)
     _ = (mx.rows, my.rows)
     return o^
 
