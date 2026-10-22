@@ -29,7 +29,13 @@ b1() {
   cleanup; pid=""
 }
 
-items=("$@"); [ ${#items[@]} -gt 0 ] || items=(b1)
+b3() {
+  tests/gate-batch-replay.sh
+  scripts/mojo.sh tests/batch_threads.mojo .work/batch_threads 2> .work/batch_threads.err || { echo "FAIL build: tests/batch_threads.mojo"; cat .work/batch_threads.err; return 1; }
+  timeout 60 .work/batch_threads
+}
+
+items=("$@"); [ ${#items[@]} -gt 0 ] || items=(b1 b3)
 for it in "${items[@]}"; do
   { "$it"; echo "exit $?"; } 2>&1 | tee .work/$it-gate.txt | tail -40
   rc=$(tail -1 .work/$it-gate.txt | cut -d' ' -f2)
