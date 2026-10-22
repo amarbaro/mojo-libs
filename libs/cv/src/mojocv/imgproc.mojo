@@ -43,13 +43,25 @@ def pad[dt: DType](a: Mat[dt], py: Int, px: Int, mode: Int = 0, val: Scalar[dt] 
     var ch = a.ch
     var pa = a.ptr()
     var po = o.ptr()
+    var ostride = o.cols * ch
+    var astride = a.cols * ch
 
     def row(r: Int) {imm}:
         var sr = bidx(r - py, a.rows, mode)
-        for c in range(o.cols):
-            var sc = bidx(c - px, a.cols, mode)
+        var dst = po + r * ostride
+        if sr < 0:
+            for i in range(ostride):
+                dst[unsafe_offset=i] = val
+            return
+        var src = pa + sr * astride
+        for i in range(astride):
+            dst[unsafe_offset=px * ch + i] = src[unsafe_offset=i]
+        for c in range(px):
+            var lc = bidx(c - px, a.cols, mode)
+            var rc = bidx(a.cols + c, a.cols, mode)
             for k in range(ch):
-                po[unsafe_offset=(r * o.cols + c) * ch + k] = val if (sr < 0 or sc < 0) else pa[unsafe_offset=(sr * a.cols + sc) * ch + k]
+                dst[unsafe_offset=c * ch + k] = val if lc < 0 else src[unsafe_offset=lc * ch + k]
+                dst[unsafe_offset=(px + a.cols + c) * ch + k] = val if rc < 0 else src[unsafe_offset=rc * ch + k]
 
     parallelize(row, o.rows)
     return o^
@@ -369,38 +381,82 @@ def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int)
     var ch = src.ch
     comptime W = simd_width_of[dt]()
     comptime ident = Scalar[dt].MAX if is_min else Scalar[dt].MIN
-    var cur = Mat[dt](copy=src)
+    var cur = Mat[dt](0, 0)
     var n = src.cols * ch
-    for _ in range(iters):
-        var p = pad(cur, r, r, 2, ident)
+    for it in range(iters):
+        var p = pad(src, r, r, 2, ident) if it == 0 else pad(cur, r, r, 2, ident)
         var pp = p.ptr()
         var o = Mat[dt](src.rows, src.cols, ch)
         var po = o.ptr()
-        var pr = ptr_of(runs)
-        var nr = len(runs) // 3
         var pstride = p.cols * ch
+        if shape == 0:
+            # a rectangle is separable: min over the row window, then over the column window
+            var tmp = Mat[dt](p.rows, src.cols, ch)
+            var pt = tmp.ptr()
 
-        def row(y: Int) {imm}:
-            var i = 0
-            while i < n:
-                var w = W if i + W <= n else 1
-                var acc = SIMD[dt, W](ident)
-                for q in range(nr):
-                    var base = (y + r + pr[unsafe_offset=3 * q]) * pstride + r * ch + i
-                    for dx in range(pr[unsafe_offset=3 * q + 1], pr[unsafe_offset=3 * q + 2] + 1):
-                        var v = pp.unsafe_load[width=W](base + dx * ch) if w == W else SIMD[dt, W](pp[unsafe_offset=base + dx * ch])
+            def hrow(y: Int) {imm}:
+                var i = 0
+                while i < n:
+                    var w = W if i + W <= n else 1
+                    var acc = SIMD[dt, W](ident)
+                    for dx in range(-r, r + 1):
+                        var v = pp.unsafe_load[width=W](y * pstride + r * ch + i + dx * ch) if w == W else SIMD[dt, W](pp[unsafe_offset=y * pstride + r * ch + i + dx * ch])
                         comptime if is_min:
                             acc = min(acc, v)
                         else:
                             acc = max(acc, v)
-                if w == W:
-                    po.unsafe_store(y * n + i, acc)
-                else:
-                    po[unsafe_offset=y * n + i] = acc[0]
-                i += w
+                    if w == W:
+                        pt.unsafe_store(y * n + i, acc)
+                    else:
+                        pt[unsafe_offset=y * n + i] = acc[0]
+                    i += w
 
-        parallelize(row, src.rows)
-        _ = (p.rows, runs.__len__())
+            parallelize(hrow, p.rows)
+
+            def vrow(y: Int) {imm}:
+                var i = 0
+                while i < n:
+                    var w = W if i + W <= n else 1
+                    var acc = SIMD[dt, W](ident)
+                    for dy in range(0, 2 * r + 1):
+                        var v = pt.unsafe_load[width=W]((y + dy) * n + i) if w == W else SIMD[dt, W](pt[unsafe_offset=(y + dy) * n + i])
+                        comptime if is_min:
+                            acc = min(acc, v)
+                        else:
+                            acc = max(acc, v)
+                    if w == W:
+                        po.unsafe_store(y * n + i, acc)
+                    else:
+                        po[unsafe_offset=y * n + i] = acc[0]
+                    i += w
+
+            parallelize(vrow, src.rows)
+            _ = (p.rows, tmp.rows)
+        else:
+            var pr = ptr_of(runs)
+            var nr = len(runs) // 3
+
+            def row(y: Int) {imm}:
+                var i = 0
+                while i < n:
+                    var w = W if i + W <= n else 1
+                    var acc = SIMD[dt, W](ident)
+                    for q in range(nr):
+                        var base = (y + r + pr[unsafe_offset=3 * q]) * pstride + r * ch + i
+                        for dx in range(pr[unsafe_offset=3 * q + 1], pr[unsafe_offset=3 * q + 2] + 1):
+                            var v = pp.unsafe_load[width=W](base + dx * ch) if w == W else SIMD[dt, W](pp[unsafe_offset=base + dx * ch])
+                            comptime if is_min:
+                                acc = min(acc, v)
+                            else:
+                                acc = max(acc, v)
+                    if w == W:
+                        po.unsafe_store(y * n + i, acc)
+                    else:
+                        po[unsafe_offset=y * n + i] = acc[0]
+                    i += w
+
+            parallelize(row, src.rows)
+            _ = (p.rows, len(runs))
         cur = o^
     return cur^
 

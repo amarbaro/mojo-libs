@@ -606,7 +606,7 @@ def time_of(text):
     return float(m.group(1)) if m else None
 
 
-def suite(files, bench):
+def suite(files, bench, every=False):
     work = os.path.join(ROOT, ".work", "t")
     os.makedirs(work, exist_ok=True)
     exe = os.path.join(ROOT, ".bin", "mojo-cv")
@@ -616,7 +616,7 @@ def suite(files, bench):
         paths = [fpath(n) for n in ins]
         kvs = [f"{k}={v}" for k, v in kv.items()]
         hd = any(n.startswith("hd") for n in ins)
-        if bench and not hd:
+        if bench and not hd and not every:
             continue
         kvs_b = kvs + (["reps=5"] if bench else [])
         o, r = os.path.join(work, cid + ".ours"), os.path.join(work, cid + ".ref")
@@ -659,8 +659,8 @@ def suite(files, bench):
 if __name__ == "__main__":
     a = sys.argv[1:]
     if a and a[0] == "--suite":
-        bench = "--bench" in a
-        sys.exit(1 if suite([x for x in a[1:] if not x.startswith("--")], bench) else 0)
+        bench = "--bench" in a or "--bench-all" in a
+        sys.exit(1 if suite([x for x in a[1:] if not x.startswith("--")], bench, "--bench-all" in a) else 0)
     if a and a[0] == "--fixtures":
         make_fixtures(a[1])
         sys.exit(0)

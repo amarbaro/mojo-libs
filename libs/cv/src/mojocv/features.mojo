@@ -102,6 +102,15 @@ def fast_score(img: Mat[DType.uint8], y: Int, x: Int, t: Int) -> Int:
     var dx = SIMD[DType.int32, 16](0, 1, 2, 3, 3, 3, 2, 1, 0, -1, -2, -3, -3, -3, -2, -1)
     var dy = SIMD[DType.int32, 16](3, 3, 2, 1, 0, -1, -2, -3, -3, -3, -2, -1, 0, 1, 2, 3)
     var c = Int(img.at(y, x))
+    # a 9-arc contains at least two of the four compass pixels on one side of the threshold
+    var up = 0
+    var dn = 0
+    for k in range(0, 16, 4):
+        var v = Int(img.at(y + Int(dy[k]), x + Int(dx[k]))) - c
+        up += Int(v > t)
+        dn += Int(v < -t)
+    if up < 2 and dn < 2:
+        return 0
     var d = SIMD[DType.int32, 16](0)
     for k in range(16):
         d[k] = Int32(Int(img.at(y + Int(dy[k]), x + Int(dx[k]))) - c)
@@ -192,10 +201,16 @@ def orb_detect(img: Mat[DType.uint8], nfeatures: Int, fast_t: Int) raises -> Mat
         var rows = im.rows
         var cols = im.cols
         var sc = Mat[DType.int32](rows, cols, 1)
-        for y in range(3, rows - 3):
+        var psc = sc.ptr()
+
+        def score_row(y: Int) {imm}:
+            if y < 3 or y >= rows - 3:
+                return
             for x in range(3, cols - 3):
-                var s = fast_score(im, y, x, fast_t)
-                sc.set(y, x, 0, Int32(s))
+                psc[unsafe_offset=y * cols + x] = Int32(fast_score(im, y, x, fast_t))
+
+        parallelize(score_row, rows)
+        _ = sc.rows
         for y in range(3, rows - 3):
             for x in range(3, cols - 3):
                 var s = sc.at(y, x)
