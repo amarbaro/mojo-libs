@@ -126,6 +126,34 @@ def blobFromImage(i, kv):
     return b.reshape(-1, b.shape[3])
 
 
+@op()
+def connectedComponentsWithStats(i, kv):
+    n, lab, st, cen = cv2.connectedComponentsWithStats(i[0], connectivity=kv_i(kv, "connectivity", 8), ltype=cv2.CV_32S)
+    return [lab, st, cen]
+@op()
+def Canny(i, kv):
+    return cv2.Canny(i[0], kv_f(kv, "t1", 100.0), kv_f(kv, "t2", 200.0), apertureSize=kv_i(kv, "aperture", 3), L2gradient=bool(kv_i(kv, "l2", 0)))
+@op()
+def findContours(i, kv):
+    cs, _ = cv2.findContours(i[0], [cv2.RETR_EXTERNAL, cv2.RETR_LIST][kv_i(kv, "mode", 0)], [cv2.CHAIN_APPROX_NONE, cv2.CHAIN_APPROX_SIMPLE][kv_i(kv, "method", 0)])
+    pts = np.concatenate([c.reshape(-1, 2) for c in cs]) if cs else np.zeros((0, 2), np.int32)
+    return [pts.astype(np.int32), np.array([[len(c)] for c in cs], np.int32).reshape(-1, 1)]
+@op()
+def goodFeaturesToTrack(i, kv):
+    r = cv2.goodFeaturesToTrack(i[0], kv_i(kv, "maxCorners", 100), kv_f(kv, "quality", 0.01), kv_f(kv, "minDist", 10.0), blockSize=kv_i(kv, "block", 3))
+    return np.zeros((0, 2), np.float32) if r is None else r.reshape(-1, 2).astype(np.float32)
+@op()
+def line(i, kv):
+    im = i[0].copy()
+    c = tuple(kv_l(kv, "color", [255, 255, 255]))
+    return cv2.line(im, (kv_i(kv, "x1", 0), kv_i(kv, "y1", 0)), (kv_i(kv, "x2", 0), kv_i(kv, "y2", 0)), c, 1)
+@op()
+def rectangle(i, kv):
+    im = i[0].copy()
+    c = tuple(kv_l(kv, "color", [255, 255, 255]))
+    return cv2.rectangle(im, (kv_i(kv, "x1", 0), kv_i(kv, "y1", 0)), (kv_i(kv, "x2", 0), kv_i(kv, "y2", 0)), c, kv_i(kv, "thick", 1))
+
+
 # ---- compare ----------------------------------------------------------------------------------------------
 def compare(ours, ref, spec):
     if ours.shape != ref.shape:
@@ -181,6 +209,19 @@ def make_fixtures(d):
     fx["hdg2"] = cv2.cvtColor(fx["hd2"], cv2.COLOR_BGR2GRAY)
     fx["sm"], fx["sm2"] = fx["hd"][300:570, 400:880].copy(), fx["hd2"][300:570, 400:880].copy()
     fx["smg"], fx["smg2"] = fx["hdg"][300:570, 400:880].copy(), fx["hdg2"][300:570, 400:880].copy()
+    fx["bin"] = (fx["smg"] < 128).astype(np.uint8) * 255
+    fx["binhd"] = (fx["hdg"] < 128).astype(np.uint8) * 255
+    shapes = np.zeros((60, 80), np.uint8)
+    cv2.rectangle(shapes, (5, 5), (30, 30), 255, -1)
+    cv2.rectangle(shapes, (12, 12), (22, 22), 0, -1)
+    cv2.circle(shapes, (55, 30), 15, 255, -1)
+    cv2.circle(shapes, (55, 30), 6, 0, -1)
+    cv2.line(shapes, (3, 50), (70, 57), 255, 1)
+    shapes[40, 40] = 255
+    shapes[0, 0:5] = 255
+    fx["shapes"] = shapes
+    fx["blank"] = np.zeros((9, 11), np.uint8)
+    fx["full"] = np.full((9, 11), 255, np.uint8)
     fx["odd"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["odd2"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["one"] = np.array([[[200, 0, 77]]], np.uint8)

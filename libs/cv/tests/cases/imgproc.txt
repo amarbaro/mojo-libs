@@ -66,3 +66,29 @@ remap_odd_const    remap odd mapxo mapyo interp=1 bval=9 => max:1
 remap_odd_refl     remap odd mapxo mapyo interp=1 border=0 => max:1
 blob_sm            blobFromImage sm w=224 h=224 scale=0.017 mean=104,117,123 swap=1 => max:0.02
 blob_hd            blobFromImage hd w=320 h=180 scale=1 mean=0,0,0 => max:1
+ccl8_bin         connectedComponentsWithStats bin connectivity=8 => exact, exact, max:1e-9
+ccl4_binhd       connectedComponentsWithStats binhd connectivity=4 => exact, exact, max:1e-9
+ccl8_shapes      connectedComponentsWithStats shapes connectivity=8 => exact, exact, max:1e-9
+ccl_blank        connectedComponentsWithStats blank connectivity=8 => exact, exact, max:1e-9
+canny_hdg        Canny hdg t1=50 t2=150 aperture=3 => exact
+canny_smg_l2     Canny smg t1=80 t2=200 aperture=3 l2=1 => exact
+canny_sm5        Canny smg t1=40 t2=120 aperture=5 => exact
+canny_blank      Canny blank t1=10 t2=20 => exact
+canny_g1         Canny g1 t1=30 t2=60 => exact
+contours_ext_shapes findContours shapes mode=0 method=0 => exact, exact
+contours_list_shapes findContours shapes mode=1 method=0 => exact, exact
+contours_simple_shapes findContours shapes mode=1 method=1 => exact, exact
+contours_ext_bin findContours bin mode=0 method=1 => exact, exact
+contours_list_bin findContours bin mode=1 method=0 => exact, exact
+contours_blank   findContours blank mode=1 method=0 => exact, exact
+contours_full    findContours full mode=0 method=0 => exact, exact
+gftt_hdg         goodFeaturesToTrack hdg maxCorners=500 quality=0.01 minDist=8 block=3 => pts:0.5:0.95
+gftt_smg         goodFeaturesToTrack smg maxCorners=100 quality=0.05 minDist=5 block=5 => pts:0.5:0.98
+gftt_blank       goodFeaturesToTrack blank maxCorners=10 quality=0.1 minDist=3 => cnt:0
+line_diag_hd     line hd x1=10 y1=20 x2=1800 y2=900 color=0,255,0 => exact
+line_steep_g1    line g1 x1=2 y1=0 x2=5 y2=4 color=200 => exact
+line_clip_sm     line sm x1=-50 y1=-30 x2=700 y2=400 color=255,0,0 => exact
+line_out_sm      line sm x1=-50 y1=-30 x2=-10 y2=400 color=255,0,0 => exact
+line_hor_odd     line odd x1=12 y1=3 x2=0 y2=3 color=1,2,3 => exact
+rect_edge_sm     rectangle sm x1=10 y1=20 x2=300 y2=200 color=0,0,255 thick=1 => exact
+rect_fill_odd    rectangle odd x1=-3 y1=2 x2=8 y2=9 color=9,8,7 thick=-1 => exact

@@ -736,6 +736,445 @@ def blob[dt: DType](src: Mat[dt], dw: Int, dh: Int, scale: Float32, mean: List[F
     return o^
 
 
+# ---- connected components ---------------------------------------------------------------------------------
+
+
+def find_root(parent: Ptr[Int32], i: Int32) -> Int32:
+    var r = i
+    while parent[unsafe_offset=Int(r)] != r:
+        r = parent[unsafe_offset=Int(r)]
+    return r
+
+
+def components(src: Mat[DType.uint8], conn: Int) -> Tuple[Mat[DType.int32], Mat[DType.int32], Mat[DType.float64]]:
+    """connectedComponentsWithStats: labels in raster order of each component's first pixel, label 0 is the background;
+    stats rows are left, top, width, height, area; centroids are float64 (x, y)."""
+    var rows = src.rows
+    var cols = src.cols
+    var lab = Mat[DType.int32](rows, cols, 1)
+    var parent = List[Int32](length=rows * cols // 2 + 2, fill=0)
+    var pp = ptr_of(parent)
+    var pl = lab.ptr()
+    var ps = src.ptr()
+    var count: Int32 = 0
+    for y in range(rows):
+        for x in range(cols):
+            if ps[unsafe_offset=y * cols + x] == 0:
+                continue
+            var best: Int32 = 0
+            comptime for k in range(4):
+                var nx = x + (-1 if k == 0 else (-1 if k == 1 else (0 if k == 2 else 1)))
+                var ny = y - (0 if k == 0 else 1)
+                if (k == 0 or conn == 8 or k == 2) and nx >= 0 and nx < cols and ny >= 0:
+                    var l = pl[unsafe_offset=ny * cols + nx]
+                    if l != 0:
+                        if best == 0:
+                            best = find_root(pp, l)
+                        else:
+                            var r = find_root(pp, l)
+                            if r != best:
+                                if r < best:
+                                    pp[unsafe_offset=Int(best)] = r
+                                    best = r
+                                else:
+                                    pp[unsafe_offset=Int(r)] = best
+            if best == 0:
+                count += 1
+                pp[unsafe_offset=Int(count)] = count
+                best = count
+            pl[unsafe_offset=y * cols + x] = best
+    var remap_ = List[Int32](length=Int(count) + 1, fill=0)
+    var n: Int32 = 0
+    for i in range(1, Int(count) + 1):
+        if pp[unsafe_offset=i] == Int32(i):
+            n += 1
+            remap_[i] = n
+        else:
+            remap_[i] = remap_[Int(find_root(pp, Int32(i)))]
+    var nl = Int(n) + 1
+    var stats = Mat[DType.int32](nl, 5, 1)
+    var cen = Mat[DType.float64](nl, 2, 1)
+    var sx = List[Float64](length=nl, fill=0)
+    var sy = List[Float64](length=nl, fill=0)
+    for i in range(nl):
+        stats.set(i, 0, 0, Int32(cols))
+        stats.set(i, 1, 0, Int32(rows))
+        stats.set(i, 2, 0, -1)
+        stats.set(i, 3, 0, -1)
+    for y in range(rows):
+        for x in range(cols):
+            var l = 0
+            if pl[unsafe_offset=y * cols + x] != 0:
+                l = Int(remap_[Int(pl[unsafe_offset=y * cols + x])])
+                pl[unsafe_offset=y * cols + x] = Int32(l)
+            stats.set(l, 0, 0, min(stats.at(l, 0), Int32(x)))
+            stats.set(l, 1, 0, min(stats.at(l, 1), Int32(y)))
+            stats.set(l, 2, 0, max(stats.at(l, 2), Int32(x)))
+            stats.set(l, 3, 0, max(stats.at(l, 3), Int32(y)))
+            stats.set(l, 4, 0, stats.at(l, 4) + 1)
+            sx[l] += Float64(x)
+            sy[l] += Float64(y)
+    for l in range(nl):
+        var area = Float64(stats.at(l, 4))
+        stats.set(l, 2, 0, stats.at(l, 2) - stats.at(l, 0) + 1)
+        stats.set(l, 3, 0, stats.at(l, 3) - stats.at(l, 1) + 1)
+        cen.set(l, 0, 0, sx[l] / area)
+        cen.set(l, 1, 0, sy[l] / area)
+    return (lab^, stats^, cen^)
+
+
+# ---- Canny ------------------------------------------------------------------------------------------------
+
+
+def canny(src: Mat[DType.uint8], t1: Float64, t2: Float64, aperture: Int, l2: Bool) -> Mat[DType.uint8]:
+    """cv2.Canny: Sobel (replicate border), non-maximum suppression with cv2's fixed-point tangent tests
+    (tan 22.5 deg = 13573 / 2^15), hysteresis by 8-connected flood from the strong pixels."""
+    var dx = sobel[DType.uint8, DType.int16](src, 1, 0, aperture, 1.0, 1)
+    var dy = sobel[DType.uint8, DType.int16](src, 0, 1, aperture, 1.0, 1)
+    var rows = src.rows
+    var cols = src.cols
+    var lo = min(t1, t2)
+    var hi = max(t1, t2)
+    if l2:
+        lo = min(32767.0, lo)
+        hi = min(32767.0, hi)
+        lo = lo * lo if lo > 0 else lo
+        hi = hi * hi if hi > 0 else hi
+    var low = Int(floor(lo))
+    var high = Int(floor(hi))
+    var mag = List[Int32](length=rows * cols, fill=0)
+    var pmag = ptr_of(mag)
+    var pdx = dx.ptr()
+    var pdy = dy.ptr()
+
+    def mrow(y: Int) {imm}:
+        for x in range(cols):
+            var a = Int32(pdx[unsafe_offset=y * cols + x])
+            var b = Int32(pdy[unsafe_offset=y * cols + x])
+            pmag[unsafe_offset=y * cols + x] = (a * a + b * b) if l2 else (abs(a) + abs(b))
+
+    parallelize(mrow, rows)
+    var map = Mat[DType.uint8](rows, cols, 1)  # 1 not an edge, 0 weak candidate, 3 strong
+    var pm = map.ptr()
+
+    def nrow(y: Int) {imm}:
+        for x in range(cols):
+            var i = y * cols + x
+            var m = Int(pmag[unsafe_offset=i])
+            var xs = Int(pdx[unsafe_offset=i])
+            var ys = Int(pdy[unsafe_offset=i])
+            var ok = False
+            if m > low:
+                var ax = abs(xs)
+                var ay = abs(ys) << 15
+                var tg22x = ax * 13573
+                var e = Int(pmag[unsafe_offset=i - 1]) if x > 0 else 0
+                var w = Int(pmag[unsafe_offset=i + 1]) if x + 1 < cols else 0
+                if ay < tg22x:
+                    ok = m > e and m >= w
+                else:
+                    var tg67x = tg22x + (ax << 16)
+                    var up = Int(pmag[unsafe_offset=i - cols]) if y > 0 else 0
+                    var dn = Int(pmag[unsafe_offset=i + cols]) if y + 1 < rows else 0
+                    if ay > tg67x:
+                        ok = m > up and m >= dn
+                    else:
+                        var sg = -1 if (xs ^ ys) < 0 else 1
+                        var xa = x - sg
+                        var xb = x + sg
+                        var pa = Int(pmag[unsafe_offset=i - cols - sg]) if (y > 0 and xa >= 0 and xa < cols) else 0
+                        var pb = Int(pmag[unsafe_offset=i + cols + sg]) if (y + 1 < rows and xb >= 0 and xb < cols) else 0
+                        ok = m > pa and m > pb
+            pm[unsafe_offset=i] = UInt8((3 if m > high else 0) if ok else 1)
+
+    parallelize(nrow, rows)
+    var stack = List[Int](capacity=1024)
+    for i in range(rows * cols):
+        if pm[unsafe_offset=i] == 3:
+            pm[unsafe_offset=i] = 2
+            stack.append(i)
+    while len(stack) > 0:
+        var i = stack.pop()
+        var y = i // cols
+        var x = i % cols
+        for ddy in range(-1, 2):
+            for ddx in range(-1, 2):
+                var ny = y + ddy
+                var nx = x + ddx
+                if ny >= 0 and ny < rows and nx >= 0 and nx < cols:
+                    var j = ny * cols + nx
+                    if pm[unsafe_offset=j] == 0 or pm[unsafe_offset=j] == 3:
+                        pm[unsafe_offset=j] = 2
+                        stack.append(j)
+    var o = Mat[DType.uint8](rows, cols, 1)
+    for i in range(rows * cols):
+        o.data[i] = 255 if pm[unsafe_offset=i] == 2 else 0
+    _ = (dx.rows, dy.rows, len(mag), map.rows)
+    return o^
+
+
+# ---- findContours -----------------------------------------------------------------------------------------
+
+
+def find_contours(src: Mat[DType.uint8], external: Bool, simple: Bool) -> Tuple[Mat[DType.int32], Mat[DType.int32]]:
+    """Suzuki and Abe border following as cv2 does it: raster scan, outer and hole borders, points emitted in
+    follow order starting at the first pixel found. Returns (points (n, 2) int32, lengths (k, 1) int32)."""
+    var w = src.cols + 2
+    var h = src.rows + 2
+    var img = List[Int32](length=w * h, fill=0)
+    var pi = ptr_of(img)
+    for y in range(src.rows):
+        for x in range(src.cols):
+            if src.data[y * src.cols + x] != 0:
+                pi[unsafe_offset=(y + 1) * w + x + 1] = 1
+    var dxs = SIMD[DType.int32, 8](1, 1, 0, -1, -1, -1, 0, 1)
+    var dys = SIMD[DType.int32, 8](0, -1, -1, -1, 0, 1, 1, 1)
+    var pts = List[Int32]()
+    var lens = List[Int32]()
+    var ctype: List[Int] = [1, 1]  # by border id (nbd): 1 outer, 0 hole; id 1 is the frame
+    var cpar: List[Int] = [0, 1]
+    var nbd = 1
+    for y in range(1, h - 1):
+        var lnbd = 1
+        for x in range(1, w - 1):
+            var f = Int(pi[unsafe_offset=y * w + x])
+            var is_outer = f == 1 and pi[unsafe_offset=y * w + x - 1] == 0
+            var is_hole = f >= 1 and pi[unsafe_offset=y * w + x + 1] == 0
+            if is_outer or is_hole:
+                if not is_outer and f > 1:
+                    lnbd = f
+                var outer = is_outer
+                nbd += 1
+                var tb = ctype[lnbd]
+                var parent = (cpar[lnbd] if tb == 1 else lnbd) if outer else (lnbd if tb == 1 else cpar[lnbd])
+                ctype.append(1 if outer else 0)
+                cpar.append(parent)
+                var keep = (not external) or (outer and parent == 1)
+                var start = len(pts)
+                var cx = x
+                var cy = y
+                var s = 4 if outer else 0
+                var s_end = s
+                var found = False
+                while True:
+                    s = (s - 1) & 7
+                    if pi[unsafe_offset=(cy + Int(dys[s])) * w + cx + Int(dxs[s])] != 0:
+                        found = True
+                        break
+                    if s == s_end:
+                        break
+                if not found:
+                    pi[unsafe_offset=y * w + x] = Int32(-nbd)
+                    if keep:
+                        pts.append(Int32(x - 1))
+                        pts.append(Int32(y - 1))
+                else:
+                    var i3x = cx
+                    var i3y = cy
+                    var prev_s = s ^ 4
+                    var i1x = cx + Int(dxs[s])
+                    var i1y = cy + Int(dys[s])
+                    while True:
+                        s_end = s
+                        var i4x = 0
+                        var i4y = 0
+                        while True:
+                            s += 1
+                            i4x = i3x + Int(dxs[s & 7])
+                            i4y = i3y + Int(dys[s & 7])
+                            if pi[unsafe_offset=i4y * w + i4x] != 0:
+                                break
+                        s &= 7
+                        if UInt(s - 1) < UInt(s_end):
+                            pi[unsafe_offset=i3y * w + i3x] = Int32(-nbd)
+                        elif pi[unsafe_offset=i3y * w + i3x] == 1:
+                            pi[unsafe_offset=i3y * w + i3x] = Int32(nbd)
+                        if keep and (s != prev_s or not simple):
+                            pts.append(Int32(i3x - 1))
+                            pts.append(Int32(i3y - 1))
+                            prev_s = s
+                        if i4x == cx and i4y == cy and i3x == i1x and i3y == i1y:
+                            break
+                        i3x = i4x
+                        i3y = i4y
+                        s = (s + 4) & 7
+                if keep:
+                    lens.append(Int32((len(pts) - start) // 2))
+            f = Int(pi[unsafe_offset=y * w + x])
+            if f != 1 and f != 0:
+                lnbd = abs(f)
+    # cv2 returns the contours last found first
+    var op = Mat[DType.int32](len(pts) // 2, 2, 1)
+    var ol = Mat[DType.int32](len(lens), 1, 1)
+    var src_at = len(pts)
+    var dst_at = 0
+    for c in range(len(lens)):
+        var k = 2 * Int(lens[len(lens) - 1 - c])
+        src_at -= k
+        for i in range(k):
+            op.data[dst_at + i] = pts[src_at + i]
+        dst_at += k
+        ol.data[c] = lens[len(lens) - 1 - c]
+    return (op^, ol^)
+
+
+# ---- goodFeaturesToTrack ----------------------------------------------------------------------------------
+
+
+def good_features(src: Mat[DType.uint8], max_corners: Int, quality: Float64, min_dist: Float64, block: Int) -> Mat[F32]:
+    """Shi-Tomasi: smallest eigenvalue of the windowed gradient covariance, local maxima above quality * max,
+    strongest first (ties by position), thinned by a minimum distance on a grid. Returns (n, 2) float32 (x, y)."""
+    var scale = Float32(1.0 / (4.0 * Float64(block) * 255.0))
+    var dx = sobel[DType.uint8, F32](src, 1, 0, 3, scale)
+    var dy = sobel[DType.uint8, F32](src, 0, 1, 3, scale)
+    var n = src.rows * src.cols
+    var cov = Mat[F32](src.rows, src.cols, 3)
+    for i in range(n):
+        cov.data[3 * i] = dx.data[i] * dx.data[i]
+        cov.data[3 * i + 1] = dx.data[i] * dy.data[i]
+        cov.data[3 * i + 2] = dy.data[i] * dy.data[i]
+    var box = List[Float32](length=block, fill=1)
+    var sums = sepfilter[F32, F32](cov, box, box)
+    var eig = Mat[F32](src.rows, src.cols, 1)
+    var best = Float32(0)
+    for i in range(n):
+        var a = sums.data[3 * i] * 0.5
+        var b = sums.data[3 * i + 1]
+        var c = sums.data[3 * i + 2] * 0.5
+        eig.data[i] = (a + c) - sqrt((a - c) * (a - c) + b * b)
+        best = max(best, eig.data[i])
+    var thr = Float32(Float64(best) * quality)
+    var kept = Mat[F32](src.rows, src.cols, 1)
+    for i in range(n):
+        kept.data[i] = eig.data[i] if eig.data[i] > thr else 0
+    var dil = morph[False, F32](kept, 0, 3, 1)
+    var cand = List[Int]()
+    for i in range(n):
+        if kept.data[i] != 0 and kept.data[i] == dil.data[i]:
+            cand.append(i)
+
+    def stronger(p: Int, q: Int) {imm} -> Bool:
+        return eig.data[p] > eig.data[q] or (eig.data[p] == eig.data[q] and p < q)
+
+    sort(Span(cand), stronger)
+    var cell = max(rint(min_dist), 1)
+    var gw = (src.cols + cell - 1) // cell
+    var gh = (src.rows + cell - 1) // cell
+    var grid = List[List[Int]](length=gw * gh, fill=List[Int]())
+    var chosen = List[Int]()
+    var md2 = min_dist * min_dist
+    for c in cand:
+        var y = c // src.cols
+        var x = c % src.cols
+        var good = True
+        if min_dist >= 1:
+            var xc = x // cell
+            var yc = y // cell
+            for yy in range(max(yc - 1, 0), min(yc + 2, gh)):
+                for xx in range(max(xc - 1, 0), min(xc + 2, gw)):
+                    for m in grid[yy * gw + xx]:
+                        var ddx = Float64(x - m % src.cols)
+                        var ddy = Float64(y - m // src.cols)
+                        if ddx * ddx + ddy * ddy < md2:
+                            good = False
+            if good:
+                grid[yc * gw + xc].append(c)
+        if good:
+            chosen.append(c)
+            if max_corners > 0 and len(chosen) == max_corners:
+                break
+    var o = Mat[F32](len(chosen), 2, 1)
+    for i in range(len(chosen)):
+        o.data[2 * i] = Float32(chosen[i] % src.cols)
+        o.data[2 * i + 1] = Float32(chosen[i] // src.cols)
+    return o^
+
+
+# ---- drawing ----------------------------------------------------------------------------------------------
+
+
+def clip_line(cols: Int, rows: Int, mut x1: Int, mut y1: Int, mut x2: Int, mut y2: Int) -> Bool:
+    """cv2.clipLine, including its integer truncation, so clipped lines rasterize identically."""
+    var right = cols - 1
+    var bottom = rows - 1
+    var c1 = Int(x1 < 0) + Int(x1 > right) * 2 + Int(y1 < 0) * 4 + Int(y1 > bottom) * 8
+    var c2 = Int(x2 < 0) + Int(x2 > right) * 2 + Int(y2 < 0) * 4 + Int(y2 > bottom) * 8
+    if (c1 & c2) == 0 and (c1 | c2) != 0:
+        if (c1 & 12) != 0:
+            var a = 0 if c1 < 8 else bottom
+            x1 += Int(Float64(a - y1) * Float64(x2 - x1) / Float64(y2 - y1))
+            y1 = a
+            c1 = Int(x1 < 0) + Int(x1 > right) * 2
+        if (c2 & 12) != 0:
+            var a = 0 if c2 < 8 else bottom
+            x2 += Int(Float64(a - y2) * Float64(x2 - x1) / Float64(y2 - y1))
+            y2 = a
+            c2 = Int(x2 < 0) + Int(x2 > right) * 2
+        if (c1 & c2) == 0 and (c1 | c2) != 0:
+            if c1 != 0:
+                var a = 0 if c1 == 1 else right
+                y1 += Int(Float64(a - x1) * Float64(y2 - y1) / Float64(x2 - x1))
+                x1 = a
+                c1 = 0
+            if c2 != 0:
+                var a = 0 if c2 == 1 else right
+                y2 += Int(Float64(a - x2) * Float64(y2 - y1) / Float64(x2 - x1))
+                x2 = a
+                c2 = 0
+    return (c1 | c2) == 0
+
+
+def draw_line[dt: DType](mut m: Mat[dt], px1: Int, py1: Int, px2: Int, py2: Int, color: List[Float64]):
+    """cv2.line, thickness 1, LINE_8: clip, then the error-term walk of cv2's LineIterator (left to right)."""
+    var x1 = px1
+    var y1 = py1
+    var x2 = px2
+    var y2 = py2
+    if not clip_line(m.cols, m.rows, x1, y1, x2, y2):
+        return
+    if x2 < x1:
+        swap(x1, x2)
+        swap(y1, y2)
+    var dx = x2 - x1
+    var dy = abs(y2 - y1)
+    var ystep = 1 if y2 >= y1 else -1
+    var steep = dy > dx
+    var major = dy if steep else dx
+    var minor = dx if steep else dy
+    var err = major - 2 * minor
+    var x = x1
+    var y = y1
+    for _ in range(major + 1):
+        for k in range(m.ch):
+            m.set(y, x, k, Scalar[dt](color[k] if k < len(color) else 0.0))
+        if steep:
+            y += ystep
+        else:
+            x += 1
+        if err < 0:
+            if steep:
+                x += 1
+            else:
+                y += ystep
+            err += 2 * major - 2 * minor
+        else:
+            err -= 2 * minor
+
+
+def draw_rect[dt: DType](mut m: Mat[dt], x1: Int, y1: Int, x2: Int, y2: Int, color: List[Float64], thick: Int):
+    """cv2.rectangle: thickness 1 draws the four edges, a negative thickness fills the clipped box."""
+    if thick < 0:
+        for y in range(max(min(y1, y2), 0), min(max(y1, y2), m.rows - 1) + 1):
+            for x in range(max(min(x1, x2), 0), min(max(x1, x2), m.cols - 1) + 1):
+                for k in range(m.ch):
+                    m.set(y, x, k, Scalar[dt](color[k] if k < len(color) else 0.0))
+        return
+    draw_line(m, x1, y1, x2, y1, color)
+    draw_line(m, x2, y1, x2, y2, color)
+    draw_line(m, x2, y2, x1, y2, color)
+    draw_line(m, x1, y2, x1, y1, color)
+
+
 # ---- CLI --------------------------------------------------------------------------------------------------
 
 
@@ -839,7 +1278,45 @@ def run_dt[dt: DType](mut a: Args) raises -> Bool:
     return True
 
 
+def run_u8(mut a: Args) raises -> Bool:
+    var m = load[DType.uint8](a.ins[0])
+    if a.op == "connectedComponentsWithStats":
+        var o = components(m, a.i("connectivity", 8))
+        save(o[0], a.out)
+        save(o[1], a.out + ".1")
+        save(o[2], a.out + ".2")
+    elif a.op == "Canny":
+        var o = Mat[DType.uint8](0, 0)
+        while a.again():
+            o = canny(m, a.f("t1", 100.0), a.f("t2", 200.0), a.i("aperture", 3), a.i("l2", 0) == 1)
+        save(o, a.out)
+    elif a.op == "findContours":
+        var o = find_contours(m, a.i("mode", 0) == 0, a.i("method", 0) == 1)
+        save(o[0], a.out)
+        save(o[1], a.out + ".1")
+    elif a.op == "goodFeaturesToTrack":
+        var o = Mat[F32](0, 0)
+        while a.again():
+            o = good_features(m, a.i("maxCorners", 100), a.f("quality", 0.01), a.f("minDist", 10.0), a.i("block", 3))
+        save(o, a.out)
+    elif a.op == "line" or a.op == "rectangle":
+        var c = a.fl("color", [255.0, 255.0, 255.0])
+        var o = Mat[DType.uint8](copy=m)
+        while a.again():
+            o = Mat[DType.uint8](copy=m)
+            if a.op == "line":
+                draw_line(o, a.i("x1", 0), a.i("y1", 0), a.i("x2", 0), a.i("y2", 0), c)
+            else:
+                draw_rect(o, a.i("x1", 0), a.i("y1", 0), a.i("x2", 0), a.i("y2", 0), c, a.i("thick", 1))
+        save(o, a.out)
+    else:
+        return False
+    return True
+
+
 def run(mut a: Args) raises -> Bool:
+    if a.op in ["connectedComponentsWithStats", "Canny", "findContours", "goodFeaturesToTrack", "line", "rectangle"]:
+        return run_u8(a)
     if not (a.op in ["GaussianBlur", "pyrDown", "Sobel", "threshold", "integral", "erode", "dilate", "cvtColor", "resize", "warpAffine", "remap", "blobFromImage"]):
         return False
     var code = peek_code(a.ins[0])
