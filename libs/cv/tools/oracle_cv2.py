@@ -181,6 +181,12 @@ def calcOpticalFlowPyrLK(i, kv):
     return [nxt.reshape(-1, 2), st.reshape(-1, 1), err.reshape(-1, 1)]
 
 
+@op()
+def calcOpticalFlowFarneback(i, kv):
+    return cv2.calcOpticalFlowFarneback(i[0], i[1], None, kv_f(kv, "pyrScale", 0.5), kv_i(kv, "levels", 3), kv_i(kv, "winsize", 15),
+                                        kv_i(kv, "iters", 3), kv_i(kv, "polyN", 5), kv_f(kv, "polySigma", 1.2), 0)
+
+
 # ---- compare ----------------------------------------------------------------------------------------------
 def compare(ours, ref, spec):
     if ours.shape != ref.shape:
