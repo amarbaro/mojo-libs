@@ -1261,24 +1261,48 @@ def canny(src: Mat[DType.uint8], t1: Float64, t2: Float64, aperture: Int, l2: Bo
         hi = hi * hi if hi > 0 else hi
     var low = Int(floor(lo))
     var high = Int(floor(hi))
-    var mag = List[Int32](length=rows * cols, fill=0)
+    var mag = List[Int32](unsafe_uninit_length=rows * cols)
     var pmag = ptr_of(mag)
     var pdx = dx.ptr()
     var pdy = dy.ptr()
+    comptime WI = simd_width_of[DType.int32]()
 
     def mrow(y: Int) {imm}:
-        for x in range(cols):
-            var a = Int32(pdx[unsafe_offset=y * cols + x])
-            var b = Int32(pdy[unsafe_offset=y * cols + x])
-            pmag[unsafe_offset=y * cols + x] = (a * a + b * b) if l2 else (abs(a) + abs(b))
+        var i = y * cols
+        var e = i + cols
+        while i + WI <= e:
+            var a = pdx.unsafe_load[width=WI](i).cast[DType.int32]()
+            var b = pdy.unsafe_load[width=WI](i).cast[DType.int32]()
+            pmag.unsafe_store(i, (a * a + b * b) if l2 else (abs(a) + abs(b)))
+            i += WI
+        while i < e:
+            var a = Int32(pdx[unsafe_offset=i])
+            var b = Int32(pdy[unsafe_offset=i])
+            pmag[unsafe_offset=i] = (a * a + b * b) if l2 else (abs(a) + abs(b))
+            i += 1
 
     par(mrow, rows)
-    var map = Mat[DType.uint8](rows, cols, 1)  # 1 not an edge, 0 weak candidate, 3 strong
+    # 1 not an edge, 0 weak candidate, 3 strong; a one-pixel border of 1s lets the flood skip bounds checks
+    var ms = cols + 2
+    var map = Mat[DType.uint8](rows + 2, ms, 1, False)
     var pm = map.ptr()
+    for x in range(ms):
+        pm[unsafe_offset=x] = 1
+        pm[unsafe_offset=(rows + 1) * ms + x] = 1
+    for y in range(rows + 2):
+        pm[unsafe_offset=y * ms] = 1
+        pm[unsafe_offset=y * ms + cols + 1] = 1
 
     def nrow(y: Int) {imm}:
-        for x in range(cols):
+        var x = 0
+        while x < cols:
             var i = y * cols + x
+            var pi = (y + 1) * ms + x + 1
+            if x + WI <= cols and not pmag.unsafe_load[width=WI](i).gt(Int32(low)).reduce_or():
+                comptime for j in range(WI):
+                    pm[unsafe_offset=pi + j] = 1
+                x += WI
+                continue
             var m = Int(pmag[unsafe_offset=i])
             var xs = Int(pdx[unsafe_offset=i])
             var ys = Int(pdy[unsafe_offset=i])
@@ -1304,31 +1328,50 @@ def canny(src: Mat[DType.uint8], t1: Float64, t2: Float64, aperture: Int, l2: Bo
                         var pa = Int(pmag[unsafe_offset=i - cols - sg]) if (y > 0 and xa >= 0 and xa < cols) else 0
                         var pb = Int(pmag[unsafe_offset=i + cols + sg]) if (y + 1 < rows and xb >= 0 and xb < cols) else 0
                         ok = m > pa and m > pb
-            pm[unsafe_offset=i] = UInt8((3 if m > high else 0) if ok else 1)
+            pm[unsafe_offset=pi] = UInt8((3 if m > high else 0) if ok else 1)
+            x += 1
 
     par(nrow, rows)
-    var stack = List[Int](capacity=1024)
-    for i in range(rows * cols):
-        if pm[unsafe_offset=i] == 3:
-            pm[unsafe_offset=i] = 2
-            stack.append(i)
-    while len(stack) > 0:
-        var i = stack.pop()
-        var y = i // cols
-        var x = i % cols
-        for ddy in range(-1, 2):
-            for ddx in range(-1, 2):
-                var ny = y + ddy
-                var nx = x + ddx
-                if ny >= 0 and ny < rows and nx >= 0 and nx < cols:
-                    var j = ny * cols + nx
-                    if pm[unsafe_offset=j] == 0 or pm[unsafe_offset=j] == 3:
-                        pm[unsafe_offset=j] = 2
-                        stack.append(j)
-    var o = Mat[DType.uint8](rows, cols, 1)
-    for i in range(rows * cols):
-        o.data[i] = 255 if pm[unsafe_offset=i] == 2 else 0
-    _ = (dx.rows, dy.rows, len(mag), map.rows)
+    var stk = List[Int32](unsafe_uninit_length=rows * cols)  # each pixel is pushed at most once
+    var stack = ptr_of(stk)
+    var sp = 0
+    comptime WB = simd_width_of[DType.uint8]()
+    for y in range(rows):
+        var row = (y + 1) * ms + 1
+        var q = 0
+        while q < cols:
+            if q + WB <= cols and not pm.unsafe_load[width=WB](row + q).eq(3).reduce_or():
+                q += WB
+                continue
+            for qq in range(q, min(q + WB, cols)):
+                if pm[unsafe_offset=row + qq] == 3:
+                    pm[unsafe_offset=row + qq] = 2
+                    stack[unsafe_offset=sp] = Int32(row + qq)
+                    sp += 1
+            q += WB
+    var neigh: List[Int] = [-ms - 1, -ms, -ms + 1, -1, 1, ms - 1, ms, ms + 1]
+    var offs = ptr_of(neigh)
+    while sp > 0:
+        sp -= 1
+        var i = Int(stack[unsafe_offset=sp])
+        comptime for k in range(8):
+            var j = i + offs[unsafe_offset=k]
+            if pm[unsafe_offset=j] == 0 or pm[unsafe_offset=j] == 3:
+                pm[unsafe_offset=j] = 2
+                stack[unsafe_offset=sp] = Int32(j)
+                sp += 1
+    var o = Mat[DType.uint8](rows, cols, 1, False)
+    var po = o.ptr()
+    for y in range(rows):
+        var row = (y + 1) * ms + 1
+        var q = 0
+        while q + WB <= cols:
+            po.unsafe_store(y * cols + q, pm.unsafe_load[width=WB](row + q).eq(2).select(SIMD[DType.uint8, WB](255), SIMD[DType.uint8, WB](0)))
+            q += WB
+        while q < cols:
+            po[unsafe_offset=y * cols + q] = 255 if pm[unsafe_offset=row + q] == 2 else 0
+            q += 1
+    _ = (dx.rows, dy.rows, len(mag), map.rows, len(neigh), len(stk))
     return o^
 
 
@@ -1446,31 +1489,116 @@ def good_features(src: Mat[DType.uint8], max_corners: Int, quality: Float64, min
     var scale = Float32(1.0 / (4.0 * Float64(block) * 255.0))
     var dx = sobel[DType.uint8, F32](src, 1, 0, 3, scale)
     var dy = sobel[DType.uint8, F32](src, 0, 1, 3, scale)
-    var n = src.rows * src.cols
-    var cov = Mat[F32](src.rows, src.cols, 3)
-    for i in range(n):
-        cov.data[3 * i] = dx.data[i] * dx.data[i]
-        cov.data[3 * i + 1] = dx.data[i] * dy.data[i]
-        cov.data[3 * i + 2] = dy.data[i] * dy.data[i]
+    var rows = src.rows
+    var cols = src.cols
+    var n = rows * cols
+    var xx = Mat[F32](rows, cols, 1, False)
+    var xy = Mat[F32](rows, cols, 1, False)
+    var yy = Mat[F32](rows, cols, 1, False)
+    var pdx = dx.ptr()
+    var pdy = dy.ptr()
+    var pxx = xx.ptr()
+    var pxy = xy.ptr()
+    var pyy = yy.ptr()
+
+    def cov_rows(y: Int) {imm}:
+        var i = y * cols
+        var e = i + cols
+        while i + WF <= e:
+            var a = pdx.unsafe_load[width=WF](i)
+            var b = pdy.unsafe_load[width=WF](i)
+            pxx.unsafe_store(i, a * a)
+            pxy.unsafe_store(i, a * b)
+            pyy.unsafe_store(i, b * b)
+            i += WF
+        while i < e:
+            pxx[unsafe_offset=i] = pdx[unsafe_offset=i] * pdx[unsafe_offset=i]
+            pxy[unsafe_offset=i] = pdx[unsafe_offset=i] * pdy[unsafe_offset=i]
+            pyy[unsafe_offset=i] = pdy[unsafe_offset=i] * pdy[unsafe_offset=i]
+            i += 1
+
+    par(cov_rows, rows)
     var box = List[Float32](length=block, fill=1)
-    var sums = sepfilter[F32, F32](cov, box, box)
-    var eig = Mat[F32](src.rows, src.cols, 1)
+    var sxx = sepfilter[F32, F32](xx, box, box)
+    var sxy = sepfilter[F32, F32](xy, box, box)
+    var syy = sepfilter[F32, F32](yy, box, box)
+    var eig = Mat[F32](rows, cols, 1, False)
+    var pe = eig.ptr()
+    var p0 = sxx.ptr()
+    var p1 = sxy.ptr()
+    var p2 = syy.ptr()
+    var rowmax = List[Float32](length=rows, fill=0)
+    var prm = ptr_of(rowmax)
+
+    def eig_rows(y: Int) {imm}:
+        var i = y * cols
+        var e = i + cols
+        var m = SIMD[F32, WF](0)
+        var ms = Float32(0)
+        while i + WF <= e:
+            var a = p0.unsafe_load[width=WF](i) * 0.5
+            var b = p1.unsafe_load[width=WF](i)
+            var c = p2.unsafe_load[width=WF](i) * 0.5
+            var v = (a + c) - sqrt((a - c) * (a - c) + b * b)
+            pe.unsafe_store(i, v)
+            m = max(m, v)
+            i += WF
+        while i < e:
+            var a = p0[unsafe_offset=i] * 0.5
+            var b = p1[unsafe_offset=i]
+            var c = p2[unsafe_offset=i] * 0.5
+            var v = (a + c) - sqrt((a - c) * (a - c) + b * b)
+            pe[unsafe_offset=i] = v
+            ms = max(ms, v)
+            i += 1
+        prm[unsafe_offset=y] = max(ms, m.reduce_max())
+
+    par(eig_rows, rows)
     var best = Float32(0)
-    for i in range(n):
-        var a = sums.data[3 * i] * 0.5
-        var b = sums.data[3 * i + 1]
-        var c = sums.data[3 * i + 2] * 0.5
-        eig.data[i] = (a + c) - sqrt((a - c) * (a - c) + b * b)
-        best = max(best, eig.data[i])
+    for y in range(rows):
+        best = max(best, rowmax[y])
     var thr = Float32(Float64(best) * quality)
-    var kept = Mat[F32](src.rows, src.cols, 1)
-    for i in range(n):
-        kept.data[i] = eig.data[i] if eig.data[i] > thr else 0
-    var dil = morph[False, F32](kept, 0, 3, 1)
+    # a pixel is a candidate when above thr and not below any of its (in-image) 8 neighbours
+    var mask = Mat[DType.uint8](rows, cols, 1, False)
+    var pk = mask.ptr()
+
+    def mask_rows(y: Int) {imm}:
+        var x = 0
+        while x < cols:
+            var i = y * cols + x
+            if x == 0 or x + WF >= cols:
+                var v = pe[unsafe_offset=i]
+                var ok = v > thr
+                for ddy in range(max(y - 1, 0), min(y + 2, rows)):
+                    for ddx in range(max(x - 1, 0), min(x + 2, cols)):
+                        if pe[unsafe_offset=ddy * cols + ddx] > v:
+                            ok = False
+                pk[unsafe_offset=i] = 1 if ok else 0
+                x += 1
+                continue
+            var v = pe.unsafe_load[width=WF](i)
+            var nb = max(pe.unsafe_load[width=WF](i - 1), pe.unsafe_load[width=WF](i + 1))
+            if y > 0:
+                nb = max(nb, max(pe.unsafe_load[width=WF](i - cols - 1), max(pe.unsafe_load[width=WF](i - cols), pe.unsafe_load[width=WF](i - cols + 1))))
+            if y + 1 < rows:
+                nb = max(nb, max(pe.unsafe_load[width=WF](i + cols - 1), max(pe.unsafe_load[width=WF](i + cols), pe.unsafe_load[width=WF](i + cols + 1))))
+            var ok = v.gt(thr) & v.ge(nb)
+            comptime for j in range(WF):
+                pk[unsafe_offset=i + j] = 1 if ok[j] else 0
+            x += WF
+
+    par(mask_rows, rows)
     var cand = List[Int]()
-    for i in range(n):
-        if kept.data[i] != 0 and kept.data[i] == dil.data[i]:
-            cand.append(i)
+    comptime WB = simd_width_of[DType.uint8]()
+    var q = 0
+    while q < n:
+        if q + WB <= n and not pk.unsafe_load[width=WB](q).ne(0).reduce_or():
+            q += WB
+            continue
+        for qq in range(q, min(q + WB, n)):
+            if pk[unsafe_offset=qq] != 0:
+                cand.append(qq)
+        q += WB
 
     def stronger(p: Int, q: Int) {imm} -> Bool:
         return eig.data[p] > eig.data[q] or (eig.data[p] == eig.data[q] and p < q)
@@ -1506,6 +1634,7 @@ def good_features(src: Mat[DType.uint8], max_corners: Int, quality: Float64, min
     for i in range(len(chosen)):
         o.data[2 * i] = Float32(chosen[i] % src.cols)
         o.data[2 * i + 1] = Float32(chosen[i] // src.cols)
+    _ = (xx.rows, xy.rows, yy.rows, sxx.rows, sxy.rows, syy.rows, mask.rows, len(rowmax))
     return o^
 
 
