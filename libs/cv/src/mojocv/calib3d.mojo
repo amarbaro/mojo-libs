@@ -1785,7 +1785,7 @@ def aruco_detect(img: Mat[DType.uint8]) -> Tuple[Mat[DType.int32], Mat[F32]]:
     for wi in range(3):
         var win = 3 + 10 * wi
         var bw = adaptive_mean_inv(img, win, 7)
-        var cn = find_contours(bw, False, False)
+        var cn = find_contours(bw, 1, False)
         var pts = Mat[DType.int32](copy=cn[0])
         var off = 0
         for ci in range(cn[1].rows):

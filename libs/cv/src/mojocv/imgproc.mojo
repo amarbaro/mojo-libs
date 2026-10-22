@@ -1580,9 +1580,13 @@ def canny(src: Mat[DType.uint8], t1: Float64, t2: Float64, aperture: Int, l2: Bo
 # ---- findContours -----------------------------------------------------------------------------------------
 
 
-def find_contours(src: Mat[DType.uint8], external: Bool, simple: Bool) -> Tuple[Mat[DType.int32], Mat[DType.int32]]:
+def find_contours(src: Mat[DType.uint8], mode: Int, simple: Bool) -> Tuple[Mat[DType.int32], Mat[DType.int32], Mat[DType.int32]]:
     """Suzuki and Abe border following as cv2 does it: raster scan, outer and hole borders, points emitted in
-    follow order starting at the first pixel found. Returns (points (n, 2) int32, lengths (k, 1) int32)."""
+    follow order starting at the first pixel found. mode 0 external, 1 list, 2 ccomp (outer borders at the top
+    level, holes below their outer border), 3 tree. Returns (points (n, 2) int32, lengths (k, 1) int32, hierarchy
+    (k, 4) int32 as next, previous, first child, parent). Contours come out in cv2's tree order: depth first, the
+    newest sibling first."""
+    var external = mode == 0
     var w = src.cols + 2
     var h = src.rows + 2
     var img = List[Int32](length=w * h, fill=0)
@@ -1597,6 +1601,7 @@ def find_contours(src: Mat[DType.uint8], external: Bool, simple: Bool) -> Tuple[
     var lens = List[Int32]()
     var ctype: List[Int] = [1, 1]  # by border id (nbd): 1 outer, 0 hole; id 1 is the frame
     var cpar: List[Int] = [0, 1]
+    var bpar = List[Int]()  # parent border id of every border found (id - 2 indexes it), as the mode shapes the tree
     var nbd = 1
     for y in range(1, h - 1):
         var lnbd = 1
@@ -1613,6 +1618,10 @@ def find_contours(src: Mat[DType.uint8], external: Bool, simple: Bool) -> Tuple[
                 var parent = (cpar[lnbd] if tb == 1 else lnbd) if outer else (lnbd if tb == 1 else cpar[lnbd])
                 ctype.append(1 if outer else 0)
                 cpar.append(parent)
+                if mode == 1 or (mode == 2 and outer):
+                    bpar.append(1)
+                else:
+                    bpar.append(parent)
                 var keep = (not external) or (outer and parent == 1)
                 var start = len(pts)
                 var cx = x
@@ -1667,19 +1676,62 @@ def find_contours(src: Mat[DType.uint8], external: Bool, simple: Bool) -> Tuple[
             f = Int(pi[unsafe_offset=y * w + x])
             if f != 1 and f != 0:
                 lnbd = abs(f)
-    # cv2 returns the contours last found first
+    # cv2 stores contours in a tree where a new border becomes the first child of its parent, then lists the tree
+    # depth first: so children come newest first, and a node is followed by its subtree
+    var n = len(lens)
+    var kept = List[Int]()  # discovery index of every kept contour
+    for k in range(len(bpar)):
+        if not external or (ctype[k + 2] == 1 and bpar[k] == 1):
+            kept.append(k)
+    var kidx = List[Int](length=len(bpar), fill=-1)  # discovery index -> kept index
+    for i in range(len(kept)):
+        kidx[kept[i]] = i
+    var kids = List[List[Int]](length=n + 1, fill=List[Int]())  # slot n is the frame
+    for i in range(n):
+        var par = bpar[kept[i]] - 2
+        kids[n if par < 0 else kidx[par]].append(i)
+    var order = List[Int]()
+    var rank = List[Int](length=n, fill=0)
+    var hier = List[Int](length=4 * n, fill=-1)
+    # depth first from the frame: pushing in discovery order pops the newest sibling first
+    var todo = List[Int]()
+    for j in range(len(kids[n])):
+        todo.append(kids[n][j])
+    while len(todo) > 0:
+        var c = todo.pop()
+        rank[c] = len(order)
+        order.append(c)
+        for j in range(len(kids[c])):
+            todo.append(kids[c][j])
+    for p in range(n + 1):
+        var m = len(kids[p])
+        for j in range(m):
+            var c = kids[p][m - 1 - j]  # j-th newest
+            var at = rank[c]
+            hier[4 * at + 0] = rank[kids[p][m - 2 - j]] if j + 1 < m else -1
+            hier[4 * at + 1] = rank[kids[p][m - j]] if j > 0 else -1
+            hier[4 * at + 3] = rank[p] if p < n else -1
+            if j == 0 and p < n:
+                hier[4 * rank[p] + 2] = at
     var op = Mat[DType.int32](len(pts) // 2, 2, 1)
-    var ol = Mat[DType.int32](len(lens), 1, 1)
-    var src_at = len(pts)
+    var ol = Mat[DType.int32](n, 1, 1)
+    var oh = Mat[DType.int32](n, 4, 1)
+    var starts = List[Int](length=n, fill=0)
+    var acc = 0
+    for i in range(n):
+        starts[i] = acc
+        acc += 2 * Int(lens[i])
     var dst_at = 0
-    for c in range(len(lens)):
-        var k = 2 * Int(lens[len(lens) - 1 - c])
-        src_at -= k
+    for r in range(n):
+        var c = order[r]
+        var k = 2 * Int(lens[c])
         for i in range(k):
-            op.data[dst_at + i] = pts[src_at + i]
+            op.data[dst_at + i] = pts[starts[c] + i]
         dst_at += k
-        ol.data[c] = lens[len(lens) - 1 - c]
-    return (op^, ol^)
+        ol.data[r] = lens[c]
+        for q in range(4):
+            oh.data[4 * r + q] = Int32(hier[4 * r + q])
+    return (op^, ol^, oh^)
 
 
 # ---- goodFeaturesToTrack ----------------------------------------------------------------------------------
@@ -2747,11 +2799,12 @@ def run_u8(mut a: Args) raises -> Bool:
             o = canny(m, a.f("t1", 100.0), a.f("t2", 200.0), a.i("aperture", 3), a.i("l2", 0) == 1)
         save(o, a.out)
     elif a.op == "findContours":
-        var o = (Mat[DType.int32](0, 0), Mat[DType.int32](0, 0))
+        var o = (Mat[DType.int32](0, 0), Mat[DType.int32](0, 0), Mat[DType.int32](0, 0))
         while a.again():
-            o = find_contours(m, a.i("mode", 0) == 0, a.i("method", 0) == 1)
+            o = find_contours(m, a.i("mode", 0), a.i("method", 0) == 1)
         save(o[0], a.out)
         save(o[1], a.out + ".1")
+        save(o[2], a.out + ".2")
     elif a.op == "goodFeaturesToTrack":
         var o = Mat[F32](0, 0)
         while a.again():

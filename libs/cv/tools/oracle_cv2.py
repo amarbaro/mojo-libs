@@ -136,9 +136,10 @@ def Canny(i, kv):
     return cv2.Canny(i[0], kv_f(kv, "t1", 100.0), kv_f(kv, "t2", 200.0), apertureSize=kv_i(kv, "aperture", 3), L2gradient=bool(kv_i(kv, "l2", 0)))
 @op()
 def findContours(i, kv):
-    cs, _ = cv2.findContours(i[0], [cv2.RETR_EXTERNAL, cv2.RETR_LIST][kv_i(kv, "mode", 0)], [cv2.CHAIN_APPROX_NONE, cv2.CHAIN_APPROX_SIMPLE][kv_i(kv, "method", 0)])
+    cs, hi = cv2.findContours(i[0], [cv2.RETR_EXTERNAL, cv2.RETR_LIST, cv2.RETR_CCOMP, cv2.RETR_TREE][kv_i(kv, "mode", 0)], [cv2.CHAIN_APPROX_NONE, cv2.CHAIN_APPROX_SIMPLE][kv_i(kv, "method", 0)])
     pts = np.concatenate([c.reshape(-1, 2) for c in cs]) if cs else np.zeros((0, 2), np.int32)
-    return [pts.astype(np.int32), np.array([[len(c)] for c in cs], np.int32).reshape(-1, 1)]
+    hier = np.zeros((0, 4), np.int32) if hi is None else hi.reshape(-1, 4).astype(np.int32)
+    return [pts.astype(np.int32), np.array([[len(c)] for c in cs], np.int32).reshape(-1, 1), hier]
 @op()
 def goodFeaturesToTrack(i, kv):
     r = cv2.goodFeaturesToTrack(i[0], kv_i(kv, "maxCorners", 100), kv_f(kv, "quality", 0.01), kv_f(kv, "minDist", 10.0), blockSize=kv_i(kv, "block", 3), useHarrisDetector=bool(kv_i(kv, "harris", 0)), k=kv_f(kv, "k", 0.04))

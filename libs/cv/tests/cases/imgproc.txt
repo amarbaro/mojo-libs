@@ -98,13 +98,21 @@ canny_smg_l2     Canny smg t1=80 t2=200 aperture=3 l2=1 => exact
 canny_sm5        Canny smg t1=40 t2=120 aperture=5 => exact
 canny_blank      Canny blank t1=10 t2=20 => exact
 canny_g1         Canny g1 t1=30 t2=60 => exact
-contours_ext_shapes findContours shapes mode=0 method=0 => exact, exact
-contours_list_shapes findContours shapes mode=1 method=0 => exact, exact
-contours_simple_shapes findContours shapes mode=1 method=1 => exact, exact
-contours_ext_bin findContours bin mode=0 method=1 => exact, exact
-contours_list_bin findContours bin mode=1 method=0 => exact, exact
-contours_blank   findContours blank mode=1 method=0 => exact, exact
-contours_full    findContours full mode=0 method=0 => exact, exact
+contours_ext_shapes findContours shapes mode=0 method=0 => exact, exact, exact
+contours_list_shapes findContours shapes mode=1 method=0 => exact, exact, exact
+contours_simple_shapes findContours shapes mode=1 method=1 => exact, exact, exact
+contours_ext_bin findContours bin mode=0 method=1 => exact, exact, exact
+contours_list_bin findContours bin mode=1 method=0 => exact, exact, exact
+contours_blank   findContours blank mode=1 method=0 => exact, exact, exact
+contours_full    findContours full mode=0 method=0 => exact, exact, exact
+contours_ccomp_shapes findContours shapes mode=2 method=0 => exact, exact, exact
+contours_tree_shapes  findContours shapes mode=3 method=0 => exact, exact, exact
+contours_tree_simple  findContours shapes mode=3 method=1 => exact, exact, exact
+contours_ccomp_bin    findContours bin mode=2 method=1 => exact, exact, exact
+contours_tree_bin     findContours bin mode=3 method=0 => exact, exact, exact
+contours_tree_binhd   findContours binhd mode=3 method=1 => exact, exact, exact
+contours_tree_blank   findContours blank mode=3 method=0 => exact, exact, exact
+contours_tree_full    findContours full mode=3 method=0 => exact, exact, exact
 gftt_hdg         goodFeaturesToTrack hdg maxCorners=500 quality=0.01 minDist=8 block=3 => pts:0.5:0.95
 gftt_smg         goodFeaturesToTrack smg maxCorners=100 quality=0.05 minDist=5 block=5 => pts:0.5:0.98
 gftt_blank       goodFeaturesToTrack blank maxCorners=10 quality=0.1 minDist=3 => cnt:0
