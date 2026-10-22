@@ -2,4 +2,5 @@
 .work/
 .bin/
 tests/fixtures/*.mcv
+tests/fixtures/.made
 __pycache__/
