@@ -30,11 +30,18 @@ b1() {
 
 # BentoML oracle server (tools/oracle_service.py) on a free port, in its own process group
 bento_start() {
-  local p=$((20000 + RANDOM % 20000))
-  (cd .work && PYTHONPATH=../tools exec setsid "../$PY" -m bentoml serve oracle_service:Oracle --port "$p") > .work/bentoml.out 2>&1 &
-  bento_pid=$!
-  for _ in $(seq 120); do curl -s "localhost:$p/readyz" > /dev/null && { bento_port=$p; return; }; sleep 0.5; done
-  echo "FAIL start: bentoml serve did not answer on $p (.work/bentoml.out)"; exit 1
+  local try p
+  for try in 1 2 3; do  # ports below the ephemeral range (32768+); retry when the bind loses a race
+    p=$((20000 + RANDOM % 12000))
+    (cd .work && PYTHONPATH=../tools exec setsid "../$PY" -m bentoml serve oracle_service:Oracle --port "$p") > .work/bentoml.out 2>&1 &
+    bento_pid=$!
+    for _ in $(seq 360); do
+      curl -s "localhost:$p/readyz" > /dev/null && { bento_port=$p; return; }
+      kill -0 "$bento_pid" 2>/dev/null || break
+      sleep 0.5
+    done
+  done
+  echo "FAIL start: bentoml serve did not answer (last port $p):"; tail -5 .work/bentoml.out; exit 1
 }
 cleanup() { [ -z "$pid" ] || kill "$pid" 2>/dev/null || true; [ -z "$bento_pid" ] || kill -- -"$bento_pid" 2>/dev/null || true; }
 
@@ -45,10 +52,23 @@ b2() {
   $PY tools/b2_oracle.py tests/cases/b2.txt "$bento_port" "$port"
 }
 
-items=("$@"); [ ${#items[@]} -gt 0 ] || items=(b1)
+b4() {
+  scripts/mojo.sh tests/b2_service.mojo .work/b2_service 2> .work/b2_service.err || { echo "FAIL build: tests/b2_service.mojo"; cat .work/b2_service.err; return 1; }
+  bento_start
+  start .work/b2_service 0 0 600
+  $PY tools/b2_oracle.py tests/cases/b4.txt "$bento_port" "$port"
+  $PY tools/b4_check.py metrics "$port"
+  $PY tools/b4_check.py drain "$port" "$pid"
+  local rc=0; wait "$pid" || rc=$?; pid=""
+  [ "$rc" = 0 ] || { echo "FAIL b4: server exit status $rc after SIGTERM (want 0)"; return 1; }
+  tests/b4_systemd.sh .work/b2_service
+}
+
+if [ "${1:-}" = --run ]; then "$2"; exit; fi  # one item in its own process: set -e stays on inside it, and its servers die with it
+
+items=("$@"); [ ${#items[@]} -gt 0 ] || items=(b1 b2 b4)
 for it in "${items[@]}"; do
-  if "$it" > ".work/$it-gate.txt" 2>&1; then rc=0; else rc=$?; fi  # not a pipeline: servers started inside must be killed by this shell's trap
-  cleanup; pid=""; bento_pid=""
+  if bash "$0" --run "$it" > ".work/$it-gate.txt" 2>&1; then rc=0; else rc=$?; fi
   echo "exit $rc" >> ".work/$it-gate.txt"
   tail -40 ".work/$it-gate.txt"
   [ "$rc" = 0 ] || { echo "FAIL $it: exit $rc (.work/$it-gate.txt)"; exit 1; }

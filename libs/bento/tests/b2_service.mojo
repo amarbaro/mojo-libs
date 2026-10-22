@@ -1,4 +1,6 @@
 """The B2 test service: tools/oracle_service.py in Mojo. The gate sends the same requests to both."""
+from std.ffi import external_call
+from std.sys import argv
 from json import Json
 from posix import block_signals
 from bento.endpoint import Service, Endpoint, Field, T_STR, T_INT, T_FLOAT, T_BOOL, T_LIST, http_error
@@ -173,13 +175,11 @@ struct Unavailable(Endpoint):
 
 def main() raises:
     block_signals([2, 15])
-    var port = 0
-    var args = List[String]()
-    from std.sys import argv
-
     var a = argv()
-    if len(a) > 1:
-        port = Int(a[1])
+    var port = Int(a[1]) if len(a) > 1 else 0
+    var startup_ms = Int(a[2]) if len(a) > 2 else 0  # delay before READY=1, for the Type=notify check
+    var drain_ms = Int(a[3]) if len(a) > 3 else 0
     var srv = Server(Service(Echo(), Add(), Stats(), Greet(), Boom(), Refuse(), Tag(), Scale(), Deny(), Missing(), Unavailable()), "127.0.0.1", port)
     print("LISTEN", srv.port(), flush=True)
-    srv.serve(4, True)
+    _ = external_call["usleep", Int32](Int32(startup_ms * 1000))
+    srv.serve(4, True, drain_ms)

@@ -5,6 +5,8 @@ are answered in order, in one write. No queue, no lock: the kernel is the schedu
 from std.atomic import Atomic, Ordering
 from std.ffi import external_call
 from std.memory import alloc
+from std.time import perf_counter_ns
+from systemd import ready, status, stopping, watchdog as notify_watchdog, watchdog_usec
 from posix import PollSet, POLLIN, SIGINT, SIGTERM, close, recv, send_all, signal_fd, read_signals
 from bento.http import Request, Response, Limits, Parsed, parse_request, reason
 from bento.net import (
@@ -22,6 +24,10 @@ trait Handler(Movable, Deinitable):
     keep it read-only, or lock what it mutates."""
 
     def handle(self, req: Request, mut resp: Response) raises:
+        ...
+
+    def draining(self):
+        """Called once when SIGINT/SIGTERM arrives, `drain_ms` before the workers stop: turn /readyz to 503."""
         ...
 
 
@@ -72,12 +78,18 @@ struct Server[H: Handler](Movable):
         """Ask every worker to finish its request and return. Safe from any thread."""
         Atomic[Int32].store[ordering=Ordering.RELEASE](self.stop_p, 1)
 
-    def stopped(self) -> Bool:
-        return Atomic[Int32].load[ordering=Ordering.ACQUIRE](self.stop_p) != 0
+    def _drain(self):
+        """A signal arrived: ask the main thread to run the drain, unless a stop is already under way."""
+        var running = Int32(0)
+        _ = Atomic[Int32].compare_exchange(self.stop_p, running, Int32(2))
 
-    def serve(mut self, workers: Int = 4, signals: Bool = False) raises:
+    def stopped(self) -> Bool:
+        return Atomic[Int32].load[ordering=Ordering.ACQUIRE](self.stop_p) == 1
+
+    def serve(mut self, workers: Int = 4, signals: Bool = False, drain_ms: Int = 0) raises:
         """Run until stop() (or SIGINT/SIGTERM when signals; call posix.block_signals first in main).
-        Blocks the caller; spawns `workers` threads. Open connections are closed on return."""
+        A signal first calls handler.draining(), keeps serving for drain_ms, then stops. Blocks the caller;
+        spawns `workers` threads. Open connections are closed on return."""
         if not epoll_add(self.ep, self.listen_fd, EPOLLIN | EPOLLONESHOT):
             raise Error("bento: epoll_ctl(listen) failed")
         if signals:
@@ -90,6 +102,32 @@ struct Server[H: Handler](Movable):
             if rc != 0:
                 self.stop()
                 raise Error("bento: pthread_create rc ", rc)
+        try:
+            _ = ready("listening on " + String(self.port()))
+        except:
+            pass  # a bad NOTIFY_SOCKET must not stop a server that works
+        var wd = watchdog_usec() * 1000 // 2  # ping at half the interval systemd asked for
+        var last = perf_counter_ns()
+        while not self.stopped():
+            _ = external_call["usleep", Int32](Int32(20000))
+            if Atomic[Int32].load[ordering=Ordering.ACQUIRE](self.stop_p) == 2:
+                self.handler.draining()
+                try:
+                    _ = status("draining")
+                except:
+                    pass
+                _ = external_call["usleep", Int32](Int32(drain_ms * 1000))
+                self.stop()
+            if wd > 0 and Int(perf_counter_ns() - last) >= wd:
+                last = perf_counter_ns()
+                try:
+                    _ = notify_watchdog()
+                except:
+                    pass
+        try:
+            _ = stopping()
+        except:
+            pass
         for i in range(workers):
             _ = external_call["pthread_join", Int32](tids[i], Int(0))
         for fd in range(len(self.table)):
@@ -109,7 +147,7 @@ struct Server[H: Handler](Movable):
                 self._accept()
             elif fd == self.sig:
                 if len(read_signals(fd)) > 0:
-                    self.stop()
+                    self._drain()
             else:
                 var keep = self._serve(fd, evs.events(0))
                 if keep:

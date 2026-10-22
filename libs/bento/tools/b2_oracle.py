@@ -29,7 +29,10 @@ def ask(port, method, target, ctype, body):
     c.request(method, target, body=body if method != "GET" else None, headers=hdr)
     r = c.getresponse()
     data = r.read()
-    out = (r.status, r.getheader("content-type"), r.getheader("allow"), data)
+    allow = r.getheader("allow")
+    if allow:  # starlette joins a Python set: its order changes with every process, the set is the contract
+        allow = ", ".join(sorted(allow.split(", ")))
+    out = (r.status, r.getheader("content-type"), allow, data)
     c.close()
     return out
 

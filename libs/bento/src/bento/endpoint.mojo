@@ -2,8 +2,11 @@
 arguments to a JSON result. `Service[*Es]` is a Handler that serves `POST /<name>` for each of them and
 answers like BentoML does: pydantic-style 400 bodies for bad input, `[{"error": msg}]` for an HttpError,
 a fixed 500 for anything else, text/plain for a string result and JSON for the rest."""
+from std.atomic import Atomic, Ordering
+from std.time import perf_counter_ns
 from json import Json, parse, STR, INT, FLOAT, BOOL, NULL, ARR, OBJ
 from bento.http import Request, Response
+from bento.metrics import CONTENT_TYPE, Metrics
 from bento.pyerr import GENERIC_500, issue, json_invalid, quote, validation_body
 from bento.server import Handler
 
@@ -230,16 +233,59 @@ def _serve[E: Endpoint](ep: E, req: Request, mut resp: Response):
         resp = _error_response(e)
 
 
-struct Service[*Es: Endpoint](Handler):
-    var eps: Tuple[*Self.Es]
+def _allow(mut resp: Response, methods: String):
+    resp = Response.text(405, "Method Not Allowed")
+    resp.add("allow", methods)
 
-    def __init__(out self, var *eps: *Self.Es):
+
+struct Service[*Es: Endpoint](Handler):
+    """Serves `POST /<name>` per endpoint plus BentoML's built-ins: GET/HEAD /healthz, /livez, /readyz and
+    GET /metrics (Prometheus text). /readyz answers 503 after `set_ready(False)` so a balancer drains the process
+    before `Server.stop()`."""
+
+    var eps: Tuple[*Self.Es]
+    var metrics: Metrics
+    var flags: List[Int32]  # [0]: ready
+    var flag_p: Pointer[Int32, MutUntrackedOrigin]
+
+    def __init__(out self, var *eps: *Self.Es, name: String = "mojo-bento"):
         self.eps = Tuple(*eps^)
+        var paths = List[String]()
+        comptime for i in range(Self.Es.__len__()):
+            paths.append("/" + String(Self.Es[i].name))
+        self.metrics = Metrics(name, paths^)
+        self.flags = List[Int32](length=4, fill=0)
+        self.flags[0] = 1
+        self.flag_p = Pointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(self.flags.unsafe_ptr()))
+
+    def draining(self):
+        self.set_ready(False)
+
+    def set_ready(self, ready: Bool):
+        Atomic[Int32].store[ordering=Ordering.RELEASE](self.flag_p, Int32(1) if ready else Int32(0))
 
     def handle(self, req: Request, mut resp: Response) raises:
+        var path = req.path
+        if path == "/healthz" or path == "/livez" or path == "/readyz":
+            if req.method != "GET" and req.method != "HEAD":
+                _allow(resp, "GET, HEAD")
+            elif path == "/readyz" and Atomic[Int32].load[ordering=Ordering.ACQUIRE](self.flag_p) == 0:
+                resp = Response.text(503, "\n")
+            else:
+                resp = Response.text(200, "\n")
+            return
+        if path == "/metrics":
+            if req.method != "GET" and req.method != "HEAD":
+                _allow(resp, "GET, HEAD")
+            else:
+                resp = Response.text(200, self.metrics.render(), CONTENT_TYPE)
+            return
         comptime for i in range(Self.Es.__len__()):
             comptime E = Self.Es[i]
-            if req.path == "/" + String(E.name):
+            if path == "/" + String(E.name):
+                var t0 = perf_counter_ns()
+                self.metrics.begin(i)
                 _serve(self.eps[i], req, resp)
+                self.metrics.end(i, resp.status, Int(perf_counter_ns() - t0))
                 return
         resp = Response.text(404, "Not Found")
