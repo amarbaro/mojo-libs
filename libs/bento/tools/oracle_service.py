@@ -1,4 +1,6 @@
 """The B2 oracle service: the endpoints tests/b2_service.mojo must answer byte-for-byte like BentoML."""
+import typing as t
+
 import bentoml
 
 
@@ -48,3 +50,29 @@ class Oracle:
     @bentoml.api
     def unavailable(self) -> str:
         raise bentoml.exceptions.BentoMLException("later", error_code=__import__("http").HTTPStatus.SERVICE_UNAVAILABLE)
+
+    @bentoml.api
+    def count(self, n: int, prefix: str = "n") -> t.Generator[str, None, None]:
+        for i in range(n):
+            yield f"{prefix}{i}"
+
+    @bentoml.api
+    def records(self, n: int) -> t.Generator[dict, None, None]:
+        for i in range(n):
+            yield {"i": i, "sq": i * i, "text": "é" * (i % 2)}
+
+    @bentoml.api
+    def numbers(self, n: int) -> t.Generator[float, None, None]:
+        for i in range(n):
+            yield i / 4
+
+    @bentoml.api
+    def broken(self, n: int) -> t.Generator[str, None, None]:
+        for i in range(n):
+            yield f"ok{i}"
+        raise RuntimeError("mid-stream")
+
+    @bentoml.api
+    def early(self, n: int) -> t.Generator[str, None, None]:
+        raise RuntimeError("before the first item")
+        yield ""

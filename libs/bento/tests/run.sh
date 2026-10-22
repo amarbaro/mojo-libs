@@ -64,9 +64,17 @@ b4() {
   tests/b4_systemd.sh .work/b2_service
 }
 
+b6() {
+  scripts/mojo.sh tests/b2_service.mojo .work/b2_service 2> .work/b2_service.err || { echo "FAIL build: tests/b2_service.mojo"; cat .work/b2_service.err; return 1; }
+  bento_start
+  start .work/b2_service
+  $PY tools/b6_oracle.py wire tests/cases/b6.txt "$bento_port" "$port"
+  $PY tools/b6_oracle.py sse "$port"
+}
+
 if [ "${1:-}" = --run ]; then "$2"; exit; fi  # one item in its own process: set -e stays on inside it, and its servers die with it
 
-items=("$@"); [ ${#items[@]} -gt 0 ] || items=(b1 b2 b4)
+items=("$@"); [ ${#items[@]} -gt 0 ] || items=(b1 b2 b4 b6)
 for it in "${items[@]}"; do
   if bash "$0" --run "$it" > ".work/$it-gate.txt" 2>&1; then rc=0; else rc=$?; fi
   echo "exit $rc" >> ".work/$it-gate.txt"

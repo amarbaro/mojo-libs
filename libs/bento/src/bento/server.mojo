@@ -16,6 +16,7 @@ from bento.net import (
 
 comptime _MutConn = Pointer[Conn, MutUntrackedOrigin]
 comptime _MutInt = Pointer[Int32, MutUntrackedOrigin]
+comptime _MutBytes = Pointer[List[UInt8], MutUntrackedOrigin]
 comptime _WAKE_MS = 100  # how often an idle worker looks at the stop flag
 
 
@@ -198,11 +199,18 @@ struct Server[H: Handler](Movable):
             c.pos += p.used
             c.told = False
             var resp = Response()
+            keep = req.keep_alive() and not self.stopped()
+            resp.attach(fd, req.minor, keep, Int(Pointer(to=out)))
             try:
                 self.handler.handle(req, resp)
             except e:
-                resp = Response.text(500, String(e) + "\n")
-            keep = req.keep_alive() and not self.stopped()
+                if resp.state == 0:
+                    resp = Response.text(500, String(e) + "\n")
+                else:
+                    resp.end_stream()  # an error after the head went out can only end the stream
+            if resp.state != 0:  # the handler streamed: the answer is already on the wire
+                keep = resp.state == 2 and resp.keep
+                continue
             resp.encode(req.minor, keep, req.method == "HEAD", out)
         if c.pos == len(c.inbuf):
             c.inbuf.clear()

@@ -3,6 +3,7 @@ arguments to a JSON result. `Service[*Es]` is a Handler that serves `POST /<name
 answers like BentoML does: pydantic-style 400 bodies for bad input, `[{"error": msg}]` for an HttpError,
 a fixed 500 for anything else, text/plain for a string result and JSON for the rest."""
 from std.atomic import Atomic, Ordering
+from std.builtin.rebind import downcast, rebind
 from std.time import perf_counter_ns
 from json import Json, parse, STR, INT, FLOAT, BOOL, NULL, ARR, OBJ
 from bento.http import Request, Response
@@ -42,17 +43,37 @@ struct Field(Copyable, Movable):
         self.default = default.copy()
 
 
-trait Endpoint(Movable, Deinitable):
+trait Routable(Movable, Deinitable):
+    """What Service routes on: a name and an input model. Implement Endpoint or StreamEndpoint."""
+
     comptime name: StaticString
 
     def fields(self) -> List[Field]:
         """The input model, in the order issues are reported."""
         ...
 
+
+trait Endpoint(Routable):
     def call(self, args: Json) raises -> Json:
         """`args` is an object holding every field, validated and coerced (defaults filled in).
         A string result is sent as text/plain, anything else as JSON."""
         ...
+
+
+trait StreamEndpoint(Routable):
+    def stream(self, args: Json, mut resp: Response) raises:
+        """Send results as they exist: `emit(resp, item)` per item (BentoML's wire form: one chunk each),
+        or `resp.sse(data, event, id)` for text/event-stream frames. Raising before the first send answers like
+        any endpoint error; raising later ends the stream where it stands, as BentoML does."""
+        ...
+
+
+def emit(mut resp: Response, item: Json) raises:
+    """One item of a generator endpoint as one chunk: a string as is, anything else as Python's json.dumps."""
+    if item.kind() == STR:
+        resp.write(item.str())
+    else:
+        resp.write(item.dumps(False))
 
 
 def http_error(status: Int, message: String) -> Error:
@@ -203,12 +224,12 @@ def _error_response(e: Error) -> Response:
     return _json_response(status, "[{\"error\":" + quote(text) + "}]")
 
 
-def _serve[E: Endpoint](ep: E, req: Request, mut resp: Response):
+def _input(fields: List[Field], req: Request, mut resp: Response, mut args: Json) -> Bool:
+    """POST body to validated args. False: `resp` holds the answer (405, 400)."""
     if req.method != "POST":
         resp = Response.text(405, "Method Not Allowed")
         resp.add("allow", "POST")
-        return
-    var args = Json()
+        return False
     var issues = Json.array()
     var body = Json.object()
     if len(req.body) > 0:
@@ -218,10 +239,17 @@ def _serve[E: Endpoint](ep: E, req: Request, mut resp: Response):
             var bad = Json.array()
             bad.push(issue("json_invalid", Json.array(), json_invalid(Span(req.body), String(e))))
             resp = _json_response(400, validation_body(bad))
-            return
-    validate(ep.fields(), body, args, issues)
+            return False
+    validate(fields, body, args, issues)
     if issues.len() > 0:
         resp = _json_response(400, validation_body(issues))
+        return False
+    return True
+
+
+def _serve[E: Endpoint](ep: E, req: Request, mut resp: Response):
+    var args = Json()
+    if not _input(ep.fields(), req, resp, args):
         return
     try:
         var out = ep.call(args)
@@ -233,12 +261,26 @@ def _serve[E: Endpoint](ep: E, req: Request, mut resp: Response):
         resp = _error_response(e)
 
 
+def _serve_stream[E: StreamEndpoint](ep: E, req: Request, mut resp: Response):
+    var args = Json()
+    if not _input(ep.fields(), req, resp, args):
+        return
+    try:
+        ep.stream(args, resp)
+        resp.begin_stream("text/event-stream; charset=utf-8")  # a stream with no items still answers
+    except e:
+        if resp.state == 0:
+            resp = _error_response(e)
+            return
+    resp.end_stream()
+
+
 def _allow(mut resp: Response, methods: String):
     resp = Response.text(405, "Method Not Allowed")
     resp.add("allow", methods)
 
 
-struct Service[*Es: Endpoint](Handler):
+struct Service[*Es: Routable](Handler):
     """Serves `POST /<name>` per endpoint plus BentoML's built-ins: GET/HEAD /healthz, /livez, /readyz and
     GET /metrics (Prometheus text). /readyz answers 503 after `set_ready(False)` so a balancer drains the process
     before `Server.stop()`."""
@@ -285,7 +327,10 @@ struct Service[*Es: Endpoint](Handler):
             if path == "/" + String(E.name):
                 var t0 = perf_counter_ns()
                 self.metrics.begin(i)
-                _serve(self.eps[i], req, resp)
+                comptime if conforms_to(E, StreamEndpoint):
+                    _serve_stream[downcast[E, StreamEndpoint]](rebind[downcast[E, StreamEndpoint]](self.eps[i]), req, resp)
+                else:
+                    _serve[downcast[E, Endpoint]](rebind[downcast[E, Endpoint]](self.eps[i]), req, resp)
                 self.metrics.end(i, resp.status, Int(perf_counter_ns() - t0))
                 return
         resp = Response.text(404, "Not Found")
