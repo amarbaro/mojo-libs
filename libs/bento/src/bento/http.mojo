@@ -6,6 +6,8 @@ Stricter than h11 on purpose where leniency enables request smuggling: bare LF a
 400, and Content-Length with Transfer-Encoding is 400.
 """
 
+from posix import send_all
+
 comptime SP: UInt8 = 32
 comptime HT: UInt8 = 9
 comptime CR: UInt8 = 13
@@ -326,6 +328,41 @@ def _chunked(buf: Span[UInt8, _], start: Int, mut req: Request, lim: Limits, con
         at += size + 2
 
 
+def _hexlen(n: Int) -> String:
+    var out = String()
+    var v = n
+    if v == 0:
+        return "0"
+    while v > 0:
+        var d = v & 15
+        out = chr(48 + d if d < 10 else 87 + d) + out
+        v >>= 4
+    return out
+
+
+def sse_frame(data: String, event: String = "", id: String = "") -> String:
+    """The text/event-stream wire form (WHATWG HTML section 9.2). CR, LF and CRLF in data start a new `data:` line."""
+    var out = List[UInt8]()
+    if event != "":
+        out.extend(("event: " + event + "\n").as_bytes())
+    if id != "":
+        out.extend(("id: " + id + "\n").as_bytes())
+    var b = data.as_bytes()
+    var start = 0
+    var i = 0
+    while i <= len(b):
+        if i == len(b) or b[i] == LF or b[i] == CR:
+            out.extend("data: ".as_bytes())
+            out.extend(b[start:i])
+            out.append(LF)
+            if i < len(b) and b[i] == CR and i + 1 < len(b) and b[i + 1] == LF:
+                i += 1
+            start = i + 1
+        i += 1
+    out.append(LF)
+    return String(unsafe_from_utf8=Span(out))
+
+
 def reason(status: Int) -> String:
     if status == 100:
         return "Continue"
@@ -384,17 +421,104 @@ def reason(status: Int) -> String:
     return "Status"
 
 
+comptime IDLE = 0  # Response.state: nothing sent yet
+comptime OPEN = 1  # head sent, chunks may follow
+comptime DONE = 2  # stream finished cleanly
+comptime BROKEN = 3  # the peer went away mid-stream: close the connection
+
+
 struct Response(Copyable, Movable):
+    """What a handler returns: fill status, headers and body, or stream. `begin_stream` / `write` / `end_stream`
+    send as the handler runs (chunked for HTTP/1.1, close-delimited for 1.0); the server attaches the connection."""
+
     var status: Int
     var names: List[String]
     var values: List[String]
     var body: List[UInt8]
+    var state: Int
+    var fd: Int32
+    var minor: Int
+    var keep: Bool
+    var queued: Int  # address of the List[UInt8] holding earlier pipelined answers, flushed before the head; 0: none
 
     def __init__(out self, status: Int = 200):
         self.status = status
         self.names = List[String]()
         self.values = List[String]()
         self.body = List[UInt8]()
+        self.state = IDLE
+        self.fd = -1
+        self.minor = 1
+        self.keep = False
+        self.queued = 0
+
+    def attach(mut self, fd: Int32, minor: Int, keep: Bool, queued: Int):
+        self.fd = fd
+        self.minor = minor
+        self.keep = keep
+        self.queued = queued
+
+    def begin_stream(mut self, content_type: String, status: Int = 200) raises:
+        """Send the head now. HTTP/1.0 peers get a close-delimited body, so the connection ends with the stream."""
+        if self.state != IDLE:
+            return
+        if self.fd < 0:
+            raise Error("stream: response is not attached to a connection")
+        self.status = status
+        var head = List[UInt8]()
+        head.extend(("HTTP/1.1 " + String(status) + " " + reason(status) + "\r\ncontent-type: " + content_type + "\r\n").as_bytes())
+        for i in range(len(self.names)):
+            head.extend((self.names[i] + ": " + self.values[i] + "\r\n").as_bytes())
+        if self.minor == 1:
+            head.extend("transfer-encoding: chunked\r\n".as_bytes())
+        if not self.keep or self.minor == 0:
+            head.extend("connection: close\r\n".as_bytes())
+            self.keep = False
+        head.extend("\r\n".as_bytes())
+        if self.queued != 0:
+            var q = Pointer[List[UInt8], MutUntrackedOrigin](unsafe_from_address=self.queued)
+            if len(q[]) > 0:
+                var all = q[].copy()
+                all.extend(Span(head))
+                head = all^
+                q[].clear()
+        self.state = OPEN
+        if not send_all(self.fd, head):
+            self.state = BROKEN
+            raise Error("stream: client gone")
+
+    def write(mut self, data: Span[UInt8, _]) raises:
+        """One chunk (nothing for empty data). Raises when the peer is gone: stop generating."""
+        if self.state == IDLE:
+            self.begin_stream("text/event-stream; charset=utf-8")
+        if self.state != OPEN:
+            raise Error("stream: client gone")
+        if len(data) == 0:
+            return
+        var chunk = List[UInt8]()
+        if self.minor == 1:
+            chunk.extend((_hexlen(len(data)) + "\r\n").as_bytes())
+        chunk.extend(data)
+        if self.minor == 1:
+            chunk.extend("\r\n".as_bytes())
+        if not send_all(self.fd, chunk):
+            self.state = BROKEN
+            raise Error("stream: client gone")
+
+    def write(mut self, text: String) raises:
+        self.write(text.as_bytes())
+
+    def sse(mut self, data: String, event: String = "", id: String = "") raises:
+        """One Server-Sent Event as a single chunk: `event:`, `id:`, one `data:` line per line of data, blank line."""
+        self.write(sse_frame(data, event, id))
+
+    def end_stream(mut self):
+        """Terminate the stream. A stream that never began is left for the server to answer as usual."""
+        if self.state != OPEN:
+            return
+        self.state = DONE
+        if self.minor == 1 and not send_all(self.fd, "0\r\n\r\n".as_bytes()):
+            self.state = BROKEN
 
     @staticmethod
     def text(status: Int, body: String, content_type: String = "text/plain; charset=utf-8") -> Response:

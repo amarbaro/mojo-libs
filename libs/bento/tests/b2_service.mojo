@@ -1,8 +1,10 @@
 """The B2 test service: tools/oracle_service.py in Mojo. The gate sends the same requests to both."""
+from std.ffi import external_call
+from std.sys import argv
 from json import Json
 from posix import block_signals
-from bento.endpoint import Service, Endpoint, Field, T_STR, T_INT, T_FLOAT, T_BOOL, T_LIST, http_error
-from bento.http import Limits
+from bento.endpoint import Service, Endpoint, StreamEndpoint, emit, Field, T_STR, T_INT, T_FLOAT, T_BOOL, T_LIST, http_error
+from bento.http import Limits, Response
 from bento.server import Server
 
 
@@ -171,15 +173,119 @@ struct Unavailable(Endpoint):
         raise http_error(503, "later")
 
 
+struct Count(StreamEndpoint):
+    comptime name = "count"
+
+    def __init__(out self):
+        pass
+
+    def fields(self) -> List[Field]:
+        return [Field("n", T_INT), Field("prefix", T_STR, Json.of("n"))]
+
+    def stream(self, args: Json, mut resp: Response) raises:
+        for i in range(args.get("n").int()):
+            emit(resp, Json.of(args.get("prefix").str() + String(i)))
+
+
+struct Records(StreamEndpoint):
+    comptime name = "records"
+
+    def __init__(out self):
+        pass
+
+    def fields(self) -> List[Field]:
+        return [Field("n", T_INT)]
+
+    def stream(self, args: Json, mut resp: Response) raises:
+        for i in range(args.get("n").int()):
+            var r = Json.object()
+            r.set("i", Json.of(i))
+            r.set("sq", Json.of(i * i))
+            r.set("text", Json.of("\u00e9" if i % 2 == 1 else ""))
+            emit(resp, r)
+
+
+struct Numbers(StreamEndpoint):
+    comptime name = "numbers"
+
+    def __init__(out self):
+        pass
+
+    def fields(self) -> List[Field]:
+        return [Field("n", T_INT)]
+
+    def stream(self, args: Json, mut resp: Response) raises:
+        for i in range(args.get("n").int()):
+            emit(resp, Json.of(Float64(i) / 4.0))
+
+
+struct Broken(StreamEndpoint):
+    comptime name = "broken"
+
+    def __init__(out self):
+        pass
+
+    def fields(self) -> List[Field]:
+        return [Field("n", T_INT)]
+
+    def stream(self, args: Json, mut resp: Response) raises:
+        for i in range(args.get("n").int()):
+            emit(resp, Json.of("ok" + String(i)))
+        raise Error("mid-stream")
+
+
+struct Early(StreamEndpoint):
+    comptime name = "early"
+
+    def __init__(out self):
+        pass
+
+    def fields(self) -> List[Field]:
+        return [Field("n", T_INT)]
+
+    def stream(self, args: Json, mut resp: Response) raises:
+        raise Error("before the first item")
+
+
+struct Events(StreamEndpoint):
+    """Server-Sent Events: i-th event is named "tick" when i is even, has id i and a two-line data field."""
+
+    comptime name = "events"
+
+    def __init__(out self):
+        pass
+
+    def fields(self) -> List[Field]:
+        return [Field("n", T_INT)]
+
+    def stream(self, args: Json, mut resp: Response) raises:
+        for i in range(args.get("n").int()):
+            resp.sse("line1\nline2 \u00e9 " + String(i), "tick" if i % 2 == 0 else "", String(i))
+        resp.sse("[DONE]")
+
+
+struct Slow(StreamEndpoint):
+    comptime name = "slow"
+
+    def __init__(out self):
+        pass
+
+    def fields(self) -> List[Field]:
+        return [Field("n", T_INT), Field("ms", T_INT)]
+
+    def stream(self, args: Json, mut resp: Response) raises:
+        for i in range(args.get("n").int()):
+            resp.write("t" + String(i) + "\n")
+            _ = external_call["usleep", Int32](Int32(args.get("ms").int() * 1000))
+
+
 def main() raises:
     block_signals([2, 15])
-    var port = 0
-    var args = List[String]()
-    from std.sys import argv
-
     var a = argv()
-    if len(a) > 1:
-        port = Int(a[1])
-    var srv = Server(Service(Echo(), Add(), Stats(), Greet(), Boom(), Refuse(), Tag(), Scale(), Deny(), Missing(), Unavailable()), "127.0.0.1", port)
+    var port = Int(a[1]) if len(a) > 1 else 0
+    var startup_ms = Int(a[2]) if len(a) > 2 else 0  # delay before READY=1, for the Type=notify check
+    var drain_ms = Int(a[3]) if len(a) > 3 else 0
+    var srv = Server(Service(Echo(), Add(), Stats(), Greet(), Boom(), Refuse(), Tag(), Scale(), Deny(), Missing(), Unavailable(), Count(), Records(), Numbers(), Broken(), Early(), Events(), Slow()), "127.0.0.1", port)
     print("LISTEN", srv.port(), flush=True)
-    srv.serve(4, True)
+    _ = external_call["usleep", Int32](Int32(startup_ms * 1000))
+    srv.serve(4, True, drain_ms)

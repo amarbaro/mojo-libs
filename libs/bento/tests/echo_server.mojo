@@ -10,6 +10,9 @@ struct Echo(Handler):
     def __init__(out self):
         pass
 
+    def draining(self):
+        pass
+
     def handle(self, req: Request, mut resp: Response) raises:
         var s = req.method + " " + req.target + " HTTP/1." + String(req.minor) + "\n"
         for i in range(len(req.names)):

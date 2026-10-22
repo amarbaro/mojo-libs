@@ -13,9 +13,10 @@ worker x N  --epoll_wait--> one shared epoll set (EPOLLONESHOT)
 ```
 
 No queue and no lock: ONESHOT gives each ready connection to exactly one worker, so a handler may block
-(a Batcher.submit parks one worker, the others keep serving). `Server.serve(workers, signals)` blocks the
+(a Batcher.submit parks one worker, the others keep serving). `Server.serve(workers, signals, drain_ms)` blocks the
 caller; `stop()` is safe from any thread; `Handler.handle(self, req, mut resp)` runs on many threads on one
-shared value (read-only, or lock what it mutates).
+shared value (read-only, or lock what it mutates); `Handler.draining()` is called once on SIGTERM. Health,
+metrics and sd_notify are in ops.md, endpoints in endpoints.md, streaming in streaming.md.
 
 ## Parser (`http.parse_request`)
 
