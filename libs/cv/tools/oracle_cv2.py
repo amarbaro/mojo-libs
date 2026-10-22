@@ -610,7 +610,59 @@ def time_of(text):
     return float(m.group(1)) if m else None
 
 
-def suite(files, bench, every=False):
+BENCH_NOTES = """- **Parallel dispatch**: `max.algorithm.parallelize` with the default 16 workers costs about 215 us per region (best of
+  50 trivial regions); with 8 workers (the physical cores) it costs about 8 us, so `core.par` uses 8 and takes 16 only for
+  regions that run for milliseconds. A cached CPU DeviceContext changed nothing. Allocating and zero-filling a 2 MB `Mat`
+  is 18 us. Probes: measured in a scratch build, numbers quoted in the lane report.
+- The stencil, resize, pyrDown, Canny and LK loops are scalar per-pixel code with `Mat.at` bounds checks and are not
+  tuned; cv2's are hand-vectorised. HOG detection re-sums every 16x16 block (each pixel 4 times).
+- Faster than cv2 on 1080p: `convert` u8 to f32 (cv2's path is slow), Otsu, `line`, absdiff and bitwise, HOG window scoring
+  at one scale, `groupRectangles`. Point-set ops (projectPoints, estimateAffine2D, stereoRectify) take microseconds on both
+  sides; 0.00 ms entries are below the timer's resolution, not a result."""
+
+
+def write_md(path, table):
+    hd = [t for t in table if t[4]]
+    other = [t for t in table if not t[4]]
+
+    def fmt(rs):
+        out = ["| op | row | ours ms | cv2 ms | ours/cv2 |", "|---|---|---:|---:|---:|"]
+        for opn, cid, a, b, _ in rs:
+            if a is None or b is None:
+                out.append(f"| {opn} | {cid} | n/a | n/a | |")
+                continue
+            ratio = f"{a / b:.2f}" if b > 0.005 else "n/a"
+            out.append(f"| {opn} | {cid} | {a:.2f} | {b:.2f} | {ratio}{' **faster**' if b > 0.005 and a < b else ''} |")
+        return "\n".join(out)
+
+    ok = [t for t in hd if t[2] and t[3] and t[3] > 0.005]
+    faster = sum(1 for t in ok if t[2] < t[3])
+    close = sum(1 for t in ok if t[3] <= t[2] <= 1.5 * t[3])
+    with open(path, "w") as f:
+        f.write(f"""# L2D speed rows: mojo-cv vs cv2 5.0
+
+Method: `tests/run.sh --bench-all --md docs/bench.md`. Each row runs the same op in one resident process with `reps=5`
+and keeps the best wall time of the compute only (file load and save excluded), ours via `.bin/mojo-cv`, cv2 via
+`tools/oracle_cv2.py` (numpy in, cv2 call, best of 5). Both sides use all threads of the 7800X3D; CPU only, no GPU.
+Inputs are the same `.mcv` fixtures (`hd*` = 1920x1080 crops of a real screenshot, the rest smaller). Target from
+`docs/provenance/2d.md`: ours <= cv2. **Misses are listed as measured; nothing is hidden.** The HOG rows time cv2 4.8.1
+(cv2 5.0 has no HOG).
+
+1080p rows: {faster} of {len(ok)} faster than cv2, {close} more within 1.5x, the rest slower (ratio column).
+
+{BENCH_NOTES}
+
+## 1920x1080 rows
+
+{fmt(hd)}
+
+## Other sizes (270x480 and smaller, point sets, stereo pairs)
+
+{fmt(other)}
+""")
+
+
+def suite(files, bench, every=False, md=None):
     work = os.path.join(ROOT, ".work", "t")
     os.makedirs(work, exist_ok=True)
     exe = os.path.join(ROOT, ".bin", "mojo-cv")
@@ -651,12 +703,14 @@ def suite(files, bench, every=False):
         npass += ok
         nfail += not ok
         if bench and ok:
-            table.append((opn, cid, time_of(to.stdout), time_of(tr.stdout)))
+            table.append((opn, cid, time_of(to.stdout), time_of(tr.stdout), hd))
     print(f"rows: {npass + nfail}  pass: {npass}  fail: {nfail}")
     if bench:
         print("| op | row | ours ms | cv2 ms | ratio |\n|---|---|---|---|---|")
-        for opn, cid, a, b in table:
+        for opn, cid, a, b, _ in table:
             print(f"| {opn} | {cid} | {a:.2f} | {b:.2f} | {a / b:.2f} |" if a and b else f"| {opn} | {cid} | {a} | {b} | |")
+        if md:
+            write_md(md, table)
     return nfail
 
 
@@ -664,7 +718,9 @@ if __name__ == "__main__":
     a = sys.argv[1:]
     if a and a[0] == "--suite":
         bench = "--bench" in a or "--bench-all" in a
-        sys.exit(1 if suite([x for x in a[1:] if not x.startswith("--")], bench, "--bench-all" in a) else 0)
+        md = a[a.index("--md") + 1] if "--md" in a else None
+        files = [x for x in a[1:] if not x.startswith("--") and x != md]
+        sys.exit(1 if suite(files, bench, "--bench-all" in a, md) else 0)
     if a and a[0] == "--fixtures":
         make_fixtures(a[1])
         sys.exit(0)

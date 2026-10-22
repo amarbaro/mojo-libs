@@ -2,9 +2,8 @@
 # fixed-point window arithmetic, and dense Farneback flow.
 from std.sys.info import simd_width_of
 from std.math import sqrt, exp, floor
-from max.algorithm import parallelize
 from mojocv.mat import Mat, load, save
-from mojocv.core import Args
+from mojocv.core import Args, par
 from mojocv.imgproc import pyr_down, pad, ptr_of, rint, bidx, sepfilter, resize, gaussian_blur, Ptr, F32
 
 
@@ -344,7 +343,7 @@ def poly_exp(src: Mat[F32], n: Int, sigma_in: Float64) -> Mat[F32]:
             pt[unsafe_offset=(y * cols + x) * 3 + 1] = c1
             pt[unsafe_offset=(y * cols + x) * 3 + 2] = c2
 
-    parallelize(vrow, rows)
+    par(vrow, rows, 16)
 
     def hrow(y: Int) {imm}:
         for x in range(cols):
@@ -372,7 +371,7 @@ def poly_exp(src: Mat[F32], n: Int, sigma_in: Float64) -> Mat[F32]:
             po[unsafe_offset=(y * cols + x) * 5 + 3] = Float32(i10 * b1 + i12 * b4 + i11 * b5)
             po[unsafe_offset=(y * cols + x) * 5 + 4] = Float32(b6 / (m2 * m2))
 
-    parallelize(hrow, rows)
+    par(hrow, rows, 16)
     _ = tmp.rows
     return o^
 
@@ -433,7 +432,7 @@ def fb_matrices(r0: Mat[F32], r1: Mat[F32], flow: Mat[F32]) -> Mat[F32]:
             pm[unsafe_offset=(y * w + x) * 5 + 3] = r4 * r2 + r6 * r3
             pm[unsafe_offset=(y * w + x) * 5 + 4] = r6 * r2 + r5 * r3
 
-    parallelize(row, h)
+    par(row, h, 16)
     return m^
 
 

@@ -2,9 +2,8 @@
 # matrices stored as Mat[float64] (rows x cols x 1). Conventions follow cv2 5.0: dist = (k1, k2, p1, p2[, k3[, k4,
 # k5, k6[, s1, s2, s3, s4]]]), rvec/tvec map object to camera coordinates.
 from std.math import sqrt, atan, atan2, tan, cos, sin, acos, floor
-from max.algorithm import parallelize
 from mojocv.mat import Mat, load, save
-from mojocv.core import Args
+from mojocv.core import Args, par
 from mojocv.imgproc import rint, good_features, sepfilter, find_contours
 from mojocv.video import corner_sub_pix
 
@@ -377,7 +376,7 @@ def init_undistort_rectify_map(k: Mx, d: Mx, rr: Mx, p: Mx, w: Int, h: Int, fish
             pmx[unsafe_offset=v * w + u] = Float32(k.at(0, 0) * xy[0] + k.at(0, 1) * xy[1] + k.at(0, 2))
             pmy[unsafe_offset=v * w + u] = Float32(k.at(1, 1) * xy[1] + k.at(1, 2))
 
-    parallelize(row, h)
+    par(row, h)
     _ = (fi.rows, rt.rows)
     return (mapx^, mapy^)
 
@@ -1047,7 +1046,7 @@ def stereo_sgm(l: Mat[DType.uint8], r: Mat[DType.uint8], min_d: Int, nd: Int, bl
             for d in range(nd):
                 cp[unsafe_offset=(y * cw + x) * nd + d] = Int32(bt_cost(l, r, y, x + min_x, x + min_x - min_d - d))
 
-    parallelize(cost_row, h)
+    par(cost_row, h, 16)
     var half = block // 2
     var agg = Mat[DType.int32](h, cw, nd)
     var ap = agg.ptr()
@@ -1064,7 +1063,7 @@ def stereo_sgm(l: Mat[DType.uint8], r: Mat[DType.uint8], min_d: Int, nd: Int, bl
                 ap[unsafe_offset=(y * cw + x) * nd + d] = acc
 
     if block > 1:
-        parallelize(win_row, h)
+        par(win_row, h, 16)
         cp = ap
     var total = Mat[DType.int32](h, cw, nd)
     var tp = total.ptr()
@@ -1102,7 +1101,7 @@ def stereo_sgm(l: Mat[DType.uint8], r: Mat[DType.uint8], min_d: Int, nd: Int, bl
                     v = min(v, mn + Int32(p2))
                     lr[unsafe_offset=base + d] = cp[unsafe_offset=base + d] + v - mn
 
-    parallelize(path, 8)
+    par(path, 8, 16)
     for k in range(8):
         var pk = parts[k].ptr()
         for i in range(h * cw * nd):

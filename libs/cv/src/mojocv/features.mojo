@@ -1,9 +1,8 @@
 # features: binary-descriptor matching and ORB. Descriptors are rows of an (n, 32, 1) uint8 Mat.
 from std.bit import pop_count
-from max.algorithm import parallelize
 from mojocv.mat import Mat, load, save
 from std.math import floor, pow, cos, sin, sqrt
-from mojocv.core import Args
+from mojocv.core import Args, par
 from mojocv.imgproc import resize, gaussian_blur, rint
 
 
@@ -40,7 +39,7 @@ def knn2(q: Mat[DType.uint8], t: Mat[DType.uint8]) -> Mat[DType.int32]:
         po[unsafe_offset=4 * i + 2] = Int32(i2)
         po[unsafe_offset=4 * i + 3] = Int32(b2)
 
-    parallelize(row, q.rows)
+    par(row, q.rows)
     return o^
 
 
@@ -209,7 +208,7 @@ def orb_detect(img: Mat[DType.uint8], nfeatures: Int, fast_t: Int) raises -> Mat
             for x in range(3, cols - 3):
                 psc[unsafe_offset=y * cols + x] = Int32(fast_score(im, y, x, fast_t))
 
-        parallelize(score_row, rows)
+        par(score_row, rows, 16)
         _ = sc.rows
         for y in range(3, rows - 3):
             for x in range(3, cols - 3):

@@ -3,9 +3,8 @@
 # (pixel i of channel c sits at i * ch + c, so a horizontal tap at dx is a load at offset dx * ch).
 from std.sys.info import simd_width_of
 from std.math import sqrt, exp, floor, cos, sin, atan2
-from max.algorithm import parallelize
 from mojocv.mat import Mat, load, save
-from mojocv.core import Args, DTS, peek_code
+from mojocv.core import Args, DTS, peek_code, par
 from std.math import log as log_
 
 comptime Ptr = MutPointer[_, MutAnyOrigin]
@@ -63,7 +62,7 @@ def pad[dt: DType](a: Mat[dt], py: Int, px: Int, mode: Int = 0, val: Scalar[dt] 
                 dst[unsafe_offset=c * ch + k] = val if lc < 0 else src[unsafe_offset=lc * ch + k]
                 dst[unsafe_offset=(px + a.cols + c) * ch + k] = val if rc < 0 else src[unsafe_offset=rc * ch + k]
 
-    parallelize(row, o.rows)
+    par(row, o.rows)
     return o^
 
 
@@ -110,7 +109,7 @@ def sepfilter[sd: DType, od: DType](src: Mat[sd], kx: List[Float32], ky: List[Fl
         for j in range(i, n):
             pt.unsafe_store(r * n + j, _tap[sd, 1](pp, pkx, nx, r * pstride + j, ch))
 
-    parallelize(hrow, p.rows)
+    par(hrow, p.rows)
 
     def vrow(r: Int) {imm}:
         var i = 0
@@ -120,7 +119,7 @@ def sepfilter[sd: DType, od: DType](src: Mat[sd], kx: List[Float32], ky: List[Fl
         for j in range(i, n):
             po.unsafe_store(r * n + j, _fin[od, 1](_tap[F32, 1](pt, pky, ny, r * n + j, n)))
 
-    parallelize(vrow, src.rows)
+    par(vrow, src.rows)
     _ = (p.rows, tmp.rows)
     return o^
 
@@ -216,7 +215,7 @@ def pyr_down[dt: DType](src: Mat[dt]) -> Mat[dt]:
                     s += kk[t] * Float32(pp[unsafe_offset=base + t * ch])
                 pt[unsafe_offset=(r * oc + c) * ch + k] = s
 
-    parallelize(hrow, p.rows)
+    par(hrow, p.rows)
     var n = oc * ch
 
     def vrow(r: Int) {imm}:
@@ -230,7 +229,7 @@ def pyr_down[dt: DType](src: Mat[dt]) -> Mat[dt]:
                 s = s / 256
             po.unsafe_store(r * n + i, _fin[dt, 1](SIMD[F32, 1](s)))
 
-    parallelize(vrow, orow)
+    par(vrow, orow)
     _ = (p.rows, tmp.rows)
     return o^
 
@@ -305,7 +304,7 @@ def threshold[dt: DType](src: Mat[dt], thresh: Float64, maxval: Float64, kind: I
                 po[unsafe_offset=r * n + i] = v[0]
             i += w
 
-    parallelize(row, src.rows)
+    par(row, src.rows)
     return o^
 
 
@@ -327,7 +326,7 @@ def integral[sd: DType, od: DType](src: Mat[sd]) -> Mat[od]:
                 acc += Scalar[od](pa[unsafe_offset=(r * src.cols + c) * ch + k])
                 po[unsafe_offset=(r + 1) * stride + (c + 1) * ch + k] = acc
 
-    parallelize(hrow, src.rows)
+    par(hrow, src.rows)
     var chunk = 256
     var nchunk = (stride + chunk - 1) // chunk
 
@@ -338,7 +337,7 @@ def integral[sd: DType, od: DType](src: Mat[sd]) -> Mat[od]:
                 acc += po[unsafe_offset=r * stride + i]
                 po[unsafe_offset=r * stride + i] = acc
 
-    parallelize(vcol, nchunk)
+    par(vcol, nchunk)
     return o^
 
 
@@ -411,7 +410,7 @@ def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int)
                         pt[unsafe_offset=y * n + i] = acc[0]
                     i += w
 
-            parallelize(hrow, p.rows)
+            par(hrow, p.rows)
 
             def vrow(y: Int) {imm}:
                 var i = 0
@@ -430,7 +429,7 @@ def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int)
                         po[unsafe_offset=y * n + i] = acc[0]
                     i += w
 
-            parallelize(vrow, src.rows)
+            par(vrow, src.rows)
             _ = (p.rows, tmp.rows)
         else:
             var pr = ptr_of(runs)
@@ -455,7 +454,7 @@ def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int)
                         po[unsafe_offset=y * n + i] = acc[0]
                     i += w
 
-            parallelize(row, src.rows)
+            par(row, src.rows)
             _ = (p.rows, len(runs))
         cur = o^
     return cur^
@@ -487,7 +486,28 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
     var npx = src.cols
 
     def row(r: Int) {imm}:
-        for c in range(npx):
+        var c0 = 0
+        comptime if dt == DType.uint8:
+            # 16 pixels at a time for the channel-shuffle and gray conversions
+            if code == 0 or code == 1 or code == 3:
+                var qa = pa.unsafe_bitcast[UInt8]()
+                var qo = po.unsafe_bitcast[UInt8]()
+                while c0 + 16 <= npx:
+                    var i = (r * npx + c0) * 3
+                    var b = (qa + i).unsafe_strided_load[width=16](3)
+                    var g = (qa + i + 1).unsafe_strided_load[width=16](3)
+                    var rr = (qa + i + 2).unsafe_strided_load[width=16](3)
+                    if code == 3:
+                        (qo + i).unsafe_strided_store[width=16](rr, 3)
+                        (qo + i + 1).unsafe_strided_store[width=16](g, 3)
+                        (qo + i + 2).unsafe_strided_store[width=16](b, 3)
+                    else:
+                        var bb = b if code == 0 else rr
+                        var r2 = rr if code == 0 else b
+                        var y = (bb.cast[DType.int32]() * 3735 + g.cast[DType.int32]() * 19235 + r2.cast[DType.int32]() * 9798 + 16384) >> 15
+                        qo.unsafe_store(r * npx + c0, y.cast[DType.uint8]())
+                    c0 += 16
+        for c in range(c0, npx):
             var i = (r * npx + c) * ic
             var j = (r * npx + c) * oc
             comptime if dt == DType.uint8:
@@ -581,7 +601,7 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
                     po[unsafe_offset=j + 1] = pa[unsafe_offset=i + 1]
                     po[unsafe_offset=j + 2] = x0
 
-    parallelize(row, src.rows)
+    par(row, src.rows)
     return o^
 
 
@@ -687,7 +707,7 @@ def resize[dt: DType](src: Mat[dt], dw: Int, dh: Int, kind: Int) -> Mat[dt]:
                     s += pwx[unsafe_offset=d * nx + t] * Float32(pa[unsafe_offset=(r * src.cols + pix[unsafe_offset=d * nx + t]) * ch + k])
                 pt[unsafe_offset=(r * dw + d) * ch + k] = s
 
-    parallelize(hrow, src.rows)
+    par(hrow, src.rows)
 
     def vrow(r: Int) {imm}:
         var i = 0
@@ -705,7 +725,7 @@ def resize[dt: DType](src: Mat[dt], dw: Int, dh: Int, kind: Int) -> Mat[dt]:
                 po[unsafe_offset=r * n + i] = z[0]
             i += w
 
-    parallelize(vrow, dh)
+    par(vrow, dh)
     _ = (tmp.rows, tx.n, ty.n, len(need))
     return o^
 
@@ -722,7 +742,7 @@ def border_px[dt: DType](src: Mat[dt], y: Int, x: Int, k: Int, mode: Int, bval: 
     return src.data[(yy * src.cols + xx) * src.ch + k]
 
 
-def sample[dt: DType](src: Mat[dt], fx: Float64, fy: Float64, kind: Int, mode: Int, bval: Scalar[dt], dst: Ptr[Scalar[dt]]):
+def sample[dt: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: Float64, fy: Float64, kind: Int, mode: Int, bval: Scalar[dt], dst: Ptr[Scalar[dt]]):
     """Write the interpolated pixel at (fx, fy) (kind 0 nearest, 1 linear, 2 cubic) to dst[0 .. ch)."""
     var n = 1 if kind == 0 else (2 if kind == 1 else 4)
     var off = 0 if kind != 2 else 1
@@ -736,11 +756,32 @@ def sample[dt: DType](src: Mat[dt], fx: Float64, fy: Float64, kind: Int, mode: I
     elif kind == 2:
         wx = cubic_w(fx - Float64(sx))
         wy = cubic_w(fy - Float64(sy))
-    for k in range(src.ch):
+    var ch = src.ch
+    var inside = sx - off >= 0 and sy - off >= 0 and sx - off + n <= src.cols and sy - off + n <= src.rows
+    if inside and kind == 1:
+        var w00 = wy[0] * wx[0]
+        var w01 = wy[0] * wx[1]
+        var w10 = wy[1] * wx[0]
+        var w11 = wy[1] * wx[1]
+        var r0 = (sy * src.cols + sx) * ch
+        var r1 = r0 + src.cols * ch
+        for k in range(ch):
+            var v = w00 * Float64(ps[unsafe_offset=r0 + k]) + w01 * Float64(ps[unsafe_offset=r0 + ch + k]) + w10 * Float64(ps[unsafe_offset=r1 + k]) + w11 * Float64(ps[unsafe_offset=r1 + ch + k])
+            comptime if dt.is_integral():
+                v = max(Float64(Scalar[dt].MIN), min(Float64(Scalar[dt].MAX), v.__round__()))
+            dst[unsafe_offset=k] = Scalar[dt](v)
+        return
+    for k in range(ch):
         var acc = Float64(0)
-        for a in range(n):
-            for b in range(n):
-                acc += wy[a] * wx[b] * Float64(border_px(src, sy + a - off, sx + b - off, k, mode, bval))
+        if inside:
+            for a in range(n):
+                var row = ((sy + a - off) * src.cols + sx - off) * ch + k
+                for b in range(n):
+                    acc += wy[a] * wx[b] * Float64(ps[unsafe_offset=row + b * ch])
+        else:
+            for a in range(n):
+                for b in range(n):
+                    acc += wy[a] * wx[b] * Float64(border_px(src, sy + a - off, sx + b - off, k, mode, bval))
         comptime if dt.is_integral():
             acc = max(Float64(Scalar[dt].MIN), min(Float64(Scalar[dt].MAX), acc.__round__()))
         dst[unsafe_offset=k] = Scalar[dt](acc)
@@ -751,15 +792,16 @@ def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kin
     var o = Mat[dt](dh, dw, src.ch)
     var pm = ptr_of(m)
     var po = o.ptr()
+    var ps = src.ptr()
     var bv = Scalar[dt](bval)
 
     def row(y: Int) {imm}:
         for x in range(dw):
             var fx = pm[unsafe_offset=0] * Float64(x) + pm[unsafe_offset=1] * Float64(y) + pm[unsafe_offset=2]
             var fy = pm[unsafe_offset=3] * Float64(x) + pm[unsafe_offset=4] * Float64(y) + pm[unsafe_offset=5]
-            sample(src, fx, fy, kind, mode, bv, po + (y * dw + x) * src.ch)
+            sample(src, ps, fx, fy, kind, mode, bv, po + (y * dw + x) * src.ch)
 
-    parallelize(row, dh)
+    par(row, dh)
     _ = len(m)
     return o^
 
@@ -767,6 +809,7 @@ def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kin
 def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: Int, bval: Float64) -> Mat[dt]:
     var o = Mat[dt](mx.rows, mx.cols, src.ch)
     var po = o.ptr()
+    var ps = src.ptr()
     var bv = Scalar[dt](bval)
     var pmx = mx.ptr()
     var pmy = my.ptr()
@@ -774,9 +817,9 @@ def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: 
     def row(y: Int) {imm}:
         for x in range(mx.cols):
             var i = y * mx.cols + x
-            sample(src, Float64(pmx[unsafe_offset=i]), Float64(pmy[unsafe_offset=i]), kind, mode, bv, po + i * src.ch)
+            sample(src, ps, Float64(pmx[unsafe_offset=i]), Float64(pmy[unsafe_offset=i]), kind, mode, bv, po + i * src.ch)
 
-    parallelize(row, mx.rows)
+    par(row, mx.rows)
     _ = (mx.rows, my.rows)
     return o^
 
@@ -910,7 +953,7 @@ def canny(src: Mat[DType.uint8], t1: Float64, t2: Float64, aperture: Int, l2: Bo
             var b = Int32(pdy[unsafe_offset=y * cols + x])
             pmag[unsafe_offset=y * cols + x] = (a * a + b * b) if l2 else (abs(a) + abs(b))
 
-    parallelize(mrow, rows)
+    par(mrow, rows)
     var map = Mat[DType.uint8](rows, cols, 1)  # 1 not an edge, 0 weak candidate, 3 strong
     var pm = map.ptr()
 
@@ -944,7 +987,7 @@ def canny(src: Mat[DType.uint8], t1: Float64, t2: Float64, aperture: Int, l2: Bo
                         ok = m > pa and m > pb
             pm[unsafe_offset=i] = UInt8((3 if m > high else 0) if ok else 1)
 
-    parallelize(nrow, rows)
+    par(nrow, rows)
     var stack = List[Int](capacity=1024)
     for i in range(rows * cols):
         if pm[unsafe_offset=i] == 3:
@@ -1278,7 +1321,7 @@ def hog_blocks(src: Mat[DType.uint8]) -> Mat[F32]:
             p0[unsafe_offset=y * w + x] = mag * (1 - wb)
             p1[unsafe_offset=y * w + x] = mag * wb
 
-    parallelize(grad, h)
+    par(grad, h, 16)
     var po = o.ptr()
 
     # per block pixel: Gaussian window times trilinear weight for each of the four neighbouring cells
@@ -1332,7 +1375,7 @@ def hog_blocks(src: Mat[DType.uint8]) -> Mat[F32]:
         for k in range(36):
             po[unsafe_offset=t * 36 + k] = hist[k] * sc2
 
-    parallelize(block, nby * nbx)
+    par(block, nby * nbx, 16)
     _ = (bin0.rows, wt0.rows, wt1.rows, len(lut), len(wtab))
     return o^
 
@@ -1360,7 +1403,7 @@ def hog_scores(blocks: Mat[F32], svm: Mat[F32]) -> Mat[F32]:
                         acc += ps[unsafe_offset=so + t] * pbk[unsafe_offset=bo + t]
             po[unsafe_offset=wy * nx + wx] = acc
 
-    parallelize(row, ny)
+    par(row, ny, 16)
     return o^
 
 

@@ -71,6 +71,12 @@ struct Args(Movable):
         return self.done <= self.reps
 
 
+def par[F: def(Int) -> None](f: F, n: Int, workers: Int = 8):
+    """parallelize on the 8 physical cores: with 16 workers every call waits ~215 us for a sleeping SMT sibling
+    (measured), with 8 the dispatch takes ~8 us. Pass 16 for regions that run for many milliseconds."""
+    parallelize(f, n, workers)
+
+
 def peek_code(path: String) raises -> Int:
     """The dtype code of an .mcv file, read from its header."""
     var h = open(path, "r").read_bytes(16)
@@ -111,7 +117,7 @@ def absdiff[dt: DType](a: Mat[dt], b: Mat[dt]) raises -> Mat[dt]:
                 var d = abs(Int64(pa[unsafe_offset=base + j]) - Int64(pb[unsafe_offset=base + j]))
                 po[unsafe_offset=base + j] = Scalar[dt](min(d, hi))
 
-    parallelize(row, a.rows)
+    par(row, a.rows)
     return o^
 
 
@@ -145,7 +151,7 @@ def bitwise[op: Int](a: Mat, b: Mat) raises -> Mat[a.dt]:
         for j in range(i, n):
             po.unsafe_store(base + j, _bw[op, 1](pa.unsafe_load[width=1](base + j), pb.unsafe_load[width=1](base + j)))
 
-    parallelize(row, a.rows)
+    par(row, a.rows)
     return o^
 
 
@@ -168,7 +174,7 @@ def flip[dt: DType](a: Mat[dt], code: Int) -> Mat[dt]:
                 for k in range(ch):
                     po[unsafe_offset=dst + c * ch + k] = pa[unsafe_offset=src + (a.cols - 1 - c) * ch + k]
 
-    parallelize(row, a.rows)
+    par(row, a.rows)
     return o^
 
 
@@ -206,7 +212,7 @@ def rotate[dt: DType](a: Mat[dt], code: Int) -> Mat[dt]:
                 for k in range(ch):
                     po[unsafe_offset=d + k] = pa[unsafe_offset=s + k]
 
-    parallelize(tile, ((a.rows + T - 1) // T) * ((a.cols + T - 1) // T))
+    par(tile, ((a.rows + T - 1) // T) * ((a.cols + T - 1) // T))
     return o^
 
 
@@ -237,7 +243,7 @@ def convert[s: DType, d: DType](a: Mat[s], alpha: Float64, beta: Float64) -> Mat
         for j in range(i, n):
             po.unsafe_store(base + j, _cv[s, d, wide, 1](pa.unsafe_load[width=1](base + j), al, be))
 
-    parallelize(row, a.rows)
+    par(row, a.rows)
     return o^
 
 
