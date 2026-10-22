@@ -64,6 +64,42 @@ def convert(i, kv):
     return r.astype(dt)
 
 
+# ---- imgproc ----------------------------------------------------------------------------------------------
+@op()
+def GaussianBlur(i, kv):
+    k = kv_i(kv, "ksize", 5)
+    return cv2.GaussianBlur(i[0], (k, k), kv_f(kv, "sigma", 0.0))
+@op()
+def pyrDown(i, kv): return cv2.pyrDown(i[0])
+@op()
+def Sobel(i, kv):
+    return cv2.Sobel(i[0], cv2.CV_16S if i[0].dtype == np.uint8 else -1, kv_i(kv, "dx", 1), kv_i(kv, "dy", 0),
+                     ksize=kv_i(kv, "ksize", 3), scale=kv_f(kv, "scale", 1.0))
+
+
+@op()
+def threshold(i, kv):
+    t, mv = kv_f(kv, "thresh", 127.0), kv_f(kv, "maxval", 255.0)
+    ty = kv_i(kv, "type", 0) | (cv2.THRESH_OTSU if kv_i(kv, "otsu", 0) else 0)
+    r, o = cv2.threshold(i[0], t, mv, ty)
+    return [o, np.array([[r]], np.float64)]
+@op()
+def integral(i, kv): return cv2.integral(i[0], sdepth=cv2.CV_32S if i[0].dtype == np.uint8 else cv2.CV_64F)
+SHAPES = [cv2.MORPH_RECT, cv2.MORPH_CROSS, cv2.MORPH_ELLIPSE]
+def _se(kv):
+    k = kv_i(kv, "ksize", 3)
+    return cv2.getStructuringElement(SHAPES[kv_i(kv, "shape", 0)], (k, k))
+@op()
+def erode(i, kv): return cv2.erode(i[0], _se(kv), iterations=kv_i(kv, "iters", 1))
+@op()
+def dilate(i, kv): return cv2.dilate(i[0], _se(kv), iterations=kv_i(kv, "iters", 1))
+@op()
+def cvtColor(i, kv):
+    c = {"bgr2gray": cv2.COLOR_BGR2GRAY, "rgb2gray": cv2.COLOR_RGB2GRAY, "gray2bgr": cv2.COLOR_GRAY2BGR, "bgr2rgb": cv2.COLOR_BGR2RGB,
+         "bgr2hsv": cv2.COLOR_BGR2HSV, "hsv2bgr": cv2.COLOR_HSV2BGR, "bgr2ycrcb": cv2.COLOR_BGR2YCrCb, "ycrcb2bgr": cv2.COLOR_YCrCb2BGR}
+    return cv2.cvtColor(i[0], c[kv["code"]])
+
+
 # ---- compare ----------------------------------------------------------------------------------------------
 def compare(ours, ref, spec):
     if ours.shape != ref.shape:

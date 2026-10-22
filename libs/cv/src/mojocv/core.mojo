@@ -49,7 +49,7 @@ struct Args(Movable):
     def i(self, k: String, d: Int) raises -> Int:
         return atol(self.kv[k]) if k in self.kv else d
 
-    def s(self, k: String, d: String) -> String:
+    def s(self, k: String, d: String) raises -> String:
         return self.kv[k] if k in self.kv else d
 
     def again(mut self) -> Bool:

@@ -1,0 +1,45 @@
+# imgproc: one real image (hd/sm, screenshot crops) and one edge case per op
+gauss5_hd        GaussianBlur hd ksize=5 sigma=0 => max:1
+gauss_s2_hdg      GaussianBlur hdg ksize=0 sigma=2.0 => max:2
+gauss7_odd       GaussianBlur odd ksize=7 sigma=0 => max:1
+gauss_f32        GaussianBlur f32 ksize=5 sigma=1.2 => max:0.01
+gauss3_one       GaussianBlur one ksize=3 sigma=0 => max:1
+pyrdown_hd       pyrDown hd => exact
+pyrdown_odd      pyrDown odd => exact
+pyrdown_one      pyrDown one => exact
+pyrdown_f32      pyrDown f32 => max:0.01
+sobel_dx_hdg     Sobel hdg dx=1 dy=0 ksize=3 => exact
+sobel_dy5_hd     Sobel hd dx=0 dy=1 ksize=5 => exact
+sobel_scharr_g1  Sobel g1 dx=1 dy=0 ksize=-1 => exact
+sobel_f32_dxx    Sobel f32 dx=2 dy=0 ksize=3 => max:0.05
+thresh_bin_hdg   threshold hdg thresh=100 maxval=255 type=0 => exact, exact
+thresh_inv_sm    threshold smg thresh=127.6 maxval=200 type=1 => exact, exact
+thresh_trunc_g1  threshold g1 thresh=90 type=2 => exact, exact
+thresh_tozero_g1 threshold g1 thresh=90 type=3 => exact, exact
+thresh_tozinv_hd threshold hd thresh=40 type=4 => exact, exact
+thresh_otsu_hdg  threshold hdg thresh=0 maxval=255 type=0 otsu=1 => exact, exact
+thresh_otsu_one  threshold g2 thresh=0 maxval=255 type=0 otsu=1 => exact, exact
+thresh_f32       threshold f32 thresh=10.5 maxval=7 type=0 => exact, exact
+integral_hdg     integral hdg => exact
+integral_hd      integral hd => exact
+integral_odd     integral odd => exact
+integral_f32     integral f32 => max:0.001
+integral_one     integral one => exact
+erode_hdg        erode hdg ksize=3 => exact
+erode_hd5        erode hd ksize=5 iters=2 => exact
+dilate_cross_sm  dilate sm ksize=7 shape=1 => exact
+dilate_ell_smg   dilate smg ksize=9 shape=2 => exact
+erode_ell_odd    erode odd ksize=5 shape=2 => exact
+dilate_one       dilate one ksize=3 => exact
+erode_f32        erode f32 ksize=3 => exact
+cvt_gray_hd      cvtColor hd code=bgr2gray => exact
+cvt_rgb2gray_odd cvtColor odd code=rgb2gray => exact
+cvt_gray2bgr_g1  cvtColor g1 code=gray2bgr => exact
+cvt_swap_hd      cvtColor hd code=bgr2rgb => exact
+cvt_hsv_hd       cvtColor hd code=bgr2hsv => exact
+cvt_hsv_odd      cvtColor odd code=bgr2hsv => exact
+cvt_hsv_one      cvtColor one code=bgr2hsv => exact
+cvt_hsv2bgr_odd  cvtColor odd code=hsv2bgr => max:1
+cvt_ycrcb_hd     cvtColor hd code=bgr2ycrcb => max:1
+cvt_ycrcb2bgr_sm cvtColor sm code=ycrcb2bgr => max:1
+cvt_gray_f32     cvtColor f32 code=bgr2gray => max:0.01
