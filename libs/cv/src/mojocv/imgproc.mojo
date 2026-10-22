@@ -515,8 +515,70 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
                     qo[i + 1] = qa[i + 1]
                     qo[i + 2] = qa[i]
                 return
+        comptime if dt == DType.uint8:
+            if code == 0 or code == 1:
+                var base = r * npx * 3
+                var qa = pa.unsafe_bitcast[UInt8]()
+                var qo = po.unsafe_bitcast[UInt8]()
+                var c = 0
+                if code == 0:
+                    while c + 16 <= npx:
+                        var v0 = (qa + base + c * 3).unsafe_load[width=32]()
+                        var blue0 = SIMD[DType.uint8, 8](v0[0], v0[3], v0[6], v0[9], v0[12], v0[15], v0[18], v0[21])
+                        var green0 = SIMD[DType.uint8, 8](v0[1], v0[4], v0[7], v0[10], v0[13], v0[16], v0[19], v0[22])
+                        var red0 = SIMD[DType.uint8, 8](v0[2], v0[5], v0[8], v0[11], v0[14], v0[17], v0[20], v0[23])
+                        var y0 = (blue0.cast[DType.int32]() * 3735 + green0.cast[DType.int32]() * 19235 + red0.cast[DType.int32]() * 9798 + 16384) >> 15
+                        qo.unsafe_store(r * npx + c, y0.cast[DType.uint8]())
+                        var v1 = (qa + base + (c + 8) * 3).unsafe_load[width=32]()
+                        var blue1 = SIMD[DType.uint8, 8](v1[0], v1[3], v1[6], v1[9], v1[12], v1[15], v1[18], v1[21])
+                        var green1 = SIMD[DType.uint8, 8](v1[1], v1[4], v1[7], v1[10], v1[13], v1[16], v1[19], v1[22])
+                        var red1 = SIMD[DType.uint8, 8](v1[2], v1[5], v1[8], v1[11], v1[14], v1[17], v1[20], v1[23])
+                        var y1 = (blue1.cast[DType.int32]() * 3735 + green1.cast[DType.int32]() * 19235 + red1.cast[DType.int32]() * 9798 + 16384) >> 15
+                        qo.unsafe_store(r * npx + c + 8, y1.cast[DType.uint8]())
+                        c += 16
+                    while c + 8 <= npx:
+                        var v = (qa + base + c * 3).unsafe_load[width=32]()
+                        var blue = SIMD[DType.uint8, 8](v[0], v[3], v[6], v[9], v[12], v[15], v[18], v[21])
+                        var green = SIMD[DType.uint8, 8](v[1], v[4], v[7], v[10], v[13], v[16], v[19], v[22])
+                        var red = SIMD[DType.uint8, 8](v[2], v[5], v[8], v[11], v[14], v[17], v[20], v[23])
+                        var y = (blue.cast[DType.int32]() * 3735 + green.cast[DType.int32]() * 19235 + red.cast[DType.int32]() * 9798 + 16384) >> 15
+                        qo.unsafe_store(r * npx + c, y.cast[DType.uint8]())
+                        c += 8
+                else:
+                    while c + 16 <= npx:
+                        var v0 = (qa + base + c * 3).unsafe_load[width=32]()
+                        var blue0 = SIMD[DType.uint8, 8](v0[2], v0[5], v0[8], v0[11], v0[14], v0[17], v0[20], v0[23])
+                        var green0 = SIMD[DType.uint8, 8](v0[1], v0[4], v0[7], v0[10], v0[13], v0[16], v0[19], v0[22])
+                        var red0 = SIMD[DType.uint8, 8](v0[0], v0[3], v0[6], v0[9], v0[12], v0[15], v0[18], v0[21])
+                        var y0 = (blue0.cast[DType.int32]() * 3735 + green0.cast[DType.int32]() * 19235 + red0.cast[DType.int32]() * 9798 + 16384) >> 15
+                        qo.unsafe_store(r * npx + c, y0.cast[DType.uint8]())
+                        var v1 = (qa + base + (c + 8) * 3).unsafe_load[width=32]()
+                        var blue1 = SIMD[DType.uint8, 8](v1[2], v1[5], v1[8], v1[11], v1[14], v1[17], v1[20], v1[23])
+                        var green1 = SIMD[DType.uint8, 8](v1[1], v1[4], v1[7], v1[10], v1[13], v1[16], v1[19], v1[22])
+                        var red1 = SIMD[DType.uint8, 8](v1[0], v1[3], v1[6], v1[9], v1[12], v1[15], v1[18], v1[21])
+                        var y1 = (blue1.cast[DType.int32]() * 3735 + green1.cast[DType.int32]() * 19235 + red1.cast[DType.int32]() * 9798 + 16384) >> 15
+                        qo.unsafe_store(r * npx + c + 8, y1.cast[DType.uint8]())
+                        c += 16
+                    while c + 8 <= npx:
+                        var v = (qa + base + c * 3).unsafe_load[width=32]()
+                        var blue = SIMD[DType.uint8, 8](v[2], v[5], v[8], v[11], v[14], v[17], v[20], v[23])
+                        var green = SIMD[DType.uint8, 8](v[1], v[4], v[7], v[10], v[13], v[16], v[19], v[22])
+                        var red = SIMD[DType.uint8, 8](v[0], v[3], v[6], v[9], v[12], v[15], v[18], v[21])
+                        var y = (blue.cast[DType.int32]() * 3735 + green.cast[DType.int32]() * 19235 + red.cast[DType.int32]() * 9798 + 16384) >> 15
+                        qo.unsafe_store(r * npx + c, y.cast[DType.uint8]())
+                        c += 8
+                for cc in range(c, npx):
+                    var i = base + cc * 3
+                    var x0 = Int(qa[unsafe_offset=i])
+                    var x1 = Int(qa[unsafe_offset=i + 1])
+                    var x2 = Int(qa[unsafe_offset=i + 2])
+                    var b = x0 if code == 0 else x2
+                    var rr = x2 if code == 0 else x0
+                    qo[unsafe_offset=r * npx + cc] = UInt8((b * 3735 + x1 * 19235 + rr * 9798 + 16384) >> 15)
+                return
         var c0 = 0
         comptime if dt == DType.uint8:
+
             # 16 pixels at a time for the channel-shuffle and gray conversions
             if code == 0 or code == 1 or code == 3:
                 var qa = pa.unsafe_bitcast[UInt8]()
@@ -630,16 +692,7 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
                     po[unsafe_offset=j + 1] = pa[unsafe_offset=i + 1]
                     po[unsafe_offset=j + 2] = x0
 
-    def band(b: Int) {imm}:
-        var chunk = (src.rows + 7) // 8
-        var r0 = b * chunk
-        var r1 = r0 + chunk
-        if r1 > src.rows:
-            r1 = src.rows
-        for r in range(r0, r1):
-            row(r)
-
-    par(band, 8)
+    par(row, src.rows)
     return o^
 
 
