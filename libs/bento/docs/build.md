@@ -25,3 +25,7 @@ sandbox (negative control). `verify` rejects a changed model file; a model missi
 
 Differences from BentoML's `bentoml build`: no Python env, no Docker image, no bentofile include/exclude globs; the
 unit runs ExecStart only (no sd_notify Type, since the B2 service does not notify).
+
+Checked off this machine (2026-10-22): the bento built here (glibc 2.44) copied to a pristine Ubuntu 24.04.5 VM
+(glibc 2.39, no Mojo, no venv), `bento verify` passes there, `bento-serve` listens, and the 74 B2 rows through an
+ssh tunnel answer byte-equal to BentoML. The binary needs no symbol newer than what 24.04 ships.
