@@ -290,9 +290,86 @@ def sobel[sd: DType, od: DType](src: Mat[sd], dx: Int, dy: Int, ksize: Int, scal
 # ---- pyrDown ----------------------------------------------------------------------------------------------
 
 
+def _tap_mask[n: Int, ch: Int, t: Int]() -> IndexList[n]:
+    """Shuffle mask for pyrDown tap t: output pixel j reads pixel 2j + t of the window (lanes past the (n // ch - 3) // 2
+    pixels that fit read lane 0)."""
+    var m = IndexList[n]()
+    for j in range(n):
+        m[j] = (j // ch * 2 + t) * ch + j % ch if j < (n // ch - 3) // 2 * ch else 0
+    return m
+
+
+def _pyr_u8[dt: DType, ch: Int](src: Mat[dt]) -> Mat[dt]:
+    """pyrDown on uint8 in integers: the column pass sums five rows in uint16 into a padded scratch row, then 64-lane
+    windows of it give every output pixel its five taps with five shuffles ((v + 128) >> 8, half up like cv2)."""
+    comptime SW = 64
+    comptime PO = (SW // ch - 3) // 2
+    comptime M0 = _tap_mask[SW, ch, 0]()
+    comptime M1 = _tap_mask[SW, ch, 1]()
+    comptime M2 = _tap_mask[SW, ch, 2]()
+    comptime M3 = _tap_mask[SW, ch, 3]()
+    comptime M4 = _tap_mask[SW, ch, 4]()
+    comptime WU = simd_width_of[DType.uint16]()
+    comptime U16 = DType.uint16
+    var oc = (src.cols + 1) // 2
+    var orow = (src.rows + 1) // 2
+    var rows = src.rows
+    var n = src.cols * ch
+    var o = Mat[dt](orow, oc, ch, False)
+    var ps = src.ptr()
+    var po = o.ptr()
+    comptime NT = 8
+
+    def task(t: Int) {imm}:
+        var scratch = List[UInt16](unsafe_uninit_length=n + 4 * ch + SW)
+        var sc = ptr_of(scratch) + 2 * ch
+        for r in range(orow * t // NT, orow * (t + 1) // NT):
+            var r0 = ps + bidx(2 * r - 2, rows, 0) * n
+            var r1 = ps + bidx(2 * r - 1, rows, 0) * n
+            var r2 = ps + 2 * r * n
+            var r3 = ps + bidx(2 * r + 1, rows, 0) * n
+            var r4 = ps + bidx(2 * r + 2, rows, 0) * n
+            var i = 0
+            while i + WU <= n:
+                var v = r0.unsafe_load[width=WU](i).cast[U16]() + r4.unsafe_load[width=WU](i).cast[U16]() + 4 * (r1.unsafe_load[width=WU](i).cast[U16]() + r3.unsafe_load[width=WU](i).cast[U16]()) + 6 * r2.unsafe_load[width=WU](i).cast[U16]()
+                sc.unsafe_store(i, v)
+                i += WU
+            for j in range(i, n):
+                sc[unsafe_offset=j] = UInt16(r0[unsafe_offset=j]) + UInt16(r4[unsafe_offset=j]) + 4 * (UInt16(r1[unsafe_offset=j]) + UInt16(r3[unsafe_offset=j])) + 6 * UInt16(r2[unsafe_offset=j])
+            for k in range(ch):
+                sc[unsafe_offset=k - ch] = sc[unsafe_offset=ch + k]
+                sc[unsafe_offset=k - 2 * ch] = sc[unsafe_offset=2 * ch + k]
+                sc[unsafe_offset=n + k] = sc[unsafe_offset=n - 2 * ch + k]
+                sc[unsafe_offset=n + ch + k] = sc[unsafe_offset=n - 3 * ch + k]
+            var dst = po + r * oc * ch
+            var c = 0
+            while c * ch + SW // 2 <= oc * ch:
+                var w = sc.unsafe_load[width=SW]((2 * c - 2) * ch)
+                var v = w.shuffle[M0]() + w.shuffle[M4]() + 4 * (w.shuffle[M1]() + w.shuffle[M3]()) + 6 * w.shuffle[M2]()
+                dst.unsafe_store(c * ch, ((v.slice[SW // 2]() + 128) >> 8).cast[dt]())
+                c += PO
+            for q in range(c, oc):
+                for k in range(ch):
+                    var b = 2 * q * ch + k
+                    var v = sc[unsafe_offset=b - 2 * ch] + sc[unsafe_offset=b + 2 * ch] + 4 * (sc[unsafe_offset=b - ch] + sc[unsafe_offset=b + ch]) + 6 * sc[unsafe_offset=b]
+                    dst[unsafe_offset=q * ch + k] = Scalar[dt]((v + 128) >> 8)
+        _ = len(scratch)
+
+    par(task, NT)
+    return o^
+
+
 def pyr_down[dt: DType](src: Mat[dt]) -> Mat[dt]:
     """5-tap binomial blur (reflect101), then every second row and column; output ceil(n / 2). Per output row the
     column pass runs on contiguous SIMD lanes into one cached row, then the row pass reads every second pixel."""
+    comptime if dt == DType.uint8:
+        if src.cols >= 3 and src.rows >= 3:
+            if src.ch == 1:
+                return _pyr_u8[dt, 1](src)
+            elif src.ch == 3:
+                return _pyr_u8[dt, 3](src)
+            elif src.ch == 4:
+                return _pyr_u8[dt, 4](src)
     var oc = (src.cols + 1) // 2
     var orow = (src.rows + 1) // 2
     var ch = src.ch

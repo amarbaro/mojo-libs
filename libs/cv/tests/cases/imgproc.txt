@@ -8,6 +8,9 @@ gauss7_odd       GaussianBlur odd ksize=7 sigma=0 => max:1
 gauss_f32        GaussianBlur f32 ksize=5 sigma=1.2 => max:0.01
 gauss3_one       GaussianBlur one ksize=3 sigma=0 => max:1
 pyrdown_hd       pyrDown hd => exact
+pyrdown_smg      pyrDown smg => exact
+pyrdown_sm       pyrDown sm => exact
+pyrdown_hdg      pyrDown hdg => exact
 pyrdown_odd      pyrDown odd => exact
 pyrdown_one      pyrDown one => exact
 pyrdown_f32      pyrDown f32 => max:0.01
