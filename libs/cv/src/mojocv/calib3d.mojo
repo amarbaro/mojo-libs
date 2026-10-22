@@ -5,9 +5,11 @@ from std.math import sqrt, atan, atan2, tan, cos, sin, acos, floor
 from max.algorithm import parallelize
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args
-from mojocv.imgproc import rint
+from mojocv.imgproc import rint, good_features
+from mojocv.video import corner_sub_pix
 
 comptime F64 = DType.float64
+comptime F32 = DType.float32
 comptime Mx = Mat[F64]
 
 
@@ -1150,6 +1152,199 @@ def stereo_sgm(l: Mat[DType.uint8], r: Mat[DType.uint8], min_d: Int, nd: Int, bl
     return o^
 
 
+# ---- findChessboardCorners --------------------------------------------------------------------------------
+
+
+def bilinear(img: Mat[DType.uint8], x: Float64, y: Float64) -> Float64:
+    var xi = Int(floor(x))
+    var yi = Int(floor(y))
+    var fx = x - Float64(xi)
+    var fy = y - Float64(yi)
+    var x0 = min(max(xi, 0), img.cols - 1)
+    var x1 = min(max(xi + 1, 0), img.cols - 1)
+    var y0 = min(max(yi, 0), img.rows - 1)
+    var y1 = min(max(yi + 1, 0), img.rows - 1)
+    return (Float64(img.at(y0, x0)) * (1 - fx) + Float64(img.at(y0, x1)) * fx) * (1 - fy) + (Float64(img.at(y1, x0)) * (1 - fx) + Float64(img.at(y1, x1)) * fx) * fy
+
+
+def is_saddle(img: Mat[DType.uint8], px: Float64, py: Float64, ux: Float64, uy: Float64, vx: Float64, vy: Float64) -> Bool:
+    """X junction test: opposite diagonal samples agree, adjacent ones differ by a lot."""
+    var a = bilinear(img, px + 0.3 * (ux + vx), py + 0.3 * (uy + vy))
+    var b = bilinear(img, px + 0.3 * (ux - vx), py + 0.3 * (uy - vy))
+    var c = bilinear(img, px - 0.3 * (ux + vx), py - 0.3 * (uy + vy))
+    var d = bilinear(img, px - 0.3 * (ux - vx), py - 0.3 * (uy - vy))
+    var same = max(abs(a - c), abs(b - d))
+    var diff = min(abs(a - b), min(abs(a - d), min(abs(c - b), abs(c - d))))
+    return diff > 40 and same < 0.5 * diff
+
+
+def find_chessboard(img: Mat[DType.uint8], cols: Int, rows: Int) raises -> Mat[F32]:
+    """Inner-corner grid of a cols x rows board: corner candidates, lattice growth from the strongest, then the
+    cols x rows window of the lattice made only of X junctions. (n, 2) float32 in row-major lattice order; empty if absent."""
+    var cand = good_features(img, 600, 0.02, 5.0, 3)
+    var nc = cand.rows
+    var none = Mat[F32](0, 2, 1)
+    if nc < cols * rows:
+        return none^
+    var pts = corner_sub_pix(img, cand, 3, -1, 20, 0.01)
+    var px = List[Float64]()
+    var py = List[Float64]()
+    for i in range(nc):
+        px.append(Float64(pts.at(i, 0)))
+        py.append(Float64(pts.at(i, 1)))
+    # try seeds in order until a lattice covers the pattern
+    for seed in range(min(nc, 40)):
+        var near = List[Int]()
+        var dist = List[Float64]()
+        for j in range(nc):
+            if j != seed:
+                var d = sqrt((px[j] - px[seed]) ** 2 + (py[j] - py[seed]) ** 2)
+                near.append(j)
+                dist.append(d)
+        var n1 = -1
+        for q in range(len(near)):
+            if n1 < 0 or dist[q] < dist[n1]:
+                n1 = q
+        if n1 < 0:
+            continue
+        var s0 = dist[n1]
+        var ax = px[near[n1]] - px[seed]
+        var ay = py[near[n1]] - py[seed]
+        var n2 = -1
+        for q in range(len(near)):
+            if dist[q] > 1.6 * s0 or q == n1:
+                continue
+            var bx = px[near[q]] - px[seed]
+            var by = py[near[q]] - py[seed]
+            var cosang = abs(ax * bx + ay * by) / (s0 * dist[q])
+            if cosang < 0.45 and (n2 < 0 or dist[q] < dist[n2]):
+                n2 = q
+        if n2 < 0:
+            continue
+        var lat = Dict[Int, Int]()
+        var eax = List[Float64](length=nc, fill=0)
+        var eay = List[Float64](length=nc, fill=0)
+        var ebx = List[Float64](length=nc, fill=0)
+        var eby = List[Float64](length=nc, fill=0)
+        var used = List[Bool](length=nc, fill=False)
+        var queue = List[Int]()
+        var qi = List[Int]()
+        var qj = List[Int]()
+        var bx0 = px[near[n2]] - px[seed]
+        var by0 = py[near[n2]] - py[seed]
+        lat[500 * 1000 + 500] = seed
+        used[seed] = True
+        eax[seed] = ax
+        eay[seed] = ay
+        ebx[seed] = bx0
+        eby[seed] = by0
+        queue.append(seed)
+        qi.append(0)
+        qj.append(0)
+        var head = 0
+        while head < len(queue):
+            var cur = queue[head]
+            var ci = qi[head]
+            var cj = qj[head]
+            head += 1
+            for dirn in range(4):
+                var di = 0
+                var dj = 0
+                var vx = Float64(0)
+                var vy = Float64(0)
+                if dirn == 0:
+                    di = 1
+                    vx = eax[cur]
+                    vy = eay[cur]
+                elif dirn == 1:
+                    di = -1
+                    vx = -eax[cur]
+                    vy = -eay[cur]
+                elif dirn == 2:
+                    dj = 1
+                    vx = ebx[cur]
+                    vy = eby[cur]
+                else:
+                    dj = -1
+                    vx = -ebx[cur]
+                    vy = -eby[cur]
+                var key = (500 + ci + di) * 1000 + 500 + cj + dj
+                if key in lat:
+                    continue
+                var tx = px[cur] + vx
+                var ty = py[cur] + vy
+                var tol = 0.3 * sqrt(vx * vx + vy * vy)
+                var bestq = -1
+                var bestd = tol
+                for q in range(nc):
+                    if used[q]:
+                        continue
+                    var d = sqrt((px[q] - tx) ** 2 + (py[q] - ty) ** 2)
+                    if d < bestd:
+                        bestd = d
+                        bestq = q
+                if bestq < 0:
+                    continue
+                used[bestq] = True
+                lat[key] = bestq
+                var nvx = px[bestq] - px[cur]
+                var nvy = py[bestq] - py[cur]
+                if di != 0:
+                    eax[bestq] = nvx * Float64(di)
+                    eay[bestq] = nvy * Float64(di)
+                    ebx[bestq] = ebx[cur]
+                    eby[bestq] = eby[cur]
+                else:
+                    ebx[bestq] = nvx * Float64(dj)
+                    eby[bestq] = nvy * Float64(dj)
+                    eax[bestq] = eax[cur]
+                    eay[bestq] = eay[cur]
+                queue.append(bestq)
+                qi.append(ci + di)
+                qj.append(cj + dj)
+        # saddle flags on lattice points
+        var saddle = Dict[Int, Bool]()
+        for k in range(len(queue)):
+            var c = queue[k]
+            saddle[(500 + qi[k]) * 1000 + 500 + qj[k]] = is_saddle(img, px[c], py[c], eax[c] * 0.5, eay[c] * 0.5, ebx[c] * 0.5, eby[c] * 0.5)
+        for orient in range(2):
+            var w = cols if orient == 0 else rows
+            var h = rows if orient == 0 else cols
+            for i0 in range(-40, 41):
+                for j0 in range(-40, 41):
+                    var ok = True
+                    for jj in range(h):
+                        for ii in range(w):
+                            var key = (500 + i0 + ii) * 1000 + 500 + j0 + jj
+                            if not (key in saddle) or not saddle[key]:
+                                ok = False
+                                break
+                        if not ok:
+                            break
+                    if ok:
+                        # grid[r][c]: c runs along the cols-point axis; flip so that axis points right and the rows axis points down
+                        var o = Mat[F32](cols * rows, 2, 1)
+                        var g = List[Int]()
+                        for r in range(rows):
+                            for cc in range(cols):
+                                var ii = cc if orient == 0 else r
+                                var jj = r if orient == 0 else cc
+                                g.append(lat[(500 + i0 + ii) * 1000 + 500 + j0 + jj])
+                        var vx = px[g[cols - 1]] - px[g[0]]
+                        var vy = py[g[(rows - 1) * cols]] - py[g[0]]
+                        var flip_c = vx < 0
+                        var flip_r = vy < 0
+                        var n = 0
+                        for r in range(rows):
+                            for cc in range(cols):
+                                var q = g[(rows - 1 - r if flip_r else r) * cols + (cols - 1 - cc if flip_c else cc)]
+                                o.set(n, 0, 0, Float32(px[q]))
+                                o.set(n, 1, 0, Float32(py[q]))
+                                n += 1
+                        return o^
+    return none^
+
+
 def run(mut a: Args) raises -> Bool:
     if a.op == "Rodrigues":
         var m = load[F64](a.ins[0])
@@ -1188,6 +1383,12 @@ def run(mut a: Args) raises -> Bool:
             o = init_undistort_rectify_map(k, d, rr, p, a.i("w", 640), a.i("h", 480), a.op == "fisheye_initUndistortRectifyMap")
         save(o[0], a.out)
         save(o[1], a.out + ".1")
+    elif a.op == "findChessboardCorners":
+        var im = load[DType.uint8](a.ins[0])
+        var o = Mat[F32](0, 0)
+        while a.again():
+            o = find_chessboard(im, a.i("cols", 9), a.i("rows", 6))
+        save(o, a.out)
     elif a.op == "StereoSGBM":
         var l = load[DType.uint8](a.ins[0])
         var r = load[DType.uint8](a.ins[1])

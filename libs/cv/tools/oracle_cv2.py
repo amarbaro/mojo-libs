@@ -252,6 +252,12 @@ def StereoSGBM(i, kv):
     return sg.compute(i[0], i[1])
 
 
+@op()
+def findChessboardCorners(i, kv):
+    ok, c = cv2.findChessboardCorners(i[0], (kv_i(kv, "cols", 9), kv_i(kv, "rows", 6)))
+    return c.reshape(-1, 2).astype(np.float32) if ok else np.zeros((0, 2), np.float32)
+
+
 # ---- compare ----------------------------------------------------------------------------------------------
 def compare(ours, ref, spec):
     if ours.shape != ref.shape:
@@ -396,6 +402,19 @@ def make_fixtures(d):
             if 0 <= xr_ < W:
                 SR[yy, xr_] = SL[yy, xx]
     fx["st_l"], fx["st_r"] = SL, SR
+    def board(cols_, rows_, sq=40, margin=60):
+        b = np.zeros(((rows_ + 1) * sq, (cols_ + 1) * sq), np.uint8)
+        for r_ in range(rows_ + 1):
+            for c_ in range(cols_ + 1):
+                if (r_ + c_) % 2 == 0:
+                    b[r_ * sq:(r_ + 1) * sq, c_ * sq:(c_ + 1) * sq] = 255
+        big = np.full((b.shape[0] + 2 * margin, b.shape[1] + 2 * margin), 200, np.uint8)
+        big[margin:-margin, margin:-margin] = b
+        return big
+    for nm, (cc_, rr_, Mh) in {"cb_a": (9, 6, [[0.9, 0.15, 40], [-0.1, 0.95, 30], [0.0002, 0.0001, 1]]),
+                              "cb_b": (7, 5, [[0.6, -0.5, 250], [0.5, 0.6, 20], [0.0003, -0.0002, 1]]),
+                              "cb_c": (6, 4, [[1.2, 0.0, 30], [0.0, 1.2, 40], [0.0, 0.0, 1]])}.items():
+        fx[nm] = cv2.GaussianBlur(cv2.warpPerspective(board(cc_, rr_), np.array(Mh), (640, 480), borderValue=200), (3, 3), 0)
     fx["odd"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["odd2"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["one"] = np.array([[[200, 0, 77]]], np.uint8)

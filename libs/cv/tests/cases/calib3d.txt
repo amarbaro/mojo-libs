@@ -35,3 +35,7 @@ pose_all         recoverPose pose_E ess_p1 ess_p2n K => max:1e-9, max:1e-9, frac
 sgbm_dots        StereoSGBM st_l st_r minDisp=0 numDisp=32 block=5 => frac:16:0.9
 sgbm_block3      StereoSGBM st_l st_r minDisp=0 numDisp=32 block=3 lrMax=1 uniq=10 => frac:16:0.9
 sgbm_mind        StereoSGBM st_l st_r minDisp=2 numDisp=16 block=5 => frac:16:0.9
+chess_a          findChessboardCorners cb_a cols=9 rows=6 => pts:0.5:0.95
+chess_b_rot      findChessboardCorners cb_b cols=7 rows=5 => pts:0.5:0.95
+chess_c          findChessboardCorners cb_c cols=6 rows=4 => pts:1.0:0.95
+chess_none       findChessboardCorners st_l cols=9 rows=6 => cnt:0
