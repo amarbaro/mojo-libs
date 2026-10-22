@@ -396,12 +396,46 @@ def strel(shape: Int, k: Int) -> List[Int]:
     return out^
 
 
+@always_inline
+def _rect_hrow[is_min: Bool, dt: DType](s: Ptr[Scalar[dt]], d: Ptr[Scalar[dt]], n: Int, ch: Int, r: Int):
+    """d[i] = min (max) of s[i + dx * ch] for dx in -r..r; taps outside the row are skipped (the identity is neutral)."""
+    comptime W = simd_width_of[dt]()
+    comptime ident = Scalar[dt].MAX if is_min else Scalar[dt].MIN
+    var e = r * ch
+    var i = e
+    while i + W <= n - e:
+        var acc = s.unsafe_load[width=W](i - e)
+        for dx in range(-r + 1, r + 1):
+            var v = s.unsafe_load[width=W](i + dx * ch)
+            comptime if is_min:
+                acc = min(acc, v)
+            else:
+                acc = max(acc, v)
+        d.unsafe_store(i, acc)
+        i += W
+    for side in range(2):
+        for ii in range(0 if side == 0 else max(i, e), min(e, n) if side == 0 else n):
+            var acc = ident
+            for dx in range(-r, r + 1):
+                var j = ii + dx * ch
+                if j >= 0 and j < n:
+                    var v = s[unsafe_offset=j]
+                    comptime if is_min:
+                        if v < acc:
+                            acc = v
+                    else:
+                        if v > acc:
+                            acc = v
+            d[unsafe_offset=ii] = acc
+
+
 def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int) -> Mat[dt]:
     """erode (is_min) or dilate with a k x k structuring element, borders ignored as cv2 does."""
     var runs = strel(shape, k)
     var iters2 = iters
     var kk = k
     if shape == 0 and iters2 > 1:
+        # iterating a rect k times equals one pass of (k - 1) * iters + 1
         kk = (k - 1) * iters2 + 1
         iters2 = 1
     var r = kk // 2
@@ -411,84 +445,30 @@ def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int)
     var cur = Mat[dt](0, 0)
     var n = src.cols * ch
     for it in range(iters2):
-        # use kk for kernel size in rect path? strel uses k for runs (non-rect). For rect, k not used except r. r updated.
-        var k = kk
-        var p = pad(src, r, r, 2, ident) if it == 0 else pad(cur, r, r, 2, ident)
-        var pp = p.ptr()
         var o = Mat[dt](src.rows, src.cols, ch, False)
         var po = o.ptr()
-        var pstride = p.cols * ch
         if shape == 0:
-            # a rectangle is separable: min over the row window, then over the column window
-            var tmp = Mat[dt](p.rows, src.cols, ch, False)
+            # a rectangle is separable: min over the row window, then over the column window; the source is
+            # read in place and only the r edge columns and rows are clipped
+            var tmp = Mat[dt](src.rows, src.cols, ch, False)
             var pt = tmp.ptr()
-
-            def hrow(y: Int) {imm}:
-                var i = 0
-                while i + W <= n:
-                    var acc = SIMD[dt, W](ident)
-                    for dx in range(-r, r + 1):
-                        var v = pp.unsafe_load[width=W](y * pstride + r * ch + i + dx * ch)
-                        comptime if is_min:
-                            acc = min(acc, v)
-                        else:
-                            acc = max(acc, v)
-                    pt.unsafe_store(y * n + i, acc)
-                    i += W
-                for ii in range(i, n):
-                    var acc = ident
-                    for dx in range(-r, r + 1):
-                        var v = pp[unsafe_offset=y * pstride + r * ch + ii + dx * ch]
-                        comptime if is_min:
-                            if v < acc:
-                                acc = v
-                        else:
-                            if v > acc:
-                                acc = v
-                    pt[unsafe_offset=y * n + ii] = acc
+            var ps = src.ptr() if it == 0 else cur.ptr()
 
             def hband(b: Int) {imm}:
-                var r0 = b * 8
-                var r1 = r0 + 8
-                if r1 > p.rows:
-                    r1 = p.rows
-                for y in range(r0, r1):
-                    var i = 0
-                    while i + W <= n:
-                        var acc = SIMD[dt, W](ident)
-                        for dx in range(-r, r + 1):
-                            var v = pp.unsafe_load[width=W](y * pstride + r * ch + i + dx * ch)
-                            comptime if is_min:
-                                acc = min(acc, v)
-                            else:
-                                acc = max(acc, v)
-                        pt.unsafe_store(y * n + i, acc)
-                        i += W
-                    for ii in range(i, n):
-                        var acc = ident
-                        for dx in range(-r, r + 1):
-                            var v = pp[unsafe_offset=y * pstride + r * ch + ii + dx * ch]
-                            comptime if is_min:
-                                if v < acc:
-                                    acc = v
-                            else:
-                                if v > acc:
-                                    acc = v
-                        pt[unsafe_offset=y * n + ii] = acc
+                for y in range(b * 8, min(b * 8 + 8, src.rows)):
+                    _rect_hrow[is_min, dt](ps + y * n, pt + y * n, n, ch, r)
 
-            par(hband, (p.rows + 7) // 8)
+            par(hband, (src.rows + 7) // 8)
 
             def vband(b: Int) {imm}:
-                var r0 = b * 8
-                var r1 = r0 + 8
-                if r1 > src.rows:
-                    r1 = src.rows
-                for y in range(r0, r1):
+                for y in range(b * 8, min(b * 8 + 8, src.rows)):
+                    var y0 = max(y - r, 0)
+                    var y1 = min(y + r, src.rows - 1)
                     var i = 0
                     while i + W <= n:
-                        var acc = SIMD[dt, W](ident)
-                        for dy in range(0, 2 * r + 1):
-                            var v = pt.unsafe_load[width=W]((y + dy) * n + i)
+                        var acc = pt.unsafe_load[width=W](y0 * n + i)
+                        for yy in range(y0 + 1, y1 + 1):
+                            var v = pt.unsafe_load[width=W](yy * n + i)
                             comptime if is_min:
                                 acc = min(acc, v)
                             else:
@@ -496,9 +476,9 @@ def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int)
                         po.unsafe_store(y * n + i, acc)
                         i += W
                     for ii in range(i, n):
-                        var acc = ident
-                        for dy in range(0, 2 * r + 1):
-                            var v = pt[unsafe_offset=(y + dy) * n + ii]
+                        var acc = pt[unsafe_offset=y0 * n + ii]
+                        for yy in range(y0 + 1, y1 + 1):
+                            var v = pt[unsafe_offset=yy * n + ii]
                             comptime if is_min:
                                 if v < acc:
                                     acc = v
@@ -508,8 +488,11 @@ def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int)
                         po[unsafe_offset=y * n + ii] = acc
 
             par(vband, (src.rows + 7) // 8)
-            _ = (p.rows, tmp.rows)
+            _ = (tmp.rows, cur.rows)
         else:
+            var p = pad(src, r, r, 2, ident) if it == 0 else pad(cur, r, r, 2, ident)
+            var pp = p.ptr()
+            var pstride = p.cols * ch
             var pr = ptr_of(runs)
             var nr = len(runs) // 3
 
