@@ -19,3 +19,16 @@ fundist_rp       fisheye_undistortPoints pix K dfe Rr Pn => max:1e-9
 rectmap_d5       initUndistortRectifyMap K d5 Rr Pn w=640 h=480 => max:0.001, max:0.001
 rectmap_id       initUndistortRectifyMap K dz Rr K w=64 h=48 => max:0.001, max:0.001
 frectmap         fisheye_initUndistortRectifyMap K dfe Rr Pn w=320 h=240 => max:0.001, max:0.001
+aff_ransac       estimateAffine2D aff_from aff_to thresh=3 => max:1e-4, exact
+aff_tight        estimateAffine2D aff_from aff_to thresh=1 maxIters=500 conf=0.999 => max:1e-4, exact
+pnp_d4           solvePnP pnp_obj pnp_img K d4 => max:1e-6, max:1e-6
+pnp_planar       solvePnP pnp_obj_pl pnp_img_pl K d4 => max:1e-6, max:1e-6
+pnp_nodist       solvePnP pnp_obj pnp_img K dz => max:0.05, max:0.05
+pnp_ransac       solvePnPRansac pnp_obj pnp_img_out K d4 thresh=2 => max:1e-6, max:1e-6, exact
+ess_ransac       findEssentialMat ess_p1 ess_p2 K thresh=1 => max:2e-3, exact
+rect_zero        stereoRectify K dz K2 dz Rst Tst w=640 h=480 => max:1e-9, max:1e-9, max:1e-3, max:1e-3, max:1e-3
+rect_dist        stereoRectify K dst1 K2 dst2 Rst Tst w=640 h=480 => max:1e-9, max:1e-9, max:1e-3, max:1e-3, max:1e-3
+rect_nozd        stereoRectify K dst1 K2 dst2 Rst Tst w=640 h=480 zero=0 => max:1e-9, max:1e-9, max:1e-3, max:1e-3, max:1e-3
+ess_noisy        findEssentialMat ess_p1 ess_p2n K thresh=1.5 => max:0.15, frac:0:0.85
+pose_masked      recoverPose pose_E ess_p1 ess_p2 K pose_mask => max:1e-9, max:1e-9, exact
+pose_all         recoverPose pose_E ess_p1 ess_p2n K => max:1e-9, max:1e-9, frac:12:0.8

@@ -212,6 +212,38 @@ def fisheye_initUndistortRectifyMap(i, kv):
     return list(cv2.fisheye.initUndistortRectifyMap(i[0], i[1], i[2], i[3], (kv_i(kv, "w", 640), kv_i(kv, "h", 480)), cv2.CV_32FC1))
 
 
+@op()
+def estimateAffine2D(i, kv):
+    m, inl = cv2.estimateAffine2D(i[0], i[1], method=cv2.RANSAC, ransacReprojThreshold=kv_f(kv, "thresh", 3.0), maxIters=kv_i(kv, "maxIters", 2000), confidence=kv_f(kv, "conf", 0.99))
+    return [m, inl.reshape(-1, 1).astype(np.uint8)]
+@op()
+def solvePnP(i, kv):
+    ok, r, t = cv2.solvePnP(i[0], i[1], i[2], i[3] if i[3].size else None, flags=cv2.SOLVEPNP_ITERATIVE)
+    return [r.reshape(3, 1), t.reshape(3, 1)]
+@op()
+def solvePnPRansac(i, kv):
+    ok, r, t, inl = cv2.solvePnPRansac(i[0], i[1], i[2], i[3] if i[3].size else None, iterationsCount=kv_i(kv, "iters", 100),
+                                      reprojectionError=kv_f(kv, "thresh", 8.0), confidence=kv_f(kv, "conf", 0.99), flags=cv2.SOLVEPNP_ITERATIVE)
+    return [r.reshape(3, 1), t.reshape(3, 1), np.sort(inl.reshape(-1, 1).astype(np.int32), axis=0)]
+@op()
+def findEssentialMat(i, kv):
+    E, m = cv2.findEssentialMat(i[0], i[1], i[2], method=cv2.RANSAC, prob=kv_f(kv, "prob", 0.999), threshold=kv_f(kv, "thresh", 1.0))
+    E = E[:3] / np.linalg.norm(E[:3])
+    if E.flat[np.argmax(np.abs(E))] < 0:
+        E = -E
+    return [E, m.reshape(-1, 1).astype(np.uint8)]
+@op()
+def recoverPose(i, kv):
+    mask = i[4].copy() if len(i) > 4 else None
+    n, R, t, _ = cv2.recoverPose(i[0], i[1], i[2], i[3], mask=mask)
+    return [R, t.reshape(3, 1), np.array([[n]], np.int32)]
+@op()
+def stereoRectify(i, kv):
+    R1, R2, P1, P2, Q, _, _ = cv2.stereoRectify(i[0], i[1], i[2], i[3], (kv_i(kv, "w", 640), kv_i(kv, "h", 480)), i[4], i[5],
+                                                 flags=cv2.CALIB_ZERO_DISPARITY if kv_i(kv, "zero", 1) else 0)
+    return [R1, R2, P1, P2, Q]
+
+
 # ---- compare ----------------------------------------------------------------------------------------------
 def compare(ours, ref, spec):
     if ours.shape != ref.shape:
@@ -312,6 +344,38 @@ def make_fixtures(d):
     fx["rod_m"] = cv2.Rodrigues(np.array([0.3, -0.7, 0.5]))[0]
     fx["rod_mpi"] = cv2.Rodrigues(np.array([2.2214414691, 2.2214414691, 0.0]))[0]
     fx["rod_mid"] = np.eye(3)
+    # geometry fixtures: two views of a point cloud, 3D-2D correspondences, affine pairs
+    Kc = fx["K"]
+    cloud = np.column_stack([rng.uniform(-1.5, 1.5, 60), rng.uniform(-1, 1, 60), rng.uniform(4, 9, 60)])
+    rv2, tv2 = np.array([0.05, -0.12, 0.03]), np.array([[-0.8], [0.05], [0.1]])
+    tv2 = tv2 / np.linalg.norm(tv2)
+    q1 = cv2.projectPoints(cloud, np.zeros(3), np.zeros(3), Kc, None)[0].reshape(-1, 2)
+    q2 = cv2.projectPoints(cloud, rv2, tv2, Kc, None)[0].reshape(-1, 2)
+    q2n = q2 + rng.normal(0, 0.3, q2.shape)
+    for q in (q2, q2n):
+        q[:12] = rng.uniform(0, 640, (12, 2))  # gross outliers
+    fx["ess_p1"], fx["ess_p2"], fx["ess_p2n"] = q1, q2, q2n
+    tn = tv2.reshape(3)
+    fx["pose_E"] = np.array([[0, -tn[2], tn[1]], [tn[2], 0, -tn[0]], [-tn[1], tn[0], 0]]) @ cv2.Rodrigues(rv2)[0]
+    fx["pose_mask"] = np.concatenate([np.zeros(12), np.ones(48)]).reshape(-1, 1).astype(np.uint8)
+    fx["pnp_obj"] = np.column_stack([rng.uniform(-1, 1, 40), rng.uniform(-0.8, 0.8, 40), rng.uniform(-0.5, 0.5, 40)])
+    fx["pnp_obj_pl"] = np.column_stack([rng.uniform(-1, 1, 12), rng.uniform(-0.8, 0.8, 12), np.zeros(12)])
+    rvp, tvp = np.array([0.2, -0.3, 0.1]), np.array([0.1, -0.2, 5.0])
+    fx["pnp_img"] = cv2.projectPoints(fx["pnp_obj"], rvp, tvp, Kc, fx["d4"])[0].reshape(-1, 2)
+    fx["pnp_img_pl"] = cv2.projectPoints(fx["pnp_obj_pl"], rvp, tvp, Kc, fx["d4"])[0].reshape(-1, 2)
+    out = fx["pnp_img"].copy()
+    out[:12] = rng.uniform(0, 640, (12, 2))
+    fx["pnp_img_out"] = out
+    Af = np.array([[0.9, -0.3, 12.0], [0.25, 1.1, -7.0]])
+    pa = rng.uniform(0, 300, (80, 2))
+    pb = pa @ Af[:, :2].T + Af[:, 2]
+    pb[:16] = rng.uniform(0, 300, (16, 2))
+    fx["aff_from"], fx["aff_to"] = pa, pb
+    fx["Rst"] = cv2.Rodrigues(np.array([0.01, -0.02, 0.005]))[0]
+    fx["Tst"] = np.array([[-0.12], [0.003], [0.002]])
+    fx["K2"] = np.array([[820, 0, 315], [0, 830, 245], [0, 0, 1.0]])
+    fx["dst1"] = np.array([[-0.2], [0.05], [0], [0], [0]])
+    fx["dst2"] = np.array([[-0.1], [0.02], [0], [0], [0]])
     fx["odd"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["odd2"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["one"] = np.array([[[200, 0, 77]]], np.uint8)

@@ -168,8 +168,15 @@ def eigh(a_in: Mx) -> Tuple[List[Float64], Mx]:
     return (vals^, vecs^)
 
 
+def fl(*v: Float64) -> List[Float64]:
+    var o = List[Float64]()
+    for x in v:
+        o.append(x)
+    return o^
+
+
 def cross(a: List[Float64], b: List[Float64]) -> List[Float64]:
-    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]]
+    return fl(a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
 
 
 def det3(a: Mx) -> Float64:
@@ -190,7 +197,7 @@ def rodrigues_vec(r: List[Float64]) -> Mx:
     var x = r[0] / th
     var y = r[1] / th
     var z = r[2] / th
-    return mx_from([c + c1 * x * x, c1 * x * y - s * z, c1 * x * z + s * y, c1 * y * x + s * z, c + c1 * y * y, c1 * y * z - s * x, c1 * z * x - s * y, c1 * z * y + s * x, c + c1 * z * z], 3, 3)
+    return mx_from(fl(c + c1 * x * x, c1 * x * y - s * z, c1 * x * z + s * y, c1 * y * x + s * z, c + c1 * y * y, c1 * y * z - s * x, c1 * z * x - s * y, c1 * z * y + s * x, c + c1 * z * z), 3, 3)
 
 
 def rodrigues_mat(rm: Mx) -> List[Float64]:
@@ -211,7 +218,7 @@ def rodrigues_mat(rm: Mx) -> List[Float64]:
     var th = acos(c)
     if s < 1e-5:
         if c > 0:
-            return [0.0, 0.0, 0.0]
+            return fl(0.0, 0.0, 0.0)
         var t = (r.at(0, 0) + 1) * 0.5
         var vx = sqrt(max(t, 0.0))
         t = (r.at(1, 1) + 1) * 0.5
@@ -222,10 +229,10 @@ def rodrigues_mat(rm: Mx) -> List[Float64]:
             vz = -vz
         var nn = sqrt(vx * vx + vy * vy + vz * vz)
         th = th / nn
-        return [vx * th, vy * th, vz * th]
+        return fl(vx * th, vy * th, vz * th)
     var vth = 1.0 / (2.0 * s)
     vth *= th
-    return [rx * vth, ry * vth, rz * vth]
+    return fl(rx * vth, ry * vth, rz * vth)
 
 
 # ---- camera model -----------------------------------------------------------------------------------------
@@ -264,7 +271,7 @@ def fisheye_distort(x: Float64, y: Float64, d: Mx) -> Tuple[Float64, Float64]:
 
 
 def project_points(obj: Mx, rvec: Mx, tvec: Mx, k: Mx, d: Mx, fisheye: Bool) -> Mx:
-    var rm = rodrigues_vec([rvec.data[0], rvec.data[1], rvec.data[2]])
+    var rm = rodrigues_vec(fl(rvec.data[0], rvec.data[1], rvec.data[2]))
     var o = mx(obj.rows, 2)
     for i in range(obj.rows):
         var x = rm.at(0, 0) * obj.at(i, 0) + rm.at(0, 1) * obj.at(i, 1) + rm.at(0, 2) * obj.at(i, 2) + tvec.data[0]
@@ -373,11 +380,631 @@ def init_undistort_rectify_map(k: Mx, d: Mx, rr: Mx, p: Mx, w: Int, h: Int, fish
     return (mapx^, mapy^)
 
 
+# ---- RANSAC helpers ---------------------------------------------------------------------------------------
+
+
+struct Rng(Movable):
+    var s: UInt64
+
+    def __init__(out self, seed: UInt64 = 0x9E3779B97F4A7C15):
+        self.s = seed
+
+    def next(mut self) -> UInt64:
+        self.s ^= self.s << 13
+        self.s ^= self.s >> 7
+        self.s ^= self.s << 17
+        return self.s
+
+    def sample(mut self, n: Int, k: Int) -> List[Int]:
+        """k distinct indices below n."""
+        var out = List[Int]()
+        while len(out) < k:
+            var v = Int(self.next() % UInt64(n))
+            var dup = False
+            for u in out:
+                if u == v:
+                    dup = True
+            if not dup:
+                out.append(v)
+        return out^
+
+
+def ransac_iters(inliers: Int, n: Int, m: Int, conf: Float64, cap: Int) -> Int:
+    """Adaptive stopping: ceil(ln(1 - conf) / ln(1 - w^m)) with w the inlier share."""
+    var w = Float64(inliers) / Float64(n)
+    var wm = 1.0
+    for _ in range(m):
+        wm *= w
+    if wm < 1e-300:
+        return cap
+    if wm >= 1.0:
+        return 1
+    return min(cap, Int(floor(log_(1.0 - conf) / log_(1.0 - wm))) + 1)
+
+
+def log_(x: Float64) -> Float64:
+    from std.math import log
+    return log(x)
+
+
+# ---- estimateAffine2D -------------------------------------------------------------------------------------
+
+
+def affine_fit(a: Mx, b: Mx, idx: List[Int]) -> Mx:
+    """Least-squares 2 x 3 affine map taking a[idx] to b[idx] (exact for three points)."""
+    var n = len(idx)
+    var ata = mx(3, 3)
+    var atb = mx(3, 2)
+    for t in range(n):
+        var i = idx[t]
+        var row = fl(a.at(i, 0), a.at(i, 1), 1.0)
+        for r in range(3):
+            for c in range(3):
+                ata.data[r * 3 + c] += row[r] * row[c]
+            atb.data[r * 2] += row[r] * b.at(i, 0)
+            atb.data[r * 2 + 1] += row[r] * b.at(i, 1)
+    var x = solve(ata, atb)
+    return mt(x)
+
+
+def estimate_affine(a: Mx, b: Mx, thresh: Float64, max_iters: Int, conf: Float64) -> Tuple[Mx, Mat[DType.uint8]]:
+    var n = a.rows
+    var rng = Rng()
+    var best = mx(2, 3)
+    var best_in = -1
+    var mask = Mat[DType.uint8](n, 1, 1)
+    var t2 = thresh * thresh
+    var iters = max_iters
+    var it = 0
+    while it < iters:
+        it += 1
+        var s = rng.sample(n, 3)
+        var d = (a.at(s[1], 0) - a.at(s[0], 0)) * (a.at(s[2], 1) - a.at(s[0], 1)) - (a.at(s[2], 0) - a.at(s[0], 0)) * (a.at(s[1], 1) - a.at(s[0], 1))
+        if abs(d) < 1e-9:
+            continue
+        var m = affine_fit(a, b, s)
+        var cnt = 0
+        for i in range(n):
+            var ex = m.at(0, 0) * a.at(i, 0) + m.at(0, 1) * a.at(i, 1) + m.at(0, 2) - b.at(i, 0)
+            var ey = m.at(1, 0) * a.at(i, 0) + m.at(1, 1) * a.at(i, 1) + m.at(1, 2) - b.at(i, 1)
+            if ex * ex + ey * ey <= t2:
+                cnt += 1
+        if cnt > best_in:
+            best_in = cnt
+            best = m^
+            iters = ransac_iters(cnt, n, 3, conf, max_iters)
+    var inl = List[Int]()
+    for i in range(n):
+        var ex = best.at(0, 0) * a.at(i, 0) + best.at(0, 1) * a.at(i, 1) + best.at(0, 2) - b.at(i, 0)
+        var ey = best.at(1, 0) * a.at(i, 0) + best.at(1, 1) * a.at(i, 1) + best.at(1, 2) - b.at(i, 1)
+        if ex * ex + ey * ey <= t2:
+            inl.append(i)
+            mask.data[i] = 1
+    if len(inl) >= 3:
+        best = affine_fit(a, b, inl)
+    return (best^, mask^)
+
+
+# ---- pose from 2D-3D --------------------------------------------------------------------------------------
+
+
+def polar_rotation(m: Mx) -> Mx:
+    """The rotation nearest to m: m (m^T m)^(-1/2)."""
+    var ev = eigh(mm(mt(m), m))
+    var isq = mx(3, 3)
+    for k in range(3):
+        for i in range(3):
+            for j in range(3):
+                isq.data[i * 3 + j] += ev[1].at(i, k) * ev[1].at(j, k) / sqrt(ev[0][k])
+    return mm(m, isq)
+
+
+def null_vector(a: Mx) -> List[Float64]:
+    """Unit right singular vector of the smallest singular value of a."""
+    var ev = eigh(mm(mt(a), a))
+    var v = List[Float64]()
+    for i in range(a.cols):
+        v.append(ev[1].at(i, 0))
+    return v^
+
+
+def is_planar(obj: Mx) -> Bool:
+    var c = List[Float64](length=3, fill=0)
+    for i in range(obj.rows):
+        for k in range(3):
+            c[k] += obj.at(i, k) / Float64(obj.rows)
+    var cov = mx(3, 3)
+    for i in range(obj.rows):
+        for r in range(3):
+            for q in range(3):
+                cov.data[r * 3 + q] += (obj.at(i, r) - c[r]) * (obj.at(i, q) - c[q])
+    var ev = eigh(cov)
+    var lo = ev[0][0]
+    var hi = ev[0][2]
+    return lo <= 1e-9 * hi
+
+
+def pose_dlt(obj: Mx, nrm: Mx, idx: List[Int]) -> Tuple[Mx, Mx]:
+    """Initial pose from normalized image points by a plane homography (coplanar) or the 3 x 4 DLT. Returns (R, t)."""
+    var n = len(idx)
+    var sub = mx(n, 3)
+    for t in range(n):
+        for k in range(3):
+            sub.set(t, k, 0, obj.at(idx[t], k))
+    if is_planar(sub):
+        var c = List[Float64](length=3, fill=0)
+        for t in range(n):
+            for k in range(3):
+                c[k] += sub.at(t, k) / Float64(n)
+        var cov = mx(3, 3)
+        for t in range(n):
+            for r in range(3):
+                for q in range(3):
+                    cov.data[r * 3 + q] += (sub.at(t, r) - c[r]) * (sub.at(t, q) - c[q])
+        var ev = eigh(cov)
+        var e1 = fl(ev[1].at(0, 2), ev[1].at(1, 2), ev[1].at(2, 2))
+        var e2 = fl(ev[1].at(0, 1), ev[1].at(1, 1), ev[1].at(2, 1))
+        var e3 = cross(e1, e2)
+        var a = mx(2 * n, 9)
+        for t in range(n):
+            var d = fl(sub.at(t, 0) - c[0], sub.at(t, 1) - c[1], sub.at(t, 2) - c[2])
+            var u = d[0] * e1[0] + d[1] * e1[1] + d[2] * e1[2]
+            var v = d[0] * e2[0] + d[1] * e2[1] + d[2] * e2[2]
+            var x = nrm.at(idx[t], 0)
+            var y = nrm.at(idx[t], 1)
+            var r0 = fl(u, v, 1.0, 0.0, 0.0, 0.0, -x * u, -x * v, -x)
+            var r1 = fl(0.0, 0.0, 0.0, u, v, 1.0, -y * u, -y * v, -y)
+            for k in range(9):
+                a.set(2 * t, k, 0, r0[k])
+                a.set(2 * t + 1, k, 0, r1[k])
+        var h = null_vector(a)
+        var l1 = sqrt(h[0] * h[0] + h[3] * h[3] + h[6] * h[6])
+        var lam = 1.0 / l1
+        if h[8] < 0:
+            lam = -lam
+        var rp = mx_from(fl(h[0] * lam, h[1] * lam, 0.0, h[3] * lam, h[4] * lam, 0.0, h[6] * lam, h[7] * lam, 0.0), 3, 3)
+        var r1v = fl(rp.at(0, 0), rp.at(1, 0), rp.at(2, 0))
+        var r2v = fl(rp.at(0, 1), rp.at(1, 1), rp.at(2, 1))
+        var r3v = cross(r1v, r2v)
+        for k in range(3):
+            rp.set(k, 2, 0, r3v[k])
+        rp = polar_rotation(rp)
+        var tp = fl(h[2] * lam, h[5] * lam, h[8] * lam)
+        var eb = mx_from(fl(e1[0], e2[0], e3[0], e1[1], e2[1], e3[1], e1[2], e2[2], e3[2]), 3, 3)
+        var rt = mm(rp, mt(eb))
+        var tv = mx(3, 1)
+        for k in range(3):
+            tv.set(k, 0, 0, tp[k] - (rt.at(k, 0) * c[0] + rt.at(k, 1) * c[1] + rt.at(k, 2) * c[2]))
+        return (rt^, tv^)
+    var a = mx(2 * n, 12)
+    for t in range(n):
+        var o = fl(obj.at(idx[t], 0), obj.at(idx[t], 1), obj.at(idx[t], 2), 1.0)
+        var x = nrm.at(idx[t], 0)
+        var y = nrm.at(idx[t], 1)
+        for k in range(4):
+            a.set(2 * t, k, 0, o[k])
+            a.set(2 * t, 8 + k, 0, -x * o[k])
+            a.set(2 * t + 1, 4 + k, 0, o[k])
+            a.set(2 * t + 1, 8 + k, 0, -y * o[k])
+    var p = null_vector(a)
+    var m = mx_from(fl(p[0], p[1], p[2], p[4], p[5], p[6], p[8], p[9], p[10]), 3, 3)
+    var sgn = 1.0 if det3(m) > 0 else -1.0
+    m = mscale(m, sgn)
+    var r = polar_rotation(m)
+    var lam = 0.0
+    for i in range(3):
+        for j in range(3):
+            lam += r.at(i, j) * m.at(i, j)
+    lam /= 3.0
+    var tv = mx_from(fl(sgn * p[3] / lam, sgn * p[7] / lam, sgn * p[11] / lam), 3, 1)
+    return (r^, tv^)
+
+
+def pose_residual(obj: Mx, img: Mx, k: Mx, d: Mx, rv: List[Float64], tv: List[Float64]) -> List[Float64]:
+    var r = mx_from(rv, 3, 1)
+    var t = mx_from(tv, 3, 1)
+    var pr = project_points(obj, r, t, k, d, False)
+    var out = List[Float64](length=2 * obj.rows, fill=0)
+    for i in range(obj.rows):
+        out[2 * i] = pr.at(i, 0) - img.at(i, 0)
+        out[2 * i + 1] = pr.at(i, 1) - img.at(i, 1)
+    return out^
+
+
+def refine_pose(obj: Mx, img: Mx, k: Mx, d: Mx, mut rv: List[Float64], mut tv: List[Float64]):
+    """Levenberg-Marquardt on the pixel reprojection error, central-difference Jacobian."""
+    var lam = 1e-3
+    var res = pose_residual(obj, img, k, d, rv, tv)
+    var cost = Float64(0)
+    for v in res:
+        cost += v * v
+    for _ in range(100):
+        var n = len(res)
+        var jac = mx(n, 6)
+        var p = fl(rv[0], rv[1], rv[2], tv[0], tv[1], tv[2])
+        for c in range(6):
+            var h = 1e-6
+            var pp = p.copy()
+            var pm = p.copy()
+            pp[c] += h
+            pm[c] -= h
+            var rp = pose_residual(obj, img, k, d, fl(pp[0], pp[1], pp[2]), fl(pp[3], pp[4], pp[5]))
+            var rm_ = pose_residual(obj, img, k, d, fl(pm[0], pm[1], pm[2]), fl(pm[3], pm[4], pm[5]))
+            for i in range(n):
+                jac.set(i, c, 0, (rp[i] - rm_[i]) / (2 * h))
+        var jt = mt(jac)
+        var jtj = mm(jt, jac)
+        var rvv = mx_from(res, n, 1)
+        var g = mm(jt, rvv)
+        var improved = False
+        for _try in range(12):
+            var a = Mx(copy=jtj)
+            for c in range(6):
+                a.data[c * 6 + c] += lam * (jtj.at(c, c) + 1e-9)
+            var delta = solve(a, mscale(g, -1.0))
+            var np_ = List[Float64]()
+            for c in range(6):
+                np_.append(p[c] + delta.data[c])
+            var nres = pose_residual(obj, img, k, d, fl(np_[0], np_[1], np_[2]), fl(np_[3], np_[4], np_[5]))
+            var ncost = Float64(0)
+            for v in nres:
+                ncost += v * v
+            if ncost <= cost:
+                var step = fnorm(delta)
+                rv = fl(np_[0], np_[1], np_[2])
+                tv = fl(np_[3], np_[4], np_[5])
+                res = nres^
+                var done = cost - ncost < 1e-20 * (1 + cost) or step < 1e-13
+                cost = ncost
+                lam = max(lam * 0.3, 1e-12)
+                improved = True
+                if done:
+                    return
+                break
+            lam *= 10.0
+        if not improved:
+            return
+
+
+def solve_pnp(obj: Mx, img: Mx, k: Mx, d: Mx) -> Tuple[List[Float64], List[Float64]]:
+    var nrm = undistort_points(img, k, d, ident(3), mx(0, 0), False)
+    var idx = List[Int]()
+    for i in range(obj.rows):
+        idx.append(i)
+    var pose = pose_dlt(obj, nrm, idx)
+    var rv = rodrigues_mat(pose[0])
+    ref pt = pose[1]
+    var tv = fl(pt.data[0], pt.data[1], pt.data[2])
+    refine_pose(obj, img, k, d, rv, tv)
+    return (rv^, tv^)
+
+
+def solve_pnp_ransac(obj: Mx, img: Mx, k: Mx, d: Mx, thresh: Float64, max_iters: Int, conf: Float64) -> Tuple[List[Float64], List[Float64], List[Int]]:
+    var n = obj.rows
+    var nrm = undistort_points(img, k, d, ident(3), mx(0, 0), False)
+    var planar = is_planar(obj)
+    var m = 4 if planar else 6
+    var rng = Rng()
+    var best_in = List[Int]()
+    var iters = max_iters
+    var it = 0
+    var t2 = thresh * thresh
+    while it < iters:
+        it += 1
+        var s = rng.sample(n, m)
+        var sub = mx(m, 3)
+        for t in range(m):
+            for c in range(3):
+                sub.set(t, c, 0, obj.at(s[t], c))
+        var idx = List[Int]()
+        for t in range(m):
+            idx.append(s[t])
+        if is_planar(sub) != planar:
+            continue
+        var pose = pose_dlt(obj, nrm, idx)
+        var pr = project_points(obj, mx_from(rodrigues_mat(pose[0]), 3, 1), pose[1], k, d, False)
+        var inl = List[Int]()
+        for i in range(n):
+            var ex = pr.at(i, 0) - img.at(i, 0)
+            var ey = pr.at(i, 1) - img.at(i, 1)
+            if ex * ex + ey * ey <= t2:
+                inl.append(i)
+        if len(inl) > len(best_in):
+            best_in = inl^
+            iters = ransac_iters(len(best_in), n, m, conf, max_iters)
+    var so = mx(len(best_in), 3)
+    var si = mx(len(best_in), 2)
+    for t in range(len(best_in)):
+        for c in range(3):
+            so.set(t, c, 0, obj.at(best_in[t], c))
+        for c in range(2):
+            si.set(t, c, 0, img.at(best_in[t], c))
+    var pose = solve_pnp(so, si, k, d)
+    var pr = project_points(obj, mx_from(pose[0], 3, 1), mx_from(pose[1], 3, 1), k, d, False)
+    var inl = List[Int]()
+    for i in range(n):
+        var ex = pr.at(i, 0) - img.at(i, 0)
+        var ey = pr.at(i, 1) - img.at(i, 1)
+        if ex * ex + ey * ey <= t2:
+            inl.append(i)
+    return (pose[0].copy(), pose[1].copy(), inl^)
+
+
+# ---- epipolar geometry ------------------------------------------------------------------------------------
+
+
+def svd3(e: Mx) -> Tuple[Mx, List[Float64], Mx]:
+    """e = U diag(s) V^T for a 3 x 3 matrix, singular values descending."""
+    var ev = eigh(mm(mt(e), e))
+    var v = mx(3, 3)
+    var s = List[Float64]()
+    for c in range(3):
+        s.append(sqrt(max(ev[0][2 - c], 0.0)))
+        for r in range(3):
+            v.set(r, c, 0, ev[1].at(r, 2 - c))
+    var u = mx(3, 3)
+    for c in range(2):
+        for r in range(3):
+            var t = Float64(0)
+            for q in range(3):
+                t += e.at(r, q) * v.at(q, c)
+            u.set(r, c, 0, t / s[c] if s[c] > 1e-300 else 0.0)
+    var u0 = fl(u.at(0, 0), u.at(1, 0), u.at(2, 0))
+    var u1 = fl(u.at(0, 1), u.at(1, 1), u.at(2, 1))
+    var u2 = cross(u0, u1)
+    for r in range(3):
+        u.set(r, 2, 0, u2[r])
+    return (u^, s^, v^)
+
+
+def hartley(x: Mx, idx: List[Int]) -> Mx:
+    """Similarity (3 x 3) taking x[idx] to zero mean and mean distance sqrt(2)."""
+    var cx = Float64(0)
+    var cy = Float64(0)
+    for i in idx:
+        cx += x.at(i, 0) / Float64(len(idx))
+        cy += x.at(i, 1) / Float64(len(idx))
+    var md = Float64(0)
+    for i in idx:
+        md += sqrt((x.at(i, 0) - cx) ** 2 + (x.at(i, 1) - cy) ** 2) / Float64(len(idx))
+    var s = 1.4142135623730951 / md if md > 0 else 1.0
+    return mx_from(fl(s, 0.0, -s * cx, 0.0, s, -s * cy, 0.0, 0.0, 1.0), 3, 3)
+
+
+def essential_8pt(x1: Mx, x2: Mx, idx: List[Int]) -> Mx:
+    var n = len(idx)
+    var t1 = hartley(x1, idx)
+    var t2 = hartley(x2, idx)
+    var a = mx(n, 9)
+    for t in range(n):
+        var i = idx[t]
+        var p = t1.at(0, 0) * x1.at(i, 0) + t1.at(0, 2)
+        var q = t1.at(1, 1) * x1.at(i, 1) + t1.at(1, 2)
+        var r = t2.at(0, 0) * x2.at(i, 0) + t2.at(0, 2)
+        var s = t2.at(1, 1) * x2.at(i, 1) + t2.at(1, 2)
+        var row = fl(r * p, r * q, r, s * p, s * q, s, p, q, 1.0)
+        for c in range(9):
+            a.set(t, c, 0, row[c])
+    var e = mm(mm(mt(t2), mx_from(null_vector(a), 3, 3)), t1)
+    var f = svd3(e)
+    var s0 = f[1][0]
+    var s1 = f[1][1]
+    var sv = (s0 + s1) * 0.5
+    var d = mx(3, 3)
+    d.set(0, 0, 0, sv)
+    d.set(1, 1, 0, sv)
+    return mm(mm(f[0], d), mt(f[2]))
+
+
+def sampson(e: Mx, x1: Mx, x2: Mx, i: Int) -> Float64:
+    var p = fl(x1.at(i, 0), x1.at(i, 1), 1.0)
+    var q = fl(x2.at(i, 0), x2.at(i, 1), 1.0)
+    var ex = fl(0.0, 0.0, 0.0)
+    var etx = fl(0.0, 0.0, 0.0)
+    for r in range(3):
+        for c in range(3):
+            ex[r] += e.at(r, c) * p[c]
+            etx[r] += e.at(c, r) * q[c]
+    var num = q[0] * ex[0] + q[1] * ex[1] + q[2] * ex[2]
+    var den = ex[0] * ex[0] + ex[1] * ex[1] + etx[0] * etx[0] + etx[1] * etx[1]
+    return num * num / den if den > 0 else 1e30
+
+
+def normalize_pixels(p: Mx, k: Mx) -> Mx:
+    var o = mx(p.rows, 2)
+    for i in range(p.rows):
+        var y = (p.at(i, 1) - k.at(1, 2)) / k.at(1, 1)
+        o.set(i, 1, 0, y)
+        o.set(i, 0, 0, (p.at(i, 0) - k.at(0, 2) - k.at(0, 1) * y) / k.at(0, 0))
+    return o^
+
+
+def find_essential(p1: Mx, p2: Mx, k: Mx, thresh: Float64, conf: Float64) -> Tuple[Mx, Mat[DType.uint8]]:
+    """RANSAC over eight-point models, refit on the inliers; E is scaled to unit Frobenius norm with its largest
+    entry positive. (cv2 draws minimal five-point sets; on consistent data both land on the same E.)"""
+    var n = p1.rows
+    var x1 = normalize_pixels(p1, k)
+    var x2 = normalize_pixels(p2, k)
+    var f = (k.at(0, 0) + k.at(1, 1)) * 0.5
+    var t2 = (thresh / f) * (thresh / f)
+    var rng = Rng()
+    var best_e = mx(3, 3)
+    var best_n = -1
+    var best_cost = 1e300
+    var iters = 1000
+    var it = 0
+    while it < iters:
+        it += 1
+        var e = essential_8pt(x1, x2, rng.sample(n, 8))
+        var cnt = 0
+        var cost = Float64(0)
+        for i in range(n):
+            var er = sampson(e, x1, x2, i)
+            cost += min(er, t2)
+            if er <= t2:
+                cnt += 1
+        if cost < best_cost:
+            best_n = cnt
+            best_cost = cost
+            best_e = e^
+            iters = ransac_iters(cnt, n, 8, conf, 1000)
+    var e = best_e^
+    var mask = Mat[DType.uint8](n, 1, 1)
+    for i in range(n):
+        if sampson(e, x1, x2, i) <= t2:
+            mask.data[i] = 1
+    var nrm = fnorm(e)
+    var big = 0
+    for i in range(9):
+        if abs(e.data[i]) > abs(e.data[big]):
+            big = i
+    var sg = 1.0 if e.data[big] > 0 else -1.0
+    return (mscale(e, sg / nrm), mask^)
+
+
+def triangulate(p1: Mx, p2: Mx, x1: Float64, y1: Float64, x2: Float64, y2: Float64) -> List[Float64]:
+    var a = mx(4, 4)
+    for c in range(4):
+        a.set(0, c, 0, x1 * p1.at(2, c) - p1.at(0, c))
+        a.set(1, c, 0, y1 * p1.at(2, c) - p1.at(1, c))
+        a.set(2, c, 0, x2 * p2.at(2, c) - p2.at(0, c))
+        a.set(3, c, 0, y2 * p2.at(2, c) - p2.at(1, c))
+    return null_vector(a)
+
+
+def recover_pose(e: Mx, p1: Mx, p2: Mx, k: Mx, mask: Mat[DType.uint8], has_mask: Bool) -> Tuple[Mx, Mx, Int]:
+    var f = svd3(e)
+    var u = Mx(copy=f[0])
+    var v = Mx(copy=f[2])
+    if det3(u) < 0:
+        for r in range(3):
+            u.set(r, 2, 0, -u.at(r, 2))
+    if det3(v) < 0:
+        for r in range(3):
+            v.set(r, 2, 0, -v.at(r, 2))
+    var w = mx_from(fl(0.0, -1.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0), 3, 3)
+    var ra = mm(mm(u, w), mt(v))
+    var rb = mm(mm(u, mt(w)), mt(v))
+    var tt = fl(u.at(0, 2), u.at(1, 2), u.at(2, 2))
+    var x1 = normalize_pixels(p1, k)
+    var x2 = normalize_pixels(p2, k)
+    var pa = mx(3, 4)
+    for i in range(3):
+        pa.set(i, i, 0, 1.0)
+    var best = -1
+    var best_r = ident(3)
+    var best_t = mx(3, 1)
+    for c in range(4):
+        var rr = Mx(copy=ra) if c < 2 else Mx(copy=rb)
+        var sg = 1.0 if c % 2 == 0 else -1.0
+        var pb = mx(3, 4)
+        for i in range(3):
+            for j in range(3):
+                pb.set(i, j, 0, rr.at(i, j))
+            pb.set(i, 3, 0, sg * tt[i])
+        var good = 0
+        for i in range(p1.rows):
+            if has_mask and mask.data[i] == 0:
+                continue
+            var X = triangulate(pa, pb, x1.at(i, 0), x1.at(i, 1), x2.at(i, 0), x2.at(i, 1))
+            var z1 = X[2] / X[3]
+            var z2 = (pb.at(2, 0) * X[0] + pb.at(2, 1) * X[1] + pb.at(2, 2) * X[2] + pb.at(2, 3) * X[3]) / X[3]
+            if z1 > 0 and z2 > 0 and z1 < 50 and z2 < 50:
+                good += 1
+        if good > best:
+            best = good
+            best_r = rr^
+            best_t = mx_from(fl(sg * tt[0], sg * tt[1], sg * tt[2]), 3, 1)
+    return (best_r^, best_t^, best)
+
+
+# ---- stereoRectify ----------------------------------------------------------------------------------------
+
+
+def stereo_rectify(k1: Mx, d1: Mx, k2: Mx, d2: Mx, rm: Mx, t: Mx, w: Int, h: Int, zero_disp: Bool) -> List[Mx]:
+    """Bouguet's rectification with cv2's default alpha (-1), horizontal baseline: R1, R2, P1, P2, Q."""
+    var om = rodrigues_mat(rm)
+    var half = rodrigues_vec(fl(-0.5 * om[0], -0.5 * om[1], -0.5 * om[2]))
+    var tv = List[Float64](length=3, fill=0)
+    for i in range(3):
+        for j in range(3):
+            tv[i] += half.at(i, j) * t.data[j]
+    var idx = 0 if abs(tv[0]) > abs(tv[1]) else 1
+    var c = tv[idx]
+    var nt = sqrt(tv[0] * tv[0] + tv[1] * tv[1] + tv[2] * tv[2])
+    var uu = fl(0.0, 0.0, 0.0)
+    uu[idx] = 1.0 if c > 0 else -1.0
+    var ww = cross(tv, uu)
+    var nw = sqrt(ww[0] * ww[0] + ww[1] * ww[1] + ww[2] * ww[2])
+    if nw > 0:
+        var sc = acos(min(abs(c) / nt, 1.0)) / nw
+        ww = fl(ww[0] * sc, ww[1] * sc, ww[2] * sc)
+    var wr = rodrigues_vec(ww)
+    var r1 = mm(wr, mt(half))
+    var r2 = mm(wr, half)
+    var t2 = mm(r2, t)
+    var f = (k1.at(idx ^ 1, idx ^ 1) + k2.at(idx ^ 1, idx ^ 1)) * 0.5
+    var corners = mx(4, 2)
+    corners.set(1, 0, 0, Float64(w - 1))
+    corners.set(2, 1, 0, Float64(h - 1))
+    corners.set(3, 0, 0, Float64(w - 1))
+    corners.set(3, 1, 0, Float64(h - 1))
+    var cx = List[Float64]()
+    var cy = List[Float64]()
+    for kk in range(2):
+        var u = undistort_points(corners, k1 if kk == 0 else k2, d1 if kk == 0 else d2, ident(3), mx(0, 0), False)
+        var rk = Mx(copy=r1) if kk == 0 else Mx(copy=r2)
+        var ax = Float64(0)
+        var ay = Float64(0)
+        for i in range(4):
+            var z = rk.at(2, 0) * u.at(i, 0) + rk.at(2, 1) * u.at(i, 1) + rk.at(2, 2)
+            ax += f * (rk.at(0, 0) * u.at(i, 0) + rk.at(0, 1) * u.at(i, 1) + rk.at(0, 2)) / z * 0.25
+            ay += f * (rk.at(1, 0) * u.at(i, 0) + rk.at(1, 1) * u.at(i, 1) + rk.at(1, 2)) / z * 0.25
+        cx.append(Float64(w - 1) / 2 - ax)
+        cy.append(Float64(h - 1) / 2 - ay)
+    if zero_disp:
+        cx[0] = (cx[0] + cx[1]) * 0.5
+        cx[1] = cx[0]
+        cy[0] = (cy[0] + cy[1]) * 0.5
+        cy[1] = cy[0]
+    elif idx == 0:
+        cy[0] = (cy[0] + cy[1]) * 0.5
+        cy[1] = cy[0]
+    else:
+        cx[0] = (cx[0] + cx[1]) * 0.5
+        cx[1] = cx[0]
+    var p1 = mx(3, 4)
+    p1.set(0, 0, 0, f)
+    p1.set(1, 1, 0, f)
+    p1.set(0, 2, 0, cx[0])
+    p1.set(1, 2, 0, cy[0])
+    p1.set(2, 2, 0, 1.0)
+    var p2 = Mx(copy=p1)
+    p2.set(0, 2, 0, cx[1])
+    p2.set(1, 2, 0, cy[1])
+    p2.set(idx, 3, 0, t2.data[idx] * f)
+    var q = mx(4, 4)
+    q.set(0, 0, 0, 1.0)
+    q.set(1, 1, 0, 1.0)
+    q.set(0, 3, 0, -cx[0])
+    q.set(1, 3, 0, -cy[0])
+    q.set(2, 3, 0, f)
+    q.set(3, 2, 0, -1.0 / t2.data[idx])
+    q.set(3, 3, 0, (cx[0] - cx[1]) / t2.data[idx])
+    var out = List[Mx]()
+    out.append(r1^)
+    out.append(r2^)
+    out.append(p1^)
+    out.append(p2^)
+    out.append(q^)
+    return out^
+
+
 def run(mut a: Args) raises -> Bool:
     if a.op == "Rodrigues":
         var m = load[F64](a.ins[0])
         if m.size() == 3:
-            save(rodrigues_vec([m.data[0], m.data[1], m.data[2]]), a.out)
+            save(rodrigues_vec(fl(m.data[0], m.data[1], m.data[2])), a.out)
         else:
             var v = rodrigues_vec_from(m)
             save(mx_from(v, 3, 1), a.out)
@@ -411,6 +1038,73 @@ def run(mut a: Args) raises -> Bool:
             o = init_undistort_rectify_map(k, d, rr, p, a.i("w", 640), a.i("h", 480), a.op == "fisheye_initUndistortRectifyMap")
         save(o[0], a.out)
         save(o[1], a.out + ".1")
+    elif a.op == "estimateAffine2D":
+        var f = load[F64](a.ins[0])
+        var t = load[F64](a.ins[1])
+        var o = (mx(0, 0), Mat[DType.uint8](0, 0))
+        while a.again():
+            o = estimate_affine(f, t, a.f("thresh", 3.0), a.i("maxIters", 2000), a.f("conf", 0.99))
+        save(o[0], a.out)
+        save(o[1], a.out + ".1")
+    elif a.op == "solvePnP":
+        var obj = load[F64](a.ins[0])
+        var img = load[F64](a.ins[1])
+        var k = load[F64](a.ins[2])
+        var d = load[F64](a.ins[3])
+        var o = (List[Float64](), List[Float64]())
+        while a.again():
+            o = solve_pnp(obj, img, k, d)
+        save(mx_from(o[0], 3, 1), a.out)
+        save(mx_from(o[1], 3, 1), a.out + ".1")
+    elif a.op == "solvePnPRansac":
+        var obj = load[F64](a.ins[0])
+        var img = load[F64](a.ins[1])
+        var k = load[F64](a.ins[2])
+        var d = load[F64](a.ins[3])
+        var o = (List[Float64](), List[Float64](), List[Int]())
+        while a.again():
+            o = solve_pnp_ransac(obj, img, k, d, a.f("thresh", 8.0), a.i("iters", 100), a.f("conf", 0.99))
+        save(mx_from(o[0], 3, 1), a.out)
+        save(mx_from(o[1], 3, 1), a.out + ".1")
+        var inl = Mat[DType.int32](len(o[2]), 1, 1)
+        for i in range(len(o[2])):
+            inl.data[i] = Int32(o[2][i])
+        save(inl, a.out + ".2")
+    elif a.op == "findEssentialMat":
+        var p1 = load[F64](a.ins[0])
+        var p2 = load[F64](a.ins[1])
+        var k = load[F64](a.ins[2])
+        var o = (mx(0, 0), Mat[DType.uint8](0, 0))
+        while a.again():
+            o = find_essential(p1, p2, k, a.f("thresh", 1.0), a.f("prob", 0.999))
+        save(o[0], a.out)
+        save(o[1], a.out + ".1")
+    elif a.op == "recoverPose":
+        var e = load[F64](a.ins[0])
+        var p1 = load[F64](a.ins[1])
+        var p2 = load[F64](a.ins[2])
+        var k = load[F64](a.ins[3])
+        var mk = load[DType.uint8](a.ins[4]) if len(a.ins) > 4 else Mat[DType.uint8](0, 0)
+        var o = (mx(0, 0), mx(0, 0), 0)
+        while a.again():
+            o = recover_pose(e, p1, p2, k, mk, len(a.ins) > 4)
+        save(o[0], a.out)
+        save(o[1], a.out + ".1")
+        var cnt = Mat[DType.int32](1, 1, 1)
+        cnt.data[0] = Int32(o[2])
+        save(cnt, a.out + ".2")
+    elif a.op == "stereoRectify":
+        var k1 = load[F64](a.ins[0])
+        var d1 = load[F64](a.ins[1])
+        var k2 = load[F64](a.ins[2])
+        var d2 = load[F64](a.ins[3])
+        var rm = load[F64](a.ins[4])
+        var t = load[F64](a.ins[5])
+        var o = List[Mx]()
+        while a.again():
+            o = stereo_rectify(k1, d1, k2, d2, rm, t, a.i("w", 640), a.i("h", 480), a.i("zero", 1) == 1)
+        for i in range(5):
+            save(o[i], a.out if i == 0 else a.out + "." + String(i))
     else:
         return False
     return True
