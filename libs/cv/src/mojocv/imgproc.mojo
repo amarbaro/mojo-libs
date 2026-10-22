@@ -418,41 +418,89 @@ def morph[is_min: Bool, dt: DType](src: Mat[dt], shape: Int, k: Int, iters: Int)
 
             def hrow(y: Int) {imm}:
                 var i = 0
-                while i < n:
-                    var w = W if i + W <= n else 1
+                while i + W <= n:
                     var acc = SIMD[dt, W](ident)
                     for dx in range(-r, r + 1):
-                        var v = pp.unsafe_load[width=W](y * pstride + r * ch + i + dx * ch) if w == W else SIMD[dt, W](pp[unsafe_offset=y * pstride + r * ch + i + dx * ch])
+                        var v = pp.unsafe_load[width=W](y * pstride + r * ch + i + dx * ch)
                         comptime if is_min:
                             acc = min(acc, v)
                         else:
                             acc = max(acc, v)
-                    if w == W:
+                    pt.unsafe_store(y * n + i, acc)
+                    i += W
+                for ii in range(i, n):
+                    var acc = ident
+                    for dx in range(-r, r + 1):
+                        var v = pp[unsafe_offset=y * pstride + r * ch + ii + dx * ch]
+                        comptime if is_min:
+                            if v < acc:
+                                acc = v
+                        else:
+                            if v > acc:
+                                acc = v
+                    pt[unsafe_offset=y * n + ii] = acc
+
+            def hband(b: Int) {imm}:
+                var r0 = b * 8
+                var r1 = r0 + 8
+                if r1 > p.rows:
+                    r1 = p.rows
+                for y in range(r0, r1):
+                    var i = 0
+                    while i + W <= n:
+                        var acc = SIMD[dt, W](ident)
+                        for dx in range(-r, r + 1):
+                            var v = pp.unsafe_load[width=W](y * pstride + r * ch + i + dx * ch)
+                            comptime if is_min:
+                                acc = min(acc, v)
+                            else:
+                                acc = max(acc, v)
                         pt.unsafe_store(y * n + i, acc)
-                    else:
-                        pt[unsafe_offset=y * n + i] = acc[0]
-                    i += w
+                        i += W
+                    for ii in range(i, n):
+                        var acc = ident
+                        for dx in range(-r, r + 1):
+                            var v = pp[unsafe_offset=y * pstride + r * ch + ii + dx * ch]
+                            comptime if is_min:
+                                if v < acc:
+                                    acc = v
+                            else:
+                                if v > acc:
+                                    acc = v
+                        pt[unsafe_offset=y * n + ii] = acc
 
             par(hrow, p.rows)
 
-            def vrow(y: Int) {imm}:
-                var i = 0
-                while i < n:
-                    var w = W if i + W <= n else 1
-                    var acc = SIMD[dt, W](ident)
-                    for dy in range(0, 2 * r + 1):
-                        var v = pt.unsafe_load[width=W]((y + dy) * n + i) if w == W else SIMD[dt, W](pt[unsafe_offset=(y + dy) * n + i])
-                        comptime if is_min:
-                            acc = min(acc, v)
-                        else:
-                            acc = max(acc, v)
-                    if w == W:
+            def vband(b: Int) {imm}:
+                var r0 = b * 8
+                var r1 = r0 + 8
+                if r1 > src.rows:
+                    r1 = src.rows
+                for y in range(r0, r1):
+                    var i = 0
+                    while i + W <= n:
+                        var acc = SIMD[dt, W](ident)
+                        for dy in range(0, 2 * r + 1):
+                            var v = pt.unsafe_load[width=W]((y + dy) * n + i)
+                            comptime if is_min:
+                                acc = min(acc, v)
+                            else:
+                                acc = max(acc, v)
                         po.unsafe_store(y * n + i, acc)
-                    else:
-                        po[unsafe_offset=y * n + i] = acc[0]
-                    i += w
+                        i += W
+                    for ii in range(i, n):
+                        var acc = ident
+                        for dy in range(0, 2 * r + 1):
+                            var v = pt[unsafe_offset=(y + dy) * n + ii]
+                            comptime if is_min:
+                                if v < acc:
+                                    acc = v
+                            else:
+                                if v > acc:
+                                    acc = v
+                        po[unsafe_offset=y * n + ii] = acc
 
-            par(vrow, src.rows)
+            par(vband, (src.rows + 7) // 8)
             _ = (p.rows, tmp.rows)
         else:
             var pr = ptr_of(runs)
