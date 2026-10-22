@@ -258,6 +258,16 @@ def findChessboardCorners(i, kv):
     return c.reshape(-1, 2).astype(np.float32) if ok else np.zeros((0, 2), np.float32)
 
 
+@op()
+def aruco_detect(i, kv):
+    det = cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50), cv2.aruco.DetectorParameters())
+    corners, ids, _ = det.detectMarkers(i[0])
+    if ids is None:
+        return [np.zeros((0, 1), np.int32), np.zeros((0, 2), np.float32)]
+    o = np.argsort(ids.ravel())
+    return [ids.reshape(-1, 1)[o].astype(np.int32), np.concatenate([corners[k].reshape(4, 2) for k in o]).astype(np.float32)]
+
+
 # ---- compare ----------------------------------------------------------------------------------------------
 def compare(ours, ref, spec):
     if ours.shape != ref.shape:
@@ -415,6 +425,24 @@ def make_fixtures(d):
                               "cb_b": (7, 5, [[0.6, -0.5, 250], [0.5, 0.6, 20], [0.0003, -0.0002, 1]]),
                               "cb_c": (6, 4, [[1.2, 0.0, 30], [0.0, 1.2, 40], [0.0, 0.0, 1]])}.items():
         fx[nm] = cv2.GaussianBlur(cv2.warpPerspective(board(cc_, rr_), np.array(Mh), (640, 480), borderValue=200), (3, 3), 0)
+    dic = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_50)
+    sc = np.full((480, 640), 190, np.uint8)
+    for mid, (ang, scale, ox, oy) in {7: (0.0, 1.0, 40, 40), 23: (0.5, 0.8, 330, 60), 42: (-0.9, 1.1, 120, 270), 3: (2.4, 0.7, 450, 280)}.items():
+        mk = cv2.aruco.generateImageMarker(dic, mid, 90)
+        mk = cv2.copyMakeBorder(mk, 15, 15, 15, 15, cv2.BORDER_CONSTANT, value=255)
+        Mrot = cv2.getRotationMatrix2D((60, 60), np.degrees(ang), scale)
+        Mrot[:, 2] += [ox, oy]
+        warped = cv2.warpAffine(mk, Mrot, (640, 480), flags=cv2.INTER_LINEAR, borderValue=190)
+        msk = cv2.warpAffine(np.ones_like(mk) * 255, Mrot, (640, 480), flags=cv2.INTER_NEAREST, borderValue=0)
+        sc[msk > 0] = warped[msk > 0]
+    fx["aruco_a"] = cv2.GaussianBlur(sc, (3, 3), 0)
+    sc2 = np.full((240, 320), 120, np.uint8)
+    mk = cv2.copyMakeBorder(cv2.aruco.generateImageMarker(dic, 11, 100), 20, 20, 20, 20, cv2.BORDER_CONSTANT, value=255)
+    P = cv2.getPerspectiveTransform(np.float32([[0, 0], [140, 0], [140, 140], [0, 140]]), np.float32([[60, 40], [200, 55], [215, 190], [50, 170]]))
+    wp = cv2.warpPerspective(mk, P, (320, 240), borderValue=120)
+    mp = cv2.warpPerspective(np.ones_like(mk) * 255, P, (320, 240), flags=cv2.INTER_NEAREST)
+    sc2[mp > 0] = wp[mp > 0]
+    fx["aruco_b"] = sc2
     fx["odd"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["odd2"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["one"] = np.array([[[200, 0, 77]]], np.uint8)

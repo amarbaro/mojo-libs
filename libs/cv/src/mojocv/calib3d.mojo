@@ -5,7 +5,7 @@ from std.math import sqrt, atan, atan2, tan, cos, sin, acos, floor
 from max.algorithm import parallelize
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args
-from mojocv.imgproc import rint, good_features
+from mojocv.imgproc import rint, good_features, sepfilter, find_contours
 from mojocv.video import corner_sub_pix
 
 comptime F64 = DType.float64
@@ -1345,6 +1345,299 @@ def find_chessboard(img: Mat[DType.uint8], cols: Int, rows: Int) raises -> Mat[F
     return none^
 
 
+# ---- ArUco 4x4_50 -----------------------------------------------------------------------------------------
+# The marker words of the predefined 4x4_50 dictionary (row-major 4x4 bits, MSB first, upright orientation), read
+# from cv2's rendered markers; the construction is Garrido-Jurado et al. 2014.
+comptime ARUCO_4X4_50 = SIMD[DType.uint32, 64](
+    46386, 3994, 13101, 39238, 21662, 31181, 40494, 50418, 65242, 53078, 63889, 4519, 3767, 10767, 9393, 9790,
+    18021, 26112, 27742, 30383, 34443, 45099, 52437, 56706, 65095, 38001, 44260, 42324, 8483, 13423, 17429, 22450,
+    40655, 61643, 2222, 2345, 6261, 1279, 3574, 7258, 5912, 10792, 12940, 14514, 9448, 12011, 11583, 19300,
+    20526, 20499, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+)
+
+
+def adaptive_mean_inv(g: Mat[DType.uint8], win: Int, c: Int) -> Mat[DType.uint8]:
+    """cv2.adaptiveThreshold(MEAN_C, BINARY_INV): 255 where the pixel is at most the window mean minus c."""
+    var box = List[Float32](length=win, fill=Float32(1.0 / Float64(win)))
+    var mean = sepfilter[DType.uint8, DType.uint8](g, box, box, 1)
+    var o = Mat[DType.uint8](g.rows, g.cols, 1)
+    for i in range(g.size()):
+        o.data[i] = 255 if Int(g.data[i]) <= Int(mean.data[i]) - c else 0
+    return o^
+
+
+def dp_split(px: List[Int], py: List[Int], a: Int, b: Int, eps: Float64, mut keep: List[Bool]):
+    """Douglas-Peucker on the open run a..b of a point list (indices modulo n)."""
+    var n = len(px)
+    var ia = a % n
+    var ib = b % n
+    var dx = Float64(px[ib] - px[ia])
+    var dy = Float64(py[ib] - py[ia])
+    var best = -1.0
+    var bi = -1
+    var k = a + 1
+    while k < b:
+        var i = k % n
+        var d = abs(Float64(px[i] - px[ia]) * dy - Float64(py[i] - py[ia]) * dx)
+        d = d / sqrt(dx * dx + dy * dy) if (dx != 0 or dy != 0) else sqrt(Float64((px[i] - px[ia]) ** 2 + (py[i] - py[ia]) ** 2))
+        if d > best:
+            best = d
+            bi = k
+        k += 1
+    if bi >= 0 and best > eps:
+        keep[bi % n] = True
+        dp_split(px, py, a, bi, eps, keep)
+        dp_split(px, py, bi, b, eps, keep)
+
+
+def approx_poly(px: List[Int], py: List[Int], eps: Float64) -> List[Int]:
+    """Indices of a closed contour kept by Douglas-Peucker, starting from the point farthest from point 0 and its opposite."""
+    var n = len(px)
+    var far1 = 0
+    var bd = -1
+    for i in range(n):
+        var d = (px[i] - px[0]) ** 2 + (py[i] - py[0]) ** 2
+        if d > bd:
+            bd = d
+            far1 = i
+    var far2 = far1
+    bd = -1
+    for i in range(n):
+        var d = (px[i] - px[far1]) ** 2 + (py[i] - py[far1]) ** 2
+        if d > bd:
+            bd = d
+            far2 = i
+    var keep = List[Bool](length=n, fill=False)
+    keep[far1] = True
+    keep[far2] = True
+    var lo = min(far1, far2)
+    var hi = max(far1, far2)
+    dp_split(px, py, lo, hi, eps, keep)
+    dp_split(px, py, hi, lo + n, eps, keep)
+    var out = List[Int]()
+    for i in range(n):
+        if keep[i]:
+            out.append(i)
+    return out^
+
+
+def homography4(src: List[Float64], dst: List[Float64]) -> Mx:
+    """3 x 3 homography mapping 4 points src (x0, y0, x1, ...) to dst."""
+    var a = mx(8, 8)
+    var b = mx(8, 1)
+    for i in range(4):
+        var x = src[2 * i]
+        var y = src[2 * i + 1]
+        var u = dst[2 * i]
+        var v = dst[2 * i + 1]
+        var r0 = fl(x, y, 1.0, 0.0, 0.0, 0.0, -u * x, -u * y)
+        var r1 = fl(0.0, 0.0, 0.0, x, y, 1.0, -v * x, -v * y)
+        for c in range(8):
+            a.set(2 * i, c, 0, r0[c])
+            a.set(2 * i + 1, c, 0, r1[c])
+        b.set(2 * i, 0, 0, u)
+        b.set(2 * i + 1, 0, 0, v)
+    var h = solve(a, b)
+    return mx_from(fl(h.data[0], h.data[1], h.data[2], h.data[3], h.data[4], h.data[5], h.data[6], h.data[7], 1.0), 3, 3)
+
+
+def decode_marker(g: Mat[DType.uint8], corners: List[Float64]) -> Int:
+    """Marker id (0..49) and, packed above it, the rotation: id + 100 * rot; -1 when the quad is no 4x4_50 marker."""
+    var hm = homography4(fl(0.0, 0.0, 6.0, 0.0, 6.0, 6.0, 0.0, 6.0), corners)
+    var samples = List[Float64](length=24 * 24, fill=0)
+    var hist = List[Int](length=256, fill=0)
+    for v in range(24):
+        for u in range(24):
+            var x = (Float64(u) + 0.5) / 4.0
+            var y = (Float64(v) + 0.5) / 4.0
+            var w = hm.at(2, 0) * x + hm.at(2, 1) * y + hm.at(2, 2)
+            var px = (hm.at(0, 0) * x + hm.at(0, 1) * y + hm.at(0, 2)) / w
+            var py = (hm.at(1, 0) * x + hm.at(1, 1) * y + hm.at(1, 2)) / w
+            var val = bilinear(g, px, py)
+            samples[v * 24 + u] = val
+            hist[min(max(Int(val + 0.5), 0), 255)] += 1
+    # Otsu on the sampled values
+    var total = 576
+    var sum_all = Float64(0)
+    for i in range(256):
+        sum_all += Float64(i * hist[i])
+    var wb = 0
+    var sb = Float64(0)
+    var best = -1.0
+    var thr = 127
+    for t in range(256):
+        wb += hist[t]
+        if wb == 0:
+            continue
+        var wf = total - wb
+        if wf == 0:
+            break
+        sb += Float64(t * hist[t])
+        var mb = sb / Float64(wb)
+        var mf = (sum_all - sb) / Float64(wf)
+        var between = Float64(wb) * Float64(wf) * (mb - mf) * (mb - mf)
+        if between > best:
+            best = between
+            thr = t
+    var bits = List[Int](length=36, fill=0)
+    for cy in range(6):
+        for cx in range(6):
+            var cnt = 0
+            for v in range(4):
+                for u in range(4):
+                    if samples[(cy * 4 + v) * 24 + cx * 4 + u] > Float64(thr):
+                        cnt += 1
+            bits[cy * 6 + cx] = 1 if cnt > 8 else 0
+    var border = 0
+    for i in range(6):
+        border += bits[i] + bits[30 + i] + bits[i * 6] + bits[i * 6 + 5]
+    if border > 5:
+        return -1
+    for rot in range(4):
+        var word = 0
+        for r in range(4):
+            for c in range(4):
+                var rr = r
+                var cc = c
+                for _ in range(rot):
+                    var t = rr
+                    rr = 3 - cc
+                    cc = t
+                word = (word << 1) | bits[(rr + 1) * 6 + cc + 1]
+        for id in range(50):
+            if Int(ARUCO_4X4_50[id]) == word:
+                return id + 100 * rot
+    return -1
+
+
+def aruco_detect(img: Mat[DType.uint8]) -> Tuple[Mat[DType.int32], Mat[F32]]:
+    """ArUco 4x4_50 markers: multi-window adaptive threshold, contours, 4-gon test, bit decoding. Returns ids (sorted)
+    and 4 integer-valued corners per marker, clockwise starting at the marker's own top-left corner."""
+    var ids = List[Int]()
+    var peris = List[Float64]()
+    var cs = List[Float64]()
+    var maxdim = max(img.rows, img.cols)
+    for wi in range(3):
+        var win = 3 + 10 * wi
+        var bw = adaptive_mean_inv(img, win, 7)
+        var cn = find_contours(bw, False, False)
+        var pts = Mat[DType.int32](copy=cn[0])
+        var off = 0
+        for ci in range(cn[1].rows):
+            var len_ = Int(cn[1].at(ci, 0))
+            var start = off
+            off += len_
+            if len_ < Int(0.03 * Float64(maxdim)) or len_ > 4 * maxdim:
+                continue
+            var px = List[Int]()
+            var py = List[Int]()
+            for k in range(len_):
+                px.append(Int(pts.at(start + k, 0)))
+                py.append(Int(pts.at(start + k, 1)))
+            var keep = approx_poly(px, py, Float64(len_) * 0.03)
+            if len(keep) != 4:
+                continue
+            var qx = List[Float64]()
+            var qy = List[Float64]()
+            for k in keep:
+                qx.append(Float64(px[k]))
+                qy.append(Float64(py[k]))
+            # orientation and convexity
+            var sg = 0
+            var convex = True
+            for k in range(4):
+                var x1 = qx[(k + 1) % 4] - qx[k]
+                var y1 = qy[(k + 1) % 4] - qy[k]
+                var x2 = qx[(k + 2) % 4] - qx[(k + 1) % 4]
+                var y2 = qy[(k + 2) % 4] - qy[(k + 1) % 4]
+                var cr = x1 * y2 - y1 * x2
+                var sgn = 1 if cr > 0 else -1
+                if k == 0:
+                    sg = sgn
+                elif sgn != sg:
+                    convex = False
+            if not convex:
+                continue
+            if sg < 0:
+                var t = qx[1]
+                qx[1] = qx[3]
+                qx[3] = t
+                t = qy[1]
+                qy[1] = qy[3]
+                qy[3] = t
+            var peri = Float64(0)
+            var mind = 1e30
+            for k in range(4):
+                var d = sqrt((qx[(k + 1) % 4] - qx[k]) ** 2 + (qy[(k + 1) % 4] - qy[k]) ** 2)
+                peri += d
+                mind = min(mind, d)
+            if mind < 0.05 * peri:
+                continue
+            var inside = True
+            for k in range(4):
+                if qx[k] < 3 or qy[k] < 3 or qx[k] >= Float64(img.cols - 3) or qy[k] >= Float64(img.rows - 3):
+                    inside = False
+            if not inside:
+                continue
+            var code = decode_marker(img, fl(qx[0], qy[0], qx[1], qy[1], qx[2], qy[2], qx[3], qy[3]))
+            if code < 0:
+                continue
+            var rot = code // 100
+            ids.append(code % 100)
+            peris.append(peri)
+            for k in range(4):
+                cs.append(qx[(k + rot) % 4])
+                cs.append(qy[(k + rot) % 4])
+    # the same marker shows up at several window sizes and as its inner border: keep the largest of each cluster
+    var byp = List[Int]()
+    for i in range(len(ids)):
+        byp.append(i)
+    for i in range(len(byp)):
+        for j in range(i + 1, len(byp)):
+            if peris[byp[j]] > peris[byp[i]]:
+                var t = byp[i]
+                byp[i] = byp[j]
+                byp[j] = t
+    var kept = List[Int]()
+    for m in byp:
+        var dup = False
+        for q in kept:
+            for rr in range(4):
+                var dsum = Float64(0)
+                for k in range(4):
+                    var kq = (k + rr) % 4
+                    dsum += sqrt((cs[8 * m + 2 * k] - cs[8 * q + 2 * kq]) ** 2 + (cs[8 * m + 2 * k + 1] - cs[8 * q + 2 * kq + 1]) ** 2)
+                if dsum / 4.0 < 0.1 * peris[q]:
+                    dup = True
+        if not dup:
+            kept.append(m)
+    var nids = List[Int]()
+    var ncs = List[Float64]()
+    for m in kept:
+        nids.append(ids[m])
+        for k in range(8):
+            ncs.append(cs[8 * m + k])
+    ids = nids^
+    cs = ncs^
+    var order = List[Int]()
+    for i in range(len(ids)):
+        order.append(i)
+    for i in range(len(order)):
+        for j in range(i + 1, len(order)):
+            if ids[order[j]] < ids[order[i]]:
+                var t = order[i]
+                order[i] = order[j]
+                order[j] = t
+    var oi = Mat[DType.int32](len(ids), 1, 1)
+    var oc = Mat[F32](4 * len(ids), 2, 1)
+    for r in range(len(order)):
+        var m = order[r]
+        oi.data[r] = Int32(ids[m])
+        for k in range(8):
+            oc.data[8 * r + k] = Float32(cs[8 * m + k])
+    return (oi^, oc^)
+
+
 def run(mut a: Args) raises -> Bool:
     if a.op == "Rodrigues":
         var m = load[F64](a.ins[0])
@@ -1381,6 +1674,13 @@ def run(mut a: Args) raises -> Bool:
         var o = (Mat[DType.float32](0, 0), Mat[DType.float32](0, 0))
         while a.again():
             o = init_undistort_rectify_map(k, d, rr, p, a.i("w", 640), a.i("h", 480), a.op == "fisheye_initUndistortRectifyMap")
+        save(o[0], a.out)
+        save(o[1], a.out + ".1")
+    elif a.op == "aruco_detect":
+        var im = load[DType.uint8](a.ins[0])
+        var o = (Mat[DType.int32](0, 0), Mat[F32](0, 0))
+        while a.again():
+            o = aruco_detect(im)
         save(o[0], a.out)
         save(o[1], a.out + ".1")
     elif a.op == "findChessboardCorners":

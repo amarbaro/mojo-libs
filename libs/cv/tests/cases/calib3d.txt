@@ -39,3 +39,6 @@ chess_a          findChessboardCorners cb_a cols=9 rows=6 => pts:0.5:0.95
 chess_b_rot      findChessboardCorners cb_b cols=7 rows=5 => pts:0.5:0.95
 chess_c          findChessboardCorners cb_c cols=6 rows=4 => pts:1.0:0.95
 chess_none       findChessboardCorners st_l cols=9 rows=6 => cnt:0
+aruco_four       aruco_detect aruco_a => exact, max:1.5
+aruco_persp      aruco_detect aruco_b => exact, max:1.5
+aruco_none       aruco_detect st_l => exact, exact
