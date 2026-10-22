@@ -318,6 +318,52 @@ def otsu[dt: DType](m: Mat[dt]) -> Int:
     return val
 
 
+def triangle[dt: DType](m: Mat[dt]) -> Int:
+    """The threshold cv2 picks for THRESH_TRIANGLE: the histogram point farthest from the line between its peak and
+    the far end of the longer tail (cv2 compares a * i + b * h[i], dropping the constant factors)."""
+    var h = List[Int](length=256, fill=0)
+    for v in m.data:
+        h[Int(v)] += 1
+    var left = 0
+    var right = 0
+    var peak = 0
+    var top = 0
+    for i in range(256):
+        if h[i] > 0:
+            left = i
+            break
+    if left > 0:
+        left -= 1
+    for i in range(255, 0, -1):
+        if h[i] > 0:
+            right = i
+            break
+    if right < 255:
+        right += 1
+    for i in range(256):
+        if h[i] > top:
+            top = h[i]
+            peak = i
+    var flipped = False
+    if peak - left < right - peak:
+        flipped = True
+        for i in range(128):
+            var t = h[i]
+            h[i] = h[255 - i]
+            h[255 - i] = t
+        left = 255 - right
+        peak = 255 - peak
+    var thresh = left
+    var dist = 0
+    for i in range(left + 1, peak + 1):
+        var d = top * i + (left - peak) * h[i]
+        if d > dist:
+            dist = d
+            thresh = i
+    thresh -= 1
+    return 255 - thresh if flipped else thresh
+
+
 def threshold[dt: DType](src: Mat[dt], thresh: Float64, maxval: Float64, kind: Int) -> Mat[dt]:
     """kind: 0 binary, 1 binary_inv, 2 trunc, 3 tozero, 4 tozero_inv (cv2 THRESH_*)."""
     var o = Mat[dt](src.rows, src.cols, src.ch)
@@ -2483,6 +2529,8 @@ def run_dt[dt: DType](mut a: Args) raises -> Bool:
         comptime if dt == DType.uint8:
             if a.i("otsu", 0) == 1:
                 th = Float64(otsu(m))
+            elif a.i("tri", 0) == 1:
+                th = Float64(triangle(m))
         while a.again():
             o = threshold(m, th, a.f("maxval", 255.0), a.i("type", 0))
         save(o, a.out)

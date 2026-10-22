@@ -80,7 +80,7 @@ def Sobel(i, kv):
 @op()
 def threshold(i, kv):
     t, mv = kv_f(kv, "thresh", 127.0), kv_f(kv, "maxval", 255.0)
-    ty = kv_i(kv, "type", 0) | (cv2.THRESH_OTSU if kv_i(kv, "otsu", 0) else 0)
+    ty = kv_i(kv, "type", 0) | (cv2.THRESH_OTSU if kv_i(kv, "otsu", 0) else 0) | (cv2.THRESH_TRIANGLE if kv_i(kv, "tri", 0) else 0)
     r, o = cv2.threshold(i[0], t, mv, ty)
     return [o, np.array([[r]], np.float64)]
 @op()
