@@ -148,7 +148,7 @@ def goodFeaturesToTrack(i, kv):
 def line(i, kv):
     im = i[0].copy()
     c = tuple(kv_l(kv, "color", [255, 255, 255]))
-    return cv2.line(im, (kv_i(kv, "x1", 0), kv_i(kv, "y1", 0)), (kv_i(kv, "x2", 0), kv_i(kv, "y2", 0)), c, 1)
+    return cv2.line(im, (kv_i(kv, "x1", 0), kv_i(kv, "y1", 0)), (kv_i(kv, "x2", 0), kv_i(kv, "y2", 0)), c, kv_i(kv, "thick", 1))
 @op()
 def rectangle(i, kv):
     im = i[0].copy()

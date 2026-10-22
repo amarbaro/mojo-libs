@@ -1935,8 +1935,12 @@ def clip_line(cols: Int, rows: Int, mut x1: Int, mut y1: Int, mut x2: Int, mut y
     return (c1 | c2) == 0
 
 
-def draw_line[dt: DType](mut m: Mat[dt], px1: Int, py1: Int, px2: Int, py2: Int, color: List[Float64]):
-    """cv2.line, thickness 1, LINE_8: clip, then the error-term walk of cv2's LineIterator (left to right)."""
+def draw_line[dt: DType](mut m: Mat[dt], px1: Int, py1: Int, px2: Int, py2: Int, color: List[Float64], thickness: Int = 1, flags: Int = 3):
+    """cv2.line, LINE_8: thickness 1 clips, then walks the error term of cv2's LineIterator (left to right);
+    thicker lines are a filled rectangle with round caps (`flags` 1 start cap, 2 end cap)."""
+    if thickness > 1:
+        _thick_line(m, px1, py1, px2, py2, color, thickness, flags)
+        return
     var x1 = px1
     var y1 = py1
     var x2 = px2
@@ -1972,6 +1976,199 @@ def draw_line[dt: DType](mut m: Mat[dt], px1: Int, py1: Int, px2: Int, py2: Int,
             err -= 2 * minor
 
 
+comptime XY_SHIFT = 16
+comptime XY_ONE = 1 << 16
+
+
+def _tdiv(a: Int, b: Int) -> Int:
+    """C integer division (truncates toward zero)."""
+    var q = abs(a) // abs(b)
+    return q if (a < 0) == (b < 0) else -q
+
+
+def _put[dt: DType](mut m: Mat[dt], x: Int, y: Int, color: List[Float64]):
+    if x < 0 or y < 0 or x >= m.cols or y >= m.rows:
+        return
+    for k in range(m.ch):
+        m.set(y, x, k, Scalar[dt](color[k] if k < len(color) else 0.0))
+
+
+def _hline[dt: DType](mut m: Mat[dt], y: Int, x1: Int, x2: Int, color: List[Float64]):
+    for x in range(x1, x2 + 1):
+        _put(m, x, y, color)
+
+
+def _line2[dt: DType](mut m: Mat[dt], px1: Int, py1: Int, px2: Int, py2: Int, color: List[Float64]):
+    """cv2's Line2: a line between 16.16 fixed-point endpoints, clipped in fixed point, walked with a constant step."""
+    var x1 = px1
+    var y1 = py1
+    var x2 = px2
+    var y2 = py2
+    if not clip_line(m.cols << XY_SHIFT, m.rows << XY_SHIFT, x1, y1, x2, y2):
+        return
+    var dx = x2 - x1
+    var dy = y2 - y1
+    var ax = abs(dx)
+    var ay = abs(dy)
+    var x_step: Int
+    var y_step: Int
+    var ecount: Int
+    if ax > ay:
+        if dx < 0:
+            swap(x1, x2)
+            swap(y1, y2)
+            dy = -dy
+        x_step = XY_ONE
+        y_step = _tdiv(dy << XY_SHIFT, ax | 1)
+        ecount = (x2 - x1) >> XY_SHIFT
+    else:
+        if dy < 0:
+            swap(x1, x2)
+            swap(y1, y2)
+            dx = -dx
+        x_step = _tdiv(dx << XY_SHIFT, ay | 1)
+        y_step = XY_ONE
+        ecount = (y2 - y1) >> XY_SHIFT
+    x1 += XY_ONE >> 1
+    y1 += XY_ONE >> 1
+    while ecount >= 0:
+        _put(m, x1 >> XY_SHIFT, y1 >> XY_SHIFT, color)
+        x1 += x_step
+        y1 += y_step
+        ecount -= 1
+
+
+def _fill_convex[dt: DType](mut m: Mat[dt], vx: List[Int], vy: List[Int], color: List[Float64]):
+    """cv2's FillConvexPoly for 16.16 vertices and LINE_8: outline with Line2, then fill between the two active edges."""
+    var npts = len(vx)
+    var delta = XY_ONE >> 1
+    var imin = 0
+    var edges = npts
+    var xmin = vx[0]
+    var xmax = vx[0]
+    var ymin = vy[0]
+    var ymax = vy[0]
+    var p0x = vx[npts - 1]
+    var p0y = vy[npts - 1]
+    for i in range(npts):
+        if vy[i] < ymin:
+            ymin = vy[i]
+            imin = i
+        ymax = max(ymax, vy[i])
+        xmax = max(xmax, vx[i])
+        xmin = min(xmin, vx[i])
+        _line2(m, p0x, p0y, vx[i], vy[i], color)
+        p0x = vx[i]
+        p0y = vy[i]
+    xmin = (xmin + delta) >> XY_SHIFT
+    xmax = (xmax + delta) >> XY_SHIFT
+    ymin = (ymin + delta) >> XY_SHIFT
+    ymax = (ymax + delta) >> XY_SHIFT
+    if npts < 3 or xmax < 0 or ymax < 0 or xmin >= m.cols or ymin >= m.rows:
+        return
+    ymax = min(ymax, m.rows - 1)
+    var eidx: List[Int] = [imin, imin]
+    var eye: List[Int] = [ymin, ymin]
+    var edi: List[Int] = [1, npts - 1]
+    var ex: List[Int] = [-XY_ONE, -XY_ONE]
+    var edx: List[Int] = [0, 0]
+    var y = ymin
+    while True:
+        for i in range(2):
+            if y >= eye[i]:
+                var idx0 = eidx[i]
+                var idx = idx0 + edi[i]
+                if idx >= npts:
+                    idx -= npts
+                while edges > 0:
+                    edges -= 1
+                    var ty = (vy[idx] + delta) >> XY_SHIFT
+                    if ty > y:
+                        var xs = vx[idx0]
+                        var xe = vx[idx]
+                        eye[i] = ty
+                        edx[i] = _tdiv((xe - xs) * 2 + (ty - y), 2 * (ty - y))
+                        ex[i] = xs
+                        eidx[i] = idx
+                        break
+                    idx0 = idx
+                    idx += edi[i]
+                    if idx >= npts:
+                        idx -= npts
+                else:
+                    edges -= 1
+        if edges < 0:
+            break
+        if y >= 0:
+            var left = 0
+            var right = 1
+            if ex[0] > ex[1]:
+                left = 1
+                right = 0
+            var xx1 = (ex[left] + delta) >> XY_SHIFT
+            var xx2 = (ex[right] + delta) >> XY_SHIFT
+            if xx2 >= 0 and xx1 < m.cols:
+                _hline(m, y, max(xx1, 0), min(xx2, m.cols - 1), color)
+        ex[0] += edx[0]
+        ex[1] += edx[1]
+        y += 1
+        if y > ymax:
+            break
+
+
+def _circle_fill[dt: DType](mut m: Mat[dt], cx: Int, cy: Int, radius: Int, color: List[Float64]):
+    """cv2's filled Circle: Bresenham octant walk, each step fills two rows."""
+    var err = 0
+    var dx = radius
+    var dy = 0
+    var plus = 1
+    var minus = (radius << 1) - 1
+    while dx >= dy:
+        for pass_ in range(2):
+            var yy = cy - dy if pass_ == 0 else cy - dx
+            var yy2 = cy + dy if pass_ == 0 else cy + dx
+            var half = dx if pass_ == 0 else dy
+            var xa = max(cx - half, 0)
+            var xb = min(cx + half, m.cols - 1)
+            if xa <= xb:
+                if yy >= 0 and yy < m.rows:
+                    _hline(m, yy, xa, xb, color)
+                if yy2 >= 0 and yy2 < m.rows:
+                    _hline(m, yy2, xa, xb, color)
+        dy += 1
+        err += plus
+        plus += 2
+        var mask = 0 if err <= 0 else -1
+        err -= minus & mask
+        dx += mask
+        minus -= mask & 2
+
+
+def _thick_line[dt: DType](mut m: Mat[dt], x1: Int, y1: Int, x2: Int, y2: Int, color: List[Float64], thickness: Int, flags: Int):
+    """cv2's ThickLine for LINE_8: a rectangle around the segment, plus a filled circle at the ends flagged in `flags`."""
+    var p0x = x1 << XY_SHIFT
+    var p0y = y1 << XY_SHIFT
+    var p1x = x2 << XY_SHIFT
+    var p1y = y2 << XY_SHIFT
+    var dx = Float64(p0x - p1x) / Float64(XY_ONE)
+    var dy = Float64(p1y - p0y) / Float64(XY_ONE)
+    var r = dx * dx + dy * dy
+    var odd = thickness & 1
+    var th = thickness << (XY_SHIFT - 1)
+    if abs(r) > 2.220446049250313e-16:
+        r = (Float64(th) + Float64(odd) * Float64(XY_ONE) * 0.5) / sqrt(r)
+        var dpx = rint(dy * r)
+        var dpy = rint(dx * r)
+        var vx: List[Int] = [p0x + dpx, p0x - dpx, p1x - dpx, p1x + dpx]
+        var vy: List[Int] = [p0y + dpy, p0y - dpy, p1y - dpy, p1y + dpy]
+        _fill_convex(m, vx, vy, color)
+    for i in range(2):
+        if (flags & (i + 1)) != 0:
+            _circle_fill(m, (p0x + (XY_ONE >> 1)) >> XY_SHIFT, (p0y + (XY_ONE >> 1)) >> XY_SHIFT, (th + (XY_ONE >> 1)) >> XY_SHIFT, color)
+        p0x = p1x
+        p0y = p1y
+
+
 def draw_rect[dt: DType](mut m: Mat[dt], x1: Int, y1: Int, x2: Int, y2: Int, color: List[Float64], thick: Int):
     """cv2.rectangle: thickness 1 draws the four edges, a negative thickness fills the clipped box."""
     if thick < 0:
@@ -1980,10 +2177,11 @@ def draw_rect[dt: DType](mut m: Mat[dt], x1: Int, y1: Int, x2: Int, y2: Int, col
                 for k in range(m.ch):
                     m.set(y, x, k, Scalar[dt](color[k] if k < len(color) else 0.0))
         return
-    draw_line(m, x1, y1, x2, y1, color)
-    draw_line(m, x2, y1, x2, y2, color)
-    draw_line(m, x2, y2, x1, y2, color)
-    draw_line(m, x1, y2, x1, y1, color)
+    # a closed polyline: every segment with a round cap at its end (cv2 PolyLine)
+    draw_line(m, x1, y2, x1, y1, color, thick, 2)
+    draw_line(m, x1, y1, x2, y1, color, thick, 2)
+    draw_line(m, x2, y1, x2, y2, color, thick, 2)
+    draw_line(m, x2, y2, x1, y2, color, thick, 2)
 
 
 # ---- HOG people detector ----------------------------------------------------------------------------------
@@ -2834,7 +3032,7 @@ def run_u8(mut a: Args) raises -> Bool:
         while a.again():
             o = Mat[DType.uint8](copy=m)
             if a.op == "line":
-                draw_line(o, a.i("x1", 0), a.i("y1", 0), a.i("x2", 0), a.i("y2", 0), c)
+                draw_line(o, a.i("x1", 0), a.i("y1", 0), a.i("x2", 0), a.i("y2", 0), c, a.i("thick", 1))
             else:
                 draw_rect(o, a.i("x1", 0), a.i("y1", 0), a.i("x2", 0), a.i("y2", 0), c, a.i("thick", 1))
         save(o, a.out)
