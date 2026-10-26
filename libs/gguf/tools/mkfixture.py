@@ -3,7 +3,7 @@
     mkfixture.py OUT_DIR       writes OUT_DIR/tiny.gguf (alignment 32) and OUT_DIR/tiny-a64.gguf (alignment 64)
 
 Both carry every scalar KV type, arrays of u8/i32/f32/bool/string, and one 8-row tensor per type gguf-py can
-quantize (F32 F16 BF16 Q4_0 Q4_1 Q5_0 Q5_1 Q8_0 TQ1_0 TQ2_0), seeded. Oracle only: product code is Mojo.
+quantize (F32 F16 BF16 Q4_0 Q4_1 Q5_0 Q5_1 Q8_0 TQ1_0 TQ2_0) after a 33-byte I8 tensor, seeded. Oracle only: product code is Mojo.
 Needs LLAMACPP (default .work/llama.cpp) for gguf-py."""
 import os, sys
 import numpy as np
@@ -36,6 +36,7 @@ def build(path, align):
     w.add_token_list(["<unk>", "a", "b", "ab", "café", "☃"])
     w.add_token_scores([0.0, -1.0, -2.0, -3.5, -4.0, -5.0])
     w.add_token_types([2, 1, 1, 1, 1, 1])
+    w.add_tensor("blk.0.i8.weight", rng.integers(-128, 128, 33, dtype=np.int8))  # 33 bytes: padding to the alignment
     for t in TYPES:
         x = (rng.standard_normal((ROWS, COLS)) * 0.5).astype(np.float32)
         if t == Q.F32:
