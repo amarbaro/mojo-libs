@@ -1,5 +1,5 @@
 """A/B timing of 1080p rows: OLD_BIN vs .bin/mojo-cv vs cv2, interleaved, min of N runs per side.
-  abbench.py OLD_BIN [N] [ROWID...]   (run under `~/iTools/video/camera-motion/v/bin/python -I`)
+  abbench.py OLD_BIN [N] [ROWID...]   (run under `.venv/bin/python -I`)
 Interleaving makes the ratios fair on a loaded box; absolute numbers still move with the load."""
 import os, subprocess, sys, tempfile
 sys.path.insert(0, os.path.dirname(__file__))

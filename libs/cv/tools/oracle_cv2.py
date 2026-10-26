@@ -290,7 +290,7 @@ def ORB(i, kv):
     return np.array(rows, np.float32)
 
 
-PY4 = os.environ.get("MCV_PY4", "/home/mario/.cache/vpython-root.1000/store/uv_venv-a7iu7r892a2vi0aj6osrpia0u4/contents/bin/python3.11")
+PY4 = os.environ.get("MCV_PY4", os.path.join(ROOT, ".venv4", "bin", "python"))  # cv2 4.8.1 for the HOG rows, see scripts/ci.sh
 HOG_OPS = ("HOGScores", "detectMultiScale", "groupRectangles")  # cv2 5.0 dropped HOGDescriptor: these run under cv2 4.8.1 (PY4)
 
 
@@ -382,16 +382,50 @@ def compare(ours, ref, spec):
 
 
 # ---- fixtures ---------------------------------------------------------------------------------------------
-SHOT = os.path.expanduser("~/Projects/AMD/.work/")
+def scene(seed, h=1080, w=1920):
+    """A deterministic 1080p test picture with the statistics the ops care about: flat panels with sharp edges, a
+    smooth colour field, text at several sizes, diagonal lines, circles, and noisy texture patches."""
+    r = np.random.default_rng(seed)
+    gy, gx = np.mgrid[0:h, 0:w].astype(np.float32)
+    img = np.stack([120 + 80 * np.sin(gx / 310 + seed) * np.cos(gy / 270), 110 + 70 * np.cos(gx / 190 - gy / 410),
+                    100 + 90 * np.sin((gx + gy) / 520 + seed)], axis=2)
+    img = np.clip(img, 0, 255).astype(np.uint8)
+    for _ in range(90):
+        x0, y0 = int(r.integers(0, w - 60)), int(r.integers(0, h - 40))
+        x1, y1 = x0 + int(r.integers(30, 420)), y0 + int(r.integers(20, 260))
+        cv2.rectangle(img, (x0, y0), (min(x1, w - 1), min(y1, h - 1)), tuple(int(c) for c in r.integers(0, 256, 3)), -1)
+    for _ in range(60):
+        org = (int(r.integers(0, w - 200)), int(r.integers(30, h - 10)))
+        cv2.putText(img, "mojo-cv %d" % int(r.integers(0, 99999)), org, cv2.FONT_HERSHEY_SIMPLEX, float(r.uniform(0.4, 2.2)),
+                    tuple(int(c) for c in r.integers(0, 256, 3)), int(r.integers(1, 4)), cv2.LINE_AA)
+    for _ in range(50):
+        cv2.line(img, (int(r.integers(0, w)), int(r.integers(0, h))), (int(r.integers(0, w)), int(r.integers(0, h))),
+                 tuple(int(c) for c in r.integers(0, 256, 3)), int(r.integers(1, 4)), cv2.LINE_AA)
+    for _ in range(40):
+        cv2.circle(img, (int(r.integers(0, w)), int(r.integers(0, h))), int(r.integers(8, 90)),
+                   tuple(int(c) for c in r.integers(0, 256, 3)), int(r.choice([-1, 1, 2, 3])), cv2.LINE_AA)
+    for _ in range(25):
+        x0, y0 = int(r.integers(0, w - 200)), int(r.integers(0, h - 150))
+        ph, pw = int(r.integers(40, 150)), int(r.integers(60, 200))
+        patch = img[y0:y0 + ph, x0:x0 + pw].astype(np.int16) + r.integers(-40, 41, (ph, pw, 3))
+        img[y0:y0 + ph, x0:x0 + pw] = np.clip(patch, 0, 255).astype(np.uint8)
+    return img
 
 
 def make_fixtures(d):
-    """Inputs named by the case rows. hd* are 1080p crops of two real screenshots; the rest are synthetic."""
+    """Inputs named by the case rows. hd* are 1080p synthetic scenes (`scene`); the rest are synthetic too."""
     os.makedirs(d, exist_ok=True)
     rng = np.random.default_rng(7)
-    A, B = cv2.imread(SHOT + "shotA.png"), cv2.imread(SHOT + "shotB.png")
-    if A is None or B is None:
-        raise SystemExit("FAIL fixtures: need ~/Projects/AMD/.work/shotA.png and shotB.png")
+    A = scene(11)
+    # the second frame: the same scene seen 0.6 degrees and (6.3, -4.6) px later, with sensor noise and a few new panels
+    R = np.random.default_rng(12)
+    Mb = cv2.getRotationMatrix2D((960, 540), 0.6, 1.0)
+    Mb[:, 2] += (6.3, -4.6)
+    B = cv2.warpAffine(A, Mb, (1920, 1080), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+    B = np.clip(B.astype(np.int16) + R.integers(-3, 4, B.shape), 0, 255).astype(np.uint8)
+    for _ in range(12):
+        x0, y0 = int(R.integers(0, 1700)), int(R.integers(0, 900))
+        cv2.rectangle(B, (x0, y0), (x0 + int(R.integers(30, 200)), y0 + int(R.integers(20, 120))), tuple(int(c) for c in R.integers(0, 256, 3)), -1)
     fx = {"hd": A[:, :1920], "hd2": B[:, :1920]}
     fx["hdg"] = cv2.cvtColor(fx["hd"], cv2.COLOR_BGR2GRAY)
     fx["hdg2"] = cv2.cvtColor(fx["hd2"], cv2.COLOR_BGR2GRAY)
@@ -418,7 +452,16 @@ def make_fixtures(d):
     fx["lk_prev"], fx["lk_next"] = fx["smg"].copy(), hm[300:570, 400:880].copy()
     gp = cv2.goodFeaturesToTrack(fx["smg"], 120, 0.05, 10).reshape(-1, 2).astype(np.float32)
     fx["lk_pts"] = np.vstack([gp, np.array([[3, 3], [476, 266]], np.float32)])
-    fx["sp_pts"] = gp[:80] + rng.uniform(-1.2, 1.2, (80, 2)).astype(np.float32)
+    # cornerSubPix start points: jittered corners where cv2's iteration has converged (10, 50 and 100 iterations agree);
+    # on a slowly drifting point the result after 50 iterations is decided by float rounding and cv2's restore rule
+    jit = gp + rng.uniform(-1.2, 1.2, gp.shape).astype(np.float32)
+    fixed_ = []
+    for pt in jit:
+        c = [cv2.cornerSubPix(fx["smg"], pt.reshape(1, 1, 2).copy(), (3, 3), (-1, -1), (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_COUNT, n, 0.001)) for n in (10, 50, 100)]
+        if max(np.abs(c[0] - c[1]).max(), np.abs(c[1] - c[2]).max()) < 1e-3:
+            fixed_.append(pt)
+    fx["sp_pts"] = np.array(fixed_[:80], np.float32)
+    assert len(fx["sp_pts"]) >= 60, len(fixed_)
     da = rng.integers(0, 256, (200, 32), dtype=np.uint8)
     db = rng.integers(0, 256, (300, 32), dtype=np.uint8)
     db[:150] = da[:150] ^ (rng.random((150, 32)) < 0.02).astype(np.uint8)  # 150 near copies of the first 150 queries
@@ -531,7 +574,7 @@ def make_fixtures(d):
     mp = cv2.warpPerspective(np.ones_like(mk) * 255, P, (320, 240), flags=cv2.INTER_NEAREST)
     sc2[mp > 0] = wp[mp > 0]
     fx["aruco_b"] = sc2
-    # grabCut inputs: a coloured scene (blobs on a textured background) and a screenshot crop
+    # grabCut inputs: a coloured scene (blobs on a textured background) and a scene crop
     gy, gx = np.mgrid[0:110, 0:150]
     sc3 = np.zeros((110, 150, 3), np.uint8)
     sc3[:] = (40, 90, 30)
@@ -540,7 +583,7 @@ def make_fixtures(d):
     cv2.circle(sc3, (60, 50), 10, (230, 200, 40), -1)
     sc3 = np.clip(sc3.astype(np.int16) + rng.integers(-10, 11, sc3.shape), 0, 255).astype(np.uint8)
     fx["gc_scene"] = sc3
-    best_c, best_xy = -1, (0, 0)  # the screenshot crop with the most distinct colours (UI is mostly flat)
+    best_c, best_xy = -1, (0, 0)  # the scene crop with the most distinct colours
     for y0 in range(0, 1080 - 110, 20):
         for x0 in range(0, 1920 - 150, 30):
             c_ = len(np.unique(fx["hd"][y0:y0 + 110:3, x0:x0 + 150:3].reshape(-1, 3), axis=0))
@@ -552,7 +595,7 @@ def make_fixtures(d):
     obj = np.clip(obj.astype(np.int16) + rng.integers(-25, 26, obj.shape), 0, 255).astype(np.uint8)
     om = np.zeros(gs.shape[:2], np.uint8)
     cv2.ellipse(om, (80, 55), (38, 28), -15, 0, 360, 255, -1)
-    gs[om > 0] = obj[om > 0]  # a coloured object on a real screenshot crop
+    gs[om > 0] = obj[om > 0]  # a coloured object on a scene crop
     fx["gc_shot"] = gs
     fx["odd"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
     fx["odd2"] = rng.integers(0, 256, (7, 13, 3), dtype=np.uint8)
@@ -574,15 +617,20 @@ def make_fixtures(d):
         fx["mapy" + nm] = (yy + 9 * np.cos(xx / 23) - 0.21).astype(np.float32)
     fx["mapxo"] = rng.uniform(-3, 16, (7, 13)).astype(np.float32)
     fx["mapyo"] = rng.uniform(-3, 10, (7, 13)).astype(np.float32)
-    try:
-        hog_ = cv2.HOGDescriptor if hasattr(cv2, "HOGDescriptor") else None
-        raw = subprocess.run([PY4, "-c", "import cv2,sys,numpy as np;sys.path.insert(0,%r);import mcv;h=cv2.HOGDescriptor();h.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector());r,_=h.detectMultiScale(mcv.load(%r),hitThreshold=-1.0,winStride=(8,8),padding=(0,0),scale=1.05,groupThreshold=0);mcv.save(np.array(r,np.int32).reshape(-1,4),%r)" % (os.path.join(ROOT, "tools"), os.path.join(d, "hdg.mcv"), os.path.join(d, "hog_raw.mcv"))], capture_output=True)
-    except Exception:
-        pass
+    # raw HOG boxes of cv2 4.x on hdg: the input of the groupRectangles row (hdg.mcv must exist before the call)
+    mcv.save(fx["hdg"], os.path.join(d, "hdg.mcv"))
+    code = ("import cv2,sys,numpy as np;sys.path.insert(0,%r);import mcv;h=cv2.HOGDescriptor();"
+            "h.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector());"
+            "r,_=h.detectMultiScale(mcv.load(%r),hitThreshold=-1.0,winStride=(8,8),padding=(0,0),scale=1.05,groupThreshold=0);"
+            "mcv.save(np.array(r,np.int32).reshape(-1,4),%r)" % (os.path.join(ROOT, "tools"), os.path.join(d, "hdg.mcv"), os.path.join(d, "hog_raw.mcv")))
+    raw = subprocess.run([PY4, "-c", code], capture_output=True, text=True)
+    if raw.returncode:
+        raise SystemExit("FAIL fixtures: HOG oracle (cv2 4.x at %s): %s" % (PY4, raw.stderr.strip()[-300:]))
     # the default people detector (3780 weights + bias) only exists in cv2 4.x
     sv = subprocess.run([PY4, "-c", "import cv2,sys;sys.stdout.buffer.write(cv2.HOGDescriptor_getDefaultPeopleDetector().astype('<f4').tobytes())"], capture_output=True)
-    if sv.returncode == 0 and len(sv.stdout) == 3781 * 4:
-        fx["hog_svm"] = np.frombuffer(sv.stdout, "<f4").reshape(-1, 1).copy()
+    if sv.returncode or len(sv.stdout) != 3781 * 4:
+        raise SystemExit("FAIL fixtures: the default people detector from cv2 4.x (%s) did not return 3781 weights" % PY4)
+    fx["hog_svm"] = np.frombuffer(sv.stdout, "<f4").reshape(-1, 1).copy()
     for n, a in fx.items():
         mcv.save(a, os.path.join(d, n + ".mcv"))
 
@@ -634,13 +682,12 @@ def time_of(text):
 
 BENCH_NOTES = """- **Parallel dispatch**: `max.algorithm.parallelize` with the default 16 workers costs about 215 us per region (best of
   50 trivial regions); with 8 workers (the physical cores) it costs about 8 us, so `core.par` uses 8 and takes 16 only for
-  regions that run for milliseconds. A cached CPU DeviceContext changed nothing. Allocating and zero-filling a 2 MB `Mat`
-  is 18 us. Probes: measured in a scratch build, numbers quoted in the lane report.
-- The stencil, resize, pyrDown, Canny and LK loops are scalar per-pixel code with `Mat.at` bounds checks and are not
-  tuned; cv2's are hand-vectorised. HOG detection re-sums every 16x16 block (each pixel 4 times).
-- Faster than cv2 on 1080p: `convert` u8 to f32 (cv2's path is slow), Otsu, `line`, absdiff and bitwise, HOG window scoring
-  at one scale, `groupRectangles`. Point-set ops (projectPoints, estimateAffine2D, stereoRectify) take microseconds on both
-  sides; 0.00 ms entries are below the timer's resolution, not a result."""
+  regions that run for milliseconds. Allocating and zero-filling a 2 MB `Mat` is 18 us.
+- **Read the ratios with care.** One run of this table is one sample on a shared desktop: a row near 1.0 can land on either
+  side, and a loaded run of the same binary moves a row by up to a factor of two. `tools/abbench.py OLD_BIN` runs an old
+  build, the current build and cv2 back to back per row, which is the fair comparison when the machine is not quiet.
+- Point-set ops (projectPoints, estimateAffine2D, stereoRectify) take microseconds on both sides; 0.00 ms entries are
+  below the timer's resolution, not a result."""
 
 
 def write_md(path, table):
@@ -660,17 +707,20 @@ def write_md(path, table):
     ok = [t for t in hd if t[2] and t[3] and t[3] > 0.005]
     faster = sum(1 for t in ok if t[2] < t[3])
     close = sum(1 for t in ok if t[3] <= t[2] <= 1.5 * t[3])
+    slow = ', '.join(sorted({t[1] for t in ok if t[2] > 1.5 * t[3]}))
     with open(path, "w") as f:
-        f.write(f"""# L2D speed rows: mojo-cv vs cv2 5.0
+        f.write(f"""# 2D speed rows: mojo-cv vs cv2 5.0
 
 Method: `tests/run.sh --bench-all --md docs/bench.md`. Each row runs the same op in one resident process with `reps=5`
 and keeps the best wall time of the compute only (file load and save excluded), ours via `.bin/mojo-cv`, cv2 via
 `tools/oracle_cv2.py` (numpy in, cv2 call, best of 5). Both sides use all threads of the 7800X3D; CPU only, no GPU.
-Inputs are the same `.mcv` fixtures (`hd*` = 1920x1080 crops of a real screenshot, the rest smaller). Target from
-`docs/provenance/2d.md`: ours <= cv2. **Misses are listed as measured; nothing is hidden.** The HOG rows time cv2 4.8.1
+Inputs are the same `.mcv` fixtures (`hd*` = 1920x1080 synthetic scenes from `scene()` in `tools/oracle_cv2.py`, the rest
+smaller). Target: ours <= cv2. **Misses are listed as measured; nothing is hidden.** The HOG rows time cv2 4.8.1
 (cv2 5.0 has no HOG).
 
 1080p rows: {faster} of {len(ok)} faster than cv2, {close} more within 1.5x, the rest slower (ratio column).
+
+Slower than cv2 in this run: {slow}.
 
 {BENCH_NOTES}
 

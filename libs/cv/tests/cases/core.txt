@@ -1,4 +1,4 @@
-# core ops: one real image (hd, 1080p crop of a screenshot) and one edge case per op, across dtypes
+# core ops: one 1080p scene (hd) and one edge case per op, across dtypes
 flip_x_hd        flip hd code=0 => exact
 flip_y_odd       flip odd code=1 => exact
 flip_xy_one      flip one code=-1 => exact

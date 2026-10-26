@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
+# Downloads the two Kaggle datasets behind tests/cases/real.txt (needs the kaggle CLI and its credentials) and converts
+# them to .mcv under tests/real/. Not part of scripts/ci.sh.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REAL="$ROOT/tests/real"
 mkdir -p "$REAL"
-PY="${MCV_PY:-$HOME/iTools/video/camera-motion/v/bin/python}"
+PY="${MCV_PY:-$ROOT/.venv/bin/python}"
+# any video file with a few seconds of ordinary footage; its first frame feeds the orb_real row
+: "${MCV_VIDEO:?set MCV_VIDEO to a video file}"
 
 # chessboard photos
 if [ ! -d "$REAL/data/imgs/leftcamera" ]; then
@@ -58,7 +62,7 @@ for i,p in enumerate(chosen):
 frame=os.path.join(real,'frame0.png')
 if not os.path.exists(frame):
     import subprocess
-    subprocess.run(['ffmpeg','-y','-i',os.path.expanduser('~/Videos/obs.space/2026-01-25 15-05-00.mkv'),'-vf','scale=640:360,format=gray','-frames:v','1',frame],check=True,stderr=subprocess.DEVNULL)
+    subprocess.run(['ffmpeg','-y','-i',os.environ['MCV_VIDEO'],'-vf','scale=640:360,format=gray','-frames:v','1',frame],check=True,stderr=subprocess.DEVNULL)
 im=cv2.imread(frame,cv2.IMREAD_GRAYSCALE)
 mcv.save(im, os.path.join(real,'frame0.mcv'))
 print('fetch_fixtures: converted real inputs')

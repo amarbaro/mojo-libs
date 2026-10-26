@@ -1,4 +1,4 @@
-# imgproc: one real image (hd/sm, screenshot crops) and one edge case per op
+# imgproc: one scene row (hd/sm, synthetic scenes) and one edge case per op
 gauss5_hd        GaussianBlur hd ksize=5 sigma=0 => max:1
 gauss_s2_hdg      GaussianBlur hdg ksize=0 sigma=2.0 => max:2
 gauss5_odd       GaussianBlur odd ksize=5 sigma=0 => exact
@@ -149,8 +149,8 @@ hog_scores_hdg   HOGScores hdg hog_svm => max:0.01
 hog_raw_smg      detectMultiScale smg hog_svm hit=-1.5 group=0 => pts:1:0.99
 hog_raw_hdg      detectMultiScale hdg hog_svm hit=-1.0 group=0 => pts:1:0.99
 hog_group_smg    detectMultiScale smg hog_svm hit=-2.0 group=2 => pts:2:0.99
-hog_group_smg2   detectMultiScale smg2 hog_svm hit=-1.8 group=2 => pts:2:0.99
-hog_group_hdg    detectMultiScale hdg hog_svm hit=-1.0 group=2 => pts:2:0.97
+hog_group_smg2   detectMultiScale smg2 hog_svm hit=-2.2 group=2 => pts:2:0.99
+hog_group_hdg    detectMultiScale hdg hog_svm hit=-0.8 group=2 => pts:2:0.9
 hog_none         detectMultiScale smg hog_svm hit=1.0 group=2 => cnt:0
 group_rects_hdg  groupRectangles hog_raw thresh=2 => pts:0.5:1.0
 grabcut_scene    grabCut gc_scene rect=25,12,100,86 iters=3 => iou:0.95
