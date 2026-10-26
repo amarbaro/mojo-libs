@@ -1,144 +1,92 @@
 # mojo-gguf
 
-GGUF tooling in Mojo: reader/writer, HF safetensors to GGUF conversion, quantizers, dequant and the gguf-py
-scripts, each unit gated byte-for-byte against a pinned llama.cpp (`1744c6bde`). Built: U1 reader/writer
-(`gguf-rewrite`), U2 generated tables, U3a safetensors + `hf2gguf` for Qwen2, U4 `quantize --pure` (8 types),
-U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 types), U7 `lora2gguf`. Units and status: `docs/PLAN.md`.
-U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 types), U9 legacy GGML to GGUF (`ggml2gguf`). Units and status: `docs/PLAN.md`.
-U5 `gguf-tool` (dump, hash, set-metadata, convert-endian), U6 CPU dequant (19 types), L3 `latent-metric` (latent
-quality of a quant vs its bf16 source). Units and status: `docs/PLAN.md`.
+[![CI](https://github.com/amarbaro/mojo-gguf/actions/workflows/ci.yml/badge.svg)](https://github.com/amarbaro/mojo-gguf/actions/workflows/ci.yml)
 
-## What exists
+GGUF tools in Mojo that write the bytes llama.cpp's own tools write: a GGUF reader and writer, the four gguf-py
+scripts (`dump`, `hash`, `set-metadata`, `convert-endian`), the Qwen2 safetensors-to-GGUF converter, the LoRA and
+legacy-GGML converters, eight `llama-quantize --pure` types and a dequantizer for 19 types. Every command is
+compared with llama.cpp pinned at `1744c6bde`: converter and quantizer outputs are byte-identical on
+Qwen2.5-0.5B-Instruct, dequantized rows are bit-equal to `ggml`'s `to_float`. Linux x86-64, CPU only.
 
-| path | what |
+```mojo
+from gguf import Gguf
+
+def main() raises:
+    var g = Gguf("model.gguf")                       # header and tensor table only, no tensor data is read
+    print(g.summary())                               # kv 22 tensors 11 alignment 32 data_offset 1472
+    print("arch present:", g.find("general.architecture") >= 0)
+```
+
+```
+mojo build -I src src/hf2gguf.mojo -o hf2gguf
+./hf2gguf Qwen2.5-0.5B-Instruct --outfile qwen.bf16.gguf --outtype bf16      # 0.26 s, same bytes as the script
+mojo build -I src src/quantize.mojo -o quantize
+./quantize --pure qwen.bf16.gguf qwen.q4_k.gguf Q4_K                         # same bytes as llama-quantize --pure
+```
+
+## Install
+
+Requires Mojo 1.1 (`uv sync` installs it) and Linux x86-64. Nothing else: every command builds with the `mojo`
+package alone, no linker flags.
+
+| Way | Command |
 |---|---|
-| `tools/oracle.sh` | reference outputs from pinned llama.cpp: `convert`, `quantize --pure`, `new_metadata`, `dump`; wall + peak RSS |
-| `tools/mkoracle.sh HF_DIR NAME` | full reference set for one model into `.work/oracle/NAME/` |
-| `tools/gguf-cmp.py REF GOT` | identical-bytes, else KV + tensor table + per-tensor data diff; self-test `tests/gguf-cmp-selftest.sh` |
-| `src/gguf/model.mojo` | GGUF v3 LE reader (sliding window, spans per KV, all 13 value types, nested arrays validated) and writer (streams KV payloads and tensor data through one 1 MiB buffer) |
-| `src/gguf_rewrite.mojo` | CLI `gguf-rewrite IN OUT [--name STR] [--remove KEY]...`; first stdout line `kv K tensors T alignment A data_offset D`; edits match `gguf_new_metadata.py` byte for byte |
-| `tools/type-census.mojo` | tensor-type census over GGUF files (header + tensor table only): count and bytes per type, per file and total; U6 scope |
-| `tests/u1-gate.sh` | U1 gate (reader/writer round trip, parse summary, metadata edits), 16 checks |
-| `tools/gen-tables.py GGUFPY OUT` | U2 generator: gguf-py `constants.py` + `tensor_mapping.py` to `consts.mojo` (enums, name tables) and `tensor_map.mojo` (per-arch name rows); deterministic |
-| `src/gguf/consts.mojo`, `src/gguf/tensor_map.mojo` | U2 generated tables, committed exactly as the generator writes them; do not edit |
-| `src/gguf/tensor_lookup.mojo` | `map_tensor_name(arch, n_blocks, hf_name)` (empty when unmapped), `expand_rows` |
-| `src/u2_dump.mojo` | U2 dump: one line of sorted-key JSON from the generated tables, byte-equal to `tests/u2-oracle.py` |
-| `src/u2_lookup.mojo` | verifier CLI for `map_tensor_name`, one lookup per line of a TSV |
-| `tests/u2-gate.sh` | U2 gate: generator runs and is deterministic, committed = generated, dump = gguf-py JSON, `PASS 7/7` |
-| `tests/u2-lookup-check.sh` | `map_tensor_name` vs gguf-py `TensorNameMap` on every key at n=2 and n=5, plus probes: `PASS 18527/18527` |
-| `src/st/` | `json.mojo`: cursor JSON reader over one byte buffer; `safetensors.mojo`: mmap'd shards, tensors in the converter's order (shards by file name, tensors by name), `model.safetensors.index.json` cross-check |
-| `src/hf2gguf.mojo` | CLI `hf2gguf HF_DIR --outfile OUT --outtype bf16\|q8_0` for Qwen2 (`Qwen2ForCausalLM`, `Qwen2Model`); byte-identical to `convert_hf_to_gguf.py`; every unsupported input is `FAIL hf2gguf: <reason>`, exit 1 |
-| `src/hfconv/` | converter pieces: `qwen2_names.mojo` (HF to GGUF tensor names, swap for the generated map), `naming.mojo` (gguf-py Metadata name heuristics), `quant.mojo` (BF16 / F32 / Q8_0 kernels, bit-exact with gguf-py `quants.py`) |
-| `tests/u3-gate.sh` | U3a gate: bf16 and q8_0 identical-bytes against the script, wall + peak RSS vs the oracle |
-| `check/u3-naming-check.sh` | `hfconv.naming` vs gguf-py `get_model_id_components` / `id_to_title` / `size_label` on 25 ids x 3 parameter counts |
-| `src/quantize.mojo` + `src/gguf/quants.mojo` | CLI `quantize --pure IN OUT TYPE [NTHREADS]` for Q8_0 Q4_0 Q4_K Q6_K Q2_K Q2_0 TQ1_0 TQ2_0 (with llama-quantize's block-size fallbacks), byte-identical to `llama-quantize --pure`; K-quant fits run one sub-block per SIMD lane, every product fenced against FMA contraction |
-| `tests/u4-gate.sh` | U4 gate: identical bytes per type + wall and peak RSS next to the oracle's, 11 checks |
-| `src/gguf/dequant.mojo` | `deq_rows(type, src, ne0, nrows, dst)`: 19 ggml types to f32, bit-equal to llama.cpp `to_float`, rows in parallel; per-row functions allocate nothing (kernel-shaped) |
-| `src/gguf/grids.mojo` | IQ codebooks (IQ2_XXS 256 x u64, IQ1_S/M 2048 x u64, IQ4 values), generated by `tools/gen-grids.sh` from `ggml-common.h` |
-| `src/gguf_dequant.mojo` | CLI `gguf-dequant MODEL TENSOR ROW0 N OUT.f32`: N rows as little-endian f32, streamed through a 16 MiB f32 buffer |
-| `tools/u6-extra-types.py` | verifier beyond the gate: random raw blocks of all 19 types (incl. Q4_1, Q2_K, IQ1_S, on no ladder model) vs `to_float`, offset reads, 20 MB streaming read |
-| `tests/u6-gate.sh` | U6 gate: 16 types of five real models, first/last tensor per type, 6 rows each, bit-equal, falsifier per type; `PASS 4/4` |
-| `src/gguf_tool.mojo` | CLI `gguf-tool dump\|hash\|set-metadata\|convert-endian ARGS`: the four gguf-py scripts, matched on stdout, exit code and written bytes; U5 |
-| `src/gguf/{fmt,values,quant,sha}.mojo` | Python-compatible formatting (exact `%.Nf`, repr, numpy float32 str), in-place value reads, GGML type table, streaming SHA-1/SHA-256 |
-| `tests/u5-gate.sh` | U5 gate (dump, hash, set-metadata, convert-endian against the pinned scripts), 14 checks |
-| `src/gguf_latent.mojo` | CLI `gguf-latent bake IN OUT --wa W.f32 --beta B --row-median M` appends `latent.version`, `latent.beta`, `latent.embd_row_median`, `latent.w_a` (f32 d*d), `latent.w_a.shape` (u32 [d, d]) as KV, replacing them if present, tensors streamed verbatim; `gguf-latent show FILE`; L2 |
-| `tests/l2-gate.sh` | L2 gate (bake read back against the fixture, rebake idempotent, show, llama-cli loads the baked file under gpu-wait), `PASS 7/7` |
-| `src/lora2gguf.mojo` | CLI `lora2gguf ADAPTER_DIR --base HF_DIR --outfile OUT --outtype f32\|f16\|bf16\|q8_0`: `convert_lora_to_gguf.py` for Qwen2 bases, byte-identical; U7 |
-| `tests/u7-gate.sh` | U7 gate: two synthetic adapters x three out types vs the script, `PASS 9/9` |
-| `tools/lora-extra-check.sh` | lora2gguf vs the script on an adapter the gate does not reach (embedding transpose, norms, F16, mixed dtypes, aLoRA tokens, dir/template outfile) |
-| `src/ggml2gguf.mojo` | CLI `ggml2gguf --input IN --output OUT [--name S] [--desc S] [--gqa N] [--eps E] [--context-length N]`: legacy GGML, GGMF v1 and GGJT v1 to v3 (lmgg, fmgg, tjgg) as GGUF, byte-identical to `convert_llama_ggml_to_gguf.py`; the script's Q8_0 refusal is kept (exit 1); `--model-metadata-dir` and `--vocab-dir` exit 2 (not supported); U9 |
-| `tests/u9-gate.sh` | U9 gate: three legacy fixtures identical to the script, the GGJTv3 Q8_0 refusal, `PASS 7/7` |
-| `tests/u9-parity.sh` | U9 parity beyond the gate: containers, versions, F16/F32 weights, byte/space/empty tokens, 300-token vocab, argv flags, against the script; `PASS 25/25` |
-| `src/latent_metric.mojo` | CLI `latent-metric REF.gguf TEST.gguf PROMPTS.txt OUT.json`: per-prompt (last position) final-norm hidden cos, top-1 agreement, soft-embedding cos, and TEST's W_a known-answer recovery; L3 |
-| `tools/l3-verify.py` | numpy re-derivation of every `latent-metric` key from the same dumps (beyond the gate's cos oracle); also covers the untied `output.weight` path |
-| `tests/l3-gate.sh` | L3 gate: keys, bf16 vs itself exact, Q4_K beats Q2_K, byte-identical rerun, cos_mean vs `tests/l3-cos.py`; `PASS 8/8` |
+| A command | `mojo build -I path/to/mojo-gguf/src path/to/mojo-gguf/src/<command>.mojo -o <command>` |
+| The library | `mojo build -I path/to/mojo-gguf/src app.mojo`, then `from gguf import Gguf` |
+| Vendor | copy `src/gguf/` into your project |
 
-## Build and gate
+## What you get
 
-```
-.venv/bin/mojo build src/gguf_rewrite.mojo -I src -o .work/u1/gguf-rewrite
-tests/u1-gate.sh        # PASS 16/16; bf16 rewrite 994 MB: 19 MB peak RSS (runtime floor 17 MB)
-tests/u2-gate.sh        # PASS 7/7 (builds src/u2_dump.mojo: about 60 s, the literal tables are large)
-tests/u2-lookup-check.sh  # PASS 18527/18527
-.venv/bin/mojo build src/gguf_tool.mojo -I src -o .work/u5/gguf-tool
-tests/u5-gate.sh        # PASS 14/14 (the gate builds the tool itself)
-.venv/bin/mojo build src/gguf_latent.mojo -I src -o .work/l2/gguf-latent
-tests/l2-gate.sh        # PASS 7/7 (builds the tool itself; bake of the 317 MB Q4_K fixture: 1.22 s / 18.8 MB peak RSS)
-.venv/bin/mojo build src/ggml2gguf.mojo -I src -o .work/u9/ggml2gguf
-tests/u9-gate.sh        # PASS 7/7 (the gate builds the tool itself); 83 MB F16 file: 0.04 s / 37 MB peak RSS, script 0.22 s / 122 MB
-tests/u9-parity.sh      # PASS 25/25
-```
+| Command | Replaces | Scope |
+|---|---|---|
+| `gguf-rewrite` | `gguf_new_metadata.py` (`--name`, `--remove`) | GGUF v3 little-endian reader and writer; no edit gives the input's bytes back |
+| `gguf-tool dump\|hash\|set-metadata\|convert-endian` | the four gguf-py scripts | same argv, stdout, exit code and written bytes |
+| `hf2gguf` | `convert_hf_to_gguf.py` | Qwen2 (`Qwen2ForCausalLM`, `Qwen2Model`), `--outtype bf16\|q8_0` |
+| `quantize --pure` | `llama-quantize --pure` | `Q8_0 Q4_0 Q4_K Q6_K Q2_K Q2_0 TQ1_0 TQ2_0` |
+| `gguf-dequant` | `to_float` in `ggml-quants.c` | 19 types: F32 F16 BF16 Q4_0 Q4_1 Q5_0 Q8_0 Q2_K Q3_K Q4_K Q5_K Q6_K IQ2_XXS IQ1_S IQ1_M IQ4_NL IQ4_XS TQ1_0 Q2_0 |
+| `lora2gguf` | `convert_lora_to_gguf.py` | PEFT adapters on Qwen2 bases, `--outtype f32\|f16\|bf16\|q8_0` |
+| `ggml2gguf` | `convert_llama_ggml_to_gguf.py` | GGML, GGMF v1, GGJT v1 to v3 |
+| `hf-update` | the check in `convert_hf_to_gguf_update.py` | pre-tokenizer fingerprint of a local `tokenizer.json`, no Python |
 
-U2 tables: `tools/gen-tables.py ~/Projects/imports/llama.cpp-master/gguf-py src/gguf` regenerates them. Tensor
-rows are templates (`{bid}` expanded per n_blocks); gguf-py's `TensorNameMap` mutates a class dict in `__init__`, so
-the generator starts each arch from a pristine copy. Lookup keys are base names (no `.weight`); callers strip suffixes.
-### hf2gguf (U3a)
+The generated tables (`src/gguf/consts.mojo`, `tensor_map.mojo`, `grids.mojo`) come from gguf-py and `ggml-common.h`
+through `tools/gen-tables.py` and `tools/gen-grids.sh`, and a gate fails when they drift. Commands and library calls
+are in [docs/api.md](docs/api.md); which gate checks what, where it runs and its last receipt is in
+[docs/gates.md](docs/gates.md).
 
-```
-.venv/bin/mojo build src/hf2gguf.mojo -I src -o .work/u3/hf2gguf
-tests/u3-gate.sh        # PASS 5/5; bf16 0.5 s, q8_0 0.5 s, 42 MB peak RSS (script: 17.00 s / 2.31 GB, 6.12 s / 2.10 GB)
-```
+## Performance
 
-Plan first (names, types, sizes from the safetensors headers), then header + KVs + tensor infos, then each tensor
-streamed through the kernels; consumed source pages are handed back with `madvise(DONTNEED)`. The pre-tokenizer
-name comes from the regex in `tokenizer.json`, not from the script's hash of an HF-tokenizers run: the table
-(`QWEN2_RE`) has one row, and an unknown pre-tokenizer is a FAIL. Not ported yet, all FAIL loudly: other
-architectures, rope scaling, MoE keys, `head_dim`, F16 fallback for rows not divisible by 32, source dtypes
-other than BF16/F16/F32, sentence-transformers pooling, named chat templates, tokenizers without `tokenizer.json`.
-Mojo refuses a module that imports a package of its own name, so the helpers are `src/hfconv/`, not `src/hf2gguf/`.
+One run each of the gates' own timing lines, Ryzen 7 7800X3D (16 threads), Linux, a machine that was running other
+jobs. The oracle column is llama.cpp's tool on the same input. Receipts: [docs/receipts/](docs/receipts/).
 
-Layout rules the writer follows: tensor sizes come from the input's own offsets (no quant table);
-output offsets are the running sum of spans padded to `general.alignment` (default 32); with no edit a
-file with zero tensors is padded after the tensor infos (C writer), with an edit it is not (gguf-py).
-Failures print `FAIL gguf-rewrite: <reason>` and exit 1. Report: `exchange/lane-u1-sonnet-report.md`.
+| Task (Qwen2.5-0.5B-Instruct) | mojo-gguf | llama.cpp tool | Receipt |
+|---|---|---|---|
+| `hf2gguf` bf16, 994 MB out | 0.26 s, 33 MiB peak RSS | `convert_hf_to_gguf.py` 12.55 s, 2252 MiB | `u3.txt` |
+| `hf2gguf` q8_0 | 0.34 s, 33 MiB | 6.77 s, 2051 MiB | `u3.txt` |
+| `quantize --pure` Q8_0 | 0.82 s, 49 MiB | `llama-quantize` 1.06 s, 1002 MiB | `u4.txt` |
+| `quantize --pure` Q4_K | 0.71 s, 43 MiB | 1.29 s, 954 MiB | `u4.txt` |
+| `quantize --pure` Q2_K | 0.61 s, 41 MiB | 1.17 s, 938 MiB | `u4.txt` |
+| `lora2gguf`, 2 adapters x 3 out types | 0.01 to 0.04 s, 16 to 17 MiB | `convert_lora_to_gguf.py` 3.2 to 3.6 s, 1184 to 1185 MiB | `u7.txt` |
+| `gguf-rewrite`, 994 MB bf16 file | 0.16 s, 13 MiB | | `u1.txt` |
 
-```
-.venv/bin/mojo build src/gguf_dequant.mojo -I src -o .work/u6/gguf-dequant
-tests/u6-gate.sh        # PASS 4/4; 20000 Q4_K rows x 2560: 0.02 s wall (16 threads) / 40 MB peak RSS (runtime floor 17 MB)
-```
+Tensors are streamed through fixed buffers and consumed source pages are handed back, which is where the memory
+difference comes from. The other quantizer types are in `u4.txt`: 0.5 to 0.9 s against 0.8 to 1.3 s for
+`llama-quantize`.
 
-Every float is the C reference's op in the C reference's order (integer part in Int, one conversion, same
-multiply/add sequence; the f16 scale conversion is exact), so outputs are equal bytes, not within tolerance. The
-IQ2 sign table is not stored: `ksigns_iq2xs[i]` is `i` plus a parity bit 7. Errors print
-`FAIL gguf-dequant: <reason>` (unknown tensor, type without a dequantizer, rows out of range) and exit 1.
-Report: `exchange/lane-u6-report.md`.
+## Limits
 
-### lora2gguf (U7)
-
-```
-.venv/bin/mojo build src/lora2gguf.mojo -I src -o .work/u7/lora2gguf
-tests/u7-gate.sh        # PASS 9/9; 0.01-0.05 s, 16-24 MB peak RSS per adapter (script: 3.6-7.2 s, 1.21 GB)
-tools/lora-extra-check.sh   # PASS 6/6 on the cases the gate's adapters do not hit
-```
-
-The adapter file is mmapped and streamed through the hf2gguf writer; names, naming heuristics and the Q8_0 row rule
-are the hf2gguf pieces (`hfconv/`, `Gw`, `dropped`, `sampling`). Tensors come in file-offset order (safetensors
-`keys()`), norm tensors first, then `<name>.lora_a` / `.lora_b` per base tensor in first-seen order; under q8_0 a tensor
-whose last dim is not a multiple of 32 (lora_b: rank) is F16, as in the script. `general.*` come from the ADAPTER
-directory name with the negative-parameter-count rules, and no `general.file_type` is written. The embedding lora_a is
-transposed through one tensor's F32 staging. FAIL, never a guess: README.md model-card frontmatter, `invocation_string`
-without `alora_invocation_tokens`, no `--base`, `--outtype auto` (the script itself raises AttributeError), non-Qwen2
-bases. Report: `exchange/lane-u7-report.md`.
-### latent-metric (L3)
-
-```
-.venv/bin/mojo build src/latent_metric.mojo -I src -o .work/l3/latent-metric
-tests/l3-gate.sh        # PASS 8/8 (about 15 min: llama.cpp CPU dumps of the 0.5B per run, 79 s each)
-```
-
-Forward passes are `hidden-probe-dump` (override with `HIDDEN_PROBE_DUMP`) into `OUT.json.dump-ref` / `.dump-test`
-(790 MB per 32 prompts on the 0.5B), deleted after reading; REF == TEST dumps once. Everything after the dump is
-deterministic Mojo: same inputs, same JSON bytes. Per prompt it reads the `result_norm` row (cos, f64, exactly 1.0
-for equal vectors) and the `result_output` row (argmax; softmax in f64 times each model's own dequantized
-`token_embd`, streamed 2048 rows at a time). `wa_recovery` forms `G = W_out^T W_out` (4x4 SIMD tiles over row chunks,
-f64 total) and `B = W_out^T W_in` (`G` when tied), factors `G + 1e-4 trace/d I` by Cholesky, solves only the 256 probe
-rows (`z = (G+lambda I)^-1 W_out[t]`, `e = z^T B`) and scores `e` against every `token_embd` row by cosine
-(zero rows score 0). After the dump on the 0.5B: 1.2 s wall, 54 MB peak RSS; the numpy re-derivation takes 24.6 s and
-3.9 GB. Env `LATENT_METRIC_REUSE=1` keeps the dumps and reuses ones already present (development only). Errors print
-`FAIL latent-metric: <reason>` and exit 1. Report: `exchange/lane-l3-report.md`.
-
-## Setup
-
-`.venv` links to mojo-baro's (Mojo 1.1.0). Oracle Python: ComfyUI venv (torch) for the converter,
-mojo-baro's venv (numpy) for gguf-cmp. Fixtures: `tools/mkoracle.sh ~/Models/qwen2.5-0.5b-instruct-hf qwen25-05b`
-(about 30 s CPU, 3.9 GB).
+- Scope of "byte-identical": the Qwen2.5-0.5B-Instruct outputs of the converter and quantizer gates, the synthetic
+  adapters and legacy files in the gates, and gguf-py-written fixtures. It is not a proof for every model or every
+  input.
+- `hf2gguf` and `lora2gguf` convert Qwen2 only. Other architectures, rope scaling, MoE keys, `head_dim`, source
+  dtypes other than BF16, F16 and F32, sentence-transformers pooling, named chat templates and tokenizers without
+  `tokenizer.json` are a `FAIL`, never a guess.
+- `quantize` implements `--pure` only (every weight gets one type, with llama-quantize's block-size fallbacks). No
+  mixed recipe such as `Q4_K_M`, no importance matrices, no types beyond the eight.
+- `gguf-dequant` covers the 19 types above; any other (Q5_1, TQ2_0, IQ2_XS, IQ3_S, MXFP4 and more) is a `FAIL`.
+- `ggml2gguf` refuses a GGJT Q8_0 input because the script does, and does not support `--model-metadata-dir` or
+  `--vocab-dir`.
+- The gates cover GGUF v3 little-endian inputs and `convert-endian ... big`.
+- CI runs on synthetic fixtures against the pinned llama.cpp's Python. The converter, quantizer, dequant and LoRA
+  gates need a llama.cpp build, Python with torch and the Qwen2.5-0.5B model, so they run locally
+  (`scripts/oracle-gates.sh`), not on a hosted runner. The GPU is not used.
+- `gguf-tool` does not include the GUI editor of gguf-py.
