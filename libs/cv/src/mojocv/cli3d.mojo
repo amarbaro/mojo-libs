@@ -1,4 +1,4 @@
-# 3D / time / CAD / CAE ops for the mojo-cv CLI: `mojo-cv3d OP OUT IN... [k=v]`. src/main.mojo (lane L2D) calls
+# 3D / time / CAD / CAE ops for the mojo-cv CLI: `mojo-cv3d OP OUT IN... [k=v]`. src/main.mojo calls
 # dispatch3d for any op it does not know. Every op reads and writes .mcv files; scalars are printed too.
 from std.sys import argv
 from std.time import perf_counter_ns

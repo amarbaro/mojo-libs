@@ -1,9 +1,9 @@
-# F34 correctness work
+# Geometry and sampler notes
 
 The 3D oracle now creates missing derived mesh inputs before GLB and STEP rows,
 including STEP reader rows run without mesh cases. Previously a fresh worktree
 failed in `check_glb` before reaching the mesh cases because alphabetical case
-order put GLB first. `tests/run3d.sh` on fresh `.work/run3d` passes 161/161.
+order put GLB first. `tests/run3d.sh` on a fresh `.work/run3d` passes.
 
 EPnP replaces both pose initialization paths with PCA control points, normalized
 image equations, linearized inter-control distances and Gauss-Newton beta
@@ -21,7 +21,7 @@ univariate-polynomial elimination. Source: Nister 2004, DOI 10.1109/TPAMI.2004.1
 New six-correspondence and clean-cloud rows pass against cv2 at 1e-5 and 1e-6;
 existing noisy tolerances are unchanged. RANSAC best time on ess_ransac increased
 from 2.285 ms to 12.577 ms (20 repeats); this correctness item misses cv2 speed.
-The accepted variant is Stewenius, Engels & Nister (2006), now cited in provenance.
+The accepted variant is Stewenius, Engels & Nister (2006), cited in `docs/sources.md`.
 `ess_five_roots` returns all six real matrices from an exactly five-point problem,
 matching cv2 within 6.2e-12; its remaining four algebraic roots are complex and
 excluded. Five-point outputs are canonicalized by Frobenius norm, largest-entry

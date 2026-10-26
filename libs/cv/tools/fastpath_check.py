@@ -1,5 +1,5 @@
 """Odd shapes and 1/3/4 channels through the uint8 fast paths (resize 2x, GaussianBlur 5, pyrDown) against cv2, bit exact.
-  run from the repo root under `~/iTools/video/camera-motion/v/bin/python -I tools/fastpath_check.py`"""
+  run from the repo root: `.venv/bin/python -I tools/fastpath_check.py` (after tests/run.sh has built .bin/mojo-cv)"""
 import sys, numpy as np, cv2, subprocess
 sys.path.insert(0, "tools"); import mcv
 rng = np.random.default_rng(3)
@@ -22,3 +22,4 @@ for (h, w, ch, dw, dh) in [(70, 101, 3, 67, 41), (70, 101, 3, 150, 90), (33, 47,
     d = np.abs(o.astype(int) - cv2.resize(a, (dw, dh), interpolation=cv2.INTER_LINEAR).reshape(o.shape).astype(int)).max()
     print("resize general", h, w, ch, "->", dh, dw, "maxdiff", d); bad += d > 1
 print("BAD", bad)
+sys.exit(1 if bad else 0)

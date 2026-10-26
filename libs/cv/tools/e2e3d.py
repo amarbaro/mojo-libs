@@ -1,4 +1,4 @@
-"""User-level check on a real recording: python tools/e2e3d.py VIDEO > .work/L3D-e2e.txt
+"""User-level check on a real recording: python tools/e2e3d.py VIDEO > .work/e2e3d.txt
 A  burst super-resolution of a real 1080p frame from four aliased 960x540 phases (known and estimated shifts) against bilinear/bicubic
 B  phase correlation of a real frame against a Fourier-shifted copy, ours vs cv2
 C  a voxelized 64x36x24 clip -> static/moving octree split -> watertight mesh -> GLB (colored by time) and STEP -> Blender import

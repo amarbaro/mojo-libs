@@ -648,7 +648,7 @@ def make_glb(v, f, idx="u32", interleave=False, normals=None, colors=None, no_in
 
 
 def parse_glb(raw):
-    """Independent strict reader/validator for GLBs this lane writes; returns (arrays dict, problems list)."""
+    """Independent strict reader/validator for GLBs this library writes; returns (arrays dict, problems list)."""
     import json, struct
     bad = []
     magic, ver, length = struct.unpack_from("<III", raw, 0)
