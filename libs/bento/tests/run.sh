@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # The gate: build the Mojo test services, run every oracle row against them.
-# Usage: tests/run.sh [item ...]   (default: all items). Output of each item: .work/<item>-gate.txt
+# Usage: tests/run.sh [item ...]   (default: b1 b2 b3 b4 b5 b6, the items scripts/ci.sh runs; b4systemd and b7 are local only).
+# Output of each item: .work/<item>-gate.txt
 set -euo pipefail
 cd "$(dirname "$0")/.."
-PY=.work/oracle-venv/bin/python
-[ -x "$PY" ] || { echo "FAIL setup: $PY missing; uv venv .work/oracle-venv && uv pip install -p $PY bentoml h11 prometheus_client httpx httpx-sse"; exit 1; }
+PY=.venv/bin/python
+[ -x "$PY" ] || { echo "FAIL setup: $PY missing; run uv sync"; exit 1; }
 mkdir -p .work
 pid=""; port=""; bento_port=""; bento_pid=""
 trap 'cleanup' EXIT
@@ -71,6 +72,11 @@ b4() {
   $PY tools/b4_check.py drain "$port" "$pid"
   local rc=0; wait "$pid" || rc=$?; pid=""
   [ "$rc" = 0 ] || { echo "FAIL b4: server exit status $rc after SIGTERM (want 0)"; return 1; }
+}
+
+# local only: needs a systemd user manager
+b4systemd() {
+  scripts/mojo.sh tests/b2_service.mojo .work/b2_service 2> .work/b2_service.err || { echo "FAIL build: tests/b2_service.mojo"; cat .work/b2_service.err; return 1; }
   tests/b4_systemd.sh .work/b2_service
 }
 
@@ -82,22 +88,13 @@ b6() {
   $PY tools/b6_oracle.py sse "$port"
 }
 
-b8() {
-  tests/gate-baro-fake.sh
-}
-
 b7() {
   tests/gate-b7.sh
 }
 
-# GPU, ~25 min under gpu-wait: not in the default list
-b8live() {
-  tests/gate-baro-live.sh
-}
-
 if [ "${1:-}" = --run ]; then "$2"; exit; fi  # one item in its own process: set -e stays on inside it, and its servers die with it
 
-items=("$@"); [ ${#items[@]} -gt 0 ] || items=(b1 b2 b3 b4 b5 b6 b7 b8)
+items=("$@"); [ ${#items[@]} -gt 0 ] || items=(b1 b2 b3 b4 b5 b6)
 for it in "${items[@]}"; do
   if bash "$0" --run "$it" > ".work/$it-gate.txt" 2>&1; then rc=0; else rc=$?; fi
   echo "exit $rc" >> ".work/$it-gate.txt"

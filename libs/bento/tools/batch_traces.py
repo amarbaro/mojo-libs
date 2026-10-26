@@ -1,6 +1,6 @@
 """Write the arrival traces in tests/cases/batch/ (seeded; arrivals are random nanoseconds).
 
-usage: .work/oracle-venv/bin/python -I tools/batch_traces.py
+usage: .venv/bin/python -I tools/batch_traces.py
 A trace in which two events of the virtual clock fall within 10 ns is rejected by the oracle (their order would
 be heap luck, unreproducible); that case is regenerated with the next seed until the oracle accepts it.
 """

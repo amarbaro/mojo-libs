@@ -7,14 +7,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p .work/t
 scripts/mojo.sh tests/store_cases.mojo .work/store_cases 2> .work/t/store-build.err || { echo "FAIL build: tests/store_cases.mojo"; cat .work/t/store-build.err; exit 1; }
-if [[ -x .work/oracle-venv/bin/python ]]; then
-  .work/oracle-venv/bin/python -I tools/store_oracle.py tests/cases/store.txt tests/cases/store-fixture "$PWD/.work/t/oracle-store" 2>/dev/null > .work/t/store.live
+if [[ -x .venv/bin/python ]]; then
+  .venv/bin/python -I tools/store_oracle.py tests/cases/store.txt tests/cases/store-fixture "$PWD/.work/t/oracle-store" 2>/dev/null > .work/t/store.live
   cmp -s .work/t/store.live tests/cases/store.expect || { echo "FAIL oracle drift: store.expect"; diff .work/t/store.live tests/cases/store.expect | head -10; exit 1; }
 fi
 timeout 30 .work/store_cases tests/cases/store.txt tests/cases/store-fixture "$PWD/.work/t/mojo-store" > .work/t/store.got
 cmp -s .work/t/store.got tests/cases/store.expect || { echo "FAIL store: output differs from BentoML's"; diff tests/cases/store.expect .work/t/store.got | head -20; exit 1; }
-if [[ -x .work/oracle-venv/bin/python ]]; then
-  .work/oracle-venv/bin/python -I - "$PWD/.work/t/mojo-store/models" "$PWD/.work/t/oracle-store/models" <<'PY' || { echo "FAIL readback: BentoML reads the Mojo-written store differently"; exit 1; }
+if [[ -x .venv/bin/python ]]; then
+  .venv/bin/python -I - "$PWD/.work/t/mojo-store/models" "$PWD/.work/t/oracle-store/models" <<'PY' || { echo "FAIL readback: BentoML reads the Mojo-written store differently"; exit 1; }
 import sys
 from bentoml._internal.models import ModelStore
 a, b = ModelStore(sys.argv[1]), ModelStore(sys.argv[2])

@@ -3,7 +3,7 @@
 # -> the B2 oracle rows answer the same; verify catches a changed file; a missing model fails the build.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-PY=.work/oracle-venv/bin/python; W=$PWD/.work/b7; rm -rf "$W"; mkdir -p "$W/store/iris/v1" "$W/store/iris/v3" "$W/store/tok/v2"
+PY=.venv/bin/python; W=$PWD/.work/b7; rm -rf "$W"; mkdir -p "$W/store/iris/v1" "$W/store/iris/v3" "$W/store/tok/v2"
 echo v3 > "$W/store/iris/latest"; echo weights-v3 > "$W/store/iris/v3/model.bin"; echo tok > "$W/store/tok/v2/tokenizer.json"
 scripts/bento build tests/b7/service.toml "$W/build"
 mv "$W/build" "$W/moved"; B=$W/moved

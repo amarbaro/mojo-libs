@@ -9,8 +9,8 @@ mkdir -p .work/t
 fail=0; n=0
 for f in tests/cases/batch/*.trace; do
   t=$(basename "$f" .trace); n=$((n+1))
-  if [[ -x .work/oracle-venv/bin/python ]]; then
-    .work/oracle-venv/bin/python -I tools/batch_oracle.py "$f" > ".work/t/$t.live" 2>/dev/null || { echo "FAIL oracle: $t"; fail=$((fail+1)); continue; }
+  if [[ -x .venv/bin/python ]]; then
+    .venv/bin/python -I tools/batch_oracle.py "$f" > ".work/t/$t.live" 2>/dev/null || { echo "FAIL oracle: $t"; fail=$((fail+1)); continue; }
     python3 -I tools/batch_cmp.py "$f.expect" ".work/t/$t.live" > ".work/t/$t.cmp" || { echo "FAIL oracle drift: $t: $(head -2 ".work/t/$t.cmp")"; fail=$((fail+1)); continue; }
   fi
   timeout 20 .work/t/batch_replay "$f" > ".work/t/$t.got" || { echo "FAIL replay: $t"; fail=$((fail+1)); continue; }

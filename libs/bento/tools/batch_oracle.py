@@ -1,6 +1,6 @@
 """Replay an arrival trace through BentoML's real CorkDispatcher on a virtual clock.
 
-usage: batch_oracle.py TRACE   (run with the oracle venv: .work/oracle-venv/bin/python -I)
+usage: batch_oracle.py TRACE   (run with the oracle venv: .venv/bin/python -I)
 
 TRACE lines: `max_latency_ms N`, `max_batch N`, `dur_a_ns N`, `dur_b_ns N`, `jitter_ns N N ...`, `arrive NS` (all integers).
 A batch of n takes a*n + b + jitter[call index mod len] seconds, each term its ns value / 1e9. Time is virtual: asyncio's loop jumps to the

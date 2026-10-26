@@ -1,6 +1,6 @@
 """Build the model-store fixture tests/cases/store-fixture/ with BentoML itself (run with the oracle venv).
 
-usage: .work/oracle-venv/bin/python -I tools/store_fixture.py
+usage: .venv/bin/python -I tools/store_fixture.py
 Layout is whatever bentoml's ModelStore writes: <name>/<version>/model.yaml + files, <name>/latest.
 Creation times are pinned afterwards (model.yaml is rewritten) so every run builds identical bytes.
 """

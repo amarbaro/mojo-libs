@@ -2,7 +2,7 @@
 starlette's JSONResponse layout (compact separators, UTF-8 not escaped)."""
 from json import Json
 
-comptime PYDANTIC = "2.14"  # the version in every issue url; BentoML 1.4.39 in tools/oracle-venv pins it
+comptime PYDANTIC = "2.14"  # the version in every issue url; BentoML 1.4.39 (the dev dependency in pyproject.toml) pins it
 comptime GENERIC_500 = '{"error":"An unexpected error has occurred, please check the server log."}'
 
 
