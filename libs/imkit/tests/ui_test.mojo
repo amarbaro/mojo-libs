@@ -7,6 +7,7 @@ compose and render timed. OUT (.ppm) gets the layer blended over a test backgrou
 
 usage: mojo run -I src tests/ui_test.mojo [OUT.ppm]
 """
+from std.os import getenv
 from std.sys import argv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
@@ -42,7 +43,7 @@ def frame(mut ui: Ui, inp: Input) -> Bool:
 
 
 def main() raises:
-    var ui = Ui(Font("/usr/share/fonts/TTF/Roboto-Medium.ttf", [13, 16, 22]))
+    var ui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
     var fails = 0
     var idle = Input(300, 300, 0, 0, 0, 0, 0, 0, SIMD[DType.uint64, 2](0), False)
     var press = Input(102, 78, 0, 0, 0, 1, 1, 0, SIMD[DType.uint64, 2](0), False)  # on the pause icon (2nd icon)

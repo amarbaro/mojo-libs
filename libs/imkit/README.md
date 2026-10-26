@@ -6,7 +6,6 @@ widgets append to one flat draw list, one `compose` kernel turns that list into 
 the layer over the app's picture. No Python UI process, no C++ library, no bundled windowing: the system's SDL3 and
 FreeType are called through Mojo's FFI.
 
-First user: [Kinestride](../kinestride)'s engine GUI (run controls, per-fly cards, telemetry over the live scene).
 
 ## Modules
 
@@ -42,18 +41,29 @@ while True:
     win.present(frame_ptr, Int(layer.pixels.unsafe_ptr()))
 ```
 
-A complete app: Kinestride's live viewer (`fly-connectome/agent/body_engine/live.mojo`, `-DGUI=1`).
+## Install
 
-## Check
+Mojo 1.1 and MAX 26.6 from `uv sync`; system `libSDL3.so.0` (3.4) and `libfreetype.so.6` (2.14); a TrueType font
+(Roboto Medium by default, `IMKIT_FONT` overrides). Use it with `mojo build -I path/to/mojo-imkit/src app.mojo` or
+`mojo precompile src/imkit -o imkit.mojoc`. A headless example: `examples/quickstart.mojo`.
 
-```
-tools/gate.sh      # precompile, font_test, ui_test (GPU, under gpu-wait), window_test (opens a window ~2 s)
-```
+## Verified
 
-Numbers (RX 7900 XTX, 1280 x 720, 150 commands): compose 17.7 us per launch; draw list 128 KB, tile bins 460 KB,
-atlas 61 KB for three sizes, all allocated once. Design and limits: [docs/DESIGN.md](docs/DESIGN.md).
+`scripts/ci.sh` (no GPU, no display): precompile, build of every test, `font_test` (glyph atlas), `ui_cpu_test` (click =
+press then release, tile bins, overflow drops counted; a mutant of the click rule fails it) and the quickstart.
+`scripts/local_gate.sh` (run locally, GitHub runners have no GPU or display): `ui_test` composes on the GPU and checks
+pixels, `window_test` opens a real SDL3 window. Last local run on an RX 7900 XTX (gfx1100), KDE Wayland: `PASS ui_test`.
 
-## Requirements
+## Performance
 
-Mojo 1.1 and MAX 26.6 (`max.gpu`, `layout`), a GPU MAX supports, system `libSDL3.so.0` (3.4) and
-`libfreetype.so.6` (2.14). Struct offsets are checked against those versions' headers.
+RX 7900 XTX, 1280 x 720, 150 commands, one run of `ui_test`: compose 25.8 us per launch, render 194 us per frame
+including the 3.7 MB layer copy back. Buffers (allocated once): draw list 128 KB, tile bins 64 KB, atlas 128 KB on the
+card. An earlier run measured compose at 17.7 us; the number moves with GPU clocks and load. Design and budgets:
+[docs/DESIGN.md](docs/DESIGN.md), API: [docs/api.md](docs/api.md).
+
+## Limits
+
+- ASCII text only, no shaping; no docking, axes plots, sliders, text input, menus or DPI scaling.
+- Needs a GPU MAX supports for `Layer`; only gfx1100 was tested. Struct offsets are those of SDL 3.4 and FreeType 2.14.
+- Key scancodes below 128 only. `Audio` (mono float playback) has no automated check.
+- CI covers the CPU side only; the compose kernel and the window are checked locally.
