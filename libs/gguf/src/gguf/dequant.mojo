@@ -7,7 +7,7 @@ IEEE f32 op. `deq_rows` splits the rows over threads; codebooks are materialized
 """
 from std.collections import Array
 from std.memory import bitcast
-from max.algorithm import parallelize
+from gguf.par import parallelize
 from gguf.grids import IQ2XXS_GRID, IQ1S_GRID, KVALUES_IQ4NL
 
 comptime Src = Pointer[UInt8, MutUntrackedOrigin]
@@ -442,6 +442,23 @@ def deq_span(t: Int, s: Src, y: Dst, n: Int, nb: Int, rb: Int, ne0: Int):
             else:
                 deq_tq1_0(sr, yr, nb)
 
+@fieldwise_init
+struct _Span:
+    var src: Src
+    var dst: Dst
+    var t: Int
+    var nb: Int
+    var rb: Int
+    var ne0: Int
+    var nrows: Int
+    var items: Int
+
+def _deq_task(ctx: Int, w: Int):
+    var c = Pointer[_Span, MutUntrackedOrigin](unsafe_from_address=ctx)
+    var r0 = c[].nrows * w // c[].items
+    var r1 = c[].nrows * (w + 1) // c[].items
+    deq_span(c[].t, c[].src.unsafe_offset(r0 * c[].rb), c[].dst.unsafe_offset(r0 * c[].ne0), r1 - r0, c[].nb, c[].rb, c[].ne0)
+
 def deq_rows(t: Int, src: Src, ne0: Int, nrows: Int, dst: Dst) raises:
     """Dequantize nrows rows of ne0 elements of ggml type t from src (contiguous rows) into dst (nrows * ne0 f32)."""
     var info = quant_block(t)
@@ -454,10 +471,6 @@ def deq_rows(t: Int, src: Src, ne0: Int, nrows: Int, dst: Dst) raises:
     var items = min(nrows, 256)
     if items <= 0:
         return
-
-    def work(w: Int) {imm src, imm dst, imm t, imm nb, imm rb, imm ne0, imm nrows, imm items}:
-        var r0 = nrows * w // items
-        var r1 = nrows * (w + 1) // items
-        deq_span(t, src.unsafe_offset(r0 * rb), dst.unsafe_offset(r0 * ne0), r1 - r0, nb, rb, ne0)
-
-    parallelize(work, items)
+    var c = _Span(src, dst, t, nb, rb, ne0, nrows, items)
+    parallelize(_deq_task, Int(Pointer(to=c)), items)
+    _ = c.items

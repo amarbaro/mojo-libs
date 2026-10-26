@@ -7,7 +7,7 @@ quantized on all cores; norm and bias tensors are copied.
 from std.ffi import external_call, c_ssize_t
 from std.memory import bitcast
 from std.sys import argv, exit, num_logical_cores
-from max.algorithm import parallelize
+from gguf.par import parallelize
 from gguf import Gguf
 from gguf.model import Out, T_STRING, pad_to, pread_into
 from gguf.quants import (FP, BP, T_F32, T_F16, T_BF16, T_Q4_0, T_Q5_0, T_Q8_0, T_Q2_K, T_Q4_K, T_Q6_K,
@@ -127,6 +127,31 @@ def load_row(t: Int, src: BP, at: Int, ne0: Int, dst: FP):
             var v = Int(src[unsafe_offset=b]) | (Int(src[unsafe_offset=b + 1]) << 8)
             dst[unsafe_offset=i] = Float32(bitcast[DType.float16](UInt16(v)))
 
+@fieldwise_init
+struct _Rows:
+    var src: Int
+    var dst: Int
+    var st: Int
+    var dt: Int
+    var ne0: Int
+    var nr: Int
+    var items: Int
+    var src_row: Int
+    var dst_row: Int
+
+def _quant_task(ctx: Int, w: Int):
+    var c = Pointer[_Rows, MutUntrackedOrigin](unsafe_from_address=ctx)
+    var rowf = List[Float32](length=c[].ne0, fill=0)
+    var sb = List[UInt8](length=QK_K, fill=0)
+    var rp = rowf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var bp = sb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    var sp = BP(unsafe_from_address=c[].src)
+    var dp = BP(unsafe_from_address=c[].dst)
+    for r in range(w * c[].nr // c[].items, (w + 1) * c[].nr // c[].items):
+        load_row(c[].st, sp, r * c[].src_row, c[].ne0, rp)
+        quantize_row(c[].dt, rp, dp.unsafe_offset(r * c[].dst_row), c[].ne0, bp)
+    _ = len(rowf) + len(sb)
+
 def quantize_tensor(fd: Int32, ofd: Int32, p: Plan, out_at: Int, nthreads: Int) raises:
     var src_row = row_size(p.src_type, p.ne0)
     var dst_row = row_size(p.dst_type, p.ne0)
@@ -142,17 +167,9 @@ def quantize_tensor(fd: Int32, ofd: Int32, p: Plan, out_at: Int, nthreads: Int) 
         var nr = min(step, p.nrows - r0)
         pread_into(fd, sbuf, 0, nr * src_row, p.src_off + r0 * src_row)
         var items = min(nr, nthreads * 8)
-
-        def work(w: Int) {imm}:
-            var rowf = List[Float32](length=ne0, fill=0)
-            var sb = List[UInt8](length=QK_K, fill=0)
-            var rp = rowf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-            var bp = sb.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-            for r in range(w * nr // items, (w + 1) * nr // items):
-                load_row(st, sp, r * src_row, ne0, rp)
-                quantize_row(dt, rp, dp.unsafe_offset(r * dst_row), ne0, bp)
-            _ = len(rowf) + len(sb)
-        parallelize(work, items, nthreads)
+        var c = _Rows(Int(sp), Int(dp), st, dt, ne0, nr, items, src_row, dst_row)
+        parallelize(_quant_task, Int(Pointer(to=c)), items, nthreads)
+        _ = c.items
         pwrite_all(ofd, dbuf, nr * dst_row, out_at + r0 * dst_row)
 
 def copy_tensor(fd: Int32, ofd: Int32, src_off: Int, n: Int, out_at: Int) raises:
