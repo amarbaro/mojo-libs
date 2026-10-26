@@ -1,6 +1,6 @@
-# B1 HTTP server (current truth)
+# HTTP server
 
-`src/bento/{net,http,server}.mojo`. Gate: `tests/run.sh b1` (59 raw-HTTP rows, `tests/cases/http.txt`).
+`src/bento/{net,http,server}.mojo`. Gate `b1` (`tests/run.sh b1`): 59 raw-HTTP rows in `tests/cases/http.txt`.
 
 ## Shape
 
@@ -38,10 +38,18 @@ exact-match `Connection: close`). Row flags: `hs head trickle split:N half`.
 
 ## Limits
 
-Linux x86-64 (packed 12-byte `epoll_event`), IPv4 only. No idle-connection timeout yet. A slow reader
+Linux x86-64 (packed 12-byte `epoll_event`), IPv4 only. No idle-connection timeout. A slow reader
 parks its worker in `send_all` for up to 5 s. 16384 connection slots (fd number is the index).
 
-## Numbers (tools/http_bench.py, localhost, 4 workers, echo handler, 16-core box under other load)
+## Numbers
 
-1 connection 35.9k req/s; 8 connections 120.7k; 32 connections 136.4k; 8 connections x pipeline 16 577.5k.
-Resident 14.5 MB.
+`scripts/bench.sh` (receipt `docs/receipts/bench.txt`): localhost, 4 workers, echo handler, Python load generators
+(`tools/http_bench.py`, so the rates are a lower bound), Ryzen 7 7800X3D, one 3 s run per row.
+
+| Load | Requests per second |
+|---|---|
+| 1 connection | 53,522 |
+| 8 connections | 238,565 |
+| 32 connections | 281,840 |
+| 8 connections, pipeline 16 | 1,308,085 |
+| `POST /add` through `Service` with metrics, 8 connections | 224,977 |

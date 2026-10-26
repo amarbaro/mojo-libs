@@ -1,7 +1,7 @@
-# B4 health, metrics, systemd (current truth)
+# Health, metrics, systemd
 
 `src/bento/metrics.mojo`, built into `Service` (endpoint.mojo) and `Server.serve` (server.mojo).
-Gate: `tests/run.sh b4`.
+Gates `b4` (`tests/run.sh b4`) and, locally, `b4systemd`.
 
 ## Routes (Service)
 
@@ -35,9 +35,10 @@ NOTIFY_SOCKET), pings the watchdog at half of WATCHDOG_USEC, `STOPPING=1` on the
    1 denied (403) the counts are exact, histogram count/sum/cumulative buckets/+Inf agree, in_progress is 0;
    then 8 threads x 200 requests count to exactly 1607.
 3. `tools/b4_check.py drain`: SIGTERM, /readyz 503 and /healthz 200 during the drain, exit status 0.
-4. `tests/b4_systemd.sh`: transient user unit `Type=notify` shows activating (service sleeps 1.5 s first), then
+4. `b4systemd` (`tests/b4_systemd.sh`, local only, needs a systemd user manager): transient user unit `Type=notify` shows activating (service sleeps 1.5 s first), then
    active with StatusText `listening on <port>`, /readyz 200, `systemctl --user stop` leaves it inactive.
 
 ## Cost
 
-POST /add, 8 connections, localhost: 272 to 292k req/s with metrics, 327k without (box under other lanes' load).
+`POST /add` through `Service` with the metrics on: 224,977 requests per second on 8 connections (server.md has the load
+generator and the other rows).

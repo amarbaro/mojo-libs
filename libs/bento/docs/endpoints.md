@@ -1,6 +1,6 @@
-# B2 endpoints (current truth)
+# Endpoints
 
-`src/bento/{endpoint,pyerr,batch_stub}.mojo`. Gate: `tests/run.sh b2`, 74 rows in `tests/cases/b2.txt`: each goes
+`src/bento/{endpoint,pyerr}.mojo`. Gate `b2` (`tests/run.sh b2`), 74 rows in `tests/cases/b2.txt`: each goes
 to BentoML 1.4.39 (`tools/oracle_service.py`, started by the gate) and to `tests/b2_service.mojo`; status,
 content-type, allow and body bytes must be equal.
 
@@ -36,7 +36,7 @@ Python's `json.dumps` (`", "`, `": "`, ASCII-escaped).
 
 pydantic's lax coercion is reproduced for what the rows cover: str to int/float (stripped), integral float and
 bool to int, 0/1 and the words yes/no/on/off/true/false/t/f/y/n to bool, int to float, JSON arrays element by
-element with `loc` `[name, index]`. `PYDANTIC` (pyerr.mojo) is the version in every issue url: it follows the oracle venv.
+element with `loc` `[name, index]`. `PYDANTIC` (pyerr.mojo) is the version in every issue url: it follows the BentoML in the dev group of `pyproject.toml`.
 
 ## Not covered
 
@@ -46,5 +46,4 @@ numbers and escapes (they fall back to `expected value`).
 
 ## Batching
 
-`src/bento/batch_stub.mojo` is a batch-of-one `Batcher[In, Out]` with lane B's `submit` signature until
-`batch.mojo` merges; an endpoint holds a Batcher and calls `submit` from its worker thread.
+An endpoint that wants batching holds a `Batcher[In, Out]` (batch.md) and calls `submit` from its worker thread.

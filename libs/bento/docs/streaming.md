@@ -1,7 +1,7 @@
-# B6 streaming (current truth)
+# Streaming
 
 `Response.begin_stream / write / sse / end_stream` (http.mojo), `trait StreamEndpoint`, `emit` (endpoint.mojo).
-Gate: `tests/run.sh b6` (26 wire rows vs BentoML, plus the SSE checks in `tools/b6_oracle.py sse`).
+Gate `b6` (`tests/run.sh b6`) (26 wire rows vs BentoML, plus the SSE checks in `tools/b6_oracle.py sse`).
 
 ## Two shapes
 
@@ -26,5 +26,5 @@ and the connection ends with the stream. A response that streamed leaves the con
 ## Cost and limits
 
 A streaming handler holds one worker for as long as it streams: size `serve(workers)` for the number of concurrent
-streams (the Batcher parks a worker the same way). 100000 one-item chunks to one client: 225k chunks/s.
+streams (the Batcher parks a worker the same way). 100000 SSE events to one client: 176,056 events per second, one chunk each (`scripts/bench.sh`, receipt `docs/receipts/bench.txt`).
 Earlier pipelined answers on the connection are flushed before the stream's head.
