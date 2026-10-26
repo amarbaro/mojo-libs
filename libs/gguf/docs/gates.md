@@ -39,6 +39,6 @@ arrays. The receipts here were taken without it.
 ## Mutants
 
 The core gate was run against five one-line mutants of the library; each fails it: a Q4_0 dequant offset, a Q8_0
-dequant scale, the writer's padding rule, a `dump` header line, and a SHA-1 round constant (killed by the hash
-cases). A sixth mutant of the padding rule that is wrong only for sizes of 1 mod alignment survived until the
-fixture gained a 33-byte tensor.
+dequant scale, the writer's padding rule (rounding up a size that is already aligned), a `dump` header line, and a
+SHA-1 round constant. A sixth, a padding rule that is wrong only for sizes of 1 mod alignment, survives: the inputs
+gguf-py writes never contain such a size. Details in [receipts/mutants.txt](receipts/mutants.txt).
