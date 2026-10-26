@@ -103,7 +103,7 @@ src = rs.normal(size=(100000, 3))
 dst = src * 1.5 + 2.0
 row("umeyama", "100000 points", ours("umeyama", [src, dst]), "numpy oracle (SVD)", best(lambda: o.umeyama([src, dst], {}), 5), "")
 
-print("# L3D speed rows\n")
+print("# 3D speed rows\n")
 print(f"Measured {time.strftime('%Y-%m-%d')} on the 7800X3D (CPU only, 16 threads where an op is threaded; no GPU was used).")
 print("Ours: `.bin/mojo-cv3d OP ... reps=5`, best of 5, compute step only (files already loaded). Baseline: best of 5 Python")
 print("calls on in-memory arrays. Command: `python tools/bench3d.py`.\n")
