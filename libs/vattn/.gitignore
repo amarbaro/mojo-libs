@@ -2,3 +2,13 @@
 __mojocache__/
 *.so
 *.npy
+.venv/
+exchange/
+briefs/
+.lane-prep
+.claude/
+AGENTS.md
+CLAUDE.md
+.mailmap
+__pycache__/
+*.pyc
