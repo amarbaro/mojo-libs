@@ -28,7 +28,7 @@ gate u1 tests/u1-gate.sh
 gate u3 tests/u3-gate.sh
 gate u4 tests/u4-gate.sh
 gate u5 tests/u5-gate.sh
-gate u6 tests/u6-gate.sh "$O"/{Q8_0,Q4_0,Q4_K,Q6_K,Q2_K,Q2_0,TQ1_0,TQ2_0}.gguf
+gate u6 tests/u6-gate.sh "$O"/{Q8_0,Q4_0,Q4_K,Q6_K,Q2_K,Q2_0,TQ1_0}.gguf  # TQ2_0 has no dequantizer
 gate u6-all-types "$ORACLE_PY" tools/u6-extra-types.py "$LLAMACPP/gguf-py" "$LLAMACPP/build/bin/libggml-base.so" .work/u6/gguf-dequant .work/u6/extra
 gate u7 tests/u7-gate.sh
 gate u7-extra tools/lora-extra-check.sh
