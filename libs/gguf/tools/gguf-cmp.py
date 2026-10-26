@@ -2,7 +2,7 @@
 
     gguf-cmp.py REF.gguf GOT.gguf [--kv-only] [--max N]
 
-Verifier, not product code: reads both files with the pinned gguf-py (PYTHONPATH from tools/oracle.sh).
+Verifier, not product code: reads both files with the pinned gguf-py (LLAMACPP, default .work/llama.cpp).
 Prints one line per difference (capped at --max, default 20), then a summary:
     PASS identical-bytes | PASS same-content (kv K, tensors T) | FAIL <counts>
 Exit 0 only on PASS. A same-content PASS means equal KV values and equal tensor bytes with a different
@@ -10,7 +10,8 @@ file layout (alignment, order); gates that demand byte identity check the first 
 """
 import hashlib, os, sys
 
-sys.path.insert(0, os.path.join(os.environ.get("LLAMACPP", os.path.expanduser("~/Projects/imports/llama.cpp-master")), "gguf-py"))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.environ.get("LLAMACPP", os.path.join(ROOT, ".work", "llama.cpp")), "gguf-py"))
 from gguf import GGUFReader  # noqa: E402
 
 

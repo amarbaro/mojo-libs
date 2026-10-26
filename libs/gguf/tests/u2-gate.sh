@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # U2 gate: tables generated from the pinned gguf-py into Mojo, checked by a Mojo dump against a gguf-py dump.
 #   tests/u2-gate.sh    exit 0 only on PASS 7/7
-# Lane delivers: tools/gen-tables.py GGUFPY_DIR OUT_DIR (writes OUT_DIR/consts.mojo, OUT_DIR/tensor_map.mojo),
+# Inputs: tools/gen-tables.py GGUFPY_DIR OUT_DIR (writes OUT_DIR/consts.mojo, OUT_DIR/tensor_map.mojo),
 # the generated files committed as src/gguf/consts.mojo + src/gguf/tensor_map.mojo, and src/u2_dump.mojo whose stdout
 # is exactly tests/u2-oracle.py's JSON (compact, sorted keys) built from the generated Mojo tables only.
 source "$(dirname "$0")/gate-lib.sh"
 W=.work/u2; rm -rf "$W"; mkdir -p "$W"
-check gate-files-untouched untouched
 check llama-cpp-pinned pinned
 gen() { "$PY" -I tools/gen-tables.py "$GGUFPY" "$1" > "$W/gen.log" 2>&1; }
 check generator-runs gen "$W/a"

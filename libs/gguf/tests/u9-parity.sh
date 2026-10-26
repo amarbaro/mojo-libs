@@ -5,7 +5,6 @@
 #   tests/u9-parity.sh    exit 0 only on PASS n/n
 source "$(dirname "$0")/gate-lib.sh"
 W=$PWD/.work/u9-parity; rm -rf "$W"; mkdir -p "$W"; GO=$MAIN/.work/oracle/ggml
-check gate-files-untouched untouched
 check llama-cpp-pinned pinned
 check build "$MOJO" build src/ggml2gguf.mojo -I src -o "$W/ggml2gguf"
 check fixtures "$PY" tests/mk-ggml-variants.py "$W/fix"

@@ -2,7 +2,7 @@
 files built with HF `tokenizers` (Split behaviors, Digits, added-token flags, normalizers, post-processors,
 ignore_merges, unk fusing), each encoded by `tokenizers` and by hf-update, compared on ntok and the sha256.
 
-    u8-synth-check.py HF_UPDATE_BIN LLAMACPP_DIR WORKDIR      (needs `tokenizers`: the ComfyUI venv python, run without -I)
+    u8-synth-check.py HF_UPDATE_BIN LLAMACPP_DIR WORKDIR      (needs `tokenizers`: a python with it, run without -I)
 Prints `ok NAME` / `FAIL NAME ...` per variant and `PASS n/n` or `FAIL k/n`; exit 1 on any FAIL."""
 import json, os, re, subprocess, sys
 from hashlib import sha256

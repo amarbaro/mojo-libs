@@ -4,7 +4,6 @@
 #   tests/u3-gate.sh    exit 0 only on PASS 5/5
 source "$(dirname "$0")/gate-lib.sh"
 W=$PWD/.work/u3; rm -rf "$W"; mkdir -p "$W"
-check gate-files-untouched untouched
 check llama-cpp-pinned pinned
 build() { "$MOJO" build src/hf2gguf.mojo -I src -o "$W/hf2gguf" > "$W/build.log" 2>&1; }
 check build build

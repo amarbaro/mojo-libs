@@ -2,7 +2,7 @@
 # Regenerate src/gguf/grids.mojo: the codebook tables of ggml-common.h (pinned llama.cpp) that the IQ dequant rows
 # index. usage: tools/gen-grids.sh [GGML_COMMON_H]   (writes src/gguf/grids.mojo, shell + awk only)
 set -euo pipefail
-H=${1:-$HOME/Projects/imports/llama.cpp-master/ggml/src/ggml-common.h}
+H=${1:-${LLAMACPP:-.work/llama.cpp}/ggml/src/ggml-common.h}
 OUT=$(dirname "$0")/../src/gguf/grids.mojo
 tbl() {  # name -> comma-joined values of GGML_TABLE_BEGIN(type, name, n) .. GGML_TABLE_END
   awk -v n="$1" '$0 ~ "GGML_TABLE_BEGIN\\(.*, " n "," {on=1; next} on && /GGML_TABLE_END/ {exit} on' "$H" |

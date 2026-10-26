@@ -4,7 +4,7 @@
 #   tools/lora-extra-check.sh      exit 0 only on PASS n/n (needs .work/u7/lora2gguf from tests/u7-gate.sh)
 source "$(dirname "$0")/../tests/gate-lib.sh"
 W=$PWD/.work/u7/extra; X=$W/Qwen-Foo-lora-v2; rm -rf "$W"; mkdir -p "$W"
-ORPY=${ORACLE_PY:-$HOME/Projects/imports/ComfyUI/.venv/bin/python}
+ORPY=${ORACLE_PY:-python3}
 export HIP_VISIBLE_DEVICES= CUDA_VISIBLE_DEVICES= ROCR_VISIBLE_DEVICES=
 "$ORPY" tools/mk-lora-extra.py "$X" > "$W/gen.log" 2>&1 || { echo "FAIL generate: $W/gen.log"; exit 1; }
 ref() { PYTHONPATH=$GGUFPY "$ORPY" "$LLAMACPP/convert_lora_to_gguf.py" "$X" --base "$HF05" --outfile "$1" --outtype "$2" > "$1.log" 2>&1; }

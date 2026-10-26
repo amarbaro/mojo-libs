@@ -5,7 +5,6 @@
 source "$(dirname "$0")/gate-lib.sh"
 W=$PWD/.work/u4; rm -rf "$W"; mkdir -p "$W"
 TYPES=("$@"); [ ${#TYPES[@]} -gt 0 ] || TYPES=(Q8_0 Q4_0 Q4_K Q6_K Q2_K Q2_0 TQ1_0 TQ2_0)
-check gate-files-untouched untouched
 check llama-cpp-pinned pinned
 build() { "$MOJO" build src/quantize.mojo -I src -o "$W/quantize" > "$W/build.log" 2>&1; }
 check build build

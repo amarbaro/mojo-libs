@@ -1,6 +1,6 @@
 """U8 oracle: the pinned converter's pre-tokenizer fingerprint for local tokenizer dirs. For each DIR prints
 `DIR ntok N chkhsh H pre NAME` (NAME from the pinned conversion/base.py table, `unknown` if absent) and writes
-DIR's token ids of the check text to OUT/<basename>.ids (one per line). Needs transformers (ComfyUI venv).
+DIR's token ids of the check text to OUT/<basename>.ids (one per line). Needs transformers.
 usage: u8-oracle.py LLAMACPP OUT DIR..."""
 import os, re, sys
 from hashlib import sha256

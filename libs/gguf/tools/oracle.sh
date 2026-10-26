@@ -4,10 +4,11 @@
 #   oracle.sh quantize IN.gguf OUT.gguf TYPE      llama-quantize --pure (one type for every tensor)
 #   oracle.sh new_metadata IN.gguf OUT.gguf ARGS...  gguf_new_metadata.py --force (edit oracles)
 #   oracle.sh dump IN.gguf                        gguf_dump.py (diagnosis only)
-# env: LLAMACPP (default ~/Projects/imports/llama.cpp-master, pinned 1744c6bde), ORACLE_PY (python with torch)
+# env: LLAMACPP (default .work/llama.cpp from scripts/fetch-llamacpp.sh, pinned 1744c6bde), ORACLE_PY (python with
+# torch, transformers, safetensors, numpy; only `convert` needs torch)
 set -euo pipefail
-LLAMACPP=${LLAMACPP:-$HOME/Projects/imports/llama.cpp-master}
-PY=${ORACLE_PY:-$HOME/Projects/imports/ComfyUI/.venv/bin/python}
+LLAMACPP=${LLAMACPP:-$(cd "$(dirname "$0")/.." && pwd)/.work/llama.cpp}
+PY=${ORACLE_PY:-python3}
 PIN=1744c6bde
 export HIP_VISIBLE_DEVICES= CUDA_VISIBLE_DEVICES= ROCR_VISIBLE_DEVICES=
 have=$(git -C "$LLAMACPP" rev-parse --short=9 HEAD)

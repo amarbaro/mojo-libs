@@ -13,10 +13,10 @@ step convert-bf16 convert "$H" "$O/bf16.gguf" bf16
 step convert-q8_0 convert "$H" "$O/q8_0-py.gguf" q8_0
 [ -s "$O/bf16.gguf" ] || { echo "FAIL convert-bf16: no $O/bf16.gguf"; exit 1; }
 for t in "${types[@]}"; do step "quantize-$t" quantize "$O/bf16.gguf" "$O/$t.gguf" "$t"; done
-FLASH=$HOME/Models/qwen3.8-flash-next/UD-IQ1_M/Qwen3.8-Flash-Next-UD-IQ1_M-00001-of-00003.gguf
+FLASH=${FLASH_GGUF:-/nonexistent}  # optional: a GGUF with big tokenizer arrays, for the edit oracle
 edit() { local src=$1 out=$2; if [ -s "$src" ]; then tools/oracle.sh new_metadata "$src" "$out" --general-name mojo-gguf-edit --remove-metadata tokenizer.chat_template > "$out.log" 2>&1 && echo "edit $(basename "$out"): ok" || { echo "FAIL edit $out: see $out.log"; fails+=("edit-$(basename "$out")"); }; else echo "FAIL edit: $src missing"; fails+=("edit-$(basename "$out")"); fi; }
 edit "$O/Q4_K.gguf" "$O/edit-Q4_K.gguf"
-edit "$FLASH" "$O/edit-flash.gguf"
-n=$((4 + ${#types[@]}))
+n=$((3 + ${#types[@]}))
+if [ -s "$FLASH" ]; then edit "$FLASH" "$O/edit-flash.gguf"; n=$((n + 1)); else echo "note: FLASH_GGUF not found, no edit-flash oracle"; fi
 [ ${#fails[@]} -eq 0 ] || { echo "FAIL ${#fails[@]}/$n ${fails[*]}"; exit 1; }
 echo "PASS $n/$n -> $O"

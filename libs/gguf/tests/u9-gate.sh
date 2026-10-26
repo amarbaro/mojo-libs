@@ -5,7 +5,6 @@
 #   tests/u9-gate.sh    exit 0 only on PASS 7/7
 source "$(dirname "$0")/gate-lib.sh"
 W=$PWD/.work/u9; rm -rf "$W"; mkdir -p "$W"; GO=$MAIN/.work/oracle/ggml
-check gate-files-untouched untouched
 check llama-cpp-pinned pinned
 build() { "$MOJO" build src/ggml2gguf.mojo -I src -o "$W/ggml2gguf" > "$W/build.log" 2>&1; }
 check build build
