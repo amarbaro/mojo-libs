@@ -150,7 +150,7 @@ hog_raw_smg      detectMultiScale smg hog_svm hit=-1.5 group=0 => pts:1:0.99
 hog_raw_hdg      detectMultiScale hdg hog_svm hit=-1.0 group=0 => pts:1:0.99
 hog_group_smg    detectMultiScale smg hog_svm hit=-2.0 group=2 => pts:2:0.99
 hog_group_smg2   detectMultiScale smg2 hog_svm hit=-2.2 group=2 => pts:2:0.99
-hog_group_hdg    detectMultiScale hdg hog_svm hit=-0.8 group=2 => pts:2:0.9
+hog_group_hdg    detectMultiScale hdg hog_svm hit=-0.6 group=2 => pts:2:0.99
 hog_none         detectMultiScale smg hog_svm hit=1.0 group=2 => cnt:0
 group_rects_hdg  groupRectangles hog_raw thresh=2 => pts:0.5:1.0
 grabcut_scene    grabCut gc_scene rect=25,12,100,86 iters=3 => iou:0.95
