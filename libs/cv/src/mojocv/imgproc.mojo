@@ -1683,11 +1683,12 @@ def _lin_vec[dt: DType, ct: DType](src: Mat[dt], ps: Ptr[Scalar[dt]], fx: SIMD[c
                     ok = _lin_u8[dt, 1](ps, src.rows * src.cols, src.cols, sxc, syc, (fx - ffx).cast[F32](), (fy - ffy).cast[F32](), dst, False, False)
                 if ok:
                     var gone = sx.lt(-1) | sx.ge(Int32(src.cols)) | sy.lt(-1) | sy.ge(Int32(src.rows))
+                    var redo = bad | sy.gt(Int32(src.rows - 3))  # sy was clamped to rows - 3 above
                     for i in range(WF):
                         if mode == 2 and gone[i]:
                             for k in range(src.ch):
                                 dst[unsafe_offset=i * src.ch + k] = bv
-                        elif bad[i]:
+                        elif redo[i]:
                             sample(src, ps, Float64(fx[i]), Float64(fy[i]), 1, mode, bv, dst + i * src.ch)
                     return True
         return False
