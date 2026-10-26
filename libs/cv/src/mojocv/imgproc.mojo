@@ -1834,7 +1834,8 @@ def find_root(parent: Ptr[Int32], i: Int32) -> Int32:
 
 
 def components(src: Mat[DType.uint8], conn: Int) -> Tuple[Mat[DType.int32], Mat[DType.int32], Mat[DType.float64]]:
-    """connectedComponentsWithStats: labels in raster order of each component's first pixel, label 0 is the background;
+    """connectedComponentsWithStats: label 0 is the background, the others are numbered as cv2 numbers them (4-connected:
+    raster order of each component's first pixel; 8-connected: raster order of its first 2 x 2 block);
     stats rows are left, top, width, height, area; centroids are float64 (x, y)."""
     var rows = src.rows
     var cols = src.cols
@@ -1879,6 +1880,24 @@ def components(src: Mat[DType.uint8], conn: Int) -> Tuple[Mat[DType.int32], Mat[
         else:
             remap_[i] = remap_[Int(find_root(pp, Int32(i)))]
     var nl = Int(n) + 1
+    if conn == 8:
+        # cv2 scans 8-connected images in 2 x 2 blocks, so it numbers components by their first block, not first pixel
+        var first = List[Int](length=nl, fill=rows * cols + 1)
+        for y in range(rows):
+            for x in range(cols):
+                var l = Int(pl[unsafe_offset=y * cols + x])
+                if l != 0:
+                    var f = Int(remap_[l])
+                    first[f] = min(first[f], (y >> 1) * cols + (x >> 1))
+        var order = List[Int]()
+        for i in range(1, nl):
+            order.append(first[i] * nl + i)
+        sort(order)
+        var rank = List[Int32](length=nl, fill=0)
+        for i in range(len(order)):
+            rank[order[i] % nl] = Int32(i + 1)
+        for i in range(1, Int(count) + 1):
+            remap_[i] = rank[Int(remap_[i])]
     var stats = Mat[DType.int32](nl, 5, 1)
     var cen = Mat[DType.float64](nl, 2, 1)
     var sx = List[Float64](length=nl, fill=0)
