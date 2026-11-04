@@ -13,3 +13,5 @@
 | `create(path, size) -> MappedFile` | Creates or truncates `path` to `size` zero bytes, mapped writable. |
 
 The mapping is unmapped when the value is destroyed. The file descriptor is closed right after mapping, so a `MappedFile` holds no fd.
+
+Errors read `mmap: <what> <path>: <strerror> (errno N)`, so a missing file and a permission problem are told apart.

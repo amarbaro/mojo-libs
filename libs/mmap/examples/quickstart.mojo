@@ -3,14 +3,14 @@ from mmap import MappedFile, create, SEQUENTIAL
 
 
 def main() raises:
-    var w = create("/tmp/mojo-mmap-quickstart.bin", 1 << 20)
+    var w = create("mojo-mmap-quickstart.bin", 1 << 20)
     var b = w.mut_bytes()
     for i in range(len(b)):
         b[i] = UInt8(i & 255)
     w.flush()
     _ = w^
 
-    var m = MappedFile("/tmp/mojo-mmap-quickstart.bin")
+    var m = MappedFile("mojo-mmap-quickstart.bin")
     m.advise(SEQUENTIAL)
     var total = 0
     for v in m.bytes():

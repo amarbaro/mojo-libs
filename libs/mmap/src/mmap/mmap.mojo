@@ -10,11 +10,19 @@ comptime _CLOEXEC = 0o2000000
 comptime _MAP_FAILED = -1
 
 
+def _err(what: String, path: String) -> Error:
+    """`mmap: <what> <path>: <strerror> (errno N)`, from the current errno."""
+    var code = Int(external_call["__errno_location", Pointer[Int32, MutAnyOrigin]]()[])
+    var p = external_call["strerror", Pointer[UInt8, MutAnyOrigin]](Int32(code))
+    var msg = StringSlice(unsafe_from_utf8=Span(unsafe_ptr=p, length=external_call["strlen", Int](p)))
+    return Error("mmap: ", what, " ", path, ": ", msg, " (errno ", code, ")")
+
+
 def _open(path: String, flags: Int) raises -> Int32:
     var p = path.copy()
     var fd = external_call["open64", Int32](p.as_c_string_span().ptr(), Int32(flags | _CLOEXEC), Int32(0o644))
     if fd < 0:
-        raise Error("mmap: cannot open ", path)
+        raise _err("cannot open", path)
     return fd
 
 
@@ -27,13 +35,19 @@ struct MappedFile(Movable, Sized):
 
     def __init__(out self, path: String, write: Bool = False) raises:
         var fd = _open(path, 2 if write else 0)
-        self = Self(fd, path, write)
+        self = Self(_fd=fd, path=path, write=write)
 
-    def __init__(out self, fd: Int32, path: String, write: Bool) raises:
+    def __init__(out self, *, _fd: Int32, path: String, write: Bool) raises:
+        """Internal: map an open fd (it is closed here, mapped or not)."""
+        var fd = _fd
         self.writable = write
         self.base = 0
         self.size = Int(external_call["lseek64", Int64](fd, Int64(0), Int32(2)))
-        if self.size <= 0:
+        if self.size < 0:
+            var e = _err("cannot size", path)
+            _ = external_call["close", Int32](fd)
+            raise e^
+        if self.size == 0:
             _ = external_call["close", Int32](fd)
             raise Error("mmap: cannot map an empty file: ", path)
         var prot = 3 if write else 1
@@ -41,7 +55,7 @@ struct MappedFile(Movable, Sized):
         _ = external_call["close", Int32](fd)
         if self.base == _MAP_FAILED:
             self.base = 0
-            raise Error("mmap: mmap failed: ", path)
+            raise _err("mmap failed", path)
 
     def __len__(self) -> Int:
         return self.size
@@ -59,12 +73,12 @@ struct MappedFile(Movable, Sized):
     def advise(self, advice: Int) raises:
         """madvise over the whole mapping: NORMAL, RANDOM, SEQUENTIAL, WILLNEED or DONTNEED."""
         if external_call["madvise", Int32](self.base, self.size, Int32(advice)) != 0:
-            raise Error("mmap: madvise failed")
+            raise _err("madvise failed", "")
 
     def flush(self) raises:
         """msync(MS_SYNC): block until written changes are on disk."""
         if external_call["msync", Int32](self.base, self.size, Int32(4)) != 0:
-            raise Error("mmap: msync failed")
+            raise _err("msync failed", "")
 
     def __deinit__(deinit self):
         if self.base:
@@ -76,5 +90,7 @@ def create(path: String, size: Int) raises -> MappedFile:
     var fd = _open(path, 2 | 0o100 | 0o1000)
     if external_call["ftruncate64", Int32](fd, Int64(size)) != 0:
         _ = external_call["close", Int32](fd)
-        raise Error("mmap: cannot size ", path)
-    return MappedFile(fd, path, True)
+        var e = _err("cannot size", path)
+        _ = external_call["close", Int32](fd)
+        raise e^
+    return MappedFile(_fd=fd, path=path, write=True)

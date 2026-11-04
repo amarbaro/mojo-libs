@@ -1,21 +1,18 @@
 #!/usr/bin/env bash
-# Each mutant changes one line of src; the gate must FAIL on every one (a surviving mutant means a blind gate).
+# Each line of tests/mutants.txt is FILE|FROM|TO: one source change the gate must catch.
+# A surviving mutant means a blind gate.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-MOJO=${MOJO:-.venv/bin/mojo}
-f=src/mmap/mmap.mojo; killed=0; n=0
-while IFS='|' read -r from to; do
-  n=$((n+1)); cp $f .work/orig.mojo
-  grep -qF "$from" $f || { echo "FAIL mutant $n: pattern not found: $from"; exit 1; }
-  sed -i "s|$from|$to|" $f
-  if "$MOJO" build -I src tests/cases.mojo -o .work/mutant 2>/dev/null && CASES=.work/mutant scripts/check.sh >/dev/null 2>&1; then
-    echo "SURVIVED mutant $n: $from -> $to"
+MOJO=${MOJO:-.venv/bin/mojo}; killed=0; n=0; cur=""
+trap '[ -n "$cur" ] && [ -f .work/orig.mojo ] && cp .work/orig.mojo "$cur"' EXIT INT TERM
+while IFS='|' read -r f from to; do
+  [ -n "$f" ] || continue; n=$((n+1)); cp "$f" .work/orig.mojo; cur=$f
+  grep -qF -- "$from" "$f" || { echo "FAIL mutant $n: pattern not found in $f: $from"; exit 1; }
+  python3 -c 'import sys;p,a,b=sys.argv[1:];s=open(p).read();open(p,"w").write(s.replace(a,b,1))' "$f" "$from" "$to"
+  if "$MOJO" build -I src ${MOJO_FLAGS:-} tests/cases.mojo -o .work/mutant 2>/dev/null && CHECK_DIR=.work/mcheck CASES=.work/mutant scripts/check.sh >/dev/null 2>&1; then
+    echo "SURVIVED mutant $n: $f: $from -> $to"
   else killed=$((killed+1)); fi
-  cp .work/orig.mojo $f
-done <<'M'
-Int32(1), fd, Int64(0)|Int32(2), fd, Int64(0)
-Int64(0), Int32(2)))|Int64(0), Int32(1)))
-var prot = 3 if write else 1|var prot = 1
-M
+  cp .work/orig.mojo "$f"; cur=""
+done < tests/mutants.txt
 echo "mutants: $killed/$n killed"
-[ "$killed" -eq "$n" ] || { echo "FAIL mutants"; exit 1; }
+[ "$n" -gt 0 ] && [ "$killed" -eq "$n" ] || { echo "FAIL mutants"; exit 1; }

@@ -17,6 +17,7 @@ w.mut_bytes()[0] = 1; w.flush()
 Gotchas:
 - A `Span` from `bytes()` is valid only while the `MappedFile` lives; keep the struct in scope (Mojo destroys values at their last use).
 - Empty files raise. Check the size first if empty is normal for you.
+- The size is fixed at map time. If another process truncates the file, touching the lost tail raises SIGBUS (as in C and Python): do not map files others shrink.
 - `flush()` is needed for durability, not for visibility: other processes see writes immediately.
 
 Gate: `scripts/ci.sh` (Python `mmap` oracle, mutants, api, quickstart).
