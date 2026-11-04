@@ -12,23 +12,36 @@ comptime DEFAULT_BUCKETS: List[Float64] = [0.005, 0.01, 0.025, 0.05, 0.075, 0.1,
 comptime _TYPES: List[String] = ["counter", "gauge", "histogram", "summary"]
 
 
+def _go_into(d: Float64, mut out: String):
+    """prometheus_client floatToGoString, written straight into out; whole numbers skip every temporary."""
+    if isnan(d):
+        out += "NaN"
+    elif isinf(d):
+        out += "+Inf" if d > 0 else "-Inf"
+    elif abs(d) < 1e6 and d == Float64(Int(d)) and not (d == 0 and 1.0 / d < 0):
+        out.write(Int(d), ".0")
+    else:
+        var s = py_repr(d)
+        var dot = s.find(".")
+        if d > 0 and dot > 6:
+            var m = String(s[byte=0:1]) + "." + String(s[byte=1:dot]) + String(s[byte = dot + 1 :])
+            var bb = m.as_bytes()
+            var e = len(bb)
+            while e > 0 and (bb[e - 1] == 48 or bb[e - 1] == 46):
+                e -= 1
+            var x = dot - 1
+            out += m[byte=0:e]
+            out += "e+0" if x < 10 else "e+"
+            out.write(x)
+        else:
+            out += s
+
+
 def go_float(d: Float64) -> String:
     """prometheus_client floatToGoString: Python repr, +Inf/-Inf/NaN, Go-style exponent above 1e6."""
-    if isnan(d):
-        return "NaN"
-    if isinf(d):
-        return "+Inf" if d > 0 else "-Inf"
-    var s = py_repr(d)
-    var dot = s.find(".")
-    if d > 0 and dot > 6:
-        var m = String(s[byte=0:1]) + "." + String(s[byte=1:dot]) + String(s[byte = dot + 1 :])
-        var b = m.as_bytes()
-        var e = len(b)
-        while e > 0 and (b[e - 1] == 48 or b[e - 1] == 46):
-            e -= 1
-        var x = dot - 1
-        return String(m[byte=0:e]) + ("e+0" if x < 10 else "e+") + String(x)
-    return s^
+    var out = String()
+    _go_into(d, out)
+    return out^
 
 
 def _esc(s: StringSlice[_], quote: Bool, mut out: String):
@@ -53,6 +66,7 @@ struct Registry(Movable):
     var help: List[String]
     var labels: List[List[String]]
     var bounds: List[List[Float64]]
+    var le: List[List[String]]  # bucket bounds already rendered, once per histogram
     var children: List[List[Int]]
     # per child
     var pairs: List[List[String]]  # sorted (name, escaped value) flattened
@@ -67,6 +81,7 @@ struct Registry(Movable):
         self.help = List[String]()
         self.labels = List[List[String]]()
         self.bounds = List[List[Float64]]()
+        self.le = List[List[String]]()
         self.children = List[List[Int]]()
         self.pairs = List[List[String]]()
         self.ckind = List[UInt8]()
@@ -85,6 +100,10 @@ struct Registry(Movable):
         self.name.append(name^)
         self.help.append(help.copy())
         self.labels.append(labels.copy())
+        var le = List[String]()
+        for x in bounds:
+            le.append(go_float(x))
+        self.le.append(le^)
         self.bounds.append(bounds^)
         self.children.append(List[Int]())
         var m = len(self.kind) - 1
@@ -197,7 +216,7 @@ struct Registry(Movable):
                     first = False
             out += "}"
         out += " "
-        out += go_float(v)
+        _go_into(v, out)
         out += "\n"
 
     def exposition(self) -> String:
@@ -216,7 +235,7 @@ struct Registry(Movable):
                     var nb = len(self.bounds[m])
                     for i in range(nb):
                         acc += self.vals[o + i]
-                        self._sample(out, nm, "_bucket", c, go_float(self.bounds[m][i]), acc)
+                        self._sample(out, nm, "_bucket", c, self.le[m][i], acc)
                     self._sample(out, nm, "_count", c, "", self.vals[o + nb])
                     self._sample(out, nm, "_sum", c, "", self.vals[o + nb + 1])
                 elif k == SUMMARY:
