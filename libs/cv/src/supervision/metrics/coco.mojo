@@ -5,6 +5,7 @@ Port of `COCOEvaluator` and `MeanAveragePrecision` from supervision
 the S0 `Detections` adapter lives with the caller.
 """
 
+from supervision.detection.utils.iou_and_nms import keypoint_oks_batch
 from supervision.metrics.dets import Dets
 from supervision.metrics.sortutil import (
     argsort_desc_stable,
@@ -32,6 +33,8 @@ struct Anns(Copyable, Movable):
     var ignore: List[Int]
     var score: List[Float64]
     var id: List[Int]
+    var kp: List[Float64]  # keypoint metrics: (x, y, visible) per keypoint, K * 3 per annotation
+    var box: List[Float64]  # keypoint targets without visible keypoints: xyxy, 4 per annotation (zeros otherwise)
 
     def __init__(out self):
         self.img = List[Int]()
@@ -42,6 +45,8 @@ struct Anns(Copyable, Movable):
         self.ignore = List[Int]()
         self.score = List[Float64]()
         self.id = List[Int]()
+        self.kp = List[Float64]()
+        self.box = List[Float64]()
 
 
 struct ApSet(Copyable, Movable):
@@ -194,6 +199,33 @@ def _jaccard(
     return out^
 
 
+def _oks(gt: Anns, dt: Anns, gsel: List[Int], dsel: List[Int], sigmas: List[Float64]) -> List[Float64]:
+    """OKS between the selected targets and detections, len(dsel) x len(gsel) like `_jaccard`."""
+    var k = len(sigmas)
+    var kt = List[Float64]()
+    var vis = List[Bool]()
+    var area = List[Float64]()
+    var box = List[Float64]()
+    for g in gsel:
+        for j in range(k):
+            kt.append(gt.kp[g * k * 3 + 3 * j])
+            kt.append(gt.kp[g * k * 3 + 3 * j + 1])
+            vis.append(gt.kp[g * k * 3 + 3 * j + 2] > 0)
+        area.append(gt.area[g])
+        box.extend(gt.box[4 * g : 4 * g + 4])
+    var kd = List[Float64]()
+    for d in dsel:
+        for j in range(k):
+            kd.append(dt.kp[d * k * 3 + 3 * j])
+            kd.append(dt.kp[d * k * 3 + 3 * j + 1])
+    var o = keypoint_oks_batch(kt, kd, k, area, sigmas, vis, box)  # targets x detections
+    var out = List[Float64](length=len(dsel) * len(gsel), fill=0.0)
+    for gi in range(len(gsel)):
+        for di in range(len(dsel)):
+            out[di * len(gsel) + gi] = o[gi * len(dsel) + di]
+    return out^
+
+
 def _evaluate_image(
     gt: Anns,
     dt: Anns,
@@ -326,6 +358,12 @@ def mean_average_precision(
     var any_class = _any_class(preds) or _any_class(targets)
     var gt = _prepare(targets, image_ids, True, agnostic, any_class)
     var dt = _prepare(preds, image_ids, False, agnostic, any_class)
+    return evaluate(gt, dt, image_ids, max_dets[len(max_dets) - 1])
+
+
+def evaluate(gt: Anns, dt: Anns, image_ids: List[Int], max_det: Int, sigmas: List[Float64] = List[Float64]()) raises -> MapResult:
+    """The shared COCO evaluation (matching, accumulation, 101-point interpolation). With `sigmas` the overlap is
+    the object keypoint similarity (`gt.kp`, `dt.kp`), otherwise the box IoU."""
     var cats = sorted_unique(gt.cat)
     var imgs = sorted_unique(image_ids)
     var n_cat = len(cats)
@@ -350,7 +388,6 @@ def mean_average_precision(
 
     var thr = iou_thresholds()
     var rec_thr = recall_thresholds()
-    var max_det = max_dets[len(max_dets) - 1]
     var evals = List[ImgEval]()
     for _ in range(n_cat * N_AREA * n_img):
         evals.append(ImgEval())
@@ -365,7 +402,7 @@ def mean_average_precision(
             for o in order:
                 if len(dsel) < max_det:
                     dsel.append(dts[c * n_img + m][o])
-            var iou = _jaccard(gt, dt, gsel, dsel)
+            var iou = _jaccard(gt, dt, gsel, dsel) if len(sigmas) == 0 else _oks(gt, dt, gsel, dsel, sigmas)
             for a in range(N_AREA):
                 var rng = area_range(a)
                 evals[(c * N_AREA + a) * n_img + m] = _evaluate_image(

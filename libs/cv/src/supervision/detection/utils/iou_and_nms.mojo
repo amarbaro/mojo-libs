@@ -7,7 +7,7 @@ order (only seen above 16 elements) the order of tied scores can differ, so row 
 emit equal scores.
 """
 
-from std.math import exp
+from std.math import exp, isfinite
 
 
 comptime OVERLAP_IOU = 0
@@ -586,4 +586,51 @@ def mask_non_max_merge(masks: List[UInt8], pixels: Int, scores: List[Float64], c
             for i in g:
                 glob.append(cur[i])
             out.append(glob^)
+    return out^
+
+
+def keypoint_oks_batch(
+    kt: List[Float64], kd: List[Float64], k: Int, area: List[Float64], sigmas: List[Float64],
+    visible: List[Bool], boxes: List[Float64],
+) -> List[Float64]:
+    """`_keypoint_oks_batch`: object keypoint similarity, len(area) targets x (len(kd) / (2 k)) detections.
+    `kt` / `kd` hold x, y per keypoint; `visible` is N x K; `boxes` (N x 4 xyxy, or empty) stand in for a target with no
+    visible keypoint: its keypoints count at their distance to the box grown by its width and height."""
+    var nt = len(area)
+    var nd = len(kd) // (2 * k) if k > 0 else 0
+    var out = List[Float64](length=nt * nd, fill=0.0)
+    for t in range(nt):
+        var num_visible = 0
+        for j in range(k):
+            num_visible += Int(visible[t * k + j])
+        var use_box = len(boxes) > 0 and num_visible == 0
+        var x = boxes[4 * t] if len(boxes) > 0 else 0.0
+        var y = boxes[4 * t + 1] if len(boxes) > 0 else 0.0
+        var w = (boxes[4 * t + 2] - x) if len(boxes) > 0 else 0.0
+        var h = (boxes[4 * t + 3] - y) if len(boxes) > 0 else 0.0
+        var counted_n = k if use_box else num_visible
+        if counted_n == 0:
+            continue
+        for d in range(nd):
+            var sim = 0.0
+            for j in range(k):
+                if not (use_box or visible[t * k + j]):
+                    continue
+                var xd = kd[(d * k + j) * 2]
+                var yd = kd[(d * k + j) * 2 + 1]
+                if not (isfinite(xd) and isfinite(yd)):
+                    continue
+                var dx: Float64
+                var dy: Float64
+                if use_box:
+                    dx = max(0.0, (x - w) - xd) + max(0.0, xd - (x + w * 2))
+                    dy = max(0.0, (y - h) - yd) + max(0.0, yd - (y + h * 2))
+                else:
+                    dx = xd - kt[(t * k + j) * 2]
+                    dy = yd - kt[(t * k + j) * 2 + 1]
+                if not (isfinite(dx) and isfinite(dy)):
+                    continue
+                var var_j = (sigmas[j] * 2) ** 2
+                sim += exp(-((dx**2 + dy**2) / var_j / (area[t] + 2.220446049250313e-16) / 2))
+            out[t * nd + d] = sim / Float64(counted_n)
     return out^
