@@ -16,7 +16,7 @@ s.update(chunk1); s.update(chunk2)
 print(s.digest64() == xxh3_64(chunk1 + chunk2))
 ```
 
-**Checked against** Python `xxhash` 3.6.0 (libxxhash 0.8.2) and `xxhsum` 0.8.4: all four hashes for every length 0 to 300, every 41st length to 4,200 and 1 MiB, with 4 seeds (1,592 lines), and XXH64 / XXH3 streaming in 9 chunk sizes across every boundary (240/241, 256/257, 1024/1025), all identical (`scripts/check.sh`, each twice). 7 of 7 mutants caught. Builds and passes on Mojo 1.2.0 and the 1.3 nightly.
+**Checked against** Python `xxhash` 3.6.0 (libxxhash 0.8.2), whose digests equal the `xxhsum` 0.8.4 CLI: all four hashes for every length 0 to 300, every 41st length to 4,200 and 1 MiB, with 4 seeds (1,592 lines), and XXH64 / XXH3 streaming in 9 chunk sizes across every boundary (240/241, 256/257, 1024/1025), all identical (`scripts/check.sh`, each twice). 7 of 7 mutants caught. Builds and passes on Mojo 1.2.0 and the 1.3 nightly.
 
 **Speed** on 64 MiB (7800X3D), against the system `libxxhash` 0.8.4 as Arch packages it (a generic x86-64 build; Mojo compiles for the host CPU):
 

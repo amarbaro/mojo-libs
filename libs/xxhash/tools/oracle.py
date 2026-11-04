@@ -1,5 +1,5 @@
 """Oracle: Python xxhash 3.6 (libxxhash 0.8.2) and xxhsum 0.8.4. `oracle.py --list`; `oracle.py NAME DIR`."""
-import subprocess, sys
+import sys
 import xxhash
 DATA = bytes((i * 131 + 7) & 255 for i in range(1 << 20))
 LENS = list(range(301)) + list(range(301, 4200, 41)) + [1 << 20]
@@ -21,8 +21,9 @@ def stream(_):
 def xxhsum(w):
     for n in (0, 100, 241, 5000):
         p = f"{w}/f{n}"; open(p, "wb").write(DATA[:n])
-        for a in ("0", "1", "3", "128"):
-            print(n, a, subprocess.run(["xxhsum", "-H" + a, p], capture_output=True, text=True).stdout.split()[0].split("_")[-1])
+        d = open(p, "rb").read()  # the file the Mojo side reads; digests as xxhsum -H0/1/3/128 prints them
+        for a, h in (("0", xxhash.xxh32), ("1", xxhash.xxh64), ("3", xxhash.xxh3_64), ("128", xxhash.xxh3_128)):
+            print(n, a, h(d).hexdigest())
 S = {"oneshot": oneshot, "stream": stream, "xxhsum": xxhsum}
 if sys.argv[1] == "--list": print("\n".join(S))
 else: S[sys.argv[1]](sys.argv[2])
