@@ -14,9 +14,10 @@ Python's "None" is the matching `has_*` flag. `validate()` is Python's `__post_i
 struct, set the fields, call `validate()` (every method here that builds a result validates it).
 """
 
-from std.math import isfinite
+from std.math import isfinite, nan
 from supervision.config import ORIENTED_BOX_COORDINATES
 from supervision.geometry.core import Position
+from supervision.detection.utils.masks import calculate_masks_centroids
 from supervision.detection.utils.boxes import (
     box_midpoint,
     obb_polygon_area,
@@ -185,8 +186,10 @@ struct Detections(Copyable, Movable, Sized):
             raise Error("tracker_id must be a 1D np.ndarray with shape (" + String(n) + ",), but got shape (" + String(len(self.tracker_id)) + ",)")
         for c in self.data:
             if c.rows() != n:
-                if c.width == 1 or c.is_str:
+                if c.is_str:
                     raise Error("Length of list for key '" + c.name + "' must be " + String(n))
+                if c.width == 1:
+                    raise Error("Shape of np.ndarray for key '" + c.name + "' must be (" + String(n) + ",)")
                 raise Error("First dimension of np.ndarray for key '" + c.name + "' must have size " + String(n))
 
     # ---- data columns -------------------------------------------------------------------------------------
@@ -340,7 +343,7 @@ struct Detections(Copyable, Movable, Sized):
         for i in range(len(self)):
             var w = self.xyxy[4 * i + 2] - self.xyxy[4 * i]
             var h = self.xyxy[4 * i + 3] - self.xyxy[4 * i + 1]
-            out.append(w / h if h != 0.0 else Float64.MAX_FINITE * 0.0 / 0.0)
+            out.append(w / h if h != 0.0 else nan[DType.float64]())
         return out^
 
     def mask_pixel_counts(self) -> List[Float64]:
@@ -366,20 +369,8 @@ struct Detections(Copyable, Movable, Sized):
     def mask_centroids(self) -> List[Float64]:
         """(x, y) per mask, truncated to integers like `astype(int)`."""
         var out = List[Float64]()
-        var px = self.mask_h * self.mask_w
-        for i in range(len(self)):
-            var total = 0
-            var sx = 0.0
-            var sy = 0.0
-            for y in range(self.mask_h):
-                for x in range(self.mask_w):
-                    if self.mask[i * px + y * self.mask_w + x] != 0:
-                        total += 1
-                        sx += Float64(x) + 0.5
-                        sy += Float64(y) + 0.5
-            var t = Float64(max(total, 1))
-            out.append(Float64(Int(sx / t)))
-            out.append(Float64(Int(sy / t)))
+        for v in calculate_masks_centroids(self.mask, len(self), self.mask_h, self.mask_w):
+            out.append(Float64(v))
         return out^
 
     def get_anchors_coordinates(self, anchor: Position) raises -> List[Float64]:
@@ -666,7 +657,7 @@ def merge_detection_group(detections: List[Detections]) raises -> Detections:
             var c = d.get_data(ORIENTED_BOX_COORDINATES)
             if c.width != 8 or len(c.f) != 8:
                 raise Error("corners must have shape (N, 4, 2); got (" + String(c.rows()) + ", " + String(c.width) + ")")
-            corners.append(c.f^)
+            corners.append(c.f.copy())
         var merged = _merge_obb_corners(corners)
         out.xyxy = xyxyxyxy_to_xyxy(merged)
         for c in winner.data:
