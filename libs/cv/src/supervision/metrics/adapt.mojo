@@ -18,6 +18,7 @@ def to_dets(d: Detections) raises -> Dets:
 
     `area` goes through float32, as `np.asarray(data["area"], dtype=np.float32)` does.
     """
+    d.validate()
     var out = Dets()
     out.xyxy = d.xyxy.copy()
     if d.has_class_id:

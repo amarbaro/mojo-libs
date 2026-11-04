@@ -216,6 +216,8 @@ def fmt_list(xs: List[Float64]) -> String:
 
 def run_row(line: String) raises -> String:
     var parts = line.split("\t")
+    if len(parts) < 2:
+        raise Error("row needs <op> TAB <args> TAB <expected>")
     var op = String(parts[0])
     var a = parse_args(String(parts[1]))
     var preds = to_dets_list(a.pred)
