@@ -4,7 +4,7 @@
 [![ci](https://github.com/amarbaro/mojo-semver/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-semver/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-semver)](https://github.com/amarbaro/mojo-semver/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-semver)](https://github.com/amarbaro/mojo-semver/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-semver/badges/checks.json)](https://github.com/amarbaro/mojo-semver/actions/workflows/ci.yml)
 <!-- /badges -->
 
-Semantic Versioning 2.0.0 for Mojo, with the exact rules of Python [semver](https://pypi.org/project/semver/) 3.0: strict parse, precedence, `match`, the `bump_*` family. No regex engine and no dependencies; about 167 lines.
+Semantic Versioning 2.0.0 for Mojo, with the exact rules of Python [semver](https://pypi.org/project/semver/) 3.0: strict parse, precedence, `match`, the `bump_*` family. No regex engine and no dependencies; 212 lines of code (`mojo-loc`).
 
 ```mojo
 from semver import parse
@@ -20,7 +20,7 @@ print(v.bump_minor())                  # 1.3.0
 
 **Speed** (7800X3D): parse 42 ns, compare 9.4 ns; Python semver 1,579 ns and 549 ns (`tests/bench.mojo`, `tools/bench_oracle.py`).
 
-**Limits:** major, minor and patch must fit in 18 digits (Python accepts any size). Caret and tilde ranges are not offered, because Python semver has none to check them against.
+**Limits:** major, minor and patch must fit in 18 digits (Python accepts any size). Digits are ASCII only: Python's regex also accepts Unicode decimal digits (`1١.0.0` parses there), this parser refuses them. One trailing newline is accepted, as in Python. Caret and tilde ranges are not offered, because Python semver has none to check them against.
 
 - API: [docs/api.md](docs/api.md) · design: [docs/design.md](docs/design.md) · agent skill: [skills/mojo-semver/SKILL.md](skills/mojo-semver/SKILL.md)
-- License: Apache-2.0
+- License: Apache-2.0 (portions ported from python-semver, BSD-3-Clause: see NOTICE and LICENSE-semver)

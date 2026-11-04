@@ -24,8 +24,21 @@ def p(s: String) -> String:
         return "ERR"
 
 
+def py_repr(s: String) -> String:
+    return "'" + s.replace("\n", "\\n") + "'"
+
+
 def main() raises:
     var c = argv()[1]
+    if c == "edge":
+        var edge: List[String] = ["1.2.3\n", "1.2.3-rc.1+b\n", "1.2.3\n\n", "1.0.0-rc.99999999999999999999", "1.0.0-rc.0099", "1.0.0-x.000", "1.0.0-9.9.9", "1.0.0-a999999999999999999999999"]
+        for s in edge:
+            var out = p(s)
+            if out != "ERR":
+                var v = parse(s)
+                out += " " + String(v.bump_prerelease()) + " " + String(v.bump_build())
+            print("edge", py_repr(s), out)
+        return
     if c == "parse":
         for f in ["valid.txt", "invalid.txt", "random.txt"]:
             for s in lines(f):

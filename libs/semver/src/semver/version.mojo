@@ -165,7 +165,8 @@ def _nat_cmp(a: String, b: String) -> Int:
 
 
 def _increment(s: String) -> String:
-    """Python semver _increment_string: bump the last digit run, Python's slicing quirk included."""
+    """Python semver _increment_string: bump the last digit run, Python's slicing quirk included.
+    The run is incremented as decimal text, so any length works (Python ints are unbounded)."""
     var b = s.as_bytes()
     var end = len(b)
     while end > 0 and not _digit(b[end - 1]):
@@ -175,10 +176,22 @@ def _increment(s: String) -> String:
     var start = end
     while start > 0 and _digit(b[start - 1]):
         start -= 1
-    var n = 0
-    for k in range(start, end):
-        n = n * 10 + Int(b[k] - 48)
-    var nxt = String(n + 1)
+    while start < end - 1 and b[start] == 48:  # int() drops leading zeros
+        start += 1
+    var digits = List[UInt8](b[start:end])
+    var k = len(digits) - 1
+    while k >= 0 and digits[k] == 57:
+        digits[k] = 48
+        k -= 1
+    if k >= 0:
+        digits[k] += 1
+    else:
+        digits.insert(0, 49)
+    var nxt = String(unsafe_from_utf8=digits)
+    var lead = start
+    while lead > 0 and b[lead - 1] == 48:
+        lead -= 1
+    start = lead
     var cut = max(end - nxt.byte_length(), start)
     return String(s[byte=0:cut]) + nxt + String(s[byte=end:])
 
@@ -195,9 +208,12 @@ def _core(b: Span[UInt8, _], mut i: Int) raises -> Int:
     return n
 
 
-def parse(s: String) raises -> Version:
+def parse(s_in: String) raises -> Version:
     """Strict SemVer 2.0 (major.minor.patch required), as Python semver Version.parse. One scan; the only
-    allocations are the prerelease and build strings themselves."""
+    allocations are the prerelease and build strings themselves. One trailing newline is accepted, as
+    Python's `$` does."""
+    var n = s_in.byte_length()
+    var s = String(s_in[byte = 0 : n - 1]) if n > 0 and s_in.as_bytes()[n - 1] == 10 else s_in.copy()
     try:
         var b = s.as_bytes()
         var i = 0
@@ -227,7 +243,7 @@ def parse(s: String) raises -> Version:
             raise Error("trailing")
         return Version(major, minor, patch, pre^, build^)
     except:
-        raise Error(s, " is not valid SemVer string")
+        raise Error(s_in, " is not valid SemVer string")
 
 
 def is_valid(s: String) -> Bool:
