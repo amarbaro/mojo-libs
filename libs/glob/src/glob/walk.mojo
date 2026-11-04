@@ -59,8 +59,8 @@ def _glob0(d: String, base: String) -> List[String]:
     return out^
 
 
-def _glob1(d: String, pat: String, dironly: Bool, hidden: Bool) -> List[String]:
-    var p = Pattern(pat)
+def _glob1(d: String, pat: String, p: Pattern, dironly: Bool, hidden: Bool) -> List[String]:
+    """Names in d matching the pattern, compiled once by the caller for every directory."""
     var out = List[String]()
     for n in _list(d, dironly):
         if (hidden or _hidden(pat) or not _hidden(n)) and p.matches(n):
@@ -94,15 +94,16 @@ def _iglob(path: String, root: String, recursive: Bool, dironly: Bool, hidden: B
         return out^
     var rec = recursive and base == "**"
     if not dirname:
-        return _glob2(root, dironly, hidden) if rec else _glob1(root, base, dironly, hidden)
+        return _glob2(root, dironly, hidden) if rec else _glob1(root, base, Pattern(base), dironly, hidden)
     var dirs = List[String]()
     if dirname != path and has_magic(dirname):
         dirs = _iglob(dirname, root, recursive, True, hidden)
     else:
         dirs.append(dirname.copy())
+    var cp = Pattern(base)  # compiled once for every directory below
     for d in dirs:
         var full = _join(root, d)
-        var names = _glob2(full, dironly, hidden) if (has_magic(base) and rec) else (_glob1(full, base, dironly, hidden) if has_magic(base) else _glob0(full, base))
+        var names = _glob2(full, dironly, hidden) if (has_magic(base) and rec) else (_glob1(full, base, cp, dironly, hidden) if has_magic(base) else _glob0(full, base))
         for n in names:
             out.append(_pjoin(d, n))
     return out^
