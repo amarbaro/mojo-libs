@@ -5,7 +5,7 @@ list, or a one-level block mapping. Anything deeper (anchors, flow mappings, blo
 scalars) is kept as an opaque `K_OTHER` scalar. Scalars resolve like PyYAML (YAML 1.1).
 Writer: reproduces `yaml.dump({"nc": n, "names": [...]}, sort_keys=False,
 default_flow_style=None)` byte for byte, including width-80 flow wrapping.
-Not supported: names containing a newline (raises), wrapping inside double quotes.
+Not supported: names containing a newline (raises).
 """
 
 comptime K_NULL = 0
@@ -293,6 +293,13 @@ def _scalar_from_token(tok: String) raises -> YScalar:
 def _split_flow(inner: String) raises -> List[YScalar]:
     """Items of `a, 'b, c', "d"` (one level; nested brackets become K_OTHER)."""
     var out = List[YScalar]()
+    for tok in _split_tokens(inner):
+        out.append(_scalar_from_token(tok))
+    return out^
+
+
+def _split_tokens(inner: String) -> List[String]:
+    var out = List[String]()
     var s = inner.as_bytes()
     var depth = 0
     var q = 0
@@ -318,9 +325,24 @@ def _split_flow(inner: String) raises -> List[YScalar]:
             var tok = String(inner[byte = start : i]).strip()
             if tok.byte_length() > 0 or not at_end:
                 if tok.byte_length() > 0:
-                    out.append(_scalar_from_token(String(tok)))
+                    out.append(String(tok))
             start = i + 1
     return out^
+
+
+def _flow_map(inner: String) raises -> YValue:
+    var keys = List[YScalar]()
+    var vals = List[YScalar]()
+    for tok in _split_tokens(inner):
+        var k = _split_key(tok)
+        if k < 0:
+            keys.append(_scalar_from_token(tok))
+            vals.append(YScalar(K_NULL, "None", 0, 0.0))
+        else:
+            keys.append(_scalar_from_token(String(tok[byte = :k])))
+            var v = String(String(tok[byte = k + 1 :]).strip())
+            vals.append(_scalar_from_token(v) if v.byte_length() > 0 else YScalar(K_NULL, "None", 0, 0.0))
+    return YValue(V_MAP, _str_scalar(""), vals^, keys^)
 
 
 def _flow_balanced(t: String) -> Bool:
@@ -414,7 +436,18 @@ def parse_yaml(text: String) raises -> YDoc:
         var key = _scalar_from_token(String(ln.text[byte = :k])).text
         var rest = String(String(ln.text[byte = k + 1 :]).strip())
         i += 1
+        if rest.startswith("&"):  # anchor: the node follows on the same or the next lines
+            var sp = rest.find(" ")
+            rest = String(String(rest[byte = sp + 1 :]).strip()) if sp >= 0 else String()
         if rest.byte_length() > 0:
+            if rest.startswith("{"):
+                while not _flow_balanced(rest) and i < len(ls):
+                    rest += " " + ls[i].text
+                    i += 1
+                var close = rest.rfind("}")
+                doc.keys.append(key^)
+                doc.values.append(_flow_map(String(rest[byte = 1 : close if close > 0 else rest.byte_length()])))
+                continue
             if rest.startswith("["):
                 while not _flow_balanced(rest) and i < len(ls):
                     rest += " " + ls[i].text
@@ -424,7 +457,7 @@ def parse_yaml(text: String) raises -> YDoc:
                 doc.keys.append(key^)
                 doc.values.append(YValue(V_SEQ, _str_scalar(""), _split_flow(inner), List[YScalar]()))
                 continue
-            if rest.startswith("{") or rest == "|" or rest == ">" or rest.startswith("|") or rest.startswith(">"):
+            if rest == "|" or rest == ">" or rest.startswith("|") or rest.startswith(">"):
                 while i < len(ls) and ls[i].indent > base:
                     i += 1
                 doc.keys.append(key^)
@@ -490,47 +523,43 @@ def _hex(v: Int, digits: Int) -> String:
     return out
 
 
-def _double_quoted(s: String) -> String:
-    var out = String('"')
-    for cp in s.codepoints():
-        var v = Int(cp)
-        if v == 34:
-            out += '\\"'
-        elif v == 92:
-            out += "\\\\"
-        elif v >= 32 and v <= 126:
-            out += chr(v)
-        elif v == 0:
-            out += "\\0"
-        elif v == 7:
-            out += "\\a"
-        elif v == 8:
-            out += "\\b"
-        elif v == 9:
-            out += "\\t"
-        elif v == 11:
-            out += "\\v"
-        elif v == 12:
-            out += "\\f"
-        elif v == 13:
-            out += "\\r"
-        elif v == 27:
-            out += "\\e"
-        elif v == 0x85:
-            out += "\\N"
-        elif v == 0xA0:
-            out += "\\_"
-        elif v == 0x2028:
-            out += "\\L"
-        elif v == 0x2029:
-            out += "\\P"
-        elif v <= 0xFF:
-            out += "\\x" + _hex(v, 2)
-        elif v <= 0xFFFF:
-            out += "\\u" + _hex(v, 4)
-        else:
-            out += "\\U" + _hex(v, 8)
-    return out + '"'
+def _escape(v: Int) -> String:
+    """PyYAML ESCAPE_REPLACEMENTS, then \\xXX / \\uXXXX / \\UXXXXXXXX."""
+    if v == 0:
+        return "\\0"
+    if v == 7:
+        return "\\a"
+    if v == 8:
+        return "\\b"
+    if v == 9:
+        return "\\t"
+    if v == 10:
+        return "\\n"
+    if v == 11:
+        return "\\v"
+    if v == 12:
+        return "\\f"
+    if v == 13:
+        return "\\r"
+    if v == 27:
+        return "\\e"
+    if v == 34:
+        return '\\"'
+    if v == 92:
+        return "\\\\"
+    if v == 0x85:
+        return "\\N"
+    if v == 0xA0:
+        return "\\_"
+    if v == 0x2028:
+        return "\\L"
+    if v == 0x2029:
+        return "\\P"
+    if v <= 0xFF:
+        return "\\x" + _hex(v, 2)
+    if v <= 0xFFFF:
+        return "\\u" + _hex(v, 4)
+    return "\\U" + _hex(v, 8)
 
 
 def _plain_allowed_in_flow(s: String) -> Bool:
@@ -599,6 +628,43 @@ struct _Emit:
         self.put(String(body[byte = start :]))
 
 
+def _double_quoted(mut e: _Emit, s: String, indent: Int):
+    """write_double_quoted: escapes, and `\\` line continuation past the width."""
+    var cps = List[Int]()
+    for cp in s.codepoints():
+        cps.append(Int(cp))
+    var n = len(cps)
+    e.put('"')
+    var start = 0
+    var end = 0
+    while end <= n:
+        var ch = cps[end] if end < n else -1
+        var special = ch == 34 or ch == 92 or ch == 0x85 or ch == 0x2028 or ch == 0x2029 or ch == 0xFEFF or (ch >= 0 and (ch < 32 or ch > 126))
+        if ch < 0 or special:
+            if start < end:
+                e.put(_cps_str(cps, start, end))
+                start = end
+            if ch >= 0:
+                start = end + 1
+                e.put(_escape(ch))
+        if end > 0 and end < n - 1 and (ch == 32 or start >= end) and e.column + (end - start) > _WIDTH:
+            e.put(_cps_str(cps, start, end) + "\\")
+            if start < end:
+                start = end
+            e.newline_indent(indent)
+            if cps[start] == 32:
+                e.put("\\")
+        end += 1
+    e.put('"')
+
+
+def _cps_str(cps: List[Int], lo: Int, hi: Int) -> String:
+    var out = String()
+    for k in range(lo, hi):
+        out += chr(cps[k])
+    return out
+
+
 def dump_data_yaml(classes: List[String]) raises -> String:
     """`yaml.dump({"nc": n, "names": classes}, sort_keys=False, default_flow_style=None)`."""
     var e = _Emit()
@@ -622,12 +688,12 @@ def dump_data_yaml(classes: List[String]) raises -> String:
             if ch < 32 or ch > 126:
                 special = True
         if special:
-            e.put(_double_quoted(c))
+            _double_quoted(e, c, 4)
         elif _plain_allowed_in_flow(c):
-            e.text_wrapped(c, 2)
+            e.text_wrapped(c, 4)
         else:
             e.put("'")
-            e.text_wrapped(c.replace("'", "''"), 2)
+            e.text_wrapped(c.replace("'", "''"), 4)
             e.put("'")
     e.put("]\n")
     return e.out.copy()
