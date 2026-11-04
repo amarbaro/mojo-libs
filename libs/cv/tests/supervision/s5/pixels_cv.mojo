@@ -27,7 +27,7 @@ def run_row(line: String) raises -> String:
     var op = String(cols[0])
     var args = parse(String(cols[1]))
     var p = args.get("params")
-    var out_path = ".work/tests-out/px_" + op + ".png"
+    var out_path = "build/tests-out/px_" + op + ".png"
     if op == "cv_text_size" or op == "cv_put_text_aa":
         return '{"error": "descoped"}'
     var img = imread(String(args.text("input")))

@@ -96,7 +96,7 @@ def run_row(line: String) raises -> String:
         vertex_annotate(scene, KeyPoints(xy^, j.len(), j.at(0).len()), Color.ROBOFLOW(), kw.get("radius").int())
     else:
         raise Error("unknown op " + op)
-    var out_path = ".work/tests-out/px_" + op + ".png"
+    var out_path = "build/tests-out/px_" + op + ".png"
     imwrite(out_path, scene)
     return '{"out": "' + out_path + '"}'
 

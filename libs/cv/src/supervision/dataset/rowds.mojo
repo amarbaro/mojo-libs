@@ -14,7 +14,7 @@ from supervision.dataset.voc import as_pascal_voc, from_pascal_voc
 from supervision.dataset.yolo import as_yolo, from_yolo
 
 comptime PINNED_DATE = "01/01/2020,00:00:00"  # the reference pins supervision's datetime.now()
-comptime OUT_ROOT = ".work/S3/out"
+comptime OUT_ROOT = "build/ds-out"
 
 
 def load(fmt: String, d: String) raises -> DetectionDataset:
