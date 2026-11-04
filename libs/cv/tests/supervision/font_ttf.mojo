@@ -1,21 +1,20 @@
-# Row driver for tests/cases/font_ttf.txt: one stdin row in, one JSON line out. Ops: cmap, hmetrics, vmetrics, shape.
+# Row driver for tests/cases/font_ttf.txt: one stdin row in, one JSON line out. Ops: cmap, hmetrics, vmetrics, shape, glyph.
 from json import Json, parse
+from mojocv.imgproc import rint
 from std.ffi import external_call
-from std.memory import alloc
 from supervision._cv.font.sans import load_sans
+from supervision._cv.font.raster import glyph_bitmap
 from supervision._cv.font.ttf import Font, VMOVE
 
 
 def read_rows() raises -> List[String]:
     var buf = List[UInt8]()
-    var chunk = alloc[UInt8](65536)
+    var chunk = List[UInt8](length=65536, fill=0)
     while True:
-        var n = external_call["read", Int](Int32(0), chunk, 65536)  # fd type must match the stdlib's own read()
+        var n = external_call["read", Int](Int32(0), chunk.unsafe_ptr(), 65536)  # fd type must match the stdlib's own read()
         if n <= 0:
             break
-        for i in range(n):
-            buf.append(chunk[i])
-    chunk.free()
+        buf.extend(Span(chunk)[:n])
     var rows = List[String]()
     for line in String(unsafe_from_utf8=buf).split("\n"):  # not splitlines(): it also splits at tabs
         if line.byte_length() > 0:
@@ -76,6 +75,21 @@ def run(mut font: Font, op: String, args: Json) raises -> Json:
             box.push(Json.of(s.x1))
             box.push(Json.of(s.y1))
             o.set("box", box)
+        return o^
+    elif op == "glyph":
+        font.set_instance(0x77676874, args.get("weight").int() * 65536)
+        var sc = font.scale_for_pixel_height_nodesc(Float32(args.get("size").int()))
+        var b = glyph_bitmap(font, sc, font.glyph_index(args.get("cp").int()))
+        var o = Json.object()
+        o.set("xoff", Json.of(b.xoff))
+        o.set("yoff", Json.of(b.yoff))
+        o.set("w", Json.of(b.w))
+        o.set("h", Json.of(b.h))
+        var px = Json.array()
+        for v in b.pix:
+            px.push(Json.of(Int(v)))
+        o.set("pix", px)
+        o.set("adv", Json.of(Int(rint(Float64(b.advx * 64))) >> 6))
         return o^
     else:
         raise Error("unknown op " + op)

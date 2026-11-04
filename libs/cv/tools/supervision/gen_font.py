@@ -13,6 +13,8 @@ import io
 import sys
 
 sys.path.insert(0, "tools")
+import cv2
+import numpy as np
 from fontTools.ttLib import TTFont
 from fontTools.varLib import instancer
 
@@ -88,5 +90,38 @@ for w, f in inst.items():
         o = outline(f, g)
         del o["box"]
         rows.append(("shape", {"gid": g, "wght": w, "tol": {"abs": 2, "rel": 0}}, o))
+
+
+
+def cv_glyph(ch, size, weight):
+    """cv2 draws white on black, so the blended pixel is exactly the glyph's coverage byte; the cropped non-zero box and its
+    offset from the pen are what stbtt_GetGlyphBitmapSubpixelRealloc returns (xoff, yoff, w, h, pix); adv is the cvRound(adv*64)>>6 pen step."""
+    fs = size * 3.7 / 100
+    assert round(100 * fs / 3.7) == size
+    thickness = 1 if weight == 400 else 2
+    pad = size * 3 + 40
+    img = np.zeros((pad, pad, 3), np.uint8)
+    org = (size, size * 2)
+    cv2.putText(img, ch, org, cv2.FONT_HERSHEY_SIMPLEX, fs, (255, 255, 255), thickness, cv2.LINE_AA)
+    adv = cv2.getTextSize(ch, cv2.FONT_HERSHEY_SIMPLEX, fs, thickness)[0][0] - 1
+    nz = np.argwhere(img[:, :, 0] > 0)
+    if len(nz) == 0:
+        return {"xoff": 0, "yoff": 0, "w": 0, "h": 0, "pix": [], "adv": adv}
+    (y0, x0), (y1, x1) = nz.min(0), nz.max(0)
+    crop = img[y0 : y1 + 1, x0 : x1 + 1, 0]
+    assert (img[:, :, 0] == img[:, :, 1]).all()
+    return {"xoff": int(x0 - org[0]), "yoff": int(y0 - org[1]), "w": int(x1 - x0 + 1), "h": int(y1 - y0 + 1),
+            "pix": crop.flatten().tolist(), "adv": adv}
+
+
+printable = [chr(c) for c in range(32, 127)]
+for size in (10, 26):
+    for weight in (400, 600):
+        for ch in printable:
+            rows.append(("glyph", {"cp": ord(ch), "size": size, "weight": weight}, cv_glyph(ch, size, weight)))
+for size in (5, 17, 40, 64, 100):
+    for weight in (400, 600):
+        for ch in "AgQ%@8,.":
+            rows.append(("glyph", {"cp": ord(ch), "size": size, "weight": weight}, cv_glyph(ch, size, weight)))
 
 write_rows("tests/cases/font_ttf.txt", "gen_font", 0, rows)

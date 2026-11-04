@@ -9,6 +9,13 @@ comptime VLINE = 2
 comptime VCURVE = 3
 
 
+@no_inline
+def fmul(a: Float32, b: Float32) -> Float32:
+    """a * b that LLVM cannot fuse with a following add. Mojo contracts a + b*c into an FMA by default; cv2's stbtt is built
+    without FMA, and a single fused product moves a coverage value across a rounding tie (6 of 460 glyph rows)."""
+    return a * b
+
+
 def _i16(v: Int) -> Int:
     return ((v + 32768) & 65535) - 32768
 
@@ -387,8 +394,8 @@ struct Font(Movable):
                 m2 = Float32(self.i16(comp + 4)) / 16384.0
                 m3 = Float32(self.i16(comp + 6)) / 16384.0
                 comp += 8
-            var m = Float32(sqrt(Float64(m0 * m0 + m1 * m1)))
-            var n = Float32(sqrt(Float64(m2 * m2 + m3 * m3)))
+            var m = Float32(sqrt(Float64(fmul(m0, m0) + fmul(m1, m1))))
+            var n = Float32(sqrt(Float64(fmul(m2, m2) + fmul(m3, m3))))
             if comp_idx < 32:
                 dx += ofs_x[comp_idx]
                 dy += ofs_y[comp_idx]
@@ -398,12 +405,12 @@ struct Font(Movable):
                     ref v = sub.v[k]
                     var x = Float32(v.x)
                     var y = Float32(v.y)
-                    v.x = _i16(Int(m * (m0 * x + m2 * y + Float32(dx))))
-                    v.y = _i16(Int(n * (m1 * x + m3 * y + Float32(dy))))
+                    v.x = _i16(Int(m * (fmul(m0, x) + fmul(m2, y) + Float32(dx))))
+                    v.y = _i16(Int(n * (fmul(m1, x) + fmul(m3, y) + Float32(dy))))
                     x = Float32(v.cx)
                     y = Float32(v.cy)
-                    v.cx = _i16(Int(m * (m0 * x + m2 * y + Float32(dx))))
-                    v.cy = _i16(Int(n * (m1 * x + m3 * y + Float32(dy))))
+                    v.cx = _i16(Int(m * (fmul(m0, x) + fmul(m2, y) + Float32(dx))))
+                    v.cy = _i16(Int(n * (fmul(m1, x) + fmul(m3, y) + Float32(dy))))
                 if not (flags & 2):
                     var ddx = out.v[idx_base].x - sub.v[idx_comp].x
                     var ddy = out.v[idx_base].y - sub.v[idx_comp].y
