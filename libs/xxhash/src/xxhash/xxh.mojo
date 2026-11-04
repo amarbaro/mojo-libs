@@ -417,6 +417,16 @@ def xxh3_128(data: Span[UInt8, _], seed: UInt64 = 0) -> UInt128:
 
 
 # ---------------------------------------------------------------- XXH3 streaming
+def _consume(
+    mut acc: SIMD[DType.uint64, 8], mut stripes: Int, s: UnsafePointer[UInt8, _], p: UnsafePointer[UInt8, _]
+):
+    _acc512(acc, p, s.unsafe_offset(8 * stripes))
+    stripes += 1
+    if stripes == _BLOCK_STRIPES:
+        _scramble(acc, s.unsafe_offset(_SECRET_LEN - 64))
+        stripes = 0
+
+
 struct XXH3(Movable):
     """Streaming XXH3: update() any number of times, then digest64() / digest128(); equal to the one-shot
     hashes of all data. Keeps at most 256 bytes buffered: the final stripe is only consumed at digest."""
@@ -433,17 +443,10 @@ struct XXH3(Movable):
         self.acc = _init_acc()
         self.secret = _secret_for(seed)
         self.seed = seed
-        self.buf = List[UInt8](capacity=512)
+        self.buf = List[UInt8](capacity=256)
         self.last = Array[UInt8, 64](fill=0)
         self.stripes = 0
         self.total = 0
-
-    def _consume(mut self, p: UnsafePointer[UInt8, _]):
-        _acc512(self.acc, p, self.secret.unsafe_ptr().unsafe_offset(8 * self.stripes))
-        self.stripes += 1
-        if self.stripes == _BLOCK_STRIPES:
-            _scramble(self.acc, self.secret.unsafe_ptr().unsafe_offset(_SECRET_LEN - 64))
-            self.stripes = 0
 
     def update(mut self, data: Span[UInt8, _]):
         """Consume whole stripes as soon as more input follows them: the buffer only ever holds the tail
@@ -457,16 +460,15 @@ struct XXH3(Movable):
         if len(self.buf) > 0:  # top up to 256 and consume it: more input follows, so it holds no final stripe
             j = 256 - len(self.buf)
             self.buf.extend(data[:j])
-            var local = self.buf^
-            self.buf = List[UInt8](capacity=256)
-            var p = local.unsafe_ptr()
+            var p = self.buf.unsafe_ptr()
             for k in range(4):
-                self._consume(p.unsafe_offset(64 * k))
+                _consume(self.acc, self.stripes, self.secret.unsafe_ptr(), p.unsafe_offset(64 * k))
             for k in range(64):
                 self.last[k] = p[192 + k]
+            self.buf.clear()  # keeps its capacity: no allocation per buffered call
         var start = j
         while len(data) - j > 256:
-            self._consume(d.unsafe_offset(j))
+            _consume(self.acc, self.stripes, self.secret.unsafe_ptr(), d.unsafe_offset(j))
             j += 64
         if j > start:
             for k in range(64):
@@ -485,13 +487,10 @@ struct XXH3(Movable):
             if st == _BLOCK_STRIPES:
                 _scramble(acc, s.unsafe_offset(_SECRET_LEN - 64))
                 st = 0
-        var tail = List[UInt8](capacity=64)
-        if n >= 64:
-            tail.extend(Span(self.buf)[n - 64 :])
-        else:
-            for k in range(n, 64):
-                tail.append(self.last[k])
-            tail.extend(Span(self.buf))
+        var tail = Array[UInt8, 64](fill=0)  # inline: no heap allocation at digest
+        for k in range(64):
+            var i = n - 64 + k
+            tail[k] = p[i] if i >= 0 else self.last[64 + i]
         _acc512(acc, tail.unsafe_ptr(), s.unsafe_offset(_SECRET_LEN - 64 - 7))
         return acc
 
