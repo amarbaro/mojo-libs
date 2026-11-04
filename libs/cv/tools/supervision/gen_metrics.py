@@ -14,6 +14,8 @@ Ops (detections are per-image lists; boxes rounded to 3 dp, so the args are exac
   f1         pred, target, averaging -> list[float]       f1_scores per IoU threshold
   mar        pred, target -> list[float]                  MeanAverageRecall.recall_scores
   confusion  pred, target, classes, conf, iou -> nested   ConfusionMatrix.matrix
+  kp_map     kp_pred, kp_target, [sigmas], agnostic -> 9 floats
+             KeyPointMeanAveragePrecision: [map50_95, map50, map75] for all, medium and large objects
 
 Oracle: Python supervision at .work/supervision-develop/src. Run with:
   PYTHONPATH=.work/supervision-develop/src .work/oracle-venv/bin/python tools/gen_metrics.py
@@ -37,6 +39,7 @@ from supervision.metrics import (
     Precision,
     Recall,
 )
+from supervision.metrics.keypoint_mean_average_precision import KeyPointMeanAveragePrecision
 from supervision.metrics.detection import ConfusionMatrix
 
 SEED = 20261104
@@ -46,7 +49,7 @@ OUT = ROOT / "tests" / "cases"
 AVERAGING = {"macro": AveragingMethod.MACRO, "weighted": AveragingMethod.WEIGHTED}
 CLASSES = ["c0", "c1", "c2", "c3"]
 FILES = {"map": "metrics_map.txt", "pr": "metrics_pr.txt",
-         "mar": "metrics_mar.txt", "cm": "metrics_cm.txt"}
+         "mar": "metrics_mar.txt", "cm": "metrics_cm.txt", "kp": "metrics_kp.txt"}
 
 
 def fail(step: str, reason: str) -> None:
@@ -133,6 +136,89 @@ def edge_scenes() -> list[tuple[str, list[dict], list[dict]]]:
     ]
 
 
+def kp_image(rng: np.random.Generator, k: int, target: bool, n: int, centers=None) -> dict:
+    """One image of n skeletons with k keypoints (args are float32-exact: 1 dp coordinates)."""
+    cx = rng.uniform(40, 240, n) if centers is None else centers[:, 0]
+    cy = rng.uniform(40, 240, n) if centers is None else centers[:, 1]
+    scale = rng.uniform(10, 120, n)
+    xy = np.stack([cx[:, None] + rng.normal(0, 1, (n, k)) * scale[:, None] * 0.4,
+                   cy[:, None] + rng.normal(0, 1, (n, k)) * scale[:, None] * 0.4], axis=2)
+    img = {"n": n, "k": k, "xy": np.round(xy, 1).tolist(), "class_id": rng.integers(0, 3, n).tolist()}
+    if target:
+        vis = rng.random((n, k)) < 0.8
+        if n and rng.random() < 0.4:
+            vis[int(rng.integers(0, n))] = False  # an unlabelled skeleton (ignored; needs a box to be kept)
+        img["visible"] = vis.astype(int).tolist()
+        if rng.random() < 0.5:
+            img["iscrowd"] = (rng.random(n) < 0.2).astype(int).tolist()
+        if rng.random() < 0.5:
+            img["area"] = np.round(rng.uniform(100, 14000, n), 1).tolist()
+        if rng.random() < 0.6:
+            img["xyxy"] = np.round(np.column_stack([xy.min(1), xy.max(1)])[:, [0, 2, 1, 3]], 1).tolist()
+    else:
+        img["confidence"] = np.round(rng.uniform(0.05, 1.0, n), 3).tolist()
+        if rng.random() < 0.3:
+            img["xyxy"] = np.round(np.column_stack([xy.min(1), xy.max(1)])[:, [0, 2, 1, 3]], 1).tolist()
+    return img
+
+
+def kp_obj(img: dict, target: bool) -> sv.KeyPoints:
+    n, k = img["n"], img["k"]
+    data = {}
+    for key in ("area", "iscrowd", "xyxy"):
+        if key in img:
+            data[key] = np.asarray(img[key], dtype=float if key != "iscrowd" else int)
+            if key == "xyxy":
+                data[key] = data[key].reshape(-1, 4)
+    return sv.KeyPoints(
+        xy=np.asarray(img["xy"], dtype=np.float32).reshape(n, k, 2),
+        class_id=np.asarray(img["class_id"], dtype=int),
+        detection_confidence=None if target else np.asarray(img["confidence"], dtype=np.float32),
+        visible=np.asarray(img["visible"], dtype=bool).reshape(n, k) if "visible" in img else None,
+        data=data)
+
+
+def kp_rows(rng: np.random.Generator) -> list[str]:
+    rows = []
+    scenes = []
+    for i in range(30):
+        k = 17 if i % 3 else int(rng.integers(3, 8))
+        sigmas = None if k == 17 else np.round(rng.uniform(0.2, 1.0, k) / 10, 4).tolist()
+        n_img = int(rng.integers(1, 4))
+        tg, pr = [], []
+        for _ in range(n_img):
+            nt = int(rng.integers(0, 5))
+            t = kp_image(rng, k, True, nt)
+            # predictions: jittered copies of some targets plus noise skeletons
+            p = kp_image(rng, k, False, int(rng.integers(0, 5)))
+            if nt:
+                m = min(nt, p["n"])
+                if m:
+                    jit = rng.normal(0, 2.0, (m, k, 2))
+                    p["xy"] = np.round(np.asarray(t["xy"])[:m] + jit, 1).tolist() + p["xy"][m:]
+            tg.append(t)
+            pr.append(p)
+        scenes.append((f"kp_{i}", pr, tg, sigmas, i % 5 == 0))
+    one = {"n": 1, "k": 17, "xy": np.round(rng.uniform(10, 100, (1, 17, 2)), 1).tolist(), "class_id": [0]}
+    empty = {"n": 0, "k": 17, "xy": [], "class_id": [], "confidence": []}
+    pone = {**one, "confidence": [0.9]}
+    scenes += [("kp_empty_both", [empty], [empty], None, False),
+               ("kp_empty_preds", [empty], [{**one, "visible": [[1] * 17]}], None, False),
+               ("kp_empty_targets", [pone], [empty], None, False),
+               ("kp_perfect", [pone], [{**one, "visible": [[1] * 17]}], None, False)]
+    for name, pr, tg, sigmas, agn in scenes:
+        mp = KeyPointMeanAveragePrecision(sigmas=sigmas, class_agnostic=agn)
+        res = mp.update([kp_obj(p, False) for p in pr], [kp_obj(t, True) for t in tg]).compute()
+        vals = []
+        for r in (res, res.medium_objects, res.large_objects):
+            vals += [r.map50_95, r.map50, r.map75]
+        args = {"kp_pred": pr, "kp_target": tg, "agnostic": int(agn), "name": name}
+        if sigmas is not None:
+            args["sigmas"] = sigmas
+        rows.append(row("kp_map", args, [float(v) for v in vals]))
+    return rows
+
+
 def build_rows() -> dict[str, list[str]]:
     rows: dict[str, list[str]] = {k: [] for k in FILES}
     rng = np.random.default_rng(SEED)
@@ -165,6 +251,7 @@ def build_rows() -> dict[str, list[str]]:
         rows["cm"].append(row("confusion", {**common, "classes": CLASSES,
                                             "conf": 0.3, "iou": 0.5},
                               np.asarray(cm.matrix).tolist()))
+    rows["kp"] = kp_rows(np.random.default_rng(SEED + 1))
     return rows
 
 

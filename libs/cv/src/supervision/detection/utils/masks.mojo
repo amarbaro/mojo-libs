@@ -1,7 +1,6 @@
 """Mask helpers (port of supervision/detection/utils/masks.py). Masks are flat `List[UInt8]`, n x h x w.
 
-Not ported (they need cv2 connected components, which mojo-cv does not expose yet): contains_holes,
-contains_multiple_segments, filter_segments_by_distance.
+Not ported: filter_segments_by_distance.
 """
 
 
@@ -89,3 +88,59 @@ def mask_to_roi(mask: List[UInt8], h: Int, w: Int) -> Optional[Tuple[Int, Int, I
     if x1 < 0:
         return None
     return (x0, y0, x1 + 1, y1 + 1)
+
+
+def _components(grid: List[Bool], h: Int, w: Int, conn8: Bool) -> Tuple[List[Int], Int]:
+    """Labels 1..n of the connected True cells of `grid` (0 elsewhere), 4 or 8 connected."""
+    var labels = List[Int](length=h * w, fill=0)
+    var n = 0
+    var stack = List[Int]()
+    for s in range(h * w):
+        if not grid[s] or labels[s] != 0:
+            continue
+        n += 1
+        labels[s] = n
+        stack.append(s)
+        while len(stack) > 0:
+            var p = stack.pop()
+            var y = p // w
+            var x = p % w
+            for dy in range(-1, 2):
+                for dx in range(-1, 2):
+                    if (dx == 0 and dy == 0) or (not conn8 and dx != 0 and dy != 0):
+                        continue
+                    var yy = y + dy
+                    var xx = x + dx
+                    if yy < 0 or yy >= h or xx < 0 or xx >= w:
+                        continue
+                    var q = yy * w + xx
+                    if grid[q] and labels[q] == 0:
+                        labels[q] = n
+                        stack.append(q)
+    return (labels^, n)
+
+
+def contains_holes(mask: List[UInt8], h: Int, w: Int) -> Bool:
+    """True when a 4-connected background region does not touch the border (a hole in the foreground)."""
+    var bg = List[Bool](length=h * w, fill=False)
+    for i in range(h * w):
+        bg[i] = mask[i] == 0
+    var r = _components(bg, h, w, False)
+    var on_border = List[Bool](length=r[1] + 1, fill=False)
+    for y in range(h):
+        for x in range(w):
+            if y == 0 or y == h - 1 or x == 0 or x == w - 1:
+                on_border[r[0][y * w + x]] = True
+    for k in range(1, r[1] + 1):
+        if not on_border[k]:
+            return True
+    return False
+
+
+def contains_multiple_segments(mask: List[UInt8], h: Int, w: Int, connectivity: Int = 4) raises -> Bool:
+    if connectivity != 4 and connectivity != 8:
+        raise Error("Incorrect connectivity value. Possible connectivity values: 4 or 8.")
+    var fg = List[Bool](length=h * w, fill=False)
+    for i in range(h * w):
+        fg[i] = mask[i] != 0
+    return _components(fg, h, w, connectivity == 8)[1] > 1

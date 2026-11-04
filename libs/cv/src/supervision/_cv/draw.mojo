@@ -13,27 +13,6 @@ comptime XY_ONE = 1 << 16
 comptime INT_MAX = 2147483647
 
 
-def _fill_convex_fx(mut m: Img, vx: List[Int], vy: List[Int], color: List[Float64]):
-    """mojo-cv's _fill_convex plus the one thing its _line2 lacks: cv2's Line2 first plots the (clipped, x- or y-sorted) second
-    endpoint, which can differ by a pixel from where the DDA walk ends (found on circle_outline, 2026-11-04; report to mojo-cv)."""
-    var n = len(vx)
-    var p0x = vx[n - 1]
-    var p0y = vy[n - 1]
-    for i in range(n):
-        var x1 = p0x
-        var y1 = p0y
-        var x2 = vx[i]
-        var y2 = vy[i]
-        if clip_line(m.cols << XY_SHIFT, m.rows << XY_SHIFT, x1, y1, x2, y2):
-            var swap = (abs(x2 - x1) > abs(y2 - y1) and x2 - x1 < 0) or (abs(x2 - x1) <= abs(y2 - y1) and y2 - y1 < 0)
-            var ex = x1 if swap else x2
-            var ey = y1 if swap else y2
-            _put(m, (ex + (XY_ONE >> 1)) >> XY_SHIFT, (ey + (XY_ONE >> 1)) >> XY_SHIFT, color)
-        p0x = vx[i]
-        p0y = vy[i]
-    _fill_convex(m, vx, vy, color)
-
-
 def _thick_fx(mut m: Img, p0x_in: Int, p0y_in: Int, p1x_in: Int, p1y_in: Int, color: List[Float64], thickness: Int, flags: Int):
     """ThickLine with endpoints already in 16.16 (shift == XY_SHIFT)."""
     var p0x = p0x_in
@@ -54,7 +33,7 @@ def _thick_fx(mut m: Img, p0x_in: Int, p0y_in: Int, p1x_in: Int, p1y_in: Int, co
         var dpy = rint(dx * r)
         var vx: List[Int] = [p0x + dpx, p0x - dpx, p1x - dpx, p1x + dpx]
         var vy: List[Int] = [p0y + dpy, p0y - dpy, p1y - dpy, p1y + dpy]
-        _fill_convex_fx(m, vx, vy, color)
+        _fill_convex(m, vx, vy, color)
     for i in range(2):
         if (flags & (i + 1)) != 0:
             _circle_fill(m, (p0x + (XY_ONE >> 1)) >> XY_SHIFT, (p0y + (XY_ONE >> 1)) >> XY_SHIFT, (th + (XY_ONE >> 1)) >> XY_SHIFT, color)
@@ -374,7 +353,7 @@ def ellipse_ex(mut m: Img, cx: Int, cy: Int, aw_in: Int, ah_in: Int, angle: Int,
     if thickness >= 0:
         poly_line(m, vx, vy, False, color, thickness, XY_SHIFT)
     elif arc_end - arc_start >= 360:
-        _fill_convex_fx(m, vx, vy, color)
+        _fill_convex(m, vx, vy, color)
     else:
         vx.append(cx)
         vy.append(cy)

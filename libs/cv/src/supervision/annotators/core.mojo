@@ -12,7 +12,7 @@ from supervision.detection.utils.boxes import clip_boxes
 from supervision.draw.color import Color, ColorPalette
 from supervision._cv import draw
 from supervision._cv.font.layout import TextEngine
-from supervision._cv.ops import add_weighted, blur, mean, resize_linear
+from supervision._cv.ops import add_weighted, blur, mean
 from supervision.annotators.utils import resolve_color, Trace, PENDING_TRACK_ID, LOOKUP_CLASS
 
 comptime Img = Mat[DType.uint8]
@@ -141,7 +141,7 @@ def pixelate_annotate(mut scene: Img, det: Detections, pixel_size: Int = 20) rai
             continue
         var dw = max(1, Int(Float64(roi.cols) / Float64(pixel_size) + 0.5))
         var dh = max(1, Int(Float64(roi.rows) / Float64(pixel_size) + 0.5))
-        var small = resize_linear(roi, dw, dh)
+        var small = resize(roi, dw, dh, 1)
         _paste(scene, resize(small, roi.cols, roi.rows, 0), x1, y1)
 
 

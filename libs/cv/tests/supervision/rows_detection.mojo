@@ -19,15 +19,16 @@ from supervision.detection.utils.masks import (
 from supervision.detection.utils.matching import match_detections
 from supervision.geometry.core import Position
 from supervision.detection.utils.converters import (
-    base48_decode,
-    base48_encode,
-    delta_decode,
-    delta_encode,
     mask_to_rle,
+    mask_to_rle_string,
+    rle_string_to_mask,
     rle_to_mask,
 )
 from supervision.detection.utils.iou_and_nms import oriented_box_iou_batch
-from supervision.detection.utils.polygons import polygon_to_mask
+from supervision.detection.utils.masks import contains_holes, contains_multiple_segments
+from supervision.detection.utils.polygons import (
+    approximate_mask_with_polygons, approximate_polygon, mask_to_polygons, polygon_to_mask,
+)
 from supervision.detection.utils.converters import (
     mask_to_xyxy,
     xcycwh_to_xyxy,
@@ -262,6 +263,27 @@ def mask2d(j: Json) -> Tuple[List[UInt8], Int, Int]:
     return (m^, h, w)
 
 
+def flat_ints(j: Json) -> List[Int]:
+    var o = List[Int]()
+    for f in floats(j):
+        o.append(Int(f))
+    return o^
+
+
+def jpoly(p: List[Int]) -> Json:
+    var r = Json.array()
+    for i in range(len(p) // 2):
+        r.push(jints([p[2 * i], p[2 * i + 1]]))
+    return r^
+
+
+def jpolys(v: List[List[Int]]) -> Json:
+    var r = Json.array()
+    for p in v:
+        r.push(jpoly(p))
+    return r^
+
+
 def jpairs(v: List[Tuple[Int, Int]]) -> Json:
     var r = Json.array()
     for p in v:
@@ -350,17 +372,33 @@ def run2(op: String, a: Json) raises -> Json:
         var m = mask2d(a.get("mask"))
         var counts = mask_to_rle(m[0], m[1], m[2])
         if a.get("compressed").int() != 0:
-            return Json.of(base48_encode(delta_encode(counts)))
+            return Json.of(mask_to_rle_string(m[0], m[1], m[2]))
         return jints(counts)
     if op == "rle_to_mask":
         var res = ints(a.get("resolution_wh"))
         var rle = a.get("rle")
-        var counts = delta_decode(base48_decode(rle.str())) if rle.kind() == STR else ints(rle)
-        var m = rle_to_mask(counts, res[0], res[1])
+        var m = rle_string_to_mask(rle.str(), res[0], res[1]) if rle.kind() == STR else rle_to_mask(ints(rle), res[0], res[1])
         return jmask3(m, 1, res[1], res[0], True).at(0)
     if op == "polygon_to_mask":
         var res = ints(a.get("resolution_wh"))
         return jmask3(polygon_to_mask(floats(a.get("polygon")), res[0], res[1]), 1, res[1], res[0], False).at(0)
+    if op == "mask_to_polygons":
+        var m = mask2d(a.get("mask"))
+        return jpolys(mask_to_polygons(m[0], m[1], m[2]))
+    if op == "contains_holes":
+        var m = mask2d(a.get("mask"))
+        return Json.of(contains_holes(m[0], m[1], m[2]))
+    if op == "contains_multiple_segments":
+        var m = mask2d(a.get("mask"))
+        return Json.of(contains_multiple_segments(m[0], m[1], m[2], a.get("connectivity").int()))
+    if op == "approximate_polygon":
+        return jpoly(approximate_polygon(flat_ints(a.get("polygon")), a.get("percentage").num()))
+    if op == "approximate_mask_with_polygons":
+        var m = mask2d(a.get("mask"))
+        return jpolys(approximate_mask_with_polygons(
+            m[0], m[1], m[2], a.get("min_image_area_percentage").num(), a.get("max_image_area_percentage").num(),
+            a.get("approximation_percentage").num(),
+        ))
     if op == "resize_masks":
         var m = parse_masks(a.get("masks"))
         var r = resize_masks(m[0], m[1], m[2], m[3], a.get("max_dimension").int())

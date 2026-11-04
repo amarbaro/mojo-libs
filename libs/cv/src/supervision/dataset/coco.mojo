@@ -1,13 +1,17 @@
-"""COCO dataset format (dataset/formats/coco.py): boxes only; segmentation raises."""
+"""COCO dataset format (dataset/formats/coco.py): boxes, polygon and RLE segmentation (dense masks)."""
 from std.collections import Dict
 from std.math import isfinite
 from std.os.path import isdir, realpath
-from json import Json, parse
+from json import Json, parse, ARR, OBJ, STR
+from mojocv.imgproc import rint
 from supervision.config import AREA_DATA_FIELD, ISCROWD_DATA_FIELD
 from supervision.dataset.core import DetectionDataset, map_detections_class_id, save_dataset_images
 from supervision.dataset.fsutil import image_size_wh, join, mkdirs, name_of, parent_of, read_text, write_text
 from supervision.dataset.utils import check_no_basename_collisions, py_repr
 from supervision.detection.core import DataCol, Detections
+from supervision.detection.utils.converters import mask_to_rle, rle_string_to_mask, rle_to_mask
+from supervision.detection.utils.masks import contains_holes, contains_multiple_segments
+from supervision.detection.utils.polygons import approximate_mask_with_polygons, polygon_to_mask
 
 
 def _sorted_category_order(cats: Json) -> List[Int]:
@@ -27,17 +31,60 @@ def _sorted_category_order(cats: Json) -> List[Int]:
     return order^
 
 
-def _detections(anns: List[Json]) raises -> Detections:
-    """coco_annotations_to_detections for box-only annotations (use_iscrowd=True)."""
+def _annotation_mask(seg: Json, w: Int, h: Int) raises -> List[UInt8]:
+    """coco_annotations_to_masks for one annotation: RLE (counts as list or compressed string) or polygon parts."""
+    var mask = List[UInt8](length=w * h, fill=0)
+    if not seg.truthy():
+        return mask^
+    if seg.kind() == OBJ:
+        if not seg.has("counts"):
+            return mask^  # Python warns and keeps the empty mask
+        var counts = seg.get("counts")
+        if counts.kind() == STR:
+            return rle_string_to_mask(counts.str(), w, h)
+        var c = List[Int]()
+        for i in range(counts.len()):
+            c.append(counts.at(i).int())
+        return rle_to_mask(c, w, h)
+    if seg.kind() != ARR:
+        return mask^
+    var parts = List[Json]()
+    if seg.at(0).kind() == ARR:
+        for i in range(seg.len()):
+            parts.append(seg.at(i))
+    else:
+        parts.append(seg.copy())
+    for part in parts:
+        var n = part.len()
+        if n == 0:
+            continue  # Python warns and skips an empty polygon
+        if n % 2 == 1:
+            raise Error("cannot reshape array of size " + String(n) + " into shape (2)")
+        var verts = List[Float64]()
+        for i in range(n):
+            var v = part.at(i).num()
+            if not isfinite(v):
+                raise Error("COCO polygon segmentation has a vertex that is not a finite number.")
+            verts.append(Float64(rint(v)))  # np.round: half to even
+        var pm = polygon_to_mask(verts, w, h)
+        for i in range(w * h):
+            mask[i] |= pm[i]
+    return mask^
+
+
+def _detections(anns: List[Json], w: Int, h: Int) raises -> Detections:
+    """coco_annotations_to_detections (use_iscrowd=True); masks when any annotation of the image has a segmentation."""
     if len(anns) == 0:
         return Detections.empty()
+    var with_masks = False
+    for a in anns:
+        with_masks = with_masks or a.get("segmentation").truthy()
+    var masks = List[UInt8]()
     var xyxy = List[Float64]()
     var ids = List[Int]()
     var iscrowd = List[Float64]()
     var area = List[Float64]()
     for a in anns:
-        if a.get("segmentation").len() > 0:
-            raise Error("COCO segmentation (masks) is not ported yet")
         ids.append(a.get("category_id").int())
         var bb = a.get("bbox")
         var bw = bb.at(2).num()
@@ -55,8 +102,22 @@ def _detections(anns: List[Json]) raises -> Detections:
         xyxy.append(Float64(Float32(bw) + x))
         xyxy.append(Float64(Float32(bh) + y))
         iscrowd.append(a.get("iscrowd").num() if a.has("iscrowd") else 0.0)
-        area.append(a.get("area").num() if a.has("area") else bw * bh)
+        var m = List[UInt8]()
+        if with_masks:
+            m = _annotation_mask(a.get("segmentation"), w, h)
+        if a.has("area"):
+            area.append(a.get("area").num())
+        elif with_masks and a.get("segmentation").truthy():
+            var cnt = 0
+            for v in m:
+                cnt += Int(v != 0)
+            area.append(Float64(cnt))
+        else:
+            area.append(bw * bh)
+        masks.extend(m^)
     var d = Detections(xyxy^)
+    if with_masks:
+        d.set_mask(masks^, h, w)
     d.set_class_id(ids^)
     d.set_data(DataCol(ISCROWD_DATA_FIELD, iscrowd))
     d.set_data(DataCol(AREA_DATA_FIELD, area))
@@ -120,7 +181,7 @@ def from_coco(images_dir: String, annotations_path: String) raises -> DetectionD
         if iid in groups:
             mine = groups[iid].copy()
         paths.append(p)
-        dets.append(map_detections_class_id(mapping, _detections(mine)))
+        dets.append(map_detections_class_id(mapping, _detections(mine, im.get("width").int(), im.get("height").int())))
     return DetectionDataset(classes, paths, dets)
 
 
@@ -160,8 +221,6 @@ def save_coco_annotations(ds: DetectionDataset, path: String, date_captured: Str
         im.set("date_captured", Json.of(date_captured))
         images.push(im^)
         ref d = ds.annotations[k]
-        if d.has_mask:
-            raise Error("COCO export of masks is not ported yet")
         for i in range(len(d)):
             if not d.has_class_id:
                 raise Error("Detections must include class_id for COCO export.")
@@ -179,6 +238,33 @@ def save_coco_annotations(ds: DetectionDataset, path: String, date_captured: Str
             if d.has_data(ISCROWD_DATA_FIELD):
                 iscrowd = Int(d.get_data(ISCROWD_DATA_FIELD).f[i])
             var area = Float64(bw * bh)
+            var seg = Json.array()
+            var mask = List[UInt8]()
+            if d.has_mask:
+                var px = d.mask_h * d.mask_w
+                mask = List[UInt8](d.mask[i * px : (i + 1) * px])
+                if not d.has_data(ISCROWD_DATA_FIELD):
+                    iscrowd = Int(contains_holes(mask, d.mask_h, d.mask_w) or contains_multiple_segments(mask, d.mask_h, d.mask_w))
+                if iscrowd != 0:
+                    seg = Json.object()
+                    var counts = Json.array()
+                    for c in mask_to_rle(mask, d.mask_h, d.mask_w):
+                        counts.push(Json.of(c))
+                    seg.set("counts", counts^)
+                    var size = Json.array()
+                    size.push(Json.of(d.mask_h))
+                    size.push(Json.of(d.mask_w))
+                    seg.set("size", size^)
+                else:
+                    for p in approximate_mask_with_polygons(mask, d.mask_h, d.mask_w, 0.0, 1.0, 0.0):
+                        var part = Json.array()
+                        for v in p:
+                            part.push(Json.of(v))
+                        seg.push(part^)
+                var cnt = 0
+                for v in mask:
+                    cnt += Int(v != 0)
+                area = Float64(cnt)
             if d.has_data(AREA_DATA_FIELD):
                 var a = d.get_data(AREA_DATA_FIELD).f[i]
                 if isfinite(a):
@@ -194,7 +280,7 @@ def save_coco_annotations(ds: DetectionDataset, path: String, date_captured: Str
             an.set("category_id", Json.of(d.class_id[i] + 1))
             an.set("bbox", bbox^)
             an.set("area", Json.of(area))
-            an.set("segmentation", Json.array())
+            an.set("segmentation", seg^)
             an.set("iscrowd", Json.of(iscrowd))
             annotations.push(an^)
             ann_id += 1

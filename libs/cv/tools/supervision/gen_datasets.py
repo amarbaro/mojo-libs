@@ -37,14 +37,14 @@ def fail(step: str, reason: str) -> None:
     sys.exit(1)
 
 
-def png_bytes(rgb: list[tuple[int, int, int]]) -> bytes:
+def png_bytes(rgb: list[tuple[int, int, int]], w: int = W, h: int = H) -> bytes:
     """Minimal RGB PNG writer (no PIL): filter byte 0 per row, zlib, CRCs."""
-    raw = b"".join(b"\x00" + bytes(c for px in rgb[y * W:(y + 1) * W] for c in px) for y in range(H))
+    raw = b"".join(b"\x00" + bytes(c for px in rgb[y * w:(y + 1) * w] for c in px) for y in range(h))
 
     def chunk(tag: bytes, data: bytes) -> bytes:
         return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
 
-    ihdr = struct.pack(">IIBBBBB", W, H, 8, 2, 0, 0, 0)
+    ihdr = struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)
     return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"IDAT", zlib.compress(raw, 9)) + chunk(b"IEND", b"")
 
 
@@ -119,6 +119,102 @@ def write_inputs() -> None:
         (voc_dir / "annotations" / (Path(name).stem + ".xml")).write_text(xml)
 
 
+SW = SH = 24  # segmentation fixtures: 24 x 24 px images
+SEG_FORMATS = ("coco_seg", "yolo_seg", "voc_seg")
+
+
+def _disc(cx: float, cy: float, r: float) -> list[float]:
+    """A 12-gon around (cx, cy), sub-pixel vertices (so np.round half-even cases occur)."""
+    import math
+    return [round(v, 2) for k in range(12) for v in (cx + r * math.cos(k * math.pi / 6), cy + r * math.sin(k * math.pi / 6))]
+
+
+def write_seg_inputs() -> None:
+    """tests/fixtures/datasets/{coco,yolo,voc}_seg/in: polygon and RLE segmentation, sizes 24 x 24."""
+    import numpy as np
+    from supervision.detection.utils.converters import mask_to_rle
+
+    rng = random.Random(SEED + 1)
+    names = [f"seg_{i:03d}.png" for i in range(4)]
+    imgs = {n: png_bytes([(rng.randrange(256), rng.randrange(256), rng.randrange(256)) for _ in range(SW * SH)], SW, SH) for n in names}
+    ring = np.zeros((SH, SW), bool)
+    ring[4:20, 4:20] = True
+    ring[9:15, 9:15] = False  # a mask with a hole
+    two = np.zeros((SH, SW), bool)
+    two[2:8, 2:8] = True
+    two[14:22, 12:22] = True  # two separate segments
+    blob = np.zeros((SH, SW), bool)
+    blob[6:18, 8:14] = True
+    blob[8:16, 6:18] = True
+    polys = {  # image -> (class, polygon parts as flat COCO floats)
+        names[0]: [(0, [_disc(8.0, 8.0, 6.3)]), (1, [[2.5, 12.5, 20.5, 12.5, 11.5, 22.5]])],
+        names[1]: [(1, [[1.0, 1.0, 10.0, 1.0, 10.0, 9.0, 1.0, 9.0], [13.0, 13.0, 22.0, 13.0, 22.0, 22.0]])],
+    }
+
+    # COCO
+    d = OUT / "coco_seg" / "in"
+    (d / "images").mkdir(parents=True, exist_ok=True)
+    coco = {"images": [], "annotations": [], "categories": [{"id": i + 1, "name": c, "supercategory": "none"} for i, c in enumerate(CLASSES)]}
+    aid = 1
+    for iid, n in enumerate(names, start=1):
+        (d / "images" / n).write_bytes(imgs[n])
+        coco["images"].append({"id": iid, "file_name": n, "width": SW, "height": SH})
+    def ann(iid, cls, bbox, seg, iscrowd=None, area=None):
+        nonlocal aid
+        a = {"id": aid, "image_id": iid, "category_id": cls + 1, "bbox": bbox, "segmentation": seg}
+        if iscrowd is not None:
+            a["iscrowd"] = iscrowd
+        if area is not None:
+            a["area"] = area
+        coco["annotations"].append(a)
+        aid += 1
+    for iid, n in enumerate(names[:2], start=1):
+        for cls, parts in polys[n]:
+            xs = [v for p in parts for v in p[0::2]]
+            ys = [v for p in parts for v in p[1::2]]
+            ann(iid, cls, [min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys)], parts, 0, 50.0)
+    ann(2, 0, [0.0, 0.0, 5.0, 5.0], [])  # box only, empty segmentation: empty mask
+    ann(3, 0, [4.0, 4.0, 16.0, 16.0], {"counts": mask_to_rle(ring), "size": [SH, SW]}, 1)  # uncompressed RLE, has a hole
+    ann(3, 1, [2.0, 2.0, 20.0, 20.0], {"counts": mask_to_rle(two, compressed=True), "size": [SH, SW]}, 1)  # compressed RLE string
+    ann(3, 1, [6.0, 6.0, 12.0, 12.0], {"counts": mask_to_rle(blob), "size": [SH, SW]})  # no iscrowd, no area
+    (d / "annotations.json").write_text(json.dumps(coco, indent=2) + "\n")
+
+    # YOLO: polygon rows, box rows, a polygon row with a trailing confidence (odd value count)
+    d = OUT / "yolo_seg" / "in"
+    (d / "images").mkdir(parents=True, exist_ok=True)
+    (d / "labels").mkdir(parents=True, exist_ok=True)
+    (d / "data.yaml").write_text("names:\n  0: cat\n  1: dog\n")
+    rows = {
+        names[0]: ["0 0.1 0.1 0.9 0.15 0.5 0.8", "1 0.5 0.5 0.4 0.4"],
+        names[1]: ["1 0.2 0.2 0.8 0.2 0.8 0.8 0.2 0.8 0.91", "0 0.3 0.3 0.2 0.2 0.5"],
+        names[2]: ["0 0.5 0.5 0.4 0.4"],  # box only: no masks for this image
+    }
+    for n in names:
+        (d / "images" / n).write_bytes(imgs[n])
+        if n in rows:
+            (d / "labels" / (Path(n).stem + ".txt")).write_text("\n".join(rows[n]) + "\n")
+
+    # VOC: polygon objects (1-based pixel coordinates), a box object, an object with two polygons
+    d = OUT / "voc_seg" / "in"
+    (d / "images").mkdir(parents=True, exist_ok=True)
+    (d / "annotations").mkdir(parents=True, exist_ok=True)
+    def obj(name, box, polys_=()):
+        pe = "".join("<polygon>" + "".join(f"<x{k + 1}>{x}</x{k + 1}><y{k + 1}>{y}</y{k + 1}>" for k, (x, y) in enumerate(p)) + "</polygon>" for p in polys_)
+        return (f"<object><name>{name}</name><pose>Unspecified</pose><truncated>0</truncated><difficult>0</difficult>"
+                f"<bndbox><xmin>{box[0]}</xmin><ymin>{box[1]}</ymin><xmax>{box[2]}</xmax><ymax>{box[3]}</ymax></bndbox>{pe}</object>")
+    voc = {
+        names[0]: [obj("cat", (3, 3, 15, 15), [[(3.5, 3), (15, 3), (15, 15.5), (3, 15)]]), obj("dog", (2, 2, 6, 6))],
+        names[1]: [obj("dog", (1, 1, 22, 22), [[(2, 2), (10, 2), (10, 10)], [(14, 14), (22, 14), (22, 22), (14, 22)]])],
+        names[2]: [obj("cat", (1, 1, 8, 8))],
+    }
+    for n in names:
+        (d / "images" / n).write_bytes(imgs[n])
+        if n in voc:
+            xml = (f"<annotation><folder>images</folder><filename>{n}</filename><size><width>{SW}</width>"
+                   f"<height>{SH}</height><depth>3</depth></size><segmented>1</segmented>{''.join(voc[n])}</annotation>\n")
+            (d / "annotations" / (Path(n).stem + ".xml")).write_text(xml)
+
+
 def bundle(root: Path, prefix: str = "") -> bytes:
     """Deterministic single-file form of a directory: for each file, sorted by path,
     a header `== <relpath> <nbytes>\\n` then the raw bytes. The Mojo side writes the same form."""
@@ -133,11 +229,15 @@ def summarize(ds) -> dict:
     """Load result as plain JSON: classes plus per-image class ids and xyxy boxes, sorted by image name."""
     images = []
     for path, _img, det in ds:
-        images.append({
+        row = {
             "image": Path(path).name,
             "class_id": [int(c) for c in det.class_id],
             "xyxy": [[float(v) for v in box] for box in det.xyxy],
-        })
+        }
+        if det.mask is not None:  # dense masks as uncompressed COCO run lengths
+            from supervision.detection.utils.converters import mask_to_rle
+            row["mask_rle"] = [mask_to_rle(m) for m in det.mask]
+        images.append(row)
     images.sort(key=lambda d: d["image"])
     return {"classes": list(ds.classes), "images": images}
 
@@ -148,21 +248,24 @@ def write_case_rows(summaries: dict) -> None:
 
     cases = ROOT / "tests" / "cases"
     cases.mkdir(parents=True, exist_ok=True)
-    for fmt in ("coco", "yolo", "voc"):
+    for fmt in ("coco", "yolo", "voc", *SEG_FORMATS):
         base = f"tests/fixtures/datasets/{fmt}"
         inp = f"{base}/in"
         ref = f"{base}/ref"
+        fmt_name = fmt.split("_")[0]
         rows = [
-            ("load", {"input": inp, "params": {"format": fmt}, "tol": {}}, summaries[fmt]),
-            ("save_roundtrip", {"input": inp, "params": {"format": fmt}, "tol": {}},
+            ("load", {"input": inp, "params": {"format": fmt_name}, "tol": {}}, summaries[fmt]),
+            ("save_roundtrip", {"input": inp, "params": {"format": fmt_name}, "tol": {}},
              {"ref": f"{ref}/roundtrip.bundle"}),
-            ("split", {"input": inp, "params": {"format": fmt, "split_ratio": 0.5, "random_state": SEED,
+            ("split", {"input": inp, "params": {"format": fmt_name, "split_ratio": 0.5, "random_state": SEED,
                                                 "shuffle": True}, "tol": {}},
              {"ref": f"{ref}/split.bundle"}),
-            ("merge", {"input": f"{ref}/split_train", "params": {"format": fmt, "with": f"{ref}/split_valid"},
+            ("merge", {"input": f"{ref}/split_train", "params": {"format": fmt_name, "with": f"{ref}/split_valid"},
                        "tol": {}},
              {"ref": f"{ref}/merge.bundle"}),
         ]
+        if fmt in ("yolo_seg", "voc_seg"):
+            rows = rows[:1]
         path = cases / f"dataset_{fmt}.txt"
         write_rows(str(path), "gen_datasets", SEED, rows)
         check_case_rows(path)
@@ -209,7 +312,7 @@ def run_oracle() -> dict:
         shutil.rmtree(d, ignore_errors=True)
         imgs, anns = d / "images", d / "annotations"
         try:
-            if fmt == "coco":
+            if fmt == "coco" or fmt == "coco_seg":
                 ds.as_coco(images_directory_path=str(imgs), annotations_path=str(d / "annotations.json"))
             elif fmt == "yolo":
                 ds.as_yolo(images_directory_path=str(imgs), annotations_directory_path=str(d / "labels"),
@@ -219,17 +322,22 @@ def run_oracle() -> dict:
         except Exception as e:  # noqa: BLE001 - reported with the step name
             fail(f"save-{fmt}-{tag}", repr(e))
 
-    for fmt in ("coco", "yolo", "voc"):
+    for fmt in ("coco", "yolo", "voc", *SEG_FORMATS):
         src = OUT / fmt / "in"
+        base_fmt = fmt.split("_")[0]
         try:
-            if fmt == "coco":
+            if base_fmt == "coco":
                 ds = sv.DetectionDataset.from_coco(str(src / "images"), str(src / "annotations.json"))
-            elif fmt == "yolo":
+            elif base_fmt == "yolo":
                 ds = sv.DetectionDataset.from_yolo(str(src / "images"), str(src / "labels"), str(src / "data.yaml"))
             else:
                 ds = sv.DetectionDataset.from_pascal_voc(str(src / "images"), str(src / "annotations"))
         except Exception as e:  # noqa: BLE001
             fail(f"load-{fmt}", repr(e))
+        if fmt in ("yolo_seg", "voc_seg"):  # their export bridges holes (not ported): load rows only
+            summaries[fmt] = summarize(ds)
+            print(f"ok {fmt}: {len(ds)} images (load only)")
+            continue
         save_all(ds, fmt, "roundtrip")
         train, valid = ds.split(split_ratio=0.5, random_state=SEED, shuffle=True)
         save_all(train, fmt, "split_train")
@@ -280,6 +388,7 @@ def main() -> None:
     if OUT.exists():
         shutil.rmtree(OUT)
     write_inputs()
+    write_seg_inputs()
     summaries = run_oracle()
     verify_resave()
     write_case_rows(summaries)

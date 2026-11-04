@@ -5,6 +5,7 @@ from supervision.metrics.adapt import to_dets_list
 from supervision.metrics.coco import mean_average_precision, mean_valid
 from supervision.metrics.confmat import confusion_matrix
 from supervision.metrics.dets import Dets
+from supervision.metrics.keypoints import KpDets, coco_keypoint_sigmas, keypoint_mean_average_precision
 from supervision.metrics.mar import mean_average_recall
 from supervision.metrics.prf import F1, MACRO, MICRO, PRECISION, RECALL, WEIGHTED, prf
 
@@ -69,6 +70,20 @@ struct Cursor:
             if not self.maybe(44):
                 break
         self.eat(93)
+        return out^
+
+    def flat(mut self) raises -> List[Float64]:
+        """Every number of a (nested) array, in order."""
+        var out = List[Float64]()
+        if self.maybe(91):
+            if not self.maybe(93):
+                while True:
+                    out.extend(self.flat())
+                    if not self.maybe(44):
+                        break
+                self.eat(93)
+        else:
+            out.append(self.number())
         return out^
 
     def skip(mut self) raises:
@@ -139,6 +154,72 @@ def parse_image(mut c: Cursor) raises -> Detections:
     return d^
 
 
+def parse_kp_image(mut c: Cursor) raises -> KpDets:
+    """One image of skeletons: {"n", "k", "xy", "visible", "class_id", "confidence", "area", "iscrowd", "xyxy"}."""
+    var n = 0
+    var k = 0
+    var xy = List[Float64]()
+    var visible = List[Int]()
+    var iscrowd = List[Int]()
+    var cls = List[Int]()
+    var conf = List[Float64]()
+    var area = List[Float64]()
+    var xyxy = List[Float64]()
+    c.eat(123)
+    while True:
+        var key = c.string()
+        c.eat(58)
+        if key == "n":
+            n = Int(c.number())
+        elif key == "k":
+            k = Int(c.number())
+        elif key == "xy":
+            for v in c.flat():
+                xy.append(f32(v))
+        elif key == "visible":
+            for v in c.flat():
+                visible.append(Int(v))
+        elif key == "iscrowd":
+            for v in c.flat():
+                iscrowd.append(Int(v))
+        elif key == "class_id":
+            for v in c.flat():
+                cls.append(Int(v))
+        elif key == "confidence":
+            for v in c.flat():
+                conf.append(f32(v))
+        elif key == "area":
+            area = c.flat()
+        elif key == "xyxy":
+            xyxy = c.flat()
+        else:
+            c.skip()
+        if not c.maybe(44):
+            break
+    c.eat(125)
+    var d = KpDets(n, k, xy^)
+    d.visible = visible^
+    d.iscrowd = iscrowd^
+    d.class_id = cls^
+    d.conf = conf^
+    d.area = area^
+    d.xyxy = xyxy^
+    return d^
+
+
+def parse_kp_images(mut c: Cursor) raises -> List[KpDets]:
+    var out = List[KpDets]()
+    c.eat(91)
+    if c.maybe(93):
+        return out^
+    while True:
+        out.append(parse_kp_image(c))
+        if not c.maybe(44):
+            break
+    c.eat(93)
+    return out^
+
+
 def parse_images(mut c: Cursor) raises -> List[Detections]:
     var out = List[Detections]()
     c.eat(91)
@@ -159,8 +240,16 @@ struct Args(Movable):
     var classes: Int
     var conf: Float64
     var iou: Float64
+    var kp_pred: List[KpDets]
+    var kp_target: List[KpDets]
+    var sigmas: List[Float64]
+    var agnostic: Bool
 
     def __init__(out self):
+        self.kp_pred = List[KpDets]()
+        self.kp_target = List[KpDets]()
+        self.sigmas = coco_keypoint_sigmas()
+        self.agnostic = False
         self.pred = List[Detections]()
         self.target = List[Detections]()
         self.averaging = "weighted"
@@ -180,6 +269,14 @@ def parse_args(text: String) raises -> Args:
             a.pred = parse_images(c)
         elif key == "target":
             a.target = parse_images(c)
+        elif key == "kp_pred":
+            a.kp_pred = parse_kp_images(c)
+        elif key == "kp_target":
+            a.kp_target = parse_kp_images(c)
+        elif key == "sigmas":
+            a.sigmas = c.numbers()
+        elif key == "agnostic":
+            a.agnostic = c.number() != 0
         elif key == "averaging":
             a.averaging = c.string()
         elif key == "conf":
@@ -228,6 +325,14 @@ def run_row(line: String) raises -> String:
             ids.append(i)
         var r = mean_average_precision(preds, targets, ids, [1, 10, 100])
         return fmt(r.all.scores[0]) if op == "map50" else fmt(mean_valid(r.all.scores))
+    if op == "kp_map":
+        var r = keypoint_mean_average_precision(a.kp_pred, a.kp_target, a.sigmas, a.agnostic)
+        var out = List[Float64]()
+        for ap in [r.all.scores.copy(), r.medium.scores.copy(), r.large.scores.copy()]:
+            out.append(mean_valid(ap))
+            out.append(ap[0])
+            out.append(ap[5])
+        return fmt_list(out)
     if op == "precision" or op == "recall" or op == "f1":
         var kind = PRECISION if op == "precision" else (RECALL if op == "recall" else F1)
         var avg = MACRO if a.averaging == "macro" else (MICRO if a.averaging == "micro" else WEIGHTED)

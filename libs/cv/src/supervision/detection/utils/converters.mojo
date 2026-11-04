@@ -218,3 +218,12 @@ def delta_encode(counts: List[Int]) -> List[Int]:
     for i in range(3, len(d)):
         d[i] = counts[i] - counts[i - 2]
     return d^
+
+
+def mask_to_rle_string(mask: List[UInt8], height: Int, width: Int) raises -> String:
+    """mask_to_rle(compressed=True): the pycocotools string form."""
+    return base48_encode(delta_encode(mask_to_rle(mask, height, width)))
+
+
+def rle_string_to_mask(rle: String, width: Int, height: Int) raises -> List[UInt8]:
+    return rle_to_mask(delta_decode(base48_decode(rle)), width, height)
