@@ -23,5 +23,3 @@ Rows `cv_put_text_aa`, `cv_text_size` and `pixel_label` wait for it; the driver 
 
 - `ThickLine` clips lines that leave the image only for shift 0 (as cv2); polylines with points far outside are untested.
 - `fillPoly` takes no offset and uses shift 0.
-- mojo-cv bug worked around in `draw.mojo` (`_fill_convex_fx`): its `_line2` does not plot cv2 Line2's first endpoint, so
-  thick lines with sub-pixel vertices lose a tip pixel. Fix upstream, then delete the wrapper.
