@@ -55,3 +55,4 @@ including `Int.MIN`: `fmt_commas(-9223372036854775808)` is `"-9,223,372,036,854,
 
 `def py_sum(xs: List[Float64]) -> Float64`: `sum(xs)` as CPython 3.12 and later computes it
 (Neumaier compensated summation): `py_sum` of ten `0.1` is `1.0`.
+| `py_repr(x)` | Python `repr(float)`: shortest round-trip digits, fixed for 1e-4 <= abs(x) < 1e16, else `d.ddde+XX`. Mojo 1.2 `String(Float64)` is not round-trip safe; use this when text must equal Python. |

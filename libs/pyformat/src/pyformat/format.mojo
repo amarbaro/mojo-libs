@@ -373,3 +373,65 @@ def py_sum(xs: List[Float64]) -> Float64:
         c += (total - t) + x if abs(total) >= abs(x) else (x - t) + total
         total = t
     return total + c if c != 0 else total
+
+
+def py_repr(x: Float64) -> String:
+    """Python repr(float): the shortest digits that round-trip, fixed notation for 1e-4 <= |x| < 1e16,
+    else d.ddde+XX. (Mojo's own float printing is not round-trip safe on 1.2.)"""
+    if x != x:
+        return "nan"
+    if x == Float64.MAX * 2:
+        return "inf"
+    if x == -Float64.MAX * 2:
+        return "-inf"
+    if x == 0:
+        return "-0.0" if 1.0 / x < 0 else "0.0"
+    var s = String()
+    for p in range(17):
+        s = fmt_e(x, p)
+        try:
+            if atof(s) == x:
+                break
+        except:
+            pass
+    var b = s.as_bytes()
+    var neg = b[0] == 45
+    var epos = s.find("e")
+    var digits = String()
+    for i in range(1 if neg else 0, epos):
+        if b[i] != 46:
+            digits += chr(Int(b[i]))
+    var db = digits.as_bytes()
+    var n = len(db)
+    while n > 1 and db[n - 1] == 48:
+        n -= 1
+    var trimmed = String(digits[byte=0:n])
+    digits = trimmed^
+    var e = 0
+    for i in range(epos + 2, len(b)):
+        e = e * 10 + Int(b[i] - 48)
+    if b[epos + 1] == 45:
+        e = -e
+    var out = String("-") if neg else String()
+    if -4 <= e and e < 16:
+        if e >= 0:
+            var ip = String(digits[byte = 0 : min(e + 1, n)])
+            for _ in range(e + 1 - n):
+                ip += "0"
+            var fp = String(digits[byte = e + 1 :]) if e + 1 < n else String("0")
+            out += ip + "." + fp
+        else:
+            out += "0."
+            for _ in range(-e - 1):
+                out += "0"
+            out += digits
+        return out^
+    out += String(digits[byte=0:1])
+    if n > 1:
+        out += "." + String(digits[byte=1:])
+    out += "e-" if e < 0 else "e+"
+    var ae = -e if e < 0 else e
+    if ae < 10:
+        out += "0"
+    out += String(ae)
+    return out^
