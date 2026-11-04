@@ -1,4 +1,4 @@
-# GB/s on 64 MiB and ns per hash on 16 B / 200 B inputs, pure Mojo vs the system libxxhash 0.8.4 (C, AVX2).
+# GB/s on 64 MiB and ns per hash on 16 B / 200 B inputs, pure Mojo vs the system libxxhash 0.8.4 as packaged (generic x86-64 build).
 from std.ffi import OwnedDLHandle
 from std.time import perf_counter_ns
 from xxhash import xxh32, xxh64, xxh3_64

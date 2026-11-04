@@ -1,5 +1,7 @@
 """xxHash 0.8.4 in pure Mojo: XXH32, XXH64, XXH3-64, XXH3-128 (seeded, one-shot and streaming)."""
 from std.builtin.globals import global_constant
+from std.sys import is_little_endian
+
 
 comptime P32_1: UInt32 = 0x9E3779B1
 comptime P32_2: UInt32 = 0x85EBCA77
@@ -23,11 +25,13 @@ comptime _BLOCK_STRIPES = (_SECRET_LEN - 64) // 8  # 16
 # ---------------------------------------------------------------- little helpers
 @always_inline
 def _r32(p: UnsafePointer[UInt8, _], i: Int) -> UInt32:
+    comptime assert is_little_endian(), "mojo-xxhash reads little-endian words: big-endian hosts are not supported"
     return (p.unsafe_offset(i)).unsafe_bitcast[UInt32]().unsafe_load[alignment=1]()
 
 
 @always_inline
 def _r64(p: UnsafePointer[UInt8, _], i: Int) -> UInt64:
+    comptime assert is_little_endian(), "mojo-xxhash reads little-endian words: big-endian hosts are not supported"
     return (p.unsafe_offset(i)).unsafe_bitcast[UInt64]().unsafe_load[alignment=1]()
 
 
@@ -442,30 +446,32 @@ struct XXH3(Movable):
             self.stripes = 0
 
     def update(mut self, data: Span[UInt8, _]):
+        """Consume whole stripes as soon as more input follows them: the buffer only ever holds the tail
+        (at most 256 bytes) and is topped up once per call, never filled with the whole chunk."""
         self.total += len(data)
-        if len(self.buf) == 0 and len(data) > 256:  # straight from the caller's bytes, no copy
-            var d = data.unsafe_ptr()
-            var j = 0
-            while len(data) - j > 256:
-                self._consume(d.unsafe_offset(j))
-                j += 64
+        if len(self.buf) + len(data) <= 256:
+            self.buf.extend(data)
+            return
+        var d = data.unsafe_ptr()
+        var j = 0
+        if len(self.buf) > 0:  # top up to 256 and consume it: more input follows, so it holds no final stripe
+            j = 256 - len(self.buf)
+            self.buf.extend(data[:j])
+            var local = self.buf^
+            self.buf = List[UInt8](capacity=256)
+            var p = local.unsafe_ptr()
+            for k in range(4):
+                self._consume(p.unsafe_offset(64 * k))
+            for k in range(64):
+                self.last[k] = p[192 + k]
+        var start = j
+        while len(data) - j > 256:
+            self._consume(d.unsafe_offset(j))
+            j += 64
+        if j > start:
             for k in range(64):
                 self.last[k] = d[j - 64 + k]
-            self.buf.extend(data[j:])
-            return
-        self.buf.extend(data)
-        if len(self.buf) <= 256:
-            return
-        var local = self.buf^
-        self.buf = List[UInt8](capacity=512)
-        var p = local.unsafe_ptr()
-        var i = 0
-        while len(local) - i > 256:
-            self._consume(p.unsafe_offset(i))
-            i += 64
-        for k in range(64):
-            self.last[k] = p[i - 64 + k]
-        self.buf.extend(Span(local)[i:])
+        self.buf.extend(data[j:])
 
     def _long(self) -> SIMD[DType.uint64, 8]:
         var acc = self.acc
