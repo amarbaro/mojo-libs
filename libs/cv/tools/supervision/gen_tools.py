@@ -301,6 +301,51 @@ def zone_rows(rng):
     return rows
 
 
+def slicer_merge_rows(rng):
+    """InferenceSlicer end to end with a callback that replays the row's per-slice detections in call order."""
+    rows = []
+    for k in range(60):
+        image = [rng.randint(20, 200), rng.randint(20, 200)]
+        sl = [rng.randint(10, 80), rng.randint(10, 80)]
+        ov = [rng.randint(0, sl[0] - 1), rng.randint(0, sl[1] - 1)]
+        filt = rng.choice(["NON_MAX_SUPPRESSION", "NON_MAX_SUPPRESSION", "NON_MAX_MERGE", "NONE"])
+        metric = rng.choice(["IOU", "IOS"])
+        iou = rng.choice([0.3, 0.5, 0.7])
+        has_conf, has_cls = rng.random() < 0.9, rng.random() < 0.8
+        offsets = InferenceSlicer._generate_offset(tuple(image), tuple(sl), tuple(ov))
+        slices = []
+        for o in offsets:
+            w, h = int(o[2] - o[0]), int(o[3] - o[1])
+            n = rng.choice([0, 1, 2, 3, 4])
+            xyxy = []
+            for _ in range(n):
+                x, y = rng.uniform(0, w * 0.8), rng.uniform(0, h * 0.8)
+                xyxy.append([x, y, min(w, x + rng.uniform(2, w * 0.6)), min(h, y + rng.uniform(2, h * 0.6))])
+            slices.append({"xyxy": xyxy,
+                           "confidence": [round(rng.uniform(0.1, 1), 3) for _ in range(n)] if has_conf else None,
+                           "class_id": [rng.randint(0, 2) for _ in range(n)] if has_cls else None})
+        args = {"image_wh": image, "slice_wh": sl, "overlap_wh": ov, "filter": filt, "metric": metric, "iou": iou,
+                "slices": slices}
+        it = iter(slices)
+
+        def callback(_img):
+            f = next(it)
+            return Detections(xyxy=np.array(f["xyxy"], dtype=float).reshape(-1, 4),
+                              confidence=None if f["confidence"] is None else np.array(f["confidence"], dtype=float),
+                              class_id=None if f["class_id"] is None else np.array(f["class_id"], dtype=int))
+
+        try:
+            r = InferenceSlicer(callback, slice_wh=tuple(sl), overlap_wh=tuple(ov), overlap_filter=filt,
+                                iou_threshold=iou, overlap_metric=metric)(np.zeros((image[1], image[0], 3), np.uint8))
+            rows.append(("slicer_merge", args, {
+                "xyxy": r.xyxy.tolist(),
+                "confidence": None if r.confidence is None else r.confidence.tolist(),
+                "class_id": None if r.class_id is None else [int(v) for v in r.class_id]}))
+        except Exception:
+            rows.append(("slicer_merge", args, {"error": "ValueError"}))
+    return rows
+
+
 def main():
     rng = random.Random(SEED)
     os.makedirs(OUT, exist_ok=True)
@@ -310,6 +355,7 @@ def main():
     write("tools_sinks", rows)
     write("tools_smoother", smoother_rows(rng))
     write("tools_zone", zone_rows(rng))
+    write("tools_slicer_merge", slicer_merge_rows(rng))
 
 
 if __name__ == "__main__":
