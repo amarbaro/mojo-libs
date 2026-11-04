@@ -4,7 +4,7 @@ Reads row lines (`op<TAB>args<TAB>expected`) on stdin, prints one JSON result pe
 copied to build/detection_{converters,detections,iou,nms} by tests/build.sh.
 """
 
-from std.sys import stdin
+from std.ffi import external_call, c_ssize_t
 from json import Json, parse, ARR
 from supervision.detection.core import Detections
 from supervision.detection.utils.converters import (
@@ -214,8 +214,20 @@ def run(op: String, a: Json) raises -> Json:
     raise Error("unknown op " + op)
 
 
+def read_all_stdin() -> String:
+    var buf = List[UInt8]()
+    var chunk = List[UInt8](unsafe_uninit_length=65536)
+    while True:
+        var n = external_call["__read", c_ssize_t](0, chunk.unsafe_ptr(), 65536)
+        if n <= 0:
+            break
+        for i in range(Int(n)):
+            buf.append(chunk[i])
+    return String(unsafe_from_utf8=buf)
+
+
 def main() raises:
-    var text = stdin.read()
+    var text = read_all_stdin()
     for line in text.split("\n"):
         if line.byte_length() == 0:
             continue

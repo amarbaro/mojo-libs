@@ -6,7 +6,7 @@ integer-overflow branches (object-dtype arithmetic) are not needed here.
 """
 
 from std.math import sqrt
-from supervision.detection.position import POS_CENTER, POS_CENTER_LEFT, POS_CENTER_RIGHT, POS_TOP_CENTER, POS_TOP_LEFT, POS_TOP_RIGHT, POS_BOTTOM_LEFT, POS_BOTTOM_CENTER, POS_BOTTOM_RIGHT
+from supervision.geometry.core import Position
 
 
 def clip_boxes(xyxy: List[Float64], width: Int, height: Int) -> List[Float64]:
@@ -132,29 +132,29 @@ def box_midpoint(first: Float64, second: Float64) -> Float64:
     return (first + second) / 2
 
 
-def _anchor_offset(anchor: Int) raises -> Tuple[Float64, Float64]:
-    if anchor == POS_CENTER:
+def _anchor_offset(anchor: Position) raises -> Tuple[Float64, Float64]:
+    if anchor == Position.CENTER:
         return (0.0, 0.0)
-    if anchor == POS_CENTER_LEFT:
+    if anchor == Position.CENTER_LEFT:
         return (-1.0, 0.0)
-    if anchor == POS_CENTER_RIGHT:
+    if anchor == Position.CENTER_RIGHT:
         return (1.0, 0.0)
-    if anchor == POS_TOP_CENTER:
+    if anchor == Position.TOP_CENTER:
         return (0.0, -1.0)
-    if anchor == POS_BOTTOM_CENTER:
+    if anchor == Position.BOTTOM_CENTER:
         return (0.0, 1.0)
-    if anchor == POS_TOP_LEFT:
+    if anchor == Position.TOP_LEFT:
         return (-1.0, -1.0)
-    if anchor == POS_TOP_RIGHT:
+    if anchor == Position.TOP_RIGHT:
         return (1.0, -1.0)
-    if anchor == POS_BOTTOM_LEFT:
+    if anchor == Position.BOTTOM_LEFT:
         return (-1.0, 1.0)
-    if anchor == POS_BOTTOM_RIGHT:
+    if anchor == Position.BOTTOM_RIGHT:
         return (1.0, 1.0)
-    raise Error(String(anchor) + " is not supported.")
+    raise Error(anchor.name() + " is not supported.")
 
 
-def oriented_box_anchors(corners: List[Float64], anchor: Int) raises -> List[Float64]:
+def oriented_box_anchors(corners: List[Float64], anchor: Position) raises -> List[Float64]:
     """Anchor point of every oriented box: (x, y) pairs, flat."""
     var off = _anchor_offset(anchor)
     var sx = off[0]

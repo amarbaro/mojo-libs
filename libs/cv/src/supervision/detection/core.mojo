@@ -16,18 +16,7 @@ struct, set the fields, call `validate()` (every method here that builds a resul
 
 from std.math import isfinite
 from supervision.config import ORIENTED_BOX_COORDINATES
-from supervision.detection.position import (
-    POS_CENTER,
-    POS_CENTER_LEFT,
-    POS_CENTER_RIGHT,
-    POS_TOP_CENTER,
-    POS_TOP_LEFT,
-    POS_TOP_RIGHT,
-    POS_BOTTOM_LEFT,
-    POS_BOTTOM_CENTER,
-    POS_BOTTOM_RIGHT,
-    POS_CENTER_OF_MASS,
-)
+from supervision.geometry.core import Position
 from supervision.detection.utils.boxes import (
     box_midpoint,
     obb_polygon_area,
@@ -393,11 +382,11 @@ struct Detections(Copyable, Movable, Sized):
             out.append(Float64(Int(sy / t)))
         return out^
 
-    def get_anchors_coordinates(self, anchor: Int) raises -> List[Float64]:
+    def get_anchors_coordinates(self, anchor: Position) raises -> List[Float64]:
         """(x, y) per detection, flat."""
-        if self.has_data(ORIENTED_BOX_COORDINATES) and anchor != POS_CENTER_OF_MASS:
+        if self.has_data(ORIENTED_BOX_COORDINATES) and anchor != Position.CENTER_OF_MASS:
             return oriented_box_anchors(self.get_data(ORIENTED_BOX_COORDINATES).f, anchor)
-        if anchor == POS_CENTER_OF_MASS:
+        if anchor == Position.CENTER_OF_MASS:
             if not self.has_mask:
                 raise Error("Cannot use `Position.CENTER_OF_MASS` without a detection mask.")
             return self.mask_centroids()
@@ -409,30 +398,30 @@ struct Detections(Copyable, Movable, Sized):
             var y2 = self.xyxy[4 * i + 3]
             var x = x1
             var y = y1
-            if anchor == POS_CENTER:
+            if anchor == Position.CENTER:
                 x = box_midpoint(x1, x2)
                 y = box_midpoint(y1, y2)
-            elif anchor == POS_CENTER_LEFT:
+            elif anchor == Position.CENTER_LEFT:
                 y = box_midpoint(y1, y2)
-            elif anchor == POS_CENTER_RIGHT:
+            elif anchor == Position.CENTER_RIGHT:
                 x = x2
                 y = box_midpoint(y1, y2)
-            elif anchor == POS_BOTTOM_CENTER:
+            elif anchor == Position.BOTTOM_CENTER:
                 x = box_midpoint(x1, x2)
                 y = y2
-            elif anchor == POS_BOTTOM_LEFT:
+            elif anchor == Position.BOTTOM_LEFT:
                 y = y2
-            elif anchor == POS_BOTTOM_RIGHT:
+            elif anchor == Position.BOTTOM_RIGHT:
                 x = x2
                 y = y2
-            elif anchor == POS_TOP_CENTER:
+            elif anchor == Position.TOP_CENTER:
                 x = box_midpoint(x1, x2)
-            elif anchor == POS_TOP_LEFT:
+            elif anchor == Position.TOP_LEFT:
                 pass
-            elif anchor == POS_TOP_RIGHT:
+            elif anchor == Position.TOP_RIGHT:
                 x = x2
             else:
-                raise Error(String(anchor) + " is not supported.")
+                raise Error(anchor.name() + " is not supported.")
             out.append(x)
             out.append(y)
         return out^
@@ -515,8 +504,8 @@ struct Detections(Copyable, Movable, Sized):
                 var c = detections_list[i].get_data(c0.name)
                 if c.is_str != c0.is_str or c.width != c0.width:
                     raise Error("Inconsistent data types for key '" + c0.name + "'. Only np.ndarray and list types are allowed.")
-                f.extend(c.f^)
-                s.extend(c.s^)
+                f.extend(c.f.copy())
+                s.extend(c.s.copy())
             if c0.is_str:
                 out.data.append(DataCol(c0.name, s))
             else:
