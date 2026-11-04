@@ -1,4 +1,5 @@
-"""Odd shapes and 1/3/4 channels through the uint8 fast paths (resize 2x, GaussianBlur 5, pyrDown) against cv2, bit exact.
+"""Odd shapes and 1/3/4 channels through the uint8 fast paths (resize 2x, GaussianBlur 5, pyrDown) against cv2, bit exact,
+  plus thick-line polygons (cv_circle_outline: the Line2 endpoints cv2 plots first).
   run from the repo root: `.venv/bin/python -I tools/fastpath_check.py` (after tests/run.sh has built .bin/mojo-cv)"""
 import sys, numpy as np, cv2, subprocess
 sys.path.insert(0, "tools"); import mcv
@@ -21,5 +22,13 @@ for (h, w, ch, dw, dh) in [(70, 101, 3, 67, 41), (70, 101, 3, 150, 90), (33, 47,
     o = mcv.load(".work/c4o.mcv")
     d = np.abs(o.astype(int) - cv2.resize(a, (dw, dh), interpolation=cv2.INTER_LINEAR).reshape(o.shape).astype(int)).max()
     print("resize general", h, w, ch, "->", dh, dw, "maxdiff", d); bad += d > 1
+# cv_circle_outline: thick lines are Line2 quads, and cv2's Line2 plots its (clipped, sorted) second endpoint first; these segments
+# lose one tip pixel without that (found by a 1500-line sweep against cv2.line, 9 hits)
+for (x1, y1, x2, y2, th) in [(0, 41, 18, 50, 7), (0, 0, 39, 31, 3), (41, 12, 56, 3, 9), (79, 11, 62, 42, 8), (79, 28, 68, 57, 3)]:
+    a = np.zeros((60, 80, 3), np.uint8); mcv.save(a, ".work/c4.mcv"); ref = a.copy()
+    cv2.line(ref, (x1, y1), (x2, y2), (255, 128, 0), th)
+    subprocess.run([".bin/mojo-cv", "line", ".work/c4o.mcv", ".work/c4.mcv", "x1=%d" % x1, "y1=%d" % y1, "x2=%d" % x2, "y2=%d" % y2, "color=255,128,0", "thick=%d" % th], check=True, capture_output=True)
+    d = np.abs(mcv.load(".work/c4o.mcv").astype(int) - ref.astype(int)).max()
+    print("cv_circle_outline", (x1, y1, x2, y2), th, "maxdiff", d); bad += d > 0
 print("BAD", bad)
 sys.exit(1 if bad else 0)

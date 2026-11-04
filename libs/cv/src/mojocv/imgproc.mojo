@@ -2514,6 +2514,7 @@ def _line2[dt: DType](mut m: Mat[dt], px1: Int, py1: Int, px2: Int, py2: Int, co
         x_step = _tdiv(dx << XY_SHIFT, ay | 1)
         y_step = XY_ONE
         ecount = (y2 - y1) >> XY_SHIFT
+    _put(m, (x2 + (XY_ONE >> 1)) >> XY_SHIFT, (y2 + (XY_ONE >> 1)) >> XY_SHIFT, color)  # cv2 plots pt2 (after the swap) first
     x1 += XY_ONE >> 1
     y1 += XY_ONE >> 1
     while ecount >= 0:
