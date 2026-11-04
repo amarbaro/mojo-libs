@@ -1,4 +1,4 @@
-"""Pascal VOC dataset format (dataset/formats/pascal_voc.py): boxes only; polygon objects raise."""
+"""Pascal VOC dataset format (dataset/formats/pascal_voc.py): boxes and polygon objects (dense masks on load); mask export raises."""
 from std.collections import Dict
 from std.math import isfinite
 from std.os.path import exists
@@ -9,7 +9,9 @@ from supervision.dataset.fsutil import (
 from supervision.dataset.numfmt import py_float
 from supervision.dataset.utils import check_no_basename_collisions, py_repr
 from supervision.dataset.xml import XmlDoc, parse_xml, xml_escape
+from mojocv.imgproc import rint
 from supervision.detection.core import Detections
+from supervision.detection.utils.polygons import polygon_to_mask
 
 def _voc_exts() -> List[String]:
     return ["bmp", "jpeg", "jpg", "png", "tif", "tiff", "webp"]
@@ -44,14 +46,15 @@ def _sort_strings(mut v: List[String]):
             j -= 1
 
 
-def detections_from_xml(doc: XmlDoc, mut classes: List[String]) raises -> Detections:
+def detections_from_xml(doc: XmlDoc, mut classes: List[String], w: Int, h: Int) raises -> Detections:
     """detections_from_xml_obj for box objects; `classes` grows with the names seen."""
     var objs = doc.findall(0, "object")
     var xyxy = List[Float64]()
     var names = List[String]()
+    var with_masks = False
     for o in objs:
-        if doc.find(o, "polygon") >= 0:
-            raise Error("Pascal VOC polygon (segmentation) objects are not ported yet")
+        with_masks = with_masks or doc.find(o, "polygon") >= 0
+    var masks = List[UInt8]()
     for o in objs:
         names.append(_required_text(doc, o, "name"))
         var bb = doc.find(o, "bndbox")
@@ -70,6 +73,20 @@ def detections_from_xml(doc: XmlDoc, mut classes: List[String]) raises -> Detect
         xyxy.append(Float64(Float32(lo_y) - 1))
         xyxy.append(Float64(Float32(hi_x) - 1))
         xyxy.append(Float64(Float32(hi_y) - 1))
+        var om = List[UInt8](length=w * h, fill=0)
+        for pe in doc.findall(o, "polygon"):
+            var coords = List[Float64]()
+            for c in doc.descendants(pe):
+                if not doc.has_text[c]:
+                    raise Error("Missing polygon coordinate value in Pascal VOC.")
+                coords.append(Float64(rint(_coordinate(doc.text[c], doc.tag[c]) - 1.0)))
+            if len(coords) % 2 == 1:
+                raise Error("list index out of range")
+            var pm = polygon_to_mask(coords, w, h)
+            for k in range(w * h):
+                om[k] |= pm[k]
+        if with_masks:
+            masks.extend(om^)
     var uniq = List[String]()
     for nm in names:
         var have = False
@@ -94,6 +111,8 @@ def detections_from_xml(doc: XmlDoc, mut classes: List[String]) raises -> Detect
                 break
     var d = Detections(xyxy^)
     d.set_class_id(ids^)
+    if with_masks:
+        d.set_mask(masks^, h, w)
     d.validate()
     return d^
 
@@ -109,14 +128,15 @@ def from_pascal_voc(images_dir: String, annotations_dir: String) raises -> Detec
             anns.append(Detections.empty())
             continue
         var doc = parse_xml(read_text(ap))
-        anns.append(detections_from_xml(doc, classes))
+        var wh = image_size_wh(p)
+        anns.append(detections_from_xml(doc, classes, wh[0], wh[1]))
     return DetectionDataset(classes, paths, anns)
 
 
 def pascal_voc_xml(d: Detections, classes: List[String], filename: String, w: Int, h: Int, depth: Int) raises -> String:
     """detections_to_pascal_voc for box detections, in minidom's toprettyxml layout."""
     if d.has_mask:
-        raise Error("Pascal VOC export of masks is not ported yet")
+        raise Error("Pascal VOC export of masks (polygons with bridged holes) is not ported yet")
     var s = String('<?xml version="1.0" ?>\n<annotation>\n')
     s += "  <folder>VOC</folder>\n"
     s += "  <filename>" + xml_escape(filename) + "</filename>\n"

@@ -9,6 +9,7 @@ from supervision.dataset.coco import as_coco, from_coco
 from supervision.dataset.core import DetectionDataset
 from supervision.dataset.fsutil import list_files_rec, read_bytes, write_bytes
 from supervision.dataset.rowio import error_json, read_rows, row_args, row_op
+from supervision.detection.utils.converters import mask_to_rle
 from supervision.dataset.voc import as_pascal_voc, from_pascal_voc
 from supervision.dataset.yolo import as_yolo, from_yolo
 
@@ -46,7 +47,7 @@ def bundle(root: String, prefix: String, mut out: List[UInt8]) raises:
 
 
 def summary(ds: DetectionDataset) raises -> Json:
-    """classes plus per-image class ids and boxes, sorted by image file name."""
+    """classes plus per-image class ids, boxes and (with masks) run lengths, sorted by image file name."""
     var order = List[Int]()
     var names = List[String]()
     for i in range(len(ds)):
@@ -79,6 +80,15 @@ def summary(ds: DetectionDataset) raises -> Json:
         im.set("image", Json.of(names[i]))
         im.set("class_id", ids^)
         im.set("xyxy", boxes^)
+        if d.has_mask:  # dense masks as uncompressed COCO run lengths
+            var rles = Json.array()
+            var px = d.mask_h * d.mask_w
+            for k in range(len(d)):
+                var r = Json.array()
+                for c in mask_to_rle(List[UInt8](d.mask[k * px : (k + 1) * px]), d.mask_h, d.mask_w):
+                    r.push(Json.of(c))
+                rles.push(r^)
+            im.set("mask_rle", rles^)
         images.push(im^)
     var o = Json.object()
     o.set("classes", classes^)

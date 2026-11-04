@@ -1,4 +1,4 @@
-"""YOLO dataset format (dataset/formats/yolo.py): boxes only; polygon, OBB and mask rows raise."""
+"""YOLO dataset format (dataset/formats/yolo.py): boxes and polygon rows (dense masks on load); OBB rows and mask export raise."""
 from std.math import isfinite
 from std.os.path import exists
 from supervision.dataset.core import DetectionDataset
@@ -9,7 +9,10 @@ from supervision.dataset.fsutil import (
 from supervision.dataset.numfmt import fmt_fixed, py_float
 from supervision.dataset.utils import check_no_basename_collisions, py_repr
 from supervision.dataset.yaml import dump_data_yaml, read_yaml_file
+from mojocv.imgproc import rint
 from supervision.detection.core import Detections
+from supervision.detection.utils.converters import polygon_to_xyxy
+from supervision.detection.utils.polygons import polygon_to_mask
 
 def _yolo_exts() -> List[String]:
     return ["bmp", "dng", "jpg", "jpeg", "mpo", "png", "tif", "tiff", "webp"]
@@ -61,6 +64,10 @@ def yolo_lines_to_detections(lines: List[String], w: Int, h: Int) raises -> Dete
     var xyxy = List[Float64]()
     var ids = List[Int]()
     var scale: List[Float32] = [Float32(w), Float32(h), Float32(w), Float32(h)]
+    var with_masks = False
+    for line in lines:
+        with_masks = with_masks or len(_tokens(line)) > 6
+    var masks = List[UInt8]()
     for line in lines:
         var v = _tokens(line)
         if len(v) < 5:
@@ -69,15 +76,36 @@ def yolo_lines_to_detections(lines: List[String], w: Int, h: Int) raises -> Dete
                 "(class id and four box values), got " + String(len(v)) + "."
             )
         ids.append(_parse_class_id(v[0]))
-        if len(v) > 6:
-            raise Error("YOLO polygon (segmentation) rows are not ported yet")
-        if len(v) == 6:
-            _ = py_float(v[5])
-        var box = _parse_box([v[1], v[2], v[3], v[4]])
+        var rel = List[Float32]()  # relative xyxy
+        var poly = List[Float32]()  # relative polygon (x, y pairs)
+        if len(v) <= 6:
+            if len(v) == 6:
+                _ = py_float(v[5])
+            rel = _parse_box([v[1], v[2], v[3], v[4]])
+            poly = [rel[0], rel[1], rel[2], rel[1], rel[2], rel[3], rel[0], rel[3]]
+        else:
+            var n = len(v) - 1
+            if n % 2 == 1:
+                _ = py_float(v[n])  # a trailing confidence
+                n -= 1
+            var fl = List[Float64]()
+            for k in range(n):
+                poly.append(Float32(py_float(v[1 + k])))
+                fl.append(Float64(poly[k]))
+            var bb = polygon_to_xyxy(fl)
+            for k in range(4):
+                rel.append(Float32(bb[k]))
         for k in range(4):
-            xyxy.append(Float64(box[k] * scale[k]))
+            xyxy.append(Float64(rel[k] * scale[k]))
+        if with_masks:
+            var px = List[Float64]()
+            for k in range(len(poly)):
+                px.append(Float64(rint(Float64(poly[k] * scale[k % 2]))))
+            masks.extend(polygon_to_mask(px, w, h))
     var d = Detections(xyxy^)
     d.set_class_id(ids^)
+    if with_masks:
+        d.set_mask(masks^, h, w)
     d.validate()
     return d^
 
@@ -143,7 +171,7 @@ def save_yolo_annotations(ds: DetectionDataset, labels_dir: String) raises:
         var wh = image_size_wh(ds.image_paths[k])
         var out = String()
         if d.has_mask:
-            raise Error("YOLO export of masks (polygons) is not ported yet")
+            raise Error("YOLO export of masks (polygons with bridged holes) is not ported yet")
         for i in range(len(d)):
             if not d.has_class_id:
                 raise Error("Class ID is required for YOLO annotations.")
