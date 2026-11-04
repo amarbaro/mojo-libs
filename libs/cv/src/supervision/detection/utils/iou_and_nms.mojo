@@ -460,7 +460,18 @@ def _unique_sorted(cats: List[Int]) -> List[Int]:
     return u^
 
 
-def _group_overlapping(overlap_with: def (List[Int], Int) raises -> List[Float64], scores: List[Float64], threshold: Float64) raises -> List[List[Int]]:
+def _overlap_col(oriented: Bool, data: List[Float64], order: List[Int], idx: Int, metric: Int) raises -> List[Float64]:
+    """Overlap of every box in `order` with box `idx`."""
+    var r = List[Float64]()
+    if oriented:
+        return oriented_box_iou_batch(_gather_boxes(data, order, 8), _gather_boxes(data, [idx], 8), metric)
+    var f = box_iou_batch(_gather_boxes(data, order, 4), _gather_boxes(data, [idx], 4), metric)
+    for k in range(len(f)):
+        r.append(Float64(f[k]))
+    return r^
+
+
+def _group_overlapping(oriented: Bool, data: List[Float64], metric: Int, scores: List[Float64], threshold: Float64) raises -> List[List[Int]]:
     """Greedy NMM grouping: take the best remaining score, absorb everything at or above the threshold."""
     var groups = List[List[Int]]()
     var order = argsort(scores)
@@ -469,7 +480,7 @@ def _group_overlapping(overlap_with: def (List[Int], Int) raises -> List[Float64
         if len(order) == 0:
             groups.append([idx])
             break
-        var ious = overlap_with(order, idx)
+        var ious = _overlap_col(oriented, data, order, idx, metric)
         var group: List[Int] = [idx]
         var rest = List[Int]()
         var above = List[Int]()
@@ -504,14 +515,7 @@ def box_non_max_merge(xyxy: List[Float64], scores: List[Float64], cats: List[Int
         var sub_boxes = _gather_boxes(xyxy, cur, 4)
         var sub_scores = _subset(scores, cur)
 
-        def overlap(order: List[Int], idx: Int) raises -> List[Float64]:
-            var f = box_iou_batch(_gather_boxes(sub_boxes, order, 4), _gather_boxes(sub_boxes, [idx], 4), metric)
-            var r = List[Float64]()
-            for k in range(len(f)):
-                r.append(Float64(f[k]))
-            return r^
-
-        for g in _group_overlapping(overlap, sub_scores, iou_threshold):
+        for g in _group_overlapping(False, sub_boxes, metric, sub_scores, iou_threshold):
             var glob = List[Int]()
             for i in g:
                 glob.append(cur[i])
@@ -530,10 +534,7 @@ def oriented_box_non_max_merge(corners: List[Float64], scores: List[Float64], ca
         var sub = _gather_boxes(corners, cur, 8)
         var sub_scores = _subset(scores, cur)
 
-        def overlap(order: List[Int], idx: Int) raises -> List[Float64]:
-            return oriented_box_iou_batch(_gather_boxes(sub, order, 8), _gather_boxes(sub, [idx], 8), metric)
-
-        for g in _group_overlapping(overlap, sub_scores, iou_threshold):
+        for g in _group_overlapping(True, sub, metric, sub_scores, iou_threshold):
             var glob = List[Int]()
             for i in g:
                 glob.append(cur[i])
