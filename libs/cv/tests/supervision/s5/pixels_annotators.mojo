@@ -1,11 +1,13 @@
-# Row driver for tests/cases/pixels_annotators.txt (built to build/pixels_annotators). pixel_label is descoped (text).
+# Row driver for tests/cases/pixels_annotators.txt (built to build/pixels_annotators).
 from json import parse, Json
 from mojocv.mat import Mat
 from supervision.detection.core import Detections
 from supervision.draw.color import Color, ColorPalette
 from supervision.key_points.core import KeyPoints
 from supervision.key_points.annotators import vertex_annotate
-from supervision.annotators.core import box_annotate, circle_annotate, dot_annotate, mask_annotate, polygon_annotate, blur_annotate, pixelate_annotate, halo_annotate, trace_annotate
+from supervision._cv.font.layout import TextEngine
+from supervision.geometry.core import Position
+from supervision.annotators.core import label_annotate, box_annotate, circle_annotate, dot_annotate, mask_annotate, polygon_annotate, blur_annotate, pixelate_annotate, halo_annotate, trace_annotate
 from supervision.annotators.utils import Trace
 from supervision._cv.png import imread, imwrite
 from supervision._cv import draw
@@ -47,12 +49,10 @@ def build(p: Json, h: Int, w: Int, with_mask: Bool) raises -> Detections:
     return d^
 
 
-def run_row(line: String) raises -> String:
+def run_row(line: String, n: Int) raises -> String:
     var cols = line.split("\t")
     var op = String(cols[0])
     var args = parse(String(cols[1]))
-    if op == "pixel_label":
-        return '{"error": "descoped"}'
     var p = args.get("params")
     var kw = p.get("kwargs")
     var scene = imread(String(args.text("input")))
@@ -66,6 +66,15 @@ def run_row(line: String) raises -> String:
         polygon_annotate(scene, det, pal, kw.get("thickness").int())
     elif op == "pixel_circle":
         circle_annotate(scene, det, pal, kw.get("thickness").int())
+    elif op == "pixel_label":
+        var labels = List[String]()
+        for k in range(p.get("labels").len()):
+            labels.append(p.get("labels").at(k).str())
+        var eng = TextEngine()
+        var pos = Position.from_name(kw.text("text_position", "TOP_LEFT"))
+        var ox = kw.get("text_offset").at(0).int() if kw.has("text_offset") else 0
+        var oy = kw.get("text_offset").at(1).int() if kw.has("text_offset") else 0
+        label_annotate(scene, det, pal, labels, eng, Color.WHITE(), kw.opt_f("text_scale").or_else(0.5), kw.get("text_thickness").int() if kw.has("text_thickness") else 1, kw.get("text_padding").int() if kw.has("text_padding") else 10, pos, ox, oy)
     elif op == "pixel_dot":
         dot_annotate(scene, det, pal, kw.get("radius").int())
     elif op == "pixel_halo":
@@ -96,18 +105,20 @@ def run_row(line: String) raises -> String:
         vertex_annotate(scene, KeyPoints(xy^, j.len(), j.at(0).len()), Color.ROBOFLOW(), kw.get("radius").int())
     else:
         raise Error("unknown op " + op)
-    var out_path = "build/tests-out/px_" + op + ".png"
+    var out_path = "build/tests-out/px_" + op + "_" + String(n) + ".png"  # one file per row: run.sh diffs after the binary exits
     imwrite(out_path, scene)
     return '{"out": "' + out_path + '"}'
 
 
 def main() raises:
+    var n = 0
     var text = open("/dev/stdin", "r").read()
     for ln in text.split("\n"):
         var line = String(ln)
         if line.byte_length() == 0:
             continue
         try:
-            print(run_row(line))
+            print(run_row(line, n))
+            n += 1
         except e:
             print('{"error": "' + String(e).replace('"', "'") + '"}')

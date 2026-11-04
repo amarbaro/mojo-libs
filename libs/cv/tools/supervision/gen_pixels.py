@@ -81,13 +81,21 @@ CV_BARS = {
     "polylines_open": {"max_abs": 0, "max_pct": 0.0},
     "polylines_closed": {"max_abs": 0, "max_pct": 0.0},
     "fill_nonconvex": {"max_abs": 0, "max_pct": 0.0},
-    # AA Hershey text: cv2 blends glyph coverage with rounding; a port may differ by one level on edge pixels.
-    "put_text_aa": {"max_abs": 2, "max_pct": 1.0},
+    # putText is a port of cv2 5.0's stb_truetype path (src/supervision/_cv/font): byte exact.
+    "put_text_aa": {"max_abs": 0, "max_pct": 0.0},
     "add_weighted": {"max_abs": 1, "max_pct": 0.5},
     "convert_scale_abs": {"max_abs": 0, "max_pct": 0.0},
     "apply_colormap": {"max_abs": 0, "max_pct": 0.0},
     "png_roundtrip": {"max_abs": 0, "max_pct": 0.0},
 }
+
+LABEL_VARIANTS = [
+    ({"text_scale": 0.8, "text_thickness": 2, "text_padding": 6}, LABELS),
+    ({"text_position": "CENTER"}, LABELS),
+    ({"text_position": "BOTTOM_CENTER", "text_offset": [4, -3], "text_scale": 0.4}, LABELS),
+    ({"text_position": "TOP_RIGHT", "text_padding": 3}, LABELS),
+    ({"text_position": "BOTTOM_LEFT", "text_scale": 1.0}, ["two\nlines", "", "a\n\nb\u00e9"]),
+]
 
 KWARGS = {
     "box": {"thickness": 2},
@@ -270,6 +278,19 @@ def main() -> int:
         lines.append(row(f"pixel_{name}",
                          {"input": input_rel, "params": params_for(name), "tol": BARS[name]},
                          {"ref": rel}))
+        print(f"wrote {rel} shape={out.shape}")
+    # LabelAnnotator variants (text lands in src/supervision/_cv/font, bar 0): scale/thickness/padding, every anchor, offsets, multi-line
+    for k, (kw, labels) in enumerate(LABEL_VARIANTS, 1):
+        pos = kw.get("text_position")
+        pykw = dict(kw, **({"text_position": getattr(sv.Position, pos)} if pos else {}),
+                    **({"text_offset": tuple(kw["text_offset"])} if "text_offset" in kw else {}))
+        dets = sv.Detections(xyxy=np.array(XYXY, dtype=np.float32), class_id=np.array(CLASS_ID), confidence=np.array(CONFIDENCE, dtype=np.float32))
+        out = sv.LabelAnnotator(**pykw).annotate(scene.copy(), dets, labels=labels)
+        rel = f"tests/fixtures/pixels/label_{k}.png"
+        write_png(rel, out)
+        params = params_for("label")
+        params["labels"], params["kwargs"] = labels, kw
+        lines.append(row("pixel_label", {"input": input_rel, "params": params, "tol": BARS["label"]}, {"ref": rel}))
         print(f"wrote {rel} shape={out.shape}")
     (CASES / "pixels_annotators.txt").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
