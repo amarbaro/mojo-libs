@@ -5,17 +5,18 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${CASES:?FAIL setup: set CASES to the built case runner}"
 PY=${ORACLE_PY:-python3}
-mkdir -p .work/check; fail=0; n=0
+D=${CHECK_DIR:-.work/check}
+mkdir -p "$D"; fail=0; n=0
 for c in $($PY -I tools/oracle.py --list); do
   for run in 1 2; do
     for side in exp got; do
-      w=$(mktemp -d "$PWD/.work/check/$c.$side.XXXX")
-      if [ $side = exp ]; then $PY -I tools/oracle.py "$c" "$w" > .work/check/$c.$side 2>&1 || true
-      else timeout 60 "$CASES" "$c" "$w" > .work/check/$c.$side 2>&1 || true; fi
+      w=$(mktemp -d "$PWD/$D/$c.$side.XXXX")
+      if [ $side = exp ]; then $PY -I tools/oracle.py "$c" "$w" > "$D/$c.$side" 2>&1 || true
+      else timeout 60 "$CASES" "$c" "$w" > "$D/$c.$side" 2>&1 || true; fi
       rm -rf "$w"
     done
-    [ -s .work/check/$c.exp ] || { echo "FAIL $c: empty oracle output"; fail=$((fail+1)); continue; }
-    cmp -s .work/check/$c.exp .work/check/$c.got || { echo "FAIL $c (run $run)"; diff .work/check/$c.exp .work/check/$c.got | head -6; fail=$((fail+1)); }
+    [ -s "$D/$c.exp" ] || { echo "FAIL $c: empty oracle output"; fail=$((fail+1)); continue; }
+    cmp -s "$D/$c.exp" "$D/$c.got" || { echo "FAIL $c (run $run)"; diff "$D/$c.exp" "$D/$c.got" | head -6; fail=$((fail+1)); }
   done
   n=$((n+1))
 done

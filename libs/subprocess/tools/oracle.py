@@ -1,6 +1,7 @@
 """Oracle: Python subprocess.run. `oracle.py --list`; `oracle.py NAME DIR` prints its lines.
 Outputs print as length, byte sum and the first/last 24 bytes, with DIR replaced by <W>."""
 import os, subprocess, sys, time
+sys.stdout.reconfigure(line_buffering=True)
 def d(b, w=""):
     b = b.replace(w.encode(), b"<W>") if w else b
     return f"{len(b)} {sum(b) & 0xFFFFFFFF} {b[:24].hex()} {b[-24:].hex()}"
@@ -29,6 +30,10 @@ def errors(w):
     try: subprocess.run([SH, "-c", "exit 7"], check=True, capture_output=True); print("check none")
     except subprocess.CalledProcessError as e: print("check raised", e.returncode)
     print("check_output", d(subprocess.check_output([SH, "-c", "echo ok"])))
+    print("check_output_err", d(subprocess.check_output([SH, "-c", "echo out; echo to-stderr >&2"], stderr=None)))
+    try: subprocess.run([], capture_output=True); print("emptyargv none")
+    except (IndexError, ValueError): print("emptyargv raised")
+    show("emptyinput", subprocess.run(["cat"], input=b"", capture_output=True, timeout=5))
 S = {"basic": basic, "big": big, "where": where, "errors": errors}
 if sys.argv[1] == "--list": print("\n".join(S))
 else: S[sys.argv[1]](sys.argv[2])

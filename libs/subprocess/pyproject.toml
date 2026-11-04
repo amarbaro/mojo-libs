@@ -12,4 +12,4 @@ Repository = "https://github.com/amarbaro/mojo-subprocess"
 
 [tool.mojo]
 packages = ["subprocess"]  # src/posix is a vendored copy of mojo-posix for a clone build
-deps = ["mojo-posix"]
+deps = ["mojo-posix >=0.1.0,<0.2"]

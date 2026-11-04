@@ -1,4 +1,4 @@
-# Run git, capture its output, fail loudly on a non-zero exit.
+# Run uname, capture its output, fail loudly on a non-zero exit.
 from subprocess import run
 
 

@@ -49,10 +49,16 @@ def _spawn(argv: List[String], env: List[String], cwd: String, i: Int32, o: Int3
     _ = external_call["posix_spawn_file_actions_init", Int32](fa)
     for t in [(i, 0), (o, 1), (e, 2)]:
         if t[0] >= 0:
-            _ = external_call["posix_spawn_file_actions_adddup2", Int32](fa, t[0], Int32(t[1]))
+            var rc = external_call["posix_spawn_file_actions_adddup2", Int32](fa, t[0], Int32(t[1]))
+            if rc != 0:
+                _ = external_call["posix_spawn_file_actions_destroy", Int32](fa)
+                raise error_code("subprocess: spawn setup (dup2)", Int(rc))
     var d = cwd.copy()
     if cwd.byte_length() > 0:
-        _ = external_call["posix_spawn_file_actions_addchdir_np", Int32](fa, d.as_c_string_span().ptr())
+        var rc = external_call["posix_spawn_file_actions_addchdir_np", Int32](fa, d.as_c_string_span().ptr())
+        if rc != 0:
+            _ = external_call["posix_spawn_file_actions_destroy", Int32](fa)
+            raise error_code("subprocess: spawn setup (chdir)", Int(rc))
     _ = external_call["posix_spawnattr_init", Int32](at)
     _ = external_call["sigemptyset", Int32](sg)
     _ = external_call["posix_spawnattr_setsigmask", Int32](at, sg)
@@ -90,16 +96,28 @@ def run(
     cwd: String = "",
     env: List[String] = [],
     check: Bool = False,
+    close_stdin: Bool = False,
+    capture_stderr: Bool = True,
 ) raises -> CompletedProcess:
     """Python subprocess.run(argv, input=..., capture_output=..., timeout=..., cwd=..., env=..., check=...).
-    Raises "timed out after S seconds" (child killed) and "returned non-zero exit status N" (check=True)."""
+    Raises "timed out after S seconds" (child killed) and "returned non-zero exit status N" (check=True).
+    close_stdin=True gives the child an empty stdin (EOF) when there is no input: Python's input=b"".
+    capture_stderr=False leaves stderr on this process's stderr while stdout is captured."""
+    if len(argv) == 0:
+        raise Error("subprocess: empty argv")
     _ = external_call["signal", Int](Int32(13), Int(1))  # SIGPIPE ignored, as in Python
-    var feed = len(input) > 0
-    var pi = _pipe() if feed else (Int32(-1), Int32(-1))
-    var po = _pipe() if capture_output else (Int32(-1), Int32(-1))
-    var pe = _pipe() if capture_output else (Int32(-1), Int32(-1))
+    var feed = len(input) > 0 or close_stdin
+    var pi = (Int32(-1), Int32(-1))
+    var po = (Int32(-1), Int32(-1))
+    var pe = (Int32(-1), Int32(-1))
     var pid: Int
     try:
+        if feed:
+            pi = _pipe()
+        if capture_output:
+            po = _pipe()
+        if capture_output and capture_stderr:
+            pe = _pipe()
         pid = _spawn(argv, env, cwd, pi[0], po[1], pe[1])
     except e:
         for fd in [pi[0], pi[1], po[0], po[1], pe[0], pe[1]]:
@@ -146,7 +164,7 @@ def run(
             var n = external_call["write", Int](pi[1], input.unsafe_ptr() + sent, min(len(input) - sent, _CHUNK))
             if n > 0:
                 sent += n
-            if (n < 0 and errno() != 11 and errno() != 4) or sent == len(input):
+            if (n < 0 and errno() != 11 and errno() != 4) or sent >= len(input):
                 _close(pi[1])
                 i_open = False
         if alive and ((ip >= 0 and ready > 0 and ps.revents(ip) != 0) or pidfd < 0):
@@ -169,4 +187,4 @@ def run(
 
 def check_output(argv: List[String], timeout: Float64 = -1.0, cwd: String = "", env: List[String] = []) raises -> List[UInt8]:
     """run(..., check=True).stdout"""
-    return run(argv, timeout=timeout, cwd=cwd, env=env, check=True).stdout.copy()
+    return run(argv, timeout=timeout, cwd=cwd, env=env, check=True, capture_stderr=False).stdout.copy()

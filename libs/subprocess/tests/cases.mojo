@@ -68,3 +68,10 @@ def main() raises:
             var s = String(e)
             print("check raised", String(s[byte = s.find("status ") + 7 : s.byte_length() - 1]))
         print("check_output", d(check_output([SH, "-c", "echo ok"])))
+        print("check_output_err", d(check_output([SH, "-c", "echo out; echo to-stderr >&2"])))
+        try:
+            _ = run(List[String]())
+            print("emptyargv none")
+        except:
+            print("emptyargv raised")
+        show("emptyinput", run(["cat"], timeout=5.0, close_stdin=True))
