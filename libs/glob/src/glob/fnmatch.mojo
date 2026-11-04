@@ -3,17 +3,22 @@
 
 
 def _cp(b: Span[UInt8, _], i: Int) -> Tuple[Int, Int]:
-    """(codepoint, byte length) of the UTF-8 sequence at i."""
+    """(codepoint, byte length) of the UTF-8 sequence at i. An invalid byte (stray continuation, 0xF8 and up,
+    or a truncated sequence) counts as one character on its own, as Python's surrogateescape decoding does."""
     var c = Int(b[i])
     if c < 0x80:
         return (c, 1)
-    if c < 0xE0 and i + 1 < len(b):
+    var n = 2 if (c >= 0xC2 and c < 0xE0) else (3 if (c >= 0xE0 and c < 0xF0) else (4 if (c >= 0xF0 and c < 0xF5) else 0))
+    if n == 0 or i + n > len(b):
+        return (0xDC00 + c, 1)
+    for k in range(1, n):
+        if (Int(b[i + k]) & 0xC0) != 0x80:
+            return (0xDC00 + c, 1)
+    if n == 2:
         return (((c & 0x1F) << 6) | (Int(b[i + 1]) & 0x3F), 2)
-    if c < 0xF0 and i + 2 < len(b):
+    if n == 3:
         return (((c & 0x0F) << 12) | ((Int(b[i + 1]) & 0x3F) << 6) | (Int(b[i + 2]) & 0x3F), 3)
-    if i + 3 < len(b):
-        return (((c & 0x07) << 18) | ((Int(b[i + 1]) & 0x3F) << 12) | ((Int(b[i + 2]) & 0x3F) << 6) | (Int(b[i + 3]) & 0x3F), 4)
-    return (c, 1)
+    return (((c & 0x07) << 18) | ((Int(b[i + 1]) & 0x3F) << 12) | ((Int(b[i + 2]) & 0x3F) << 6) | (Int(b[i + 3]) & 0x3F), 4)
 
 
 comptime _LIT = 0

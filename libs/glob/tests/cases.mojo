@@ -58,6 +58,15 @@ def tree(w: String) raises:
 def main() raises:
     var c = argv()[1]
     var w = String(argv()[2])
+    if c == "raw":
+        var raws: List[List[UInt8]] = [[0x61, 0xFF, 0x62], [0x80], [0xC3], [0xC3, 0xBC], [0x78, 0xC3], [0xF8, 0x88], [0xE2, 0x82], [0x6F, 0x6B]]
+        var pats: List[String] = ["a?b", "?", "??", "*", "x?", "[!a]", "???"]
+        for p in pats:
+            var row = String()
+            for r in raws:
+                row += "T" if fnmatchcase(StringSlice(unsafe_from_utf8=Span(r)), p) else "."
+            print("raw", p, row)
+        return
     if c == "fn":
         var names = lines("names.txt")
         for p in lines("fnpats.txt"):

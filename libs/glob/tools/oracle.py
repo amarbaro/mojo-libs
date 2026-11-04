@@ -18,6 +18,12 @@ def gl(w):
         for rec in (False, True):
             for hid in (False, True):
                 print("glob", repr(p), int(rec), int(hid), sorted(glob.glob(p, root_dir=w, recursive=rec, include_hidden=hid)))
-S = {"fn": fn, "glob": gl}
+RAW = [b"a\xffb", b"\x80", b"\xc3", b"\xc3\xbc", b"x\xc3", b"\xf8\x88", b"\xe2\x82", b"ok"]
+RPATS = ["a?b", "?", "??", "*", "x?", "[!a]", "???"]
+def raw(_):
+    names = [b.decode("utf-8", "surrogateescape") for b in RAW]
+    for p in RPATS:
+        print("raw", p, "".join("T" if fnmatch.fnmatchcase(n, p) else "." for n in names))
+S = {"fn": fn, "glob": gl, "raw": raw}
 if sys.argv[1] == "--list": print("\n".join(S))
 else: S[sys.argv[1]](sys.argv[2])
