@@ -1,0 +1,5 @@
+src/semver/version.mojo|return -1 if p[0] < p[1] else 1|return 1 if p[0] < p[1] else -1
+src/semver/version.mojo|r = (-1 if lx < ly else 1) if lx != ly|r = (1 if lx < ly else -1) if lx != ly
+src/semver/version.mojo|(len(b) > 1 and b[0] == 48)|(len(b) > 2 and b[0] == 48)
+src/semver/version.mojo|else (-1 if len(pa) < len(pb) else 1)|else (1 if len(pa) < len(pb) else -1)
+src/semver/version.mojo|var cut = max(end - nxt.byte_length(), start)|var cut = start
