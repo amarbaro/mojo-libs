@@ -417,19 +417,337 @@ struct Font(Movable):
                     out.v.append(sub.v[k].copy())
             more = (flags & 32) != 0
 
-    # ---- variable fonts: filled in by the gvar stage ----
+    # ---- variable fonts: fvar axes, avar normalisation, gvar deltas (stbtt's integer pipeline, not fontTools' floats) ----
     def _read_fvar(mut self, fvar: Int) raises:
-        pass
+        if self.u16(fvar) != 1 or self.u16(fvar + 2) != 0:
+            raise Error("font: unsupported fvar version")
+        var off = self.u16(fvar + 4)
+        var n = self.u16(fvar + 8)
+        if n == 0:
+            return
+        if n > 16 or self.u16(fvar + 10) != 20 or fvar + off + n * 20 > len(self.d):
+            raise Error("font: bad fvar")
+        for i in range(n):
+            var a = fvar + off + i * 20
+            self.ax_tag.append(self.u32(a))
+            self.ax_min.append(self.i32(a + 4))
+            self.ax_def.append(self.i32(a + 8))
+            self.ax_cur.append(self.i32(a + 8))
+            self.ax_max.append(self.i32(a + 12))
+            self.norm.append(0)
+            if self.ax_min[i] > self.ax_def[i] or self.ax_def[i] > self.ax_max[i]:
+                raise Error("font: bad fvar axis")
+        self.axis_count = n
 
     def _read_gvar(mut self) raises:
-        pass
+        var g = self.gvar
+        if self.u16(g) != 1 or self.u16(g + 2) != 0 or self.u16(g + 4) != self.axis_count:
+            raise Error("font: unsupported gvar")
+        var shared_count = self.u16(g + 6)
+        var shared_off = self.u32(g + 8)
+        var fmt = self.u16(g + 14)
+        if g + shared_off + shared_count * self.axis_count * 2 > len(self.d) or fmt > 1:
+            raise Error("font: bad gvar")
+        if g + 20 + (self.u16(g + 12) + 1) * (2 if fmt == 0 else 4) > len(self.d):
+            raise Error("font: bad gvar offsets")
+        self.gv_shared_count = shared_count
+        self.gv_shared = g + shared_off
+        self.gv_glob = g + self.u32(g + 16)
+        self.gv_offs = g + 20
+        self.gv_fmt = fmt
+
+    def weight(self) -> Int:
+        """Current wght (16.16) as cv2's stbtt_GetWeight reports it: the axis default, since stbtt never stores the setting."""
+        for i in range(self.axis_count):
+            if self.ax_tag[i] == 0x77676874:
+                return self.ax_cur[i]
+        return 0
 
     def set_instance(mut self, tag: Int, value: Int):
-        """stbtt_SetInstance for one axis (tag -1 = reset every axis to its default); `value` is 16.16."""
-        pass
+        """stbtt_SetInstance with one (tag, value 16.16) parameter; tag -1 resets every axis to its default."""
+        var vals = List[Int]()
+        for i in range(self.axis_count):
+            var v = self.ax_cur[i]
+            var rev = ((self.ax_tag[i] & 255) << 24) | (((self.ax_tag[i] >> 8) & 255) << 16) | (((self.ax_tag[i] >> 16) & 255) << 8) | (self.ax_tag[i] >> 24)
+            if tag != -1 and (self.ax_tag[i] == tag or rev == tag):
+                v = min(max(value, self.ax_min[i]), self.ax_max[i])
+            vals.append(v)
+        self._normalise(vals)
+
+    def _normalise(mut self, vals: List[Int]):
+        var n = self.axis_count
+        var pairs = List[Int](length=n, fill=0)
+        var pcounts = List[Int](length=n, fill=0)
+        if self.avar != 0 and self.avar + 8 < len(self.d) and self.i32(self.avar) == 0x10000 and self.i32(self.avar + 4) <= n:
+            var off = self.avar + 8
+            for i in range(self.i32(self.avar + 4)):
+                var pc = self.u16(off)
+                if pc == 0 or off + 2 + pc * 4 > len(self.d):
+                    break
+                pairs[i] = off + 2
+                pcounts[i] = pc
+                off += 2 + pc * 4
+        for i in range(n):
+            var mn = self.ax_min[i]
+            var df = self.ax_def[i]
+            var mx = self.ax_max[i]
+            var x = min(max(vals[i], mn), mx)
+            var num = 0
+            var denom = 1
+            var sgn = 1
+            if x < df:
+                num = df - x
+                denom = df - mn
+                sgn = -1
+            elif x > df:
+                num = x - df
+                denom = mx - df
+            var one = 1 << 14
+            var left = -one if mn < df else 0
+            var right = one if mx > df else 0
+            var nx = min(max(sgn * ((num * one + denom // 2) // denom), left), right)
+            if pairs[i] != 0:
+                var p = pairs[i]
+                var cnt = pcounts[i]
+                var px = self.i16(p)
+                var pfx = self.i16(p + 2)
+                var j = 1
+                var hit = False
+                while j < cnt:
+                    var xj = self.i16(p + j * 4)
+                    var fx = self.i16(p + j * 4 + 2)
+                    if xj <= px or fx < pfx:
+                        return
+                    if nx >= px and nx < xj:
+                        var dn = xj - px
+                        nx = pfx + ((fx - pfx) * (nx - px) + dn // 2) // dn
+                        hit = True
+                        break
+                    px = xj
+                    pfx = fx
+                    j += 1
+                if not hit:
+                    if nx != px:
+                        return
+                    nx = pfx
+                nx = min(max(nx, left), right)
+            self.norm[i] = nx
+
+    def _tuple_scale(self, peak: Int, mint: Int, maxt: Int) -> Int:
+        var scale = 1 << 16
+        for i in range(self.axis_count):
+            var x = self.norm[i]
+            var pk = self.i16(peak + i * 2)
+            if x == pk or pk == 0:
+                continue
+            if x == 0:
+                return 0
+            if mint < 0:
+                if (0 < x and x <= pk) or (pk <= x and x < 0):
+                    scale = _tdiv(scale * x, pk)
+                else:
+                    return 0
+            else:
+                var lo = self.i16(mint + i * 2)
+                var hi = self.i16(maxt + i * 2)
+                if lo <= x and x <= hi:
+                    scale = _tdiv(scale * ((x - lo) if x < pk else (hi - x)), (pk - lo) if x < pk else (hi - pk))
+                else:
+                    return 0
+        return scale
+
+    def _point_numbers(self, ofs_in: Int, mut out: List[Int]) -> Tuple[Int, Int]:
+        """(next offset, count); next offset 0 = malformed. Fills `out` with the absolute point numbers."""
+        var ofs = ofs_in
+        var n = self.u8(ofs)
+        ofs += 1
+        if n & 0x80:
+            n = (n & 0x7F) * 256 + self.u8(ofs)
+            ofs += 1
+        out.clear()
+        if n == 0:
+            return (ofs, 0)
+        var idx = 0
+        var i = 0
+        while i < n:
+            if ofs >= len(self.d):
+                return (0, 0)
+            var ctl = self.u8(ofs)
+            ofs += 1
+            var runlen = (ctl & 0x7F) + 1
+            var words = (ctl & 0x80) != 0
+            if i + runlen > n:
+                return (0, 0)
+            for k in range(runlen):
+                idx += self.u16(ofs + k * 2) if words else self.u8(ofs + k)
+                out.append(idx & 0xFFFF)
+            ofs += runlen * (2 if words else 1)
+            i += runlen
+        return (ofs, n)
 
     def _vary(self, gid: Int, composite: Bool, nc: Int, end_pts: Int, mut xs: List[Int], mut ys: List[Int], out_count: Int, mut box: Shape):
-        pass
+        """stbtt__VaryGlyphShapeTT: add the summed, scaled gvar tuples to the points (or to the component offsets)."""
+        if self.gvar == 0 or self.gv_offs == 0 or gid >= self.num_glyphs:
+            return
+        var g1: Int
+        var g2: Int
+        if self.gv_fmt == 0:
+            g1 = self.u16(self.gv_offs + gid * 2) * 2
+            g2 = self.u16(self.gv_offs + gid * 2 + 2) * 2
+        else:
+            g1 = self.u32(self.gv_offs + gid * 4)
+            g2 = self.u32(self.gv_offs + gid * 4 + 4)
+        var off = self.gv_glob + g1
+        if g2 - g1 <= 0 or off + (g2 - g1) > len(self.d):
+            return
+        var ntuples = self.u16(off)
+        var gdata = self.u16(off + 2) + off
+        if gdata >= len(self.d) or ntuples == 0:
+            return
+        var gtup = off + 4
+        var have_shared = (ntuples & 0x8000) != 0
+        ntuples &= 0xFFF
+        var vtx = nc if composite else out_count
+        var max_pt = vtx + 4
+        var no_delta = 0 if composite else -32768
+        var sum_d = List[Int](length=max_pt * 2, fill=0)
+        var shared = List[Int]()
+        var priv = List[Int]()
+        var shared_n = 0
+        if have_shared:
+            var r = self._point_numbers(gdata, shared)
+            if r[0] == 0:
+                return
+            gdata = r[0]
+            shared_n = r[1]
+        for _ in range(ntuples):
+            var tupsz = self.u16(gtup)
+            var tupidx = self.u16(gtup + 2)
+            if gdata + tupsz > len(self.d):
+                return
+            gtup += 4
+            var peak: Int
+            if tupidx & 0x8000:
+                peak = gtup
+                gtup += self.axis_count * 2
+            else:
+                if (tupidx & 0xFFF) >= self.gv_shared_count:
+                    return
+                peak = self.gv_shared + (tupidx & 0xFFF) * self.axis_count * 2
+            var mint = -1
+            var maxt = -1
+            if tupidx & 0x4000:
+                mint = gtup
+                maxt = gtup + self.axis_count * 2
+                gtup += self.axis_count * 4
+            var scale = self._tuple_scale(peak, mint, maxt)
+            if scale == 0:
+                gdata += tupsz
+                continue
+            var use_priv = (tupidx & 0x2000) != 0
+            var pn = shared_n
+            if use_priv:
+                var r = self._point_numbers(gdata, priv)
+                if r[0] == 0:
+                    return
+                gdata = r[0]
+                pn = r[1]
+            ref ptnum = priv if use_priv else shared
+            var dcount = pn if pn > 0 else max_pt
+            var packed = List[Int](length=2 * dcount, fill=0)
+            var i = 0
+            while i < 2 * dcount:
+                if gdata >= len(self.d):
+                    return
+                var c = self.u8(gdata)
+                gdata += 1
+                var zeros = (c & 0x80) != 0
+                var words = (c & 0x40) != 0
+                var runlen = (c & 0x3F) + 1
+                if i + runlen > 2 * dcount:
+                    return
+                for k in range(runlen):
+                    packed[i + k] = 0 if zeros else (self.i16(gdata + k * 2) if words else _s8(self.u8(gdata + k)))
+                gdata += 0 if zeros else (2 if words else 1) * runlen
+                i += runlen
+            var deltas = List[Int](length=max_pt * 2, fill=0)
+            for k in range(vtx * 2):
+                deltas[k] = no_delta
+            for k in range(dcount):
+                var pi = k if pn == 0 else ptnum[k]
+                if pi * 2 + 1 < len(deltas):
+                    deltas[pi * 2] = packed[k]
+                    deltas[pi * 2 + 1] = packed[k + dcount]
+            if dcount < max_pt and not composite:
+                self._iup(nc, end_pts, xs, ys, deltas, no_delta)
+            for k in range(max_pt * 2):
+                sum_d[k] += (deltas[k] * scale) >> 8
+        for k in range(out_count):
+            xs[k] = _i16(xs[k] + (sum_d[k * 2] >> 8))
+            ys[k] = _i16(ys[k] + (sum_d[k * 2 + 1] >> 8))
+        box.x0 += sum_d[vtx * 2] >> 8
+        box.y0 += sum_d[vtx * 2 + 5] >> 8
+        box.x1 += sum_d[vtx * 2 + 2] >> 8
+        box.y1 += sum_d[vtx * 2 + 7] >> 8
+
+    def _iup(self, nc: Int, end_pts: Int, xs: List[Int], ys: List[Int], mut dl: List[Int], no_delta: Int):
+        """Interpolate the deltas of points a tuple leaves out (IUP), integer arithmetic as in stbtt."""
+        var start = 0
+        for c in range(nc):
+            var end = self.u16(end_pts + c * 2)
+            var left = -1
+            var right = -1
+            var firstleft = -1
+            var k = start
+            while k <= end:
+                if dl[k * 2] != no_delta:
+                    if k == right:
+                        right = -1
+                    left = k
+                    if firstleft < 0:
+                        firstleft = left
+                    k += 1
+                    continue
+                if left < 0:
+                    var k1 = end
+                    while k1 > k:
+                        if dl[k1 * 2] != no_delta:
+                            break
+                        k1 -= 1
+                    if k1 == k:
+                        while k <= end:
+                            dl[k * 2] = 0
+                            dl[k * 2 + 1] = 0
+                            k += 1
+                        break
+                    left = k1
+                    firstleft = k1
+                if right < 0:
+                    var k1 = k + 1
+                    while k1 <= end:
+                        if dl[k1 * 2] != no_delta:
+                            break
+                        k1 += 1
+                    right = k1 if k1 <= end else firstleft
+                dl[k * 2] = _iup1(xs[k], xs[left], xs[right], dl[left * 2], dl[right * 2])
+                dl[k * 2 + 1] = _iup1(ys[k], ys[left], ys[right], dl[left * 2 + 1], dl[right * 2 + 1])
+                k += 1
+            start = end + 1
+
+
+def _tdiv(a: Int, b: Int) -> Int:
+    """C integer division (truncates toward zero)."""
+    var q = abs(a) // abs(b)
+    return -q if (a < 0) != (b < 0) else q
+
+
+def _iup1(v: Int, v0: Int, v1: Int, d0: Int, d1: Int) -> Int:
+    var dd = v1 - v0
+    if v0 == v1:
+        return d0 if d0 == d1 else 0
+    if v0 < v1:
+        return d0 if v <= v0 else (d1 if v >= v1 else _tdiv((d1 - d0) * (v - v0) + d0 * dd, dd))
+    return d1 if v <= v1 else (d0 if v >= v0 else _tdiv((d0 - d1) * (v - v1) - d1 * dd, -dd))
 
 
 def _s8(v: Int) -> Int:

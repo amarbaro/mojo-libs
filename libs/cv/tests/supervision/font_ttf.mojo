@@ -23,19 +23,11 @@ def read_rows() raises -> List[String]:
     return rows^
 
 
-def _pairs(var v: List[Tuple[Int, Int]]) -> Json:
-    """Sorted, de-duplicated [[x, y], ...]."""
+def _sorted(var v: List[Int]) -> Json:
     sort(v)
     var a = Json.array()
-    var last = (-99999, -99999)
-    for p in v:
-        if p[0] == last[0] and p[1] == last[1]:
-            continue
-        last = p
-        var e = Json.array()
-        e.push(Json.of(p[0]))
-        e.push(Json.of(p[1]))
-        a.push(e)
+    for x in v:
+        a.push(Json.of(x))
     return a^
 
 
@@ -58,24 +50,32 @@ def run(mut font: Font, op: String, args: Json) raises -> Json:
         out.push(Json.of(m[2]))
     elif op == "shape":
         var wght = args.get("wght")
-        if not wght.is_null():
-            font.set_instance(0x77676874, wght.int() * 65536)
+        font.set_instance(-1 if wght.is_null() else 0x77676874, 0 if wght.is_null() else wght.int() * 65536)
         var s = font.glyph_shape(args.get("gid").int())
-        var ends = List[Tuple[Int, Int]]()
-        var ctrl = List[Tuple[Int, Int]]()
+        var ex = List[Int]()
+        var ey = List[Int]()
+        var cx = List[Int]()
+        var cy = List[Int]()
         for v in s.v:
-            ends.append((v.x, v.y))
+            if v.kind == VMOVE:
+                continue  # the closing segment ends at the move point
+            ex.append(v.x)
+            ey.append(v.y)
             if v.kind == 3:
-                ctrl.append((v.cx, v.cy))
+                cx.append(v.cx)
+                cy.append(v.cy)
         var o = Json.object()
-        o.set("ends", _pairs(ends^))
-        o.set("ctrl", _pairs(ctrl^))
-        var box = Json.array()
-        box.push(Json.of(s.x0))
-        box.push(Json.of(s.y0))
-        box.push(Json.of(s.x1))
-        box.push(Json.of(s.y1))
-        o.set("box", box)
+        o.set("ex", _sorted(ex^))
+        o.set("ey", _sorted(ey^))
+        o.set("cx", _sorted(cx^))
+        o.set("cy", _sorted(cy^))
+        if wght.is_null():
+            var box = Json.array()
+            box.push(Json.of(s.x0))
+            box.push(Json.of(s.y0))
+            box.push(Json.of(s.x1))
+            box.push(Json.of(s.y1))
+            o.set("box", box)
         return o^
     else:
         raise Error("unknown op " + op)
