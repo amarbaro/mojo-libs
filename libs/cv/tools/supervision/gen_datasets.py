@@ -6,6 +6,8 @@ Step 1 (stdlib only): writes inputs with seed SEED: 4 PNG images per format, 8x8
     and annotations in that format's layout.
 Step 2 (oracle, .work/oracle-venv): loads each input with Python supervision, saves it back,
     splits it, merges the halves, and writes every result under <fmt>/ref/.
+Step 3 writes tests/cases/dataset_<fmt>.txt: one row each for load (value), save roundtrip,
+    split and merge. File refs are bundles (`== <relpath> <nbytes>` header per file, sorted).
 
 Run: .work/oracle-venv/bin/python tools/gen_datasets.py
 Exit non-zero on any failure: `FAIL <step>: <reason>`.
@@ -117,7 +119,77 @@ def write_inputs() -> None:
         (voc_dir / "annotations" / (Path(name).stem + ".xml")).write_text(xml)
 
 
-def run_oracle() -> None:
+def bundle(root: Path, prefix: str = "") -> bytes:
+    """Deterministic single-file form of a directory: for each file, sorted by path,
+    a header `== <relpath> <nbytes>\\n` then the raw bytes. The Mojo side writes the same form."""
+    parts = []
+    for p in sorted((p for p in root.rglob("*") if p.is_file()), key=lambda p: p.as_posix()):
+        data = p.read_bytes()
+        parts.append(f"== {prefix}{p.relative_to(root).as_posix()} {len(data)}\n".encode() + data)
+    return b"".join(parts)
+
+
+def summarize(ds) -> dict:
+    """Load result as plain JSON: classes plus per-image class ids and xyxy boxes, sorted by image name."""
+    images = []
+    for path, _img, det in ds:
+        images.append({
+            "image": Path(path).name,
+            "class_id": [int(c) for c in det.class_id],
+            "xyxy": [[float(v) for v in box] for box in det.xyxy],
+        })
+    images.sort(key=lambda d: d["image"])
+    return {"classes": list(ds.classes), "images": images}
+
+
+def write_case_rows(summaries: dict) -> None:
+    """tests/cases/dataset_<fmt>.txt: load (value), save roundtrip, split, merge (ref bundles)."""
+    from oracle import write_rows  # tools/oracle.py, on sys.path as the script's directory
+
+    cases = ROOT / "tests" / "cases"
+    cases.mkdir(parents=True, exist_ok=True)
+    for fmt in ("coco", "yolo", "voc"):
+        base = f"tests/fixtures/datasets/{fmt}"
+        inp = f"{base}/in"
+        ref = f"{base}/ref"
+        rows = [
+            ("load", {"input": inp, "params": {"format": fmt}, "tol": {}}, summaries[fmt]),
+            ("save_roundtrip", {"input": inp, "params": {"format": fmt}, "tol": {}},
+             {"ref": f"{ref}/roundtrip.bundle"}),
+            ("split", {"input": inp, "params": {"format": fmt, "split_ratio": 0.5, "random_state": SEED,
+                                                "shuffle": True}, "tol": {}},
+             {"ref": f"{ref}/split.bundle"}),
+            ("merge", {"input": f"{ref}/split_train", "params": {"format": fmt, "with": f"{ref}/split_valid"},
+                       "tol": {}},
+             {"ref": f"{ref}/merge.bundle"}),
+        ]
+        path = cases / f"dataset_{fmt}.txt"
+        write_rows(str(path), "gen_datasets", SEED, rows)
+        check_case_rows(path)
+
+
+def check_case_rows(path: Path) -> None:
+    """Parse check: line 1 header, 3 tab columns, JSON args and expected, args carry tol."""
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if lines[0] != f"# gen: tools/gen_datasets.py seed={SEED}":
+        fail("parse", f"{path.name} line 1 is not the # gen: header")
+    for n, line in enumerate(lines[1:], start=2):
+        cols = line.split("\t")
+        if len(cols) != 3:
+            fail("parse", f"{path.name}:{n} has {len(cols)} tab columns, want 3")
+        try:
+            args, expected = json.loads(cols[1]), json.loads(cols[2])
+        except json.JSONDecodeError as exc:
+            fail("parse", f"{path.name}:{n} bad JSON: {exc}")
+        if "tol" not in args:
+            fail("parse", f"{path.name}:{n} args lack tol")
+        if "ref" in expected and not (ROOT / expected["ref"]).is_file():
+            fail("parse", f"{path.name}:{n} ref {expected['ref']} is not a file")
+    print(f"ok parse: {path.name} {len(lines) - 1} rows")
+
+
+def run_oracle() -> dict:
+    summaries: dict = {}
     try:
         import supervision as sv
         from supervision.dataset.formats import coco as coco_fmt
@@ -164,7 +236,14 @@ def run_oracle() -> None:
         save_all(valid, fmt, "split_valid")
         merged = sv.DetectionDataset.merge([train, valid])
         save_all(merged, fmt, "merge")
+        ref = OUT / fmt / "ref"
+        # One file per op so rowdiff can cmp it: the whole output directory as a bundle.
+        (ref / "roundtrip.bundle").write_bytes(bundle(ref / "roundtrip"))
+        (ref / "split.bundle").write_bytes(bundle(ref / "split_train", "train/") + bundle(ref / "split_valid", "valid/"))
+        (ref / "merge.bundle").write_bytes(bundle(ref / "merge"))
+        summaries[fmt] = summarize(ds)
         print(f"ok {fmt}: {len(ds)} images, split {len(train)}+{len(valid)}, merged {len(merged)}")
+    return summaries
 
 
 def verify_resave() -> None:
@@ -201,8 +280,9 @@ def main() -> None:
     if OUT.exists():
         shutil.rmtree(OUT)
     write_inputs()
-    run_oracle()
+    summaries = run_oracle()
     verify_resave()
+    write_case_rows(summaries)
 
 
 if __name__ == "__main__":
