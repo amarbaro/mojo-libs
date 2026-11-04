@@ -176,6 +176,8 @@ struct Registry(Movable):
 
     def child(mut self, m: Int, *values: String) raises -> Int:
         """The child for these label values (created on first use), like `metric.labels(...)`."""
+        if m < 0 or m >= len(self.kind):
+            raise Error("unknown metric id ", m)
         if len(values) != len(self.labels[m]):
             raise Error("Incorrect label count")
         var key = String(m)

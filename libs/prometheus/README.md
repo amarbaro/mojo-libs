@@ -17,7 +17,7 @@ r.observe(lat, r.child(lat), 0.042)
 print(r.exposition())                      # serve this as text/plain; version=0.0.4
 ```
 
-**Checked against prometheus_client 0.26.0** (created series off): a 413-op script (9 metrics, label values with quotes, backslashes, newlines and Unicode, custom and default buckets, sample-name duplicates, name and label validation, bucket rules, a negative-bucket histogram fed NaN, wrong-kind updates, a negative counter increment) replayed by both, five exposition snapshots byte-identical, plus Go-style float formatting (`1.234567e+06`, `+Inf`, `NaN`), each scenario twice. 6 of 6 mutants caught. Builds and passes on Mojo 1.2.0 and the 1.3 nightly.
+**Checked against prometheus_client 0.26.0** (created series off): a 436-op script (9 metrics, label values with quotes, backslashes, newlines and Unicode, custom and default buckets, sample-name duplicates, name and label validation, bucket rules, a negative-bucket histogram fed NaN, wrong-kind updates, a negative counter increment) replayed by both, 6 exposition snapshots and 13 error rows byte-identical, plus Go-style float formatting (`1.234567e+06`, `+Inf`, `NaN`), each scenario twice. 9 of 9 mutants caught. Builds and passes on Mojo 1.2.0 and the 1.3 nightly.
 
 Names follow prometheus_client's classic validation (`PROMETHEUS_LEGACY_NAME_VALIDATION=true`): metric names `[a-zA-Z_:][a-zA-Z0-9_:]*`, label names `[a-zA-Z_][a-zA-Z0-9_]*`, no `__` labels. The default UTF-8 names of prometheus_client 0.26 (quoted in the output) are not supported.
 
