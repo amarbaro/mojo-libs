@@ -17,7 +17,11 @@ from pathlib import Path
 import numpy as np
 
 import supervision as sv
+from supervision.dataset.utils import approximate_mask_with_polygons
+from supervision.detection.utils.masks import contains_holes, contains_multiple_segments
+from supervision.detection.utils.polygons import approximate_polygon
 from supervision.detection.utils.converters import (
+    mask_to_polygons,
     mask_to_xyxy,
     polygon_to_mask,
     xcycwh_to_xyxy,
@@ -211,6 +215,34 @@ def converter_rows():
         xyxy = np.round(np.clip(xyxy, 0, [w - 1, h - 1, w - 1, h - 1]), 0)
         masks = xyxy_to_mask(xyxy, (w, h))
         rows.append(("xyxy_to_mask", {"xyxy": xyxy, "resolution_wh": [w, h]}, masks))
+    # masks -> polygons: random blobs (discs and boxes, some carved out), then the helpers the COCO export uses
+    for k in range(36):
+        w, h = int(rng.integers(10, 44)), int(rng.integers(10, 44))
+        yy, xx = np.mgrid[0:h, 0:w]
+        mask = np.zeros((h, w), bool)
+        for _ in range(int(rng.integers(1, 4))):
+            cx, cy, r = rng.uniform(2, w - 2), rng.uniform(2, h - 2), rng.uniform(1.5, 0.35 * min(w, h))
+            if rng.random() < 0.5:
+                mask |= (xx - cx) ** 2 + (yy - cy) ** 2 <= r * r
+            else:
+                mask |= (abs(xx - cx) <= r) & (abs(yy - cy) <= r * rng.uniform(0.4, 1.0))
+        if k % 3 == 0:  # a hole
+            cx, cy, r = w / 2, h / 2, 0.15 * min(w, h)
+            mask &= ~((xx - cx) ** 2 + (yy - cy) ** 2 <= r * r)
+        m8 = mask.astype(np.uint8)
+        polys = mask_to_polygons(mask)
+        rows.append(("mask_to_polygons", {"mask": m8}, polys))
+        rows.append(("contains_holes", {"mask": m8}, bool(contains_holes(mask))))
+        rows.append(("contains_multiple_segments", {"mask": m8, "connectivity": 4 if k % 2 == 0 else 8},
+                     bool(contains_multiple_segments(mask, connectivity=4 if k % 2 == 0 else 8))))
+        for pol in polys[:2]:
+            pct = float(rng.choice([0.0, 0.25, 0.5, 0.75, 0.9]))
+            rows.append(("approximate_polygon", {"polygon": pol, "percentage": pct}, approximate_polygon(pol, pct)))
+        if mask.any():
+            lo, hi, pct = float(rng.choice([0.0, 0.02, 0.1])), float(rng.choice([0.5, 1.0])), float(rng.choice([0.0, 0.5, 0.75]))
+            rows.append(("approximate_mask_with_polygons",
+                         {"mask": m8, "min_image_area_percentage": lo, "max_image_area_percentage": hi, "approximation_percentage": pct},
+                         approximate_mask_with_polygons(mask, lo, hi, pct)))
     return rows
 
 
