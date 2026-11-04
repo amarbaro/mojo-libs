@@ -14,14 +14,14 @@ for (h, w, ch) in [(40, 200, 4), (41, 203, 4), (30, 64, 4), (16, 9, 4), (50, 301
         o = mcv.load(".work/c4o.mcv")
         d = np.abs(o.astype(int) - ref.reshape(o.shape).astype(int)).max()
         print(name, h, w, ch, "maxdiff", d); bad += d > 0
-for (h, w, ch, dw, dh) in [(70, 101, 3, 67, 41), (70, 101, 3, 150, 90), (33, 47, 1, 29, 17), (50, 301, 1, 400, 61), (40, 200, 3, 17, 3), (21, 33, 3, 33, 21), (40, 200, 4, 130, 70)]:
+for (h, w, ch, dw, dh) in [(70, 101, 3, 67, 41), (70, 101, 3, 150, 90), (33, 47, 1, 29, 17), (50, 301, 1, 400, 61), (40, 200, 3, 17, 3), (21, 33, 3, 33, 21), (40, 200, 4, 130, 70), (2, 2, 3, 7, 5), (2, 3, 1, 11, 13), (3, 2, 4, 5, 7), (9, 17, 4, 40, 33)]:
     a = rng.integers(0, 256, (h, w, ch), dtype=np.uint8)
     if ch == 1: a = a[..., 0]
     mcv.save(a, ".work/c4.mcv")
     subprocess.run([".bin/mojo-cv", "resize", ".work/c4o.mcv", ".work/c4.mcv", "w=%d" % dw, "h=%d" % dh, "interp=1"], check=True, capture_output=True)
     o = mcv.load(".work/c4o.mcv")
     d = np.abs(o.astype(int) - cv2.resize(a, (dw, dh), interpolation=cv2.INTER_LINEAR).reshape(o.shape).astype(int)).max()
-    print("resize general", h, w, ch, "->", dh, dw, "maxdiff", d); bad += d > 1
+    print("resize general", h, w, ch, "->", dh, dw, "maxdiff", d); bad += d > 0
 # cv_circle_outline: thick lines are Line2 quads, and cv2's Line2 plots its (clipped, sorted) second endpoint first; these segments
 # lose one tip pixel without that (found by a 1500-line sweep against cv2.line, 9 hits)
 for (x1, y1, x2, y2, th) in [(0, 41, 18, 50, 7), (0, 0, 39, 31, 3), (41, 12, 56, 3, 9), (79, 11, 62, 42, 8), (79, 28, 68, 57, 3)]:
