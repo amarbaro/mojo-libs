@@ -13,6 +13,7 @@ from supervision.detection.line_zone import LineZone
 from supervision.detection.tools.csv_sink import CSVSink
 from supervision.detection.tools.inference_slicer import InferenceSlicer
 from supervision.detection.tools.json_sink import JSONSink
+from supervision.detection.tools.polygon_zone import PolygonZone
 from supervision.detection.tools.smoother import DetectionsSmoother
 
 warnings.simplefilter("ignore")
@@ -270,6 +271,36 @@ def smoother_rows(rng):
     return rows
 
 
+def zone_rows(rng):
+    """The mask is the oracle's own (cv2.fillPoly via polygon_to_mask): these rows test trigger(), not the fill."""
+    rows = []
+    for k in range(60):
+        npts = 2 if k == 0 else rng.randint(3, 8)
+        polygon = [[rng.randint(0, 40), rng.randint(0, 40)] for _ in range(npts)]
+        anchors = [] if k == 1 else rng.sample(ANCHOR_POOL[:], rng.randint(1, 3)) if rng.random() < 0.8 else ["BOTTOM_CENTER"]
+        require_all = rng.random() < 0.5
+        frames = []
+        for _ in range(rng.randint(1, 4)):
+            boxes = []
+            for _ in range(rng.choice([0, 1, 3, 6, 10])):
+                x, y = rng.uniform(-6, 42), rng.uniform(-6, 42)
+                boxes.append([x, y, x + rng.uniform(0, 6), y + rng.uniform(0, 6)])
+            frames.append(boxes)
+        args = {"polygon": polygon, "anchors": anchors, "require_all": require_all, "mask": [], "frames": frames}
+        try:
+            z = PolygonZone(np.array(polygon), triggering_anchors=[Position[a] for a in anchors],
+                            require_all_anchors=require_all)
+            args["mask"] = z.mask.astype(int).tolist()
+            out = []
+            for boxes in frames:
+                hit = z.trigger(Detections(xyxy=np.array(boxes, dtype=float).reshape(-1, 4)))
+                out.append({"hits": [bool(v) for v in hit], "count": int(z.current_count)})
+            rows.append(("polygon_zone", args, out))
+        except ValueError:
+            rows.append(("polygon_zone", args, {"error": "ValueError"}))
+    return rows
+
+
 def main():
     rng = random.Random(SEED)
     os.makedirs(OUT, exist_ok=True)
@@ -278,6 +309,7 @@ def main():
     rows = sink_rows(rng)
     write("tools_sinks", rows)
     write("tools_smoother", smoother_rows(rng))
+    write("tools_zone", zone_rows(rng))
 
 
 if __name__ == "__main__":
