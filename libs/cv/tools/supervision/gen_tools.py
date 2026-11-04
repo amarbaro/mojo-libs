@@ -6,7 +6,13 @@ import json, os, random, sys
 
 import numpy as np
 
+import warnings
+
+from supervision import Detections, Point, Position
+from supervision.detection.line_zone import LineZone
 from supervision.detection.tools.inference_slicer import InferenceSlicer
+
+warnings.simplefilter("ignore")
 
 SEED = 4
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "cases")
@@ -63,10 +69,74 @@ def slicer_rows(rng):
     return rows
 
 
+ALL_ANCHORS = ["TOP_LEFT", "TOP_RIGHT", "BOTTOM_LEFT", "BOTTOM_RIGHT"]
+ANCHOR_POOL = ["CENTER", "CENTER_LEFT", "CENTER_RIGHT", "TOP_CENTER", "TOP_LEFT", "TOP_RIGHT",
+               "BOTTOM_LEFT", "BOTTOM_CENTER", "BOTTOM_RIGHT"]
+
+
+def per_class(counter):
+    return [[None if k is None else int(k), int(v)] for k, v in counter.items()]
+
+
+def line_case(rng, frames, start, end, anchors, thr):
+    args = {"start": start, "end": end, "anchors": anchors, "min_threshold": thr, "frames": frames}
+    try:
+        z = LineZone(Point(*start), Point(*end), triggering_anchors=[Position[a] for a in anchors],
+                     minimum_crossing_threshold=thr)
+    except ValueError:
+        return ("line_zone", args, {"error": "ValueError"})
+    out = []
+    for f in frames:
+        xyxy = np.array(f["xyxy"], dtype=float).reshape(-1, 4)
+        d = Detections(xyxy=xyxy,
+                       tracker_id=None if f["tracker_id"] is None else np.array(f["tracker_id"], dtype=int),
+                       class_id=None if f["class_id"] is None else np.array(f["class_id"], dtype=int))
+        ci, co = z.trigger(d)
+        out.append({"in": [bool(v) for v in ci], "out": [bool(v) for v in co]})
+    out.append({"in_count": int(z.in_count), "out_count": int(z.out_count),
+                "in_per_class": per_class(z._in_count_per_class),
+                "out_per_class": per_class(z._out_count_per_class)})
+    return ("line_zone", args, out)
+
+
+def line_rows(rng):
+    rows = []
+    for k in range(70):
+        start = [float(rng.randint(0, 100)), float(rng.randint(0, 100))]
+        end = [float(rng.randint(0, 100)), float(rng.randint(0, 100))]
+        if k == 0:
+            end = list(start)  # zero magnitude -> error
+        anchors = ALL_ANCHORS if rng.random() < 0.4 else rng.sample(ANCHOR_POOL, rng.randint(1, 3))
+        thr = rng.choice([0, 1, 1, 2, 3])
+        ntr = rng.randint(1, 5)
+        cx, cy = (start[0] + end[0]) / 2, (start[1] + end[1]) / 2
+        pos = {t: [cx + rng.uniform(-40, 40), cy + rng.uniform(-40, 40)] for t in range(ntr)}
+        # aim each track at a point near the line centre so most of them cross it
+        vel = {t: [(cx + rng.uniform(-8, 8) - pos[t][0]) / 8 * rng.uniform(0.6, 1.4),
+                   (cy + rng.uniform(-8, 8) - pos[t][1]) / 8 * rng.uniform(0.6, 1.4)] for t in range(ntr)}
+        cls = {t: rng.randint(0, 2) for t in range(ntr)}
+        use_cls = rng.random() < 0.7
+        frames = []
+        for fi in range(rng.randint(1, 30) if k % 5 else 30):
+            ids = [t for t in range(ntr) if rng.random() < 0.85]
+            xyxy, tids = [], []
+            for t in ids:
+                pos[t][0] += vel[t][0]; pos[t][1] += vel[t][1]
+                w, h = rng.uniform(2, 20), rng.uniform(2, 20)
+                xyxy.append([pos[t][0] - w / 2, pos[t][1] - h / 2, pos[t][0] + w / 2, pos[t][1] + h / 2])
+                tids.append(-1 if rng.random() < 0.05 else t)
+            no_tracker = rng.random() < 0.05
+            frames.append({"xyxy": xyxy, "tracker_id": None if no_tracker else tids,
+                           "class_id": [cls[t] for t in ids] if use_cls else None})
+        rows.append(line_case(rng, frames, start, end, anchors, thr))
+    return rows
+
+
 def main():
     rng = random.Random(SEED)
     os.makedirs(OUT, exist_ok=True)
     write("tools_slicer", slicer_rows(rng))
+    write("tools_line", line_rows(rng))
 
 
 if __name__ == "__main__":
