@@ -13,6 +13,7 @@ from supervision.detection.line_zone import LineZone
 from supervision.detection.tools.csv_sink import CSVSink
 from supervision.detection.tools.inference_slicer import InferenceSlicer
 from supervision.detection.tools.json_sink import JSONSink
+from supervision.detection.tools.smoother import DetectionsSmoother
 
 warnings.simplefilter("ignore")
 
@@ -198,6 +199,77 @@ def sink_rows(rng):
     return rows
 
 
+def obb_corners(rng, cx, cy):
+    """4 corners of a rotated rectangle, starting corner and winding chosen at random."""
+    w, h, a = rng.uniform(2, 12), rng.uniform(2, 12), rng.uniform(0, 6.283)
+    c, s_ = np.cos(a), np.sin(a)
+    pts = [(-w / 2, -h / 2), (w / 2, -h / 2), (w / 2, h / 2), (-w / 2, h / 2)]
+    pts = [[cx + x * c - y * s_, cy + x * s_ + y * c] for x, y in pts]
+    k = rng.randint(0, 3)
+    pts = pts[k:] + pts[:k]
+    return pts[::-1] if rng.random() < 0.5 else pts
+
+
+def smoother_rows(rng):
+    rows = []
+    for k in range(60):
+        length = rng.choice([1, 2, 3, 5, 5, 8])
+        ntr = rng.randint(1, 5)
+        use_cls = rng.random() < 0.7
+        conf_mode = rng.choice(["all", "all", "none", "some"])
+        obb_mode = rng.choice(["none", "none", "all", "some"])
+        pos = {t: [rng.uniform(0, 80), rng.uniform(0, 80)] for t in range(ntr)}
+        vel = {t: [rng.uniform(-3, 3), rng.uniform(-3, 3)] for t in range(ntr)}
+        cls = {t: rng.randint(0, 3) for t in range(ntr)}
+        frames = []
+        for fi in range(rng.randint(1, 14)):
+            ids = [t for t in range(ntr) if rng.random() < 0.8]
+            xyxy, tids, obb = [], [], []
+            for t in ids:
+                pos[t][0] += vel[t][0]; pos[t][1] += vel[t][1]
+                w, h = rng.uniform(4, 20), rng.uniform(4, 20)
+                xyxy.append([pos[t][0], pos[t][1], pos[t][0] + w, pos[t][1] + h])
+                tids.append(t)
+                obb.append(obb_corners(rng, pos[t][0] + w / 2, pos[t][1] + h / 2))
+            if ids and rng.random() < 0.15:  # same tracker id twice in a frame
+                xyxy.append(list(xyxy[0])); tids.append(tids[0]); obb.append(obb[0])
+                ids.append(ids[0])
+            has_conf = conf_mode == "all" or (conf_mode == "some" and rng.random() < 0.6)
+            has_obb = obb_mode == "all" or (obb_mode == "some" and rng.random() < 0.6)
+            frames.append({
+                "xyxy": xyxy,
+                "confidence": [round(rng.uniform(0, 1), 3) for _ in ids] if has_conf else None,
+                "class_id": [cls[t] for t in ids] if use_cls else None,
+                "tracker_id": None if rng.random() < 0.07 else tids,
+                "obb": obb if has_obb else None,
+            })
+        args = {"length": length, "frames": frames}
+        try:
+            sm = DetectionsSmoother(length)
+            out = []
+            for f in frames:
+                n = len(f["xyxy"])
+                d = Detections(
+                    xyxy=np.array(f["xyxy"], dtype=float).reshape(-1, 4),
+                    confidence=None if f["confidence"] is None else np.array(f["confidence"], dtype=float),
+                    class_id=None if f["class_id"] is None else np.array(f["class_id"], dtype=int),
+                    tracker_id=None if f["tracker_id"] is None else np.array(f["tracker_id"], dtype=int),
+                    data={} if f["obb"] is None else {"xyxyxyxy": np.array(f["obb"], dtype=float).reshape(n, 4, 2)},
+                )
+                r = sm.update_with_detections(d)
+                out.append({
+                    "xyxy": r.xyxy.tolist(),
+                    "confidence": None if r.confidence is None else r.confidence.tolist(),
+                    "class_id": None if r.class_id is None else [int(v) for v in r.class_id],
+                    "tracker_id": None if r.tracker_id is None else [int(v) for v in r.tracker_id],
+                    "obb": [[v for pt in c for v in pt] for c in r.data["xyxyxyxy"]] if "xyxyxyxy" in r.data else None,
+                })
+            rows.append(("smoother", args, out))
+        except Exception:
+            rows.append(("smoother", args, {"error": "Exception"}))
+    return rows
+
+
 def main():
     rng = random.Random(SEED)
     os.makedirs(OUT, exist_ok=True)
@@ -205,6 +277,7 @@ def main():
     write("tools_line", line_rows(rng))
     rows = sink_rows(rng)
     write("tools_sinks", rows)
+    write("tools_smoother", smoother_rows(rng))
 
 
 if __name__ == "__main__":

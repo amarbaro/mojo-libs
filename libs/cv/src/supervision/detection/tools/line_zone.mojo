@@ -106,7 +106,7 @@ struct LineZone(Movable):
         var tracker_id = d.tracker_id.copy()
         var anchors = List[List[Float64]]()  # anchors[a] = flat x, y per detection
         for p in self.triggering_anchors:
-            anchors.append(d.get_anchors_coordinates(p.v))
+            anchors.append(d.get_anchors_coordinates(p))
         var current = List[Int]()
         for i in range(n):
             if tracker_id[i] >= 0:
