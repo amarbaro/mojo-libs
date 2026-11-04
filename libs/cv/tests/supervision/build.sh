@@ -5,4 +5,4 @@ cd "$(dirname "$0")/.."
 mkdir -p build .work
 J=${MOJO_JSON:-/home/mario/Projects/mojo/mojo-json/src}
 mojo build -O3 -I src -I "$J" tests/rows_detection.mojo -o build/detection_rows 2>.work/s1-build.log || { tail -40 .work/s1-build.log; echo "FAIL build: see .work/s1-build.log"; exit 1; }
-for s in converters detections iou nms; do cp build/detection_rows "build/detection_$s"; done
+for s in detection_converters detection_detections detection_iou detection_nms s1_detections s1_utils; do cp build/detection_rows "build/$s"; done
