@@ -52,10 +52,12 @@ struct MappedFile(Movable, Sized):
             raise Error("mmap: cannot map an empty file: ", path)
         var prot = 3 if write else 1
         self.base = external_call["mmap", Int](Int(0), self.size, Int32(prot), Int32(1), fd, Int64(0))
-        _ = external_call["close", Int32](fd)
         if self.base == _MAP_FAILED:
             self.base = 0
-            raise _err("mmap failed", path)
+            var e = _err("mmap failed", path)  # errno before close()
+            _ = external_call["close", Int32](fd)
+            raise e^
+        _ = external_call["close", Int32](fd)
 
     def __len__(self) -> Int:
         return self.size
@@ -89,8 +91,7 @@ def create(path: String, size: Int) raises -> MappedFile:
     """Create (or truncate) `path` with `size` zero bytes and map it writable."""
     var fd = _open(path, 2 | 0o100 | 0o1000)
     if external_call["ftruncate64", Int32](fd, Int64(size)) != 0:
-        _ = external_call["close", Int32](fd)
-        var e = _err("cannot size", path)
+        var e = _err("cannot size", path)  # read errno before close() can change it; close exactly once
         _ = external_call["close", Int32](fd)
         raise e^
     return MappedFile(_fd=fd, path=path, write=True)
