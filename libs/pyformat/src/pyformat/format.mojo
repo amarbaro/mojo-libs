@@ -386,6 +386,8 @@ def py_repr(x: Float64) -> String:
         return "-inf"
     if x == 0:
         return "-0.0" if 1.0 / x < 0 else "0.0"
+    if abs(x) < 1e16 and x == Float64(Int(x)):  # whole numbers: exact, no digit search
+        return String(Int(x)) + ".0"
     var s = String()
     for p in range(17):
         s = fmt_e(x, p)
