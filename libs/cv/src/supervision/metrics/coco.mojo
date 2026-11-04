@@ -245,7 +245,7 @@ def _evaluate_image(
                     if avail[t * ng + gi] and iou[di * ng + gorder[gi]] >= th:
                         if gign_sorted[gi] == 0:
                             has_kept = True
-                best = -1
+                var best = -1
                 var best_iou = -1.0
                 for gi in range(ng):
                     if not avail[t * ng + gi]:

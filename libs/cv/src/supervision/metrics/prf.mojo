@@ -23,14 +23,14 @@ struct PrfResult(Copyable, Movable):
         self.classes = List[Int]()
 
 
-def _score(kind: Int, tp: Float64, fp: Float64, fn: Float64) -> Float64:
+def _score(kind: Int, tp: Float64, fp: Float64, fneg: Float64) -> Float64:
     var num = tp
     var den = tp + fp
     if kind == RECALL:
-        den = tp + fn
+        den = tp + fneg
     elif kind == F1:
         num = 2.0 * tp
-        den = 2.0 * tp + fp + fn
+        den = 2.0 * tp + fp + fneg
     return num / den if den != 0.0 else 0.0
 
 
@@ -86,7 +86,7 @@ def prf(
     var counts = List[Int](length=nc, fill=0)
     var tp = List[Float64](length=nc * N_THR, fill=0.0)
     var fp = List[Float64](length=nc * N_THR, fill=0.0)
-    var fn = List[Float64](length=nc * N_THR, fill=0.0)
+    var fneg = List[Float64](length=nc * N_THR, fill=0.0)
     for c in tcls:
         for k in range(nc):
             if classes[k] == c:
@@ -103,16 +103,16 @@ def prf(
                     hit += 1
             var i = k * N_THR + t
             if n_pred == 0:
-                fn[i] = Float64(counts[k])
+                fneg[i] = Float64(counts[k])
             elif counts[k] == 0:
                 fp[i] = Float64(n_pred)
             else:
                 tp[i] = Float64(hit)
                 fp[i] = Float64(n_pred - hit)
-                fn[i] = Float64(counts[k] - hit)
+                fneg[i] = Float64(counts[k] - hit)
     res.per_class = List[Float64](length=nc * N_THR, fill=0.0)
     for i in range(nc * N_THR):
-        res.per_class[i] = _score(kind, tp[i], fp[i], fn[i])
+        res.per_class[i] = _score(kind, tp[i], fp[i], fneg[i])
     var total = 0.0
     for k in range(nc):
         total += Float64(counts[k])
@@ -129,7 +129,7 @@ def prf(
             for k in range(nc):
                 a += tp[k * N_THR + t]
                 b += fp[k * N_THR + t]
-                c += fn[k * N_THR + t]
+                c += fneg[k * N_THR + t]
             s = _score(kind, a, b, c)
         elif total > 0.0:
             for k in range(nc):
