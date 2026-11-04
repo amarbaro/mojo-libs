@@ -316,8 +316,8 @@ def _split_flow(inner: String) raises -> List[YScalar]:
                 continue
         if at_end or (s[i] == 44 and depth == 0):
             var tok = String(inner[byte = start : i]).strip()
-            if len(tok) > 0 or not at_end:
-                if len(tok) > 0:
+            if tok.byte_length() > 0 or not at_end:
+                if tok.byte_length() > 0:
                     out.append(_scalar_from_token(String(tok)))
             start = i + 1
     return out^
@@ -414,13 +414,13 @@ def parse_yaml(text: String) raises -> YDoc:
         var key = _scalar_from_token(String(ln.text[byte = :k])).text
         var rest = String(String(ln.text[byte = k + 1 :]).strip())
         i += 1
-        if len(rest) > 0:
+        if rest.byte_length() > 0:
             if rest.startswith("["):
                 while not _flow_balanced(rest) and i < len(ls):
                     rest += " " + ls[i].text
                     i += 1
                 var close = rest.rfind("]")
-                var inner = String(rest[byte = 1 : close if close > 0 else len(rest)])
+                var inner = String(rest[byte = 1 : close if close > 0 else rest.byte_length()])
                 doc.keys.append(key^)
                 doc.values.append(YValue(V_SEQ, _str_scalar(""), _split_flow(inner), List[YScalar]()))
                 continue
@@ -442,7 +442,7 @@ def parse_yaml(text: String) raises -> YDoc:
             var items = List[YScalar]()
             while i < len(ls) and ls[i].indent == li and (ls[i].text == "-" or ls[i].text.startswith("- ")):
                 var it = String(String(ls[i].text[byte = 1 :]).strip())
-                items.append(_scalar_from_token(it) if len(it) > 0 else YScalar(K_NULL, "None", 0, 0.0))
+                items.append(_scalar_from_token(it) if it.byte_length() > 0 else YScalar(K_NULL, "None", 0, 0.0))
                 i += 1
                 while i < len(ls) and ls[i].indent > li:
                     i += 1
@@ -459,7 +459,7 @@ def parse_yaml(text: String) raises -> YDoc:
                     if kk >= 0:
                         var v = String(String(ls[i].text[byte = kk + 1 :]).strip())
                         mk.append(_scalar_from_token(String(ls[i].text[byte = :kk])))
-                        mv.append(_scalar_from_token(v) if len(v) > 0 else YScalar(K_NULL, "None", 0, 0.0))
+                        mv.append(_scalar_from_token(v) if v.byte_length() > 0 else YScalar(K_NULL, "None", 0, 0.0))
                 i += 1
             doc.keys.append(key^)
             doc.values.append(YValue(V_MAP, _str_scalar(""), mv^, mk^))
@@ -630,4 +630,4 @@ def dump_data_yaml(classes: List[String]) raises -> String:
             e.text_wrapped(c.replace("'", "''"), 2)
             e.put("'")
     e.put("]\n")
-    return e.out^
+    return e.out.copy()

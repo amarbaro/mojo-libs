@@ -20,7 +20,7 @@ def _int_like(k: YScalar) -> Bool:
         return True
     if k.kind == K_STR:
         var t = String(k.text.strip())
-        if len(t) == 0:
+        if t.byte_length() == 0:
             return False
         for c in t.as_bytes():
             if c < 48 or c > 57:
@@ -97,13 +97,13 @@ def _repr_key(k: YScalar) -> String:
     return k.text
 
 
-def _key_less(a: YScalar, b: YScalar, numeric: Bool) -> Bool:
+def _key_less(a: YScalar, b: YScalar, numeric: Bool) raises -> Bool:
     if numeric:
         return _key_int(a) < _key_int(b)
     return a.text < b.text
 
 
-def _key_int(k: YScalar) -> Int:
+def _key_int(k: YScalar) raises -> Int:
     if k.kind == K_INT:
         return k.ival
     return Int(k.text.strip())
@@ -141,8 +141,8 @@ def pose_value_count(doc: YDoc, file_path: String) raises -> Int:
         and (Int(v.items[1].fval if v.items[1].kind == K_FLOAT else Float64(v.items[1].ival)) == 2
              or Int(v.items[1].fval if v.items[1].kind == K_FLOAT else Float64(v.items[1].ival)) == 3)
     ):
-        var k = v.items[0]
-        var d = v.items[1]
+        ref k = v.items[0]
+        ref d = v.items[1]
         var kk = k.ival if k.kind == K_INT else Int(k.fval)
         var dd = d.ival if d.kind == K_INT else Int(d.fval)
         return kk * dd
