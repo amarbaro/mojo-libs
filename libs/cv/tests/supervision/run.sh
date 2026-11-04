@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 BUILD_DIR=${BUILD_DIR:-build}
 PY=${ORACLE_PY:-.work/oracle-venv/bin/python}
-OUT=.work/tests-out
+OUT=${BUILD_DIR:-build}/tests-out
 mkdir -p "$OUT"
 
 if [ $# -gt 0 ]; then files=("$@"); else
