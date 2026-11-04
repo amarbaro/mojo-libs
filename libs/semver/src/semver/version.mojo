@@ -9,35 +9,24 @@ def _ident_char(c: UInt8) -> Bool:
     return _digit(c) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 45
 
 
-def _all_digits(s: StringSlice[_]) -> Bool:
-    for c in s.as_bytes():
-        if not _digit(c):
-            return False
-    return True
-
-
-def _number(s: StringSlice[_]) raises -> Int:
-    """0 or a digit run without a leading zero (fits in Int)."""
-    var b = s.as_bytes()
-    if len(b) == 0 or not _all_digits(s) or (len(b) > 1 and b[0] == 48) or len(b) > 18:
-        raise Error("bad number")
-    var n = 0
-    for c in b:
-        n = n * 10 + Int(c - 48)
-    return n
-
-
-def _check_idents(s: StringSlice[_], pre: Bool) raises:
-    """Dot-separated identifiers; prerelease numeric ones may not have a leading zero."""
-    for part in s.split("."):
-        var b = part.as_bytes()
-        if len(b) == 0:
-            raise Error("empty identifier")
-        for c in b:
-            if not _ident_char(c):
+def _check_idents(b: Span[UInt8, _], pre: Bool) raises:
+    """Dot-separated identifiers, scanned in place; prerelease numeric ones may not have a leading zero."""
+    var i = 0
+    while True:
+        var start = i
+        var digits = True
+        while i < len(b) and b[i] != 46:
+            if not _ident_char(b[i]):
                 raise Error("bad character")
-        if pre and _all_digits(part) and len(b) > 1 and b[0] == 48:
+            digits = digits and _digit(b[i])
+            i += 1
+        if i == start:
+            raise Error("empty identifier")
+        if pre and digits and i - start > 1 and b[start] == 48:
             raise Error("leading zero")
+        if i == len(b):
+            return
+        i += 1
 
 
 @fieldwise_init
@@ -127,30 +116,52 @@ struct Version(Copyable, Equatable, Movable, Writable):
         return Self(self.major, self.minor, self.patch, "", "")
 
 
+def _part(b: Span[UInt8, _], i: Int) -> Int:
+    """End of the dot-separated part starting at i."""
+    var j = i
+    while j < len(b) and b[j] != 46:
+        j += 1
+    return j
+
+
 def _nat_cmp(a: String, b: String) -> Int:
-    """Python semver's prerelease order: numeric parts as numbers, numbers before text."""
-    var pa = a.split(".")
-    var pb = b.split(".")
-    for i in range(min(len(pa), len(pb))):
-        var x = pa[i]
-        var y = pb[i]
-        var nx = x.byte_length() > 0 and _all_digits(x)
-        var ny = y.byte_length() > 0 and _all_digits(y)
+    """Python semver's prerelease order: numeric parts as numbers, numbers before text. No allocation."""
+    var x = a.as_bytes()
+    var y = b.as_bytes()
+    var i = 0
+    var j = 0
+    while True:
+        var ie = _part(x, i)
+        var je = _part(y, j)
+        var nx = ie > i
+        var ny = je > j
+        for k in range(i, ie):
+            nx = nx and _digit(x[k])
+        for k in range(j, je):
+            ny = ny and _digit(y[k])
         var r = 0
-        if nx and ny:
-            var lx = x.byte_length()
-            var ly = y.byte_length()
-            # digit strings without leading zeros: longer is larger, same length compares as text
-            r = (-1 if lx < ly else 1) if lx != ly else (0 if x == y else (-1 if x < y else 1))
-        elif nx:
+        if nx and ny and ie - i != je - j:
+            r = -1 if ie - i < je - j else 1
+        elif nx and not ny:
             r = -1
-        elif ny:
+        elif ny and not nx:
             r = 1
-        else:
-            r = 0 if x == y else (-1 if x < y else 1)
+        else:  # both text, or equal-length digit runs: byte order
+            var k = 0
+            while r == 0 and i + k < ie and j + k < je:
+                if x[i + k] != y[j + k]:
+                    r = -1 if x[i + k] < y[j + k] else 1
+                k += 1
+            if r == 0 and ie - i != je - j:
+                r = -1 if ie - i < je - j else 1
         if r != 0:
             return r
-    return 0 if len(pa) == len(pb) else (-1 if len(pa) < len(pb) else 1)
+        var x_end = ie >= len(x)
+        var y_end = je >= len(y)
+        if x_end or y_end:
+            return 0 if x_end and y_end else (-1 if x_end else 1)
+        i = ie + 1
+        j = je + 1
 
 
 def _increment(s: String) -> String:
@@ -172,29 +183,49 @@ def _increment(s: String) -> String:
     return String(s[byte=0:cut]) + nxt + String(s[byte=end:])
 
 
+def _core(b: Span[UInt8, _], mut i: Int) raises -> Int:
+    """One core number at i: 0 or digits without a leading zero, at most 18 digits."""
+    var start = i
+    var n = 0
+    while i < len(b) and _digit(b[i]):
+        n = n * 10 + Int(b[i] - 48)
+        i += 1
+    if i == start or (i - start > 1 and b[start] == 48) or i - start > 18:
+        raise Error("bad number")
+    return n
+
+
 def parse(s: String) raises -> Version:
-    """Strict SemVer 2.0 (major.minor.patch required), as Python semver Version.parse."""
+    """Strict SemVer 2.0 (major.minor.patch required), as Python semver Version.parse. One scan; the only
+    allocations are the prerelease and build strings themselves."""
     try:
-        var core_end = s.byte_length()
-        var plus = s.find("+")
-        var dash = s.find("-")
-        if plus >= 0:
-            core_end = plus
-        if dash >= 0 and dash < core_end:
-            core_end = dash
-        var nums = String(s[byte=0:core_end]).split(".")
-        if len(nums) != 3:
+        var b = s.as_bytes()
+        var i = 0
+        var major = _core(b, i)
+        if i >= len(b) or b[i] != 46:
             raise Error("parts")
+        i += 1
+        var minor = _core(b, i)
+        if i >= len(b) or b[i] != 46:
+            raise Error("parts")
+        i += 1
+        var patch = _core(b, i)
         var pre = String()
         var build = String()
-        if dash >= 0 and dash == core_end:
-            var pe = plus if plus >= 0 else s.byte_length()
-            pre = String(s[byte = dash + 1 : pe])
-            _check_idents(pre, True)
-        if plus >= 0:
-            build = String(s[byte = plus + 1 :])
-            _check_idents(build, False)
-        return Version(_number(nums[0]), _number(nums[1]), _number(nums[2]), pre^, build^)
+        if i < len(b) and b[i] == 45:
+            var start = i + 1
+            i = start
+            while i < len(b) and b[i] != 43:
+                i += 1
+            _check_idents(b[start:i], True)
+            pre = String(s[byte=start:i])
+        if i < len(b) and b[i] == 43:
+            _check_idents(b[i + 1 :], False)
+            build = String(s[byte = i + 1 :])
+            i = len(b)
+        if i != len(b):
+            raise Error("trailing")
+        return Version(major, minor, patch, pre^, build^)
     except:
         raise Error(s, " is not valid SemVer string")
 
