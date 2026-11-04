@@ -40,6 +40,8 @@ def main() raises:
                             labels.append(String(x))
                     var name = String(f[1])
                     var help = unhex(f[2])
+                    ms.append(-1)  # the slot exists even when registration fails, on both sides
+                    kinds.append(op)
                     var m: Int
                     if op == "counter":
                         m = reg.counter(name, help, labels)
@@ -49,19 +51,21 @@ def main() raises:
                         m = reg.summary(name, help, labels)
                     elif f[4]:
                         var b = List[Float64]()
-                        for x in f[4].split(","):
-                            b.append(atof(x))
+                        if String(f[4]) != "-":
+                            for x in f[4].split(","):
+                                b.append(Float64.MAX * 2 if String(x) == "inf" else atof(x))
                         m = reg.histogram(name, help, labels, b)
                     else:
                         m = reg.histogram(name, help, labels)
-                    ms.append(m)
-                    kinds.append(op)
+                    ms[len(ms) - 1] = m
                 elif op == "expo":
                     print(reg.exposition(), end="")
                     print("---")
                 else:
                     var mi = Int(atol(f[1]))
                     var m = ms[mi]
+                    if m < 0:
+                        raise Error("metric slot failed")
                     var vals = List[String]()
                     for x in f[3].split(","):
                         if x:
@@ -73,7 +77,7 @@ def main() raises:
                         ch = reg.child(m, vals[0])
                     else:
                         ch = reg.child(m, vals[0], vals[1])
-                    var v = atof(f[2])
+                    var v = Float64.MAX * 2 - Float64.MAX * 2 if f[2] == "nan" else atof(f[2])
                     if op == "inc":
                         reg.inc(ch, v)
                     elif op == "dec":

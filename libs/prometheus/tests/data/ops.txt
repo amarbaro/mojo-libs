@@ -414,3 +414,23 @@ expo
 inc	1	-1.0	
 set	2	-0.0	
 expo
+counter		78		
+counter	1abc	78		
+gauge	g_ok	78	__x	
+histogram	h_le	78	le	
+summary	s_q	78	quantile	
+counter	a	78		
+gauge	a_total	647570206f6620636f756e7465722061		
+histogram	h_empty	78		-
+histogram	h_inf	78		inf
+histogram	h_eq	78		1,1
+histogram	h_neg	6e65676174697665206275636b657473		-1,0,1
+observe	19	-0.5	
+observe	19	nan	
+observe	19	3.0	
+inc	0	1.0	h610062,h63
+inc	0	2.0	h61,h620063
+inc	4	1.0	h2f78
+dec	1	1.0	
+observe	0	1.0	h474554,h323030
+expo

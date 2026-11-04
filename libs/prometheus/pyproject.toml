@@ -15,4 +15,4 @@ dev = ["prometheus-client==0.26.0"]
 
 [tool.mojo]
 packages = ["prometheus"]  # src/pyformat is a vendored copy for a clone build; the conda package carries only this one
-deps = ["mojo-pyformat"]
+deps = ["mojo-pyformat >=0.2.0,<0.3"]

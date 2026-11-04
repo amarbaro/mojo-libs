@@ -20,4 +20,16 @@ for i in range(400):
     out.append("\t".join([op, str(m), v, labs]))
     if i % 100 == 99: out.append("expo")
 out += ["inc\t1\t-1.0\t", "set\t2\t-0.0\t", "expo"]
+H = lambda t: t.encode().hex()
+nm = len(specs)  # metric index of the next registration (failed ones still take a slot on both sides: see oracle)
+extra = [("counter", "", "x", "", ""), ("counter", "1abc", "x", "", ""), ("gauge", "g_ok", "x", "__x", ""),
+         ("histogram", "h_le", "x", "le", ""), ("summary", "s_q", "x", "quantile", ""),
+         ("counter", "a", "x", "", ""), ("gauge", "a_total", "dup of counter a", "", ""),
+         ("histogram", "h_empty", "x", "", "-"), ("histogram", "h_inf", "x", "", "inf"), ("histogram", "h_eq", "x", "", "1,1"),
+         ("histogram", "h_neg", "negative buckets", "", "-1,0,1")]
+for e in extra:
+    out.append("\t".join([e[0], e[1], H(e[2]), e[3], e[4]]))
+out += ["observe\t%d\t-0.5\t" % (nm + 10), "observe\t%d\tnan\t" % (nm + 10), "observe\t%d\t3.0\t" % (nm + 10),
+        "inc\t0\t1.0\th" + H("a\x00b") + ",h" + H("c"), "inc\t0\t2.0\th" + H("a") + ",h" + H("b\x00c"),
+        "inc\t4\t1.0\th" + H("/x"), "dec\t1\t1.0\t", "observe\t0\t1.0\th" + H("GET") + ",h" + H("200"), "expo"]
 open("tests/data/ops.txt", "w").write("\n".join(out) + "\n")

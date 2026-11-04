@@ -14,3 +14,5 @@
 | `r.observe(metric, child, v)` | Histogram (first bucket with `v <= bound`) or summary. |
 | `r.exposition() -> String` | The text format, `# HELP` / `# TYPE` per metric, labels sorted by name. |
 | `go_float(x) -> String` | prometheus_client `floatToGoString`. |
+
+Rules, all as prometheus_client 0.26 with classic name validation: an empty or invalid metric name, an invalid or `__`-prefixed label name, `le` on a histogram and `quantile` on a summary raise at registration; a metric whose samples (`x`, `x_total`, `x_bucket`, `x_sum`, `x_count`, `x_created`) overlap an earlier one raises `Duplicated timeseries in CollectorRegistry: <sample>`. Buckets: sorted (equal neighbours allowed), `+Inf` appended, fewer than two raise. `inc` is for counters and gauges, `dec`/`set` for gauges, `observe` for histograms and summaries (and the child must belong to that metric); anything else raises. A histogram's `_count` is its bucket total (a NaN observation lands in no bucket), and `_sum` is printed only when the first bound is >= 0.

@@ -44,6 +44,19 @@ def go_float(d: Float64) -> String:
     return out^
 
 
+def _name_ok(n: StringSlice[_], colon: Bool) -> Bool:
+    """`[a-zA-Z_:][a-zA-Z0-9_:]*` (metric) or `[a-zA-Z_][a-zA-Z0-9_]*` (label): prometheus_client legacy names."""
+    var b = n.as_bytes()
+    if len(b) == 0:
+        return False
+    for i in range(len(b)):
+        var c = b[i]
+        var alpha = (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 95 or (colon and c == 58)
+        if not (alpha or (i > 0 and c >= 48 and c <= 57)):
+            return False
+    return True
+
+
 def _esc(s: StringSlice[_], quote: Bool, mut out: String):
     for c in s.codepoint_slices():
         if c == "\\":
@@ -71,6 +84,8 @@ struct Registry(Movable):
     # per child
     var pairs: List[List[String]]  # sorted (name, escaped value) flattened
     var ckind: List[UInt8]  # metric kind per child
+    var cmetric: List[Int]  # owning metric per child
+    var samples: List[String]  # every sample name registered (duplicate check, as the reference registry)
     var off: List[Int]  # into vals: histogram = buckets..., count, sum; summary = count, sum; else value
     var vals: List[Float64]
     var index: Dict[String, Int]
@@ -85,17 +100,45 @@ struct Registry(Movable):
         self.children = List[List[Int]]()
         self.pairs = List[List[String]]()
         self.ckind = List[UInt8]()
+        self.cmetric = List[Int]()
+        self.samples = List[String]()
         self.off = List[Int]()
         self.vals = List[Float64]()
         self.index = Dict[String, Int]()
 
     def _add(mut self, k: Int, var name: String, help: String, labels: List[String], var bounds: List[Float64]) raises -> Int:
+        if not name:
+            raise Error("metric name cannot be empty")
+        if not _name_ok(name, True):
+            raise Error("invalid metric name ", name)
+        for l in labels:
+            if not _name_ok(l, False):
+                raise Error("Invalid label metric name: ", l)
+            if l.startswith("__"):
+                raise Error("Reserved label metric name: ", l)
+            if (k == HISTOGRAM and l == "le") or (k == SUMMARY and l == "quantile"):
+                raise Error("Reserved label metric name: ", l)
         if k == COUNTER and name.endswith("_total"):
             var short = String(name[byte = 0 : name.byte_length() - 6])
             name = short^
-        for n in self.name:
-            if n == name:
-                raise Error("Duplicated timeseries in CollectorRegistry: ", name)
+        var sfx = List[String]()
+        sfx.append("")
+        if k == COUNTER:
+            sfx.append("_total")
+            sfx.append("_created")
+        elif k == SUMMARY:
+            for x in ["_sum", "_count", "_created"]:
+                sfx.append(x)
+        elif k == HISTOGRAM:
+            for x in ["_bucket", "_sum", "_count", "_created"]:
+                sfx.append(x)
+        for x in sfx:
+            var full = name + x
+            for t in self.samples:
+                if t == full:
+                    raise Error("Duplicated timeseries in CollectorRegistry: ", full)
+        for x in sfx:
+            self.samples.append(name + x)
         self.kind.append(UInt8(k))
         self.name.append(name^)
         self.help.append(help.copy())
@@ -122,11 +165,13 @@ struct Registry(Movable):
 
     def histogram(mut self, name: String, help: String, labels: List[String] = [], buckets: List[Float64] = materialize[DEFAULT_BUCKETS]()) raises -> Int:
         var b = buckets.copy()
-        if len(b) == 0 or not isinf(b[len(b) - 1]):
-            b.append(Float64.MAX * 2)
         for i in range(len(b) - 1):
-            if b[i] >= b[i + 1]:
+            if b[i] > b[i + 1]:
                 raise Error("Buckets not in sorted order")
+        if len(b) > 0 and not (isinf(b[len(b) - 1]) and b[len(b) - 1] > 0):
+            b.append(Float64.MAX * 2)
+        if len(b) < 2:
+            raise Error("Must have at least two buckets")
         return self._add(HISTOGRAM, name.copy(), help, labels, b^)
 
     def child(mut self, m: Int, *values: String) raises -> Int:
@@ -135,7 +180,7 @@ struct Registry(Movable):
             raise Error("Incorrect label count")
         var key = String(m)
         for v in values:
-            key += "\x00" + v
+            key.write(":", v.byte_length(), ":", v)  # length-prefixed: no two value lists share a key
         var hit = self.index.get(key)
         if hit:
             return hit.value()
@@ -155,6 +200,7 @@ struct Registry(Movable):
         self.pairs.append(pr^)
         self.off.append(len(self.vals))
         self.ckind.append(self.kind[m])
+        self.cmetric.append(m)
         var k = Int(self.kind[m])
         var n = len(self.bounds[m]) + 2 if k == HISTOGRAM else (2 if k == SUMMARY else 1)
         for _ in range(n):
@@ -163,19 +209,36 @@ struct Registry(Movable):
         self.index[key^] = c
         return c
 
+    def _child(self, c: Int) raises -> Int:
+        if c < 0 or c >= len(self.off):
+            raise Error("unknown child id ", c)
+        return Int(self.ckind[c])
+
     def inc(mut self, c: Int, v: Float64 = 1.0) raises:
-        if v < 0 and self.ckind[c] == COUNTER:
+        var k = self._child(c)
+        if k != COUNTER and k != GAUGE:
+            raise Error("inc: not a counter or gauge")
+        if v < 0 and k == COUNTER:
             raise Error("Counters can only be incremented by non-negative amounts.")
         self.vals[self.off[c]] += v
 
-    def dec(mut self, c: Int, v: Float64 = 1.0):
+    def dec(mut self, c: Int, v: Float64 = 1.0) raises:
+        if self._child(c) != GAUGE:
+            raise Error("dec: not a gauge")
         self.vals[self.off[c]] -= v
 
-    def set(mut self, c: Int, v: Float64):
+    def set(mut self, c: Int, v: Float64) raises:
+        if self._child(c) != GAUGE:
+            raise Error("set: not a gauge")
         self.vals[self.off[c]] = v
 
-    def observe(mut self, m: Int, c: Int, v: Float64):
+    def observe(mut self, m: Int, c: Int, v: Float64) raises:
         """Histogram: first bucket with v <= bound; summary: count and sum."""
+        var k = self._child(c)
+        if self.cmetric[c] != m:
+            raise Error("observe: child ", c, " does not belong to metric ", m)
+        if k != HISTOGRAM and k != SUMMARY:
+            raise Error("observe: not a histogram or summary")
         var o = self.off[c]
         if Int(self.kind[m]) == HISTOGRAM:
             var nb = len(self.bounds[m])
@@ -236,8 +299,9 @@ struct Registry(Movable):
                     for i in range(nb):
                         acc += self.vals[o + i]
                         self._sample(out, nm, "_bucket", c, self.le[m][i], acc)
-                    self._sample(out, nm, "_count", c, "", self.vals[o + nb])
-                    self._sample(out, nm, "_sum", c, "", self.vals[o + nb + 1])
+                    self._sample(out, nm, "_count", c, "", acc)  # the bucket total, as the reference prints it
+                    if self.bounds[m][0] >= 0:
+                        self._sample(out, nm, "_sum", c, "", self.vals[o + nb + 1])
                 elif k == SUMMARY:
                     self._sample(out, nm, "_count", c, "", self.vals[o])
                     self._sample(out, nm, "_sum", c, "", self.vals[o + 1])
