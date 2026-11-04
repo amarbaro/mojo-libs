@@ -10,4 +10,4 @@
 
 `run` sets SIGPIPE to ignored in this process, as Python does at startup; children get default handlers back.
 
-Error texts: `Command '<argv0>' timed out after S seconds`, `Command '<argv0>' returned non-zero exit status N.`, `subprocess: cannot run '<argv0>': <strerror> (errno N)`, `subprocess: empty argv`. Python's texts quote the whole argv list; these name the program only.
+Error texts: `Command '<argv0>' timed out after S seconds`, `Command '<argv0>' returned non-zero exit status N.`, `posix: subprocess: cannot run '<argv0>': <strerror> (errno N)`, `subprocess: empty argv`. Python's texts quote the whole argv list; these name the program only.
