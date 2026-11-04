@@ -8,7 +8,7 @@ def read_rows() raises -> List[String]:
     var buf = List[UInt8]()
     var chunk = alloc[UInt8](65536)
     while True:
-        var n = external_call["read", Int](0, chunk, 65536)
+        var n = external_call["read", Int](Int32(0), chunk, 65536)  # fd type must match the stdlib's own read()
         if n <= 0:
             break
         for i in range(n):

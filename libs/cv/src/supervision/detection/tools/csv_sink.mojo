@@ -3,7 +3,8 @@
 from json import Json, ARR, OBJ, STR, INT, FLOAT, BOOL, NULL
 from std.os import makedirs
 from std.os.path import dirname, exists
-from supervision.detection.tools.sink_rows import SinkInput, field_names, parse_detection_data
+from supervision.detection.core import Detections
+from supervision.detection.tools.sink_rows import from_detections, field_names, parse_detection_data
 
 
 def _csv_field(s: String) -> String:
@@ -76,7 +77,8 @@ struct CSVSink(Movable):
         self.field_names = List[String]()
         self.deferred_field_names = List[String]()
 
-    def append(mut self, d: SinkInput) raises:
+    def append(mut self, detections: Detections, custom: Json = Json()) raises:
+        var d = from_detections(detections, custom)
         if not self.is_open:
             raise Error("Cannot append to CSV: The file '" + self.file_name + "' is not open.")
         var names = field_names(d)

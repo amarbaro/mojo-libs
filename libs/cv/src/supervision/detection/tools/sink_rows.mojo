@@ -1,9 +1,11 @@
 # Row building shared by CSVSink and JSONSink (port of their parse_detection_data).
-# Input is plain columns, so it does not depend on the S1 Detections struct; a Detections adapter fills `SinkInput`.
+# `from_detections` flattens a Detections into `SinkInput` columns (numeric data columns are Float64 in S1, so an
+# int column prints as 1.0 here; pass ints through custom_data).
 #
 # Value encoding for `data` / `custom_data` entries (Json): {"nd": [...]} is a numpy ndarray, a bare array is a
 # Python list, anything else a scalar. Array and list entries are indexed per detection when len == n.
 from json import Json, ARR, OBJ
+from supervision.detection.core import Detections
 
 
 struct SinkInput(Copyable, Movable):
@@ -104,3 +106,30 @@ def parse_detection_data(d: SinkInput, as_text: Bool) -> List[Json]:
                 row.set(d.custom.key_at(j), cell^ if as_text else _plain(cell))
         rows.append(row^)
     return rows^
+
+
+def from_detections(d: Detections, custom: Json) raises -> SinkInput:
+    var r = SinkInput(len(d), d.xyxy.copy())
+    if d.has_class_id:
+        r.class_id = d.class_id.copy()
+    if d.has_confidence:
+        r.confidence = d.confidence.copy()
+    if d.has_tracker_id:
+        r.tracker_id = d.tracker_id.copy()
+    for col in d.data:
+        var arr = Json.array()
+        for i in range(col.rows()):
+            if col.is_str:
+                arr.push(Json.of(col.s[i]))
+            elif col.width == 1:
+                arr.push(Json.of(col.f[i]))
+            else:
+                var row = Json.array()
+                for k in range(col.width):
+                    row.push(Json.of(col.f[i * col.width + k]))
+                arr.push(row^)
+        var w = Json.object()
+        w.set("nd", arr^)
+        r.data.set(col.name, w^)
+    r.custom = custom.copy()
+    return r^

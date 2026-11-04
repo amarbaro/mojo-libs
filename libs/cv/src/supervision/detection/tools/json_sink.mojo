@@ -2,7 +2,8 @@
 from json import Json
 from std.os import makedirs
 from std.os.path import dirname, exists
-from supervision.detection.tools.sink_rows import SinkInput, parse_detection_data
+from supervision.detection.core import Detections
+from supervision.detection.tools.sink_rows import from_detections, parse_detection_data
 
 
 struct JSONSink(Movable):
@@ -24,7 +25,8 @@ struct JSONSink(Movable):
         self.rows = Json.array()
         self.is_open = True
 
-    def append(mut self, d: SinkInput) raises:
+    def append(mut self, detections: Detections, custom: Json = Json()) raises:
+        var d = from_detections(detections, custom)
         for r in parse_detection_data(d, False):
             self.rows.push(r)
 

@@ -10,7 +10,9 @@ import warnings
 
 from supervision import Detections, Point, Position
 from supervision.detection.line_zone import LineZone
+from supervision.detection.tools.csv_sink import CSVSink
 from supervision.detection.tools.inference_slicer import InferenceSlicer
+from supervision.detection.tools.json_sink import JSONSink
 
 warnings.simplefilter("ignore")
 
@@ -132,11 +134,77 @@ def line_rows(rng):
     return rows
 
 
+WORDS = ["a", "cat", "x y", "a,b", 'say "hi"', "line\nbreak", "tab\tsep", "caf\u00e9", "", " pad "]
+
+
+def py_value(v):
+    """Args encoding -> Python: {"nd": [...]} ndarray, bare array list, else scalar."""
+    if isinstance(v, dict):
+        return np.array(v["nd"])
+    return v
+
+
+def sink_append(rng, n):
+    a = {"xyxy": [[round(rng.uniform(0, 50), 3) for _ in range(4)] for _ in range(n)]}
+    a["class_id"] = [rng.randint(0, 5) for _ in range(n)] if rng.random() < 0.7 else None
+    a["confidence"] = [round(rng.uniform(0, 1), 4) for _ in range(n)] if rng.random() < 0.7 else None
+    a["tracker_id"] = [rng.randint(0, 9) for _ in range(n)] if rng.random() < 0.5 else None
+    data = {}
+    for key in rng.sample(["class_name", "score2", "emb", "note"], rng.randint(0, 3)):
+        if key == "class_name" or key == "note":
+            data[key] = {"nd": [rng.choice(WORDS) for _ in range(n)]}
+        elif key == "emb":
+            data[key] = {"nd": [[round(rng.uniform(0, 9), 2) for _ in range(3)] for _ in range(n)]}
+        else:
+            data[key] = {"nd": [round(rng.uniform(0, 9), 3) for _ in range(n)]}
+    a["data"] = data
+    custom = {}
+    for key in rng.sample(["frame", "src", "tag", "ids", "names", "extra", "flag", "score2"], rng.randint(0, 4)):
+        kind = rng.choice(["int", "float", "str", "bool", "list", "ndn", "ndother"])
+        if kind == "int": custom[key] = rng.randint(-5, 500)
+        elif kind == "float": custom[key] = round(rng.uniform(-9, 9), 3)
+        elif kind == "str": custom[key] = rng.choice(WORDS)
+        elif kind == "bool": custom[key] = rng.random() < 0.5
+        elif kind == "list": custom[key] = [rng.randint(0, 99) for _ in range(n)]
+        elif kind == "ndn": custom[key] = {"nd": [rng.choice(WORDS) for _ in range(n)]}
+        else: custom[key] = {"nd": [rng.randint(0, 9) for _ in range(n + 2)]}
+    a["custom"] = custom
+    return a
+
+
+def py_detections(a):
+    xyxy = np.array(a["xyxy"], dtype=float).reshape(-1, 4)
+    data = {k: py_value(v) for k, v in a["data"].items()}
+    return Detections(xyxy=xyxy, class_id=None if a["class_id"] is None else np.array(a["class_id"], dtype=int),
+                      confidence=None if a["confidence"] is None else np.array(a["confidence"], dtype=float),
+                      tracker_id=None if a["tracker_id"] is None else np.array(a["tracker_id"], dtype=int),
+                      data=data)
+
+
+def sink_rows(rng):
+    rows = []
+    os.makedirs(".work/sink-oracle", exist_ok=True)
+    for k in range(60):
+        op = "sink_csv" if k % 2 == 0 else "sink_json"
+        appends = [sink_append(rng, rng.choice([0, 1, 1, 2, 3, 4])) for _ in range(rng.randint(0, 3))]
+        path = f".work/sink-oracle/{k}"
+        sink = CSVSink(path) if op == "sink_csv" else JSONSink(path)
+        sink.open()
+        for a in appends:
+            sink.append(py_detections(a), {key: py_value(v) for key, v in a["custom"].items()})
+        sink.close() if op == "sink_csv" else sink.write_and_close()
+        with open(path, newline="") as f:
+            rows.append((op, {"appends": appends}, f.read()))
+    return rows
+
+
 def main():
     rng = random.Random(SEED)
     os.makedirs(OUT, exist_ok=True)
     write("tools_slicer", slicer_rows(rng))
     write("tools_line", line_rows(rng))
+    rows = sink_rows(rng)
+    write("tools_sinks", rows)
 
 
 if __name__ == "__main__":

@@ -1,8 +1,7 @@
 # Port of supervision/detection/line_zone.py LineZone (MIT, see NOTICE-supervision-LICENSE.md).
 # The annotators in that file are S5's. coord_transform is not ported (CoordinatesTransformation is not in geometry yet).
-# trigger() takes anchor coordinates and ids instead of Detections: anchors[a][i] is the point of
-# triggering anchor `a` for detection `i`. A Detections overload comes with lane-S1.
-from supervision.geometry.core import Point, Vector
+from supervision.detection.core import Detections
+from supervision.geometry.core import Point, Position, Vector
 
 
 struct ClassCount(Copyable, Movable):
@@ -34,6 +33,7 @@ struct LineZone(Movable):
     var vector: Vector
     var limit_start: Vector
     var limit_end: Vector
+    var triggering_anchors: List[Position]
     var history_length: Int
     var history: Dict[Int, List[Bool]]
     var confirmed_side: Dict[Int, Bool]
@@ -41,7 +41,16 @@ struct LineZone(Movable):
     var in_counts: ClassCount
     var out_counts: ClassCount
 
-    def __init__(out self, start: Point, end: Point, minimum_crossing_threshold: Int = 1) raises:
+    def __init__(
+        out self,
+        start: Point,
+        end: Point,
+        var triggering_anchors: List[Position],
+        minimum_crossing_threshold: Int = 1,
+    ) raises:
+        if len(triggering_anchors) == 0:
+            raise Error("Triggering anchors cannot be empty.")
+        self.triggering_anchors = triggering_anchors^
         self.vector = Vector(start.copy(), end.copy())
         var mag = self.vector.magnitude()
         if mag == 0:
@@ -86,21 +95,18 @@ struct LineZone(Movable):
                 else:
                     self.frames_absent[key] = absent
 
-    def trigger(
-        mut self,
-        n: Int,
-        anchors: List[List[Point]],
-        has_tracker: Bool,
-        tracker_id: List[Int],
-        has_class: Bool,
-        class_id: List[Int],
-    ) raises -> Tuple[List[Bool], List[Bool]]:
+    def trigger(mut self, d: Detections) raises -> Tuple[List[Bool], List[Bool]]:
         """Returns (crossed_in, crossed_out). Without tracker_id nothing counts (Python warns)."""
+        var n = len(d)
         var crossed_in = List[Bool](length=n, fill=False)
         var crossed_out = List[Bool](length=n, fill=False)
-        if n == 0 or not has_tracker:
+        if n == 0 or not d.has_tracker_id:
             self._evict(List[Int]())
             return (crossed_in^, crossed_out^)
+        var tracker_id = d.tracker_id.copy()
+        var anchors = List[List[Float64]]()  # anchors[a] = flat x, y per detection
+        for p in self.triggering_anchors:
+            anchors.append(d.get_anchors_coordinates(p.v))
         var current = List[Int]()
         for i in range(n):
             if tracker_id[i] >= 0:
@@ -114,7 +120,7 @@ struct LineZone(Movable):
             var left = False
             var right = False
             for a in range(len(anchors)):
-                var p = anchors[a][i].copy()
+                var p = Point(anchors[a][2 * i], anchors[a][2 * i + 1])
                 var c1 = self.limit_start.cross_product(p) > 0
                 var c2 = self.limit_end.cross_product(p) > 0
                 if c1 != c2:
@@ -146,8 +152,8 @@ struct LineZone(Movable):
                 continue
             self.confirmed_side[tid] = state
             var cls = Optional[Int]()
-            if has_class:
-                cls = Optional[Int](class_id[i])
+            if d.has_class_id:
+                cls = Optional[Int](d.class_id[i])
             if state:
                 self.in_counts.add(cls)
                 crossed_in[i] = True
