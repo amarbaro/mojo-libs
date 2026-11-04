@@ -123,12 +123,13 @@ def run(
     var alive = True
     var timed_out = False
     var code = Optional[Int](None)
+    var ps = PollSet()  # reused: one allocation for the whole run
     while o_open or e_open or i_open or alive:
         var now = Int(perf_counter_ns())
         if now >= deadline:
             timed_out = True
             break
-        var ps = PollSet()
+        ps.clear()
         var io = ps.add(po[0], POLLIN) if o_open else -1
         var ie = ps.add(pe[0], POLLIN) if e_open else -1
         var ii = ps.add(pi[1], POLLOUT) if i_open else -1
