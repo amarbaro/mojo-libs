@@ -1,7 +1,8 @@
 # Port of supervision/annotators/core.py for the annotators that need no text: Box, Mask, Polygon, Circle, Dot, Halo, Blur,
 # Pixelate, Trace. Free functions on a BGR `Mat[uint8]` scene, edited in place; colors come from a ColorPalette (a single
 # Color is a one-entry palette, by_idx wraps) and `lookup` is LOOKUP_INDEX / LOOKUP_CLASS / LOOKUP_TRACK.
-# Not ported yet: LabelAnnotator and the other text annotators (text descoped, see _cv/README.md), the other ~12 annotators.
+# LabelAnnotator is label_annotate (border_radius, smart_position and max_line_length are not ported). Not ported yet: the other
+# text annotators, the other ~12 annotators.
 from supervision.geometry.core import Position
 from std.math import sqrt
 from mojocv.mat import Mat
@@ -10,6 +11,7 @@ from supervision.detection.core import Detections
 from supervision.detection.utils.boxes import clip_boxes
 from supervision.draw.color import Color, ColorPalette
 from supervision._cv import draw
+from supervision._cv.font.layout import TextEngine
 from supervision._cv.ops import add_weighted, blur, mean, resize_linear
 from supervision.annotators.utils import resolve_color, Trace, PENDING_TRACK_ID, LOOKUP_CLASS
 
@@ -207,3 +209,63 @@ def _paste(mut a: Img, o: Img, x1: Int, y1: Int):
         for x in range(o.cols):
             for c in range(a.ch):
                 a.data[((y1 + y) * a.cols + x1 + x) * a.ch + c] = o.data[(y * o.cols + x) * a.ch + c]
+
+
+def _label_box(p: Position, cx: Int, cy: Int, w: Int, h: Int) raises -> List[Int]:
+    """resolve_text_background_xyxy: the label background for text anchored at `p`."""
+    if p == Position.TOP_LEFT:
+        return [cx, cy - h, cx + w, cy]
+    if p == Position.TOP_RIGHT:
+        return [cx - w, cy - h, cx, cy]
+    if p == Position.TOP_CENTER:
+        return [cx - w // 2, cy - h, cx + w // 2, cy]
+    if p == Position.CENTER or p == Position.CENTER_OF_MASS:
+        return [cx - w // 2, cy - h // 2, cx + w // 2, cy + h // 2]
+    if p == Position.BOTTOM_LEFT:
+        return [cx, cy, cx + w, cy + h]
+    if p == Position.BOTTOM_RIGHT:
+        return [cx - w, cy, cx, cy + h]
+    if p == Position.BOTTOM_CENTER:
+        return [cx - w // 2, cy, cx + w // 2, cy + h]
+    if p == Position.CENTER_LEFT:
+        return [cx - w, cy - h // 2, cx, cy + h // 2]
+    if p == Position.CENTER_RIGHT:
+        return [cx, cy - h // 2, cx + w, cy + h // 2]
+    raise Error("Unsupported position")
+
+
+def _lines(text: String) -> List[String]:
+    """wrap_text(text, None): splitlines() or [""]."""
+    var out = List[String]()
+    for ln in text.replace("\r\n", "\n").split("\n"):
+        out.append(String(ln))
+    if len(out) > 0 and out[len(out) - 1].byte_length() == 0:
+        _ = out.pop()  # splitlines() has no trailing empty line
+    if len(out) == 0:
+        out.append(String(""))
+    return out^
+
+
+def label_annotate(mut scene: Img, det: Detections, palette: ColorPalette, labels: List[String], mut engine: TextEngine, text_color: Color, text_scale: Float64 = 0.5, text_thickness: Int = 1, text_padding: Int = 10, position: Position = Position.TOP_LEFT, offset_x: Int = 0, offset_y: Int = 0, lookup: Int = LOOKUP_CLASS) raises:
+    """sv.LabelAnnotator.annotate with a given label per detection: a filled box at the anchor, then each line with cv2 putText."""
+    if len(labels) != len(det):
+        raise Error("The number of labels provided (" + String(len(labels)) + ") does not match the number of detections (" + String(len(det)) + "). Each detection should have a corresponding label.")
+    var xy = det.get_anchors_coordinates(position)
+    for i in range(len(det)):
+        var lines = _lines(labels[i])
+        var heights = List[Int]()
+        var max_w = 0
+        var total = 0
+        for line in lines:
+            var sz = engine.text_size(line, text_scale, text_thickness)
+            max_w = max(max_w, sz[0])
+            heights.append(sz[1] if line.byte_length() > 0 else engine.text_size("Tg", text_scale, text_thickness)[1])
+            total += heights[len(heights) - 1]
+        total += (len(lines) - 1) * text_padding
+        var b = _label_box(position, Int(xy[2 * i]) + offset_x, Int(xy[2 * i + 1]) + offset_y, max_w + 2 * text_padding, total + 2 * text_padding)
+        draw_rect(scene, b[0], b[1], b[2], b[3], _bgr(resolve_color(palette, det, i, lookup)), -1)
+        var y = b[1] + text_padding
+        for k in range(len(lines)):
+            if lines[k].byte_length() > 0:
+                engine.put_text(scene, lines[k], b[0] + text_padding, y + heights[k], text_scale, _bgr(text_color), text_thickness)
+            y += heights[k] + text_padding

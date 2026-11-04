@@ -1,11 +1,11 @@
 # Row driver for tests/cases/pixels_cv.txt (built to build/pixels_cv): one JSON line per row, {"out": path} for image rows.
-# cv_put_text_aa and cv_text_size are descoped this wave (cv2 5.x text is an embedded TTF, see src/supervision/_cv/README.md):
-# they print {"error": "descoped"} so the harness reports FAIL instead of a silent skip.
+# cv_put_text_aa and cv_text_size run on supervision._cv.font (cv2 5.0's embedded Rubik through its stb_truetype path).
 from json import parse, Json
 from mojocv.imgproc import cvt_color
 from supervision._cv.png import imread, imwrite
 from supervision._cv.ops import add_weighted, convert_scale_abs, apply_color_map_jet
 from supervision._cv import draw
+from supervision._cv.font.layout import TextEngine
 
 
 def ints(j: Json) -> List[Int]:
@@ -22,14 +22,15 @@ def color_of(j: Json) -> List[Float64]:
     return out^
 
 
-def run_row(line: String) raises -> String:
+def run_row(line: String, mut eng: TextEngine) raises -> String:
     var cols = line.split("\t")
     var op = String(cols[0])
     var args = parse(String(cols[1]))
     var p = args.get("params")
     var out_path = ".work/tests-out/px_" + op + ".png"
-    if op == "cv_text_size" or op == "cv_put_text_aa":
-        return '{"error": "descoped"}'
+    if op == "cv_text_size":
+        var sz = eng.text_size(p.get("text").str(), p.get("scale").num(), p.get("thickness").int())
+        return '{"value": [' + String(sz[0]) + ", " + String(sz[1]) + ", " + String(sz[2]) + "]}"
     var img = imread(String(args.text("input")))
     if op == "cv_circle_outline":
         var c = ints(p.get("center"))
@@ -60,6 +61,9 @@ def run_row(line: String) raises -> String:
         img = convert_scale_abs(img, p.get("alpha").num(), p.get("beta").num())
     elif op == "cv_apply_colormap":
         img = apply_color_map_jet(img)
+    elif op == "cv_put_text_aa":
+        var o = ints(p.get("org"))
+        eng.put_text(img, p.get("text").str(), o[0], o[1], p.get("scale").num(), color_of(p.get("color")), p.get("thickness").int())
     elif op == "cv_png_roundtrip":
         pass
     else:
@@ -69,12 +73,13 @@ def run_row(line: String) raises -> String:
 
 
 def main() raises:
+    var eng = TextEngine()
     var text = open("/dev/stdin", "r").read()
     for ln in text.split("\n"):
         var line = String(ln)
         if line.byte_length() == 0:
             continue
         try:
-            print(run_row(line))
+            print(run_row(line, eng))
         except e:
             print('{"error": "' + String(e).replace('"', "'") + '"}')
