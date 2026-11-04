@@ -27,6 +27,7 @@ from supervision.detection.utils.converters import (
     rle_to_mask,
 )
 from supervision.detection.utils.iou_and_nms import oriented_box_iou_batch
+from supervision.detection.utils.polygons import polygon_to_mask
 from supervision.detection.utils.converters import (
     mask_to_xyxy,
     xcycwh_to_xyxy,
@@ -357,6 +358,9 @@ def run2(op: String, a: Json) raises -> Json:
         var counts = delta_decode(base48_decode(rle.str())) if rle.kind() == STR else ints(rle)
         var m = rle_to_mask(counts, res[0], res[1])
         return jmask3(m, 1, res[1], res[0], True).at(0)
+    if op == "polygon_to_mask":
+        var res = ints(a.get("resolution_wh"))
+        return jmask3(polygon_to_mask(floats(a.get("polygon")), res[0], res[1]), 1, res[1], res[0], False).at(0)
     if op == "resize_masks":
         var m = parse_masks(a.get("masks"))
         var r = resize_masks(m[0], m[1], m[2], m[3], a.get("max_dimension").int())
