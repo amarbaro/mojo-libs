@@ -26,7 +26,7 @@ print(s.digest64() == xxh3_64(chunk1 + chunk2))
 | XXH64 | 21.3 GB/s | 12.1 GB/s | 1.8x |
 | XXH3-64 | 51.6 GB/s | 22.8 GB/s | 2.3x |
 
-Short inputs: XXH3-64 of 16 B in 23 ns and of 200 B in 36 ns (the C column in `tests/bench.mojo` includes a dynamic-call overhead, so it is not a fair short-input comparison).
+Short inputs: XXH3-64 of 16 B in 2.5 ns and of 200 B in 11.8 ns (the C column in `tests/bench.mojo` includes a dynamic-call overhead, so it is not a fair short-input comparison).
 
 - API: [docs/api.md](docs/api.md) · design: [docs/design.md](docs/design.md) · agent skill: [skills/mojo-xxhash/SKILL.md](skills/mojo-xxhash/SKILL.md)
 - License: Apache-2.0 (the algorithm and constants are from xxHash, BSD-2-Clause, Yann Collet; see NOTICE and LICENSE-xxhash)
