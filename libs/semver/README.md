@@ -16,7 +16,7 @@ print(v.bump_prerelease())             # 1.2.3-rc.2
 print(v.bump_minor())                  # 1.3.0
 ```
 
-**Checked against Python semver 3.0.4:** 474 parse results (the SemVer spec's valid and invalid examples plus 400 generated versions), a 60 x 60 precedence matrix plus 440 more comparisons, 15 match expressions per version, and every bump variant, all byte-identical (`scripts/check.sh`, each scenario twice). 6 of 6 mutants caught. Builds and passes on Mojo 1.2.0 and the 1.3 nightly.
+**Checked against Python semver 3.0.4:** 474 parse results (the SemVer spec's valid and invalid examples plus 400 generated versions), a 60 x 60 precedence matrix plus 880 more comparisons, 15 match expressions per version, every bump variant, edge cases (trailing newline, 20-digit and leading-zero bumps) and the `match` error texts, all byte-identical (`scripts/check.sh`, each scenario twice). 6 of 6 mutants caught. Builds and passes on Mojo 1.2.0 and the 1.3 nightly.
 
 **Speed** (7800X3D): parse 42 ns, compare 9.4 ns; Python semver 1,579 ns and 549 ns (`tests/bench.mojo`, `tools/bench_oracle.py`).
 

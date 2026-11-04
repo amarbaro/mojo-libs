@@ -26,13 +26,17 @@ def bump(_):
         v = semver.Version.parse(a)
         print("bump", a, v.bump_major(), v.bump_minor(), v.bump_patch(), v.bump_prerelease(), v.bump_prerelease("alpha"),
               v.bump_prerelease(""), v.bump_build(), v.bump_build(""), v.finalize_version())
-EDGE = ["1.2.3\n", "1.2.3-rc.1+b\n", "1.2.3\n\n", "1.0.0-rc.99999999999999999999", "1.0.0-rc.0099", "1.0.0-x.000", "1.0.0-9.9.9", "1.0.0-a999999999999999999999999"]
+EDGE = ["1.0.0-x.0099a", "1.0.0-rc.00a9", "1.2.3\n", "1.2.3-rc.1+b\n", "1.2.3\n\n", "1.0.0-rc.99999999999999999999", "1.0.0-rc.0099", "1.0.0-x.000", "1.0.0-9.9.9", "1.0.0-a999999999999999999999999"]
 def edge(_):
     for s in EDGE:
         out = p(s)
         if out != "ERR":
             v = semver.Version.parse(s); out += " " + str(v.bump_prerelease()) + " " + str(v.bump_build())
         print("edge", repr(s), out)
-S = {"parse": parse, "order": order, "match": match, "bump": bump, "edge": edge}
+def errtext(_):
+    for e in ["~1.0.0", "x'y", "~ü", ">é1.0.0", "a\\b"]:
+        try: semver.Version.parse("1.0.0").match(e); print("errtext none")
+        except ValueError as ex: print("errtext", str(ex))
+S = {"parse": parse, "order": order, "match": match, "bump": bump, "edge": edge, "errtext": errtext}
 if sys.argv[1] == "--list": print("\n".join(S))
 else: S[sys.argv[1]](sys.argv[2])

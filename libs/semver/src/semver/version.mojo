@@ -52,6 +52,15 @@ struct Version(Copyable, Equatable, Movable, Writable):
     def __lt__(self, o: Self) -> Bool:
         return self.compare(o) < 0
 
+    def __le__(self, o: Self) -> Bool:
+        return self.compare(o) <= 0
+
+    def __gt__(self, o: Self) -> Bool:
+        return self.compare(o) > 0
+
+    def __ge__(self, o: Self) -> Bool:
+        return self.compare(o) >= 0
+
     def compare(self, o: Self) -> Int:
         """-1, 0 or 1 by SemVer precedence; build metadata is ignored."""
         for p in [(self.major, o.major), (self.minor, o.minor), (self.patch, o.patch)]:
@@ -71,7 +80,7 @@ struct Version(Copyable, Equatable, Movable, Writable):
         var b = expr.as_bytes()
         var op = String()
         var rest = 0
-        var two = String(expr[byte = 0 : min(2, len(b))])
+        var two = String(expr[byte=0:2]) if len(b) >= 2 and b[0] < 128 and b[1] < 128 else String()
         if two in [">=", "<=", "==", "!="]:
             op = two
             rest = 2
@@ -81,7 +90,7 @@ struct Version(Copyable, Equatable, Movable, Writable):
         elif len(b) > 0 and _digit(b[0]):
             op = "=="
         else:
-            raise Error("match_expr parameter should be in format <op><ver>, where <op> is one of ['<', '>', '==', '<=', '>=', '!=']. You provided: '", expr, "'")
+            raise Error("match_expr parameter should be in format <op><ver>, where <op> is one of ['<', '>', '==', '<=', '>=', '!=']. You provided: ", _py_str_repr(expr))
         var c = self.compare(parse(String(expr[byte=rest:])))
         if op == ">":
             return c == 1
@@ -122,6 +131,24 @@ def _part(b: Span[UInt8, _], i: Int) -> Int:
     while j < len(b) and b[j] != 46:
         j += 1
     return j
+
+
+def _py_str_repr(s: String) -> String:
+    """Python repr() of a str, for error texts: single quotes unless the text has one and no double quote."""
+    var q = "'"
+    if "'" in s and not '"' in s:
+        q = '"'
+    var out = q
+    for c in s.codepoint_slices():
+        if c == "\\":
+            out += "\\\\"
+        elif c == q:
+            out += "\\" + q
+        elif c == "\n":
+            out += "\\n"
+        else:
+            out += c
+    return out + q
 
 
 def _nat_cmp(a: String, b: String) -> Int:

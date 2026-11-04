@@ -30,8 +30,18 @@ def py_repr(s: String) -> String:
 
 def main() raises:
     var c = argv()[1]
+    if c == "errtext":
+        var v = parse("1.0.0")
+        var es: List[String] = ["~1.0.0", "x'y", "~ü", ">é1.0.0", "a\\b"]
+        for e in es:
+            try:
+                _ = v.match(e)
+                print("errtext none")
+            except ex:
+                print("errtext", String(ex))
+        return
     if c == "edge":
-        var edge: List[String] = ["1.2.3\n", "1.2.3-rc.1+b\n", "1.2.3\n\n", "1.0.0-rc.99999999999999999999", "1.0.0-rc.0099", "1.0.0-x.000", "1.0.0-9.9.9", "1.0.0-a999999999999999999999999"]
+        var edge: List[String] = ["1.0.0-x.0099a", "1.0.0-rc.00a9", "1.2.3\n", "1.2.3-rc.1+b\n", "1.2.3\n\n", "1.0.0-rc.99999999999999999999", "1.0.0-rc.0099", "1.0.0-x.000", "1.0.0-9.9.9", "1.0.0-a999999999999999999999999"]
         for s in edge:
             var out = p(s)
             if out != "ERR":
