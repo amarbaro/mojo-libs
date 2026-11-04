@@ -2,6 +2,7 @@
 # Pixelate, Trace. Free functions on a BGR `Mat[uint8]` scene, edited in place; colors come from a ColorPalette (a single
 # Color is a one-entry palette, by_idx wraps) and `lookup` is LOOKUP_INDEX / LOOKUP_CLASS / LOOKUP_TRACK.
 # Not ported yet: LabelAnnotator and the other text annotators (text descoped, see _cv/README.md), the other ~12 annotators.
+from supervision.geometry.core import Position
 from std.math import sqrt
 from mojocv.mat import Mat
 from mojocv.imgproc import draw_rect, find_contours, resize, cvt_color, cvt_code, _circle_fill
@@ -39,7 +40,7 @@ def circle_annotate(mut scene: Img, det: Detections, palette: ColorPalette, thic
 
 
 def dot_annotate(mut scene: Img, det: Detections, palette: ColorPalette, radius: Int = 4, position: Int = 0, lookup: Int = LOOKUP_CLASS) raises:
-    var xy = det.get_anchors_coordinates(position)
+    var xy = det.get_anchors_coordinates(Position(position))
     for i in range(len(det)):
         var c = resolve_color(palette, det, i, lookup)
         _circle_fill(scene, Int(xy[2 * i]), Int(xy[2 * i + 1]), radius, _bgr(c))

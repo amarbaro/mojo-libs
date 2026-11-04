@@ -1,4 +1,5 @@
 # Port of supervision/annotators/utils.py: ColorLookup, color resolution, Trace.
+from supervision.geometry.core import Position
 from supervision.detection.core import Detections
 from supervision.draw.color import Color, ColorPalette
 
@@ -55,7 +56,7 @@ struct Trace(Movable):
         if len(det) > 0:
             if not det.has_tracker_id:
                 raise Error("Could not put detections into Trace because Detections do not have tracker_id.")
-            var xy = det.get_anchors_coordinates(self.anchor)
+            var xy = det.get_anchors_coordinates(Position(self.anchor))
             for i in range(len(det)):
                 self.frame_id.append(self.current_frame_id)
                 self.x.append(Float32(xy[2 * i]))
