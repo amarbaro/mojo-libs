@@ -1,7 +1,7 @@
 [project]
 name = "mojo-uuid"
 version = "0.1.0"
-description = "UUID for Mojo, byte-identical with CPython 3.14 uuid"
+description = "RFC UUID values, parsing, formatting and generation for Mojo"
 license = "Apache-2.0"
 requires-python = ">=3.11,<3.15"
 dependencies = ["mojo>=1.2.0,<1.3"]
