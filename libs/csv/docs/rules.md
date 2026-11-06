@@ -18,3 +18,4 @@
 - A held row compiled despite an origin annotation: do not claim compiler-enforced row invalidation. Document next()/reset() invalidation and test owning copies across advancement.
 - An intended input-lifetime probe used an Array literal and failed on clear(), not borrowing: spell List explicitly and inspect the exact negative diagnostic.
 - Named numeric token validation allocated a temporary String per field: compare packed ASCII inf/nan/infinity tokens without heap allocation.
+- Brain commit rejected a ledger without frontmatter and flooded context with vault INFO: include ledger schema first and capture hook logs before filtering errors.
