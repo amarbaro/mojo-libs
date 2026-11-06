@@ -1,0 +1,8 @@
+src/uuid/__init__.mojo|var v: UInt128 = 0|var v: UInt128X = 0
+src/uuid/__init__.mojo|var h = Md5()|var h = Md5X()
+src/uuid/__init__.mojo|h.update(name.as_bytes())|h.update(name.as_bytes()X)
+src/uuid/__init__.mojo|v |= UInt128(3) << 76|v |= UInt128(3) << 76X
+src/uuid/__init__.mojo|comptime NAMESPACE_DNS = UUID(UInt128(0x6ba7b8109dad11d180b400c04fd430c8))|comptime NAMESPACE_DNS = UUIDX(UInt128(0x6ba7b8109dad11d180b400c04fd430c8))
+src/uuid/__init__.mojo|return UUID(v)|return UUIDX(v)
+src/uuid/__init__.mojo|v &= ~((UInt128(0xf000) << 64) | (UInt128(0xc000) << 48))|v &= ~((UInt128(0xf000) << 64) | (UInt128(0xc000) << 48))X
+src/uuid/__init__.mojo|for i in range(16):|for i in range(16)X:
