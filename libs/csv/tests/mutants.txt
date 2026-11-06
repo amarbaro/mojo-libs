@@ -1,8 +1,8 @@
-src/csv/__init__.mojo|def read_all|fn read_all
-src/csv/__init__.mojo|var rows = List[List[CsvField]]()|let rows = List[List[CsvField]]()
-src/csv/__init__.mojo|return rows^|ret rows^
-src/csv/__init__.mojo|UInt8(ord(","))|UInt16(ord(","))
-src/csv/__init__.mojo|Span[UInt8, _]|Span[UInt16, _]
-src/csv/__init__.mojo|List[UInt8]|List[UInt16]
-src/csv/__init__.mojo|struct Dialect(Copyable, Movable):|class Dialect:
-src/csv/__init__.mojo|raise Error|raise ValueErrorsrc/csv/__init__.mojo|comptime QUOTE_MINIMAL = 0|comptime QUOTE_MINIMAL = 0.0
+src/csv/__init__.mojo|if c == UInt8(10) or c == UInt8(13):|if c == UInt8(10) and c == UInt8(13):
+src/csv/__init__.mojo|self.unquoted = True|self.unquoted = False
+src/csv/__init__.mojo|quoted = True|quoted = False
+src/csv/__init__.mojo|out.append(dialect.delimiter)|out.append(dialect.quotechar)
+src/csv/__init__.mojo|if self.field_len >= 131072:|if self.field_len >= 131071:
+src/csv/__init__.mojo|if self.unquoted and self.field_len == 0 and (quoting == QUOTE_NOTNULL or quoting == QUOTE_STRINGS):|if self.unquoted and self.field_len == 1 and (quoting == QUOTE_NOTNULL or quoting == QUOTE_STRINGS):
+src/csv/__init__.mojo|first_row = False|first_row = True
+src/csv/__init__.mojo|if self.field_len >= 131072:|if self.field_len >= 131071:

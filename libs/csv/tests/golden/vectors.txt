@@ -1,60 +1,60 @@
-case 0: a,b
-case 1: a,b
-case 2: a,b
-case 3: a,b
-case 4: a,b
-case 5: a,b
-case 6: a,b
-case 7: a,b
-case 8: a,b
-case 9: a,b
-case 10: a,b
-case 11: a,b
-case 12: a,b
-case 13: a,b
-case 14: a,b
-case 15: a,b
-case 16: a,b
-case 17: a,b
-case 18: a,b
-case 19: a,b
-case 20: a,b
-case 21: a,b
-case 22: a,b
-case 23: a,b
-case 24: a,b
-case 25: a,b
-case 26: a,b
-case 27: a,b
-case 28: a,b
-case 29: a,b
-case 30: a,b
-case 31: a,b
-case 32: a,b
-case 33: a,b
-case 34: a,b
-case 35: a,b
-case 36: a,b
-case 37: a,b
-case 38: a,b
-case 39: a,b
-case 40: a,b
-case 41: a,b
-case 42: a,b
-case 43: a,b
-case 44: a,b
-case 45: a,b
-case 46: a,b
-case 47: a,b
-case 48: a,b
-case 49: a,b
-case 50: a,b
-case 51: a,b
-case 52: a,b
-case 53: a,b
-case 54: a,b
-case 55: a,b
-case 56: a,b
-case 57: a,b
-case 58: a,b
-case 59: a,b
+a,b0
+a,b1
+a,b2
+a,b3
+a,b4
+a,b5
+a,b6
+a,b7
+a,b8
+a,b9
+a,b10
+a,b11
+a,b12
+a,b13
+a,b14
+a,b15
+a,b16
+a,b17
+a,b18
+a,b19
+a,b20
+a,b21
+a,b22
+a,b23
+a,b24
+a,b25
+a,b26
+a,b27
+a,b28
+a,b29
+a,b30
+a,b31
+a,b32
+a,b33
+a,b34
+a,b35
+a,b36
+a,b37
+a,b38
+a,b39
+a,b40
+a,b41
+a,b42
+a,b43
+a,b44
+a,b45
+a,b46
+a,b47
+a,b48
+a,b49
+plain 0
+plain 1
+plain 2
+plain 3
+plain 4
+plain 5
+plain 6
+plain 7
+plain 8
+plain 9
