@@ -1,4 +1,6 @@
 <!-- badges -->
+![CI](https://github.com/amarbaro/mojo-csv/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/github/license/amarbaro/mojo-csv)
 <!-- /badges -->
 
 # mojo-csv

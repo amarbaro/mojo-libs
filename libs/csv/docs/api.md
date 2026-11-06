@@ -8,10 +8,13 @@
 - `data: List[UInt8]`, `is_null: Bool`.
 
 ## Reader
-- `Reader(dialect)` and `read_all(input: Span[UInt8, _]) raises -> List[List[CsvField]]`.
+- `Reader(dialect)` and `read_all(input) raises -> List[List[CsvField]]`.
 
 ## Writer
 - `write_all(rows, dialect) raises -> List[UInt8]`.
 
 ## Constants
-QUOTE_MINIMAL..QUOTE_NOTNULL.
+QUOTE_MINIMAL, QUOTE_ALL, QUOTE_NONNUMERIC, QUOTE_NONE, QUOTE_STRINGS, QUOTE_NOTNULL.
+
+## Errors
+unexpected end of data; newline inside unquoted field; quote expected; need to escape.
