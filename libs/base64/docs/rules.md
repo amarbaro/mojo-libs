@@ -12,3 +12,4 @@
 - A reserved case loop variable failed parsing -> use trial or an unnamed loop variable.
 - A scenario runner exit code was ignored -> both oracle and runner must exit zero as well as match output.
 - The prose-edit gate did not recognize a skill read through exec -> read the named skill, preserve its writing rules, and use the available file-writing path without changing global gate state.
+- Different CPU affinity made the first before/after timings incomparable -> pin both binaries to one core, alternate three rounds and report medians plus host load.

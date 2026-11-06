@@ -2,4 +2,4 @@
 
 Full notes in `docs/releases/`. Newest first. Format: `~/iTools/dev/release-note/TEMPLATE.md`.
 
-- [v0.1.0](docs/releases/v0.1.0.md) (2026-11-06): first release
+- [v0.1.0](docs/releases/v0.1.0.md) (2026-11-06): byte codecs; corrected CPython padding and parameter errors, real oracle gates and measured benchmarks.
