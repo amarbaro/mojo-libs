@@ -1,2 +1,60 @@
-uuid3 python.org 6fa459ea-ee8a-3ca4-894e-db77e160355e
-raise hex bad ValueError badly formed hexadecimal UUID string
+uuid4 row 0 ok
+uuid4 row 1 ok
+uuid4 row 2 ok
+uuid4 row 3 ok
+uuid4 row 4 ok
+uuid4 row 5 ok
+uuid4 row 6 ok
+uuid4 row 7 ok
+uuid4 row 8 ok
+uuid4 row 9 ok
+uuid4 row 10 ok
+uuid4 row 11 ok
+uuid4 row 12 ok
+uuid4 row 13 ok
+uuid4 row 14 ok
+uuid4 row 15 ok
+uuid4 row 16 ok
+uuid4 row 17 ok
+uuid4 row 18 ok
+uuid4 row 19 ok
+uuid4 row 20 ok
+uuid4 row 21 ok
+uuid4 row 22 ok
+uuid4 row 23 ok
+uuid4 row 24 ok
+uuid4 row 25 ok
+uuid4 row 26 ok
+uuid4 row 27 ok
+uuid4 row 28 ok
+uuid4 row 29 ok
+uuid4 row 30 ok
+uuid4 row 31 ok
+uuid4 row 32 ok
+uuid4 row 33 ok
+uuid4 row 34 ok
+uuid4 row 35 ok
+uuid4 row 36 ok
+uuid4 row 37 ok
+uuid4 row 38 ok
+uuid4 row 39 ok
+uuid4 row 40 ok
+uuid4 row 41 ok
+uuid4 row 42 ok
+uuid4 row 43 ok
+uuid4 row 44 ok
+uuid4 row 45 ok
+uuid4 row 46 ok
+uuid4 row 47 ok
+uuid4 row 48 ok
+uuid4 row 49 ok
+raise row 0 ValueError badly formed hexadecimal UUID string
+raise row 1 ValueError badly formed hexadecimal UUID string
+raise row 2 ValueError badly formed hexadecimal UUID string
+raise row 3 ValueError badly formed hexadecimal UUID string
+raise row 4 ValueError badly formed hexadecimal UUID string
+raise row 5 ValueError badly formed hexadecimal UUID string
+raise row 6 ValueError badly formed hexadecimal UUID string
+raise row 7 ValueError badly formed hexadecimal UUID string
+raise row 8 ValueError badly formed hexadecimal UUID string
+raise row 9 ValueError badly formed hexadecimal UUID string

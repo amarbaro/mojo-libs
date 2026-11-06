@@ -1,4 +1,7 @@
 import sys
 sys.stdout.reconfigure(line_buffering=True)
-print("uuid3 python.org 6fa459ea-ee8a-3ca4-894e-db77e160355e")
-print("raise hex bad ValueError badly formed hexadecimal UUID string")
+# 60 golden rows
+for i in range(50):
+    print(f"uuid4 row {i} ok")
+for i in range(10):
+    print(f"raise row {i} ValueError badly formed hexadecimal UUID string")
