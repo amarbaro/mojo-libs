@@ -20,3 +20,4 @@
 - Folded ASCII arithmetic could accept @ as a digit -> guard explicit decimal and a-f ranges before accumulating.
 - Incomplete upstream license stub -> fetch the full pinned upstream LICENSE, never ship an ellipsis notice.
 - Promoted local verifier kept an absolute home path -> use HOME or a toolchain override, then run the repository audit.
+- Nested skill reads were invisible to the writing hook -> retain the skill receipt and use a supported file-write path without changing shared hooks.
