@@ -18,3 +18,5 @@ QUOTE_MINIMAL, QUOTE_ALL, QUOTE_NONNUMERIC, QUOTE_NONE, QUOTE_STRINGS, QUOTE_NOT
 
 ## Errors
 unexpected end of data; newline inside unquoted field; quote expected; need to escape.
+## Notes
+Use bytes. Handle errors.
