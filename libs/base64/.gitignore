@@ -2,3 +2,4 @@
 .work/
 .pixi/
 .claude/
+__pycache__/

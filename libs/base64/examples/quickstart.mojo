@@ -1,10 +1,13 @@
 from base64 import b64encode, b64decode
-from std.collections import List
+from std.testing import assert_equal
 
-def main():
-    var s = List[Byte]()
-    s.append(UInt8(ord('a')))
-    var sp = Span[UInt8, _](list=s)
-    var e = b64encode(sp)
-    print(String(e[0]))
-    print(len(e))
+def main() raises:
+    var data = List[Byte]()
+    data.append(97)
+    var encoded = b64encode(data)
+    var text = String("")
+    for i in range(len(encoded)):
+        text += chr(Int(encoded[i]))
+    assert_equal(text, "YQ==")
+    assert_equal(b64decode(encoded), data)
+    print(text)

@@ -1,8 +1,14 @@
-src/base64/codec.mojo|if strict and quad_pos == 0:|if False and quad_pos == 0:
-src/base64/codec.mojo|raise Error("Only base64 data is allowed")|pass
-src/base64/codec.mojo|if strict and i + 1 < n:|if False and i + 1 < n:
+src/base64/codec.mojo|if strict and n > 0 and data[0] == UInt8(ord('=')):|if False:
+src/base64/codec.mojo|if quad_pos >= 2 and quad_pos + pads <= 4:|if quad_pos >= 2 and quad_pos + pads < 4:
+src/base64/codec.mojo|if quad_pos == 1:|if False:
+src/base64/codec.mojo|if v < 0:|if v < -1:
+src/base64/codec.mojo|if strict and pads != 0:|if False:
+src/base64/codec.mojo|leftchar = v & 15|leftchar = v & 7
+src/base64/codec.mojo|if rem == 1:|if False:
 src/base64/codec.mojo|if c == UInt8(ord('-')):|if False:
 src/base64/codec.mojo|if casefold:|if False:
-src/base64/codec.mojo|raise Error("Incorrect padding")|pass
+src/base64/codec.mojo|data[j] = map01[0]|data[j] = UInt8(ord('A'))
 src/base64/codec.mojo|if leftover == 1:|if False:
-src/base64/codec.mojo|var ok = (c >= 48 and c <= 57) or (c >= 65 and c <= 70)|if False:
+src/base64/codec.mojo|padchars not in (0,1,3,4,6)|padchars not in (0,1,2,3,4,6)
+src/base64/codec.mojo|var ok = (c >= 48 and c <= 57) or (c >= 65 and c <= 70)|var ok = (c >= 48 and c <= 57) or (c >= 65 and c <= 71)
+src/base64/codec.mojo|if data[j] == altchars[1]:|if data[j] == altchars[0]:
