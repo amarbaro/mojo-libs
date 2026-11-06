@@ -51,3 +51,8 @@ validation supports ASCII float syntax. These byte-API differences are explicit.
 
 SIMD boundaries: simd-plain/quote/escaped/quoted-escape at payload lengths
 0, 1, 15, 16, 17, 31, 32, 33, 63, 64, 65 exercise vector and scalar tails.
+
+The R vectors replay both next()/row() views and read_all() owning copies.
+Lifetime checks cover direct input pointers, retained scratch capacity and
+copies surviving next/reset. Invalid-retention examples are documented caller
+contract violations; successful compilation is not counted as a lifetime gate.

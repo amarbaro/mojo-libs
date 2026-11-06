@@ -26,7 +26,7 @@ input: bench , bench-ab 3 interleaved rounds
 parse MB/s: #: before 43.1286 / after 49.4458 (1.146x)
 parse seconds: #: before 1.15932 / after 1.01121 (0.872x)
 rows identical across 6 runs: 714285
-tests pass: scripts/cap.sh /home/mario/.local/bin/mojo build -I src tests/cases.mojo -o .work/cases && CASES=.work/cases scripts/check.sh
+tests pass: scripts/cap.sh "$MOJO" build -I src tests/cases.mojo -o .work/cases && CASES=.work/cases scripts/check.sh
 arms: A .work/bench-runs | B .work/arms/B-direct-owned-20261107T002702
 Pinned SIMD first-lane reduction, reverted after regression:
 rows identical across 6 runs: 714285
@@ -39,7 +39,7 @@ input: bench , bench-ab 3 interleaved rounds
 parse MB/s: #: before 50.6608 / after 46.5697 (0.919x)
 parse seconds: #: before 0.986956 / after 1.07366 (1.088x)
 rows identical across 6 runs: 714285
-tests pass: scripts/cap.sh /home/mario/.local/bin/mojo build -I src tests/cases.mojo -o .work/cases && CASES=.work/cases scripts/check.sh
+tests pass: scripts/cap.sh "$MOJO" build -I src tests/cases.mojo -o .work/cases && CASES=.work/cases scripts/check.sh
 arms: A .work/bench-direct | B .work/arms/B-vector-first-20261107T002832
 Pinned direct field copies versus CPython reader (A Mojo, B CPython):
 rows identical across 6 runs: 714285

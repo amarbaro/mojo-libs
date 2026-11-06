@@ -15,6 +15,10 @@ def unhex(text: StringSlice) -> List[UInt8]:
 
 
 def hex_bytes(data: List[UInt8]) -> String:
+    return hex_span(Span(data))
+
+
+def hex_span(data: Span[UInt8, _]) -> String:
     var result = String()
     var digits = "0123456789abcdef"
     for c in data:
@@ -23,7 +27,7 @@ def hex_bytes(data: List[UInt8]) -> String:
     return result^
 
 
-def encode_rows(rows: List[List[CsvField]]) -> String:
+def encode_rows(rows: List[List[OwnedField]]) -> String:
     var result = String()
     for i in range(len(rows)):
         if i > 0:
@@ -40,38 +44,61 @@ def encode_rows(rows: List[List[CsvField]]) -> String:
     return result^
 
 
-def decode_rows(text: StringSlice) raises -> List[List[CsvField]]:
-    var rows = List[List[CsvField]]()
+def decode_rows(text: StringSlice) raises -> List[List[OwnedField]]:
+    var rows = List[List[OwnedField]]()
     if text.byte_length() == 0:
         return rows^
     for line in text.split("/"):
-        var row = List[CsvField]()
+        var row = List[OwnedField]()
         if String(line) != "~":
             for field in line.split(","):
-                row.append(CsvField(unhex(field[byte=1:]), String(field) == "n"))
+                row.append(OwnedField(unhex(field[byte=1:]), String(field) == "n"))
         rows.append(row^)
     return rows^
 
 
-def parse_lines(text: StringSlice, var dialect: Dialect) raises -> List[List[CsvField]]:
+def encode_view(row: CsvRow) -> String:
+    var result = String()
+    if len(row) == 0:
+        return "~"
+    for i in range(len(row)):
+        if i > 0:
+            result += ","
+        var field = row[i]
+        result += "n" if field.is_null else "s" + hex_span(field.data)
+    return result^
+
+
+def parse_lines(text: StringSlice, var dialect: Dialect) raises -> String:
     # Inject iterator EOL separately to reach branches unavailable to StringIO lines.
     dialect.validate()
-    var reader = Reader(dialect^)
-    var rows = List[List[CsvField]]()
-    var row = List[CsvField]()
+    var input = List[UInt8]()
+    for line in text.split(","):
+        var data = unhex(line)
+        input.extend(Span(data))
+    var reader = Reader(dialect^, Span(input))
+    var result = String()
+    var records = 0
     for line in text.split(","):
         var data = unhex(line)
         for c in data:
-            _ = reader._process(Int(c), row)
-        if reader._process(-1, row):
-            rows.append(row^)
-            row = List[CsvField]()
-    if len(reader.scratch) != 0 or reader.state == IN_QUOTED_FIELD:
+            _ = reader._process(Int(c))
+            reader.position += 1
+        if reader._process(-1):
+            if records > 0:
+                result += "/"
+            result += encode_view(reader.row())
+            records += 1
+            reader.fields.clear()
+            reader.scratch.clear()
+    if reader.field_len != 0 or reader.state == IN_QUOTED_FIELD:
         if reader.dialect.strict:
             raise Error("unexpected end of data")
-        reader._save_field(row)
-        rows.append(row^)
-    return rows^
+        reader._save_field()
+        if records > 0:
+            result += "/"
+        result += encode_view(reader.row())
+    return result^
 
 
 def replay() raises:
@@ -96,16 +123,19 @@ def replay() raises:
         try:
             if String(parts[1]) == "R":
                 var input = unhex(parts[10])
-                var reader = Reader(d^)
-                var rows = reader.read_all(Span(input))
-                actual = encode_rows(rows)
+                var reader = Reader(d^, Span(input))
+                var records = 0
+                while reader.next():
+                    if records > 0:
+                        actual += "/"
+                    actual += encode_view(reader.row())
+                    records += 1
                 # Reusing the reader must reset state and retained scratch.
-                var again = reader.read_all(Span(input))
+                var again = reader.read_all()
                 if encode_rows(again) != actual:
                     raise Error("reader reuse differs")
             elif String(parts[1]) == "L":
-                var rows = parse_lines(parts[10], d^)
-                actual = encode_rows(rows)
+                actual = parse_lines(parts[10], d^)
             else:
                 var rows = decode_rows(parts[10])
                 var output = write_all(rows, d)

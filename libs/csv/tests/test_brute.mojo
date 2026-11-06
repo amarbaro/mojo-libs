@@ -90,8 +90,8 @@ def run_brute() raises:
                 if next_random(seed) % 2 == 0:
                     input.append(13)
                 input.append(10)
-        var reader = Reader(Dialect.excel())
-        var rows = reader.read_all(Span(input))
+        var reader = Reader(Dialect.excel(), Span(input))
+        var rows = reader.read_all()
         var actual = encode_rows(rows)
         var expected = brute(input)
         if actual != expected:

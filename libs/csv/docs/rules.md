@@ -12,3 +12,9 @@
 - The first ab-step race inherited no CPU pin or memory scope: run the complete A/B driver under cap.sh and taskset; do not treat those exploratory numbers as the final receipt.
 - A typed LOC estimate was wrong: derive before/after counts with wc or mojo-loc and retain the command output beside the commit.
 - SIMD first-lane reduction regressed median throughput 50.66 to 46.57 MB/s: revert the arm; a vector operation is not automatically faster than a short scalar tail.
+- Span fields carry distinct nested origins: return row views with an explicit enclosing-reader origin cast, and verify that a live row blocks the next mutation.
+- Defining __len__ alone does not enable len(): conform the row view to Sized.
+- Upstream source paths are case sensitive: discover the repository tree after a 404 rather than guessing another path.
+- A held row compiled despite an origin annotation: do not claim compiler-enforced row invalidation. Document next()/reset() invalidation and test owning copies across advancement.
+- An intended input-lifetime probe used an Array literal and failed on clear(), not borrowing: spell List explicitly and inspect the exact negative diagnostic.
+- Named numeric token validation allocated a temporary String per field: compare packed ASCII inf/nan/infinity tokens without heap allocation.

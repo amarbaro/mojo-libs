@@ -88,54 +88,112 @@ struct Dialect(Copyable, Movable):
         d.lineterminator = [UInt8(10)]
         return d^
 
-struct CsvField(Copyable, Movable):
+struct OwnedField(Copyable, Movable):
     var data: List[UInt8]
-    var holder: List[UInt8]
     var is_null: Bool
 
     def __init__(out self, var data: List[UInt8], is_null: Bool = False):
         self.data = data^
-        self.holder = List[UInt8]()
         self.is_null = is_null
 
     def __init__(out self):
         self.data = List[UInt8]()
-        self.holder = List[UInt8]()
         self.is_null = False
 
-struct Reader:
+@fieldwise_init
+struct CsvField[origin: Origin](ImplicitlyCopyable):
+    var data: Span[UInt8, Self.origin]
+    var is_null: Bool
+
+    def to_list(self) -> List[UInt8]:
+        return List[UInt8](self.data)
+
+@fieldwise_init
+struct _Field(ImplicitlyCopyable):
+    var start: Int
+    var length: Int
+    var owned: Bool
+    var is_null: Bool
+
+@fieldwise_init
+struct CsvRow[origin: Origin](ImplicitlyCopyable, Sized):
+    var _input: Span[UInt8, Self.origin]
+    var _scratch: Span[UInt8, Self.origin]
+    var _fields: Span[_Field, Self.origin]
+
+    def __len__(self) -> Int:
+        return len(self._fields)
+
+    def __getitem__(self, index: Int) -> CsvField[Self.origin]:
+        var f = self._fields[index]
+        var source = self._scratch if f.owned else self._input
+        return CsvField(source[f.start:f.start + f.length], f.is_null)
+
+    def to_list(self) -> List[OwnedField]:
+        var result = List[OwnedField](capacity=len(self))
+        for i in range(len(self)):
+            var f = self[i]
+            result.append(OwnedField(f.to_list(), f.is_null))
+        return result^
+
+struct Reader[origin: Origin]:
     var dialect: Dialect
+    var input: Span[UInt8, Self.origin]
     var state: Int
     var unquoted: Bool
     var scratch: List[UInt8]
+    var fields: List[_Field]
+    var position: Int
     var line_num: Int
+    var field_start: Int
+    var field_offset: Int
+    var field_len: Int
+    var field_owned: Bool
+    var _validated: Bool
 
-    def __init__(out self, var dialect: Dialect):
+    def __init__(out self, var dialect: Dialect, input: Span[UInt8, Self.origin]):
         self.dialect = dialect^
+        self.input = input
         self.state = START_RECORD
         self.unquoted = True
         self.scratch = List[UInt8]()
+        self.fields = List[_Field]()
+        self.position = 0
         self.line_num = 0
+        self.field_start = 0
+        self.field_offset = 0
+        self.field_len = 0
+        self.field_owned = False
+        self._validated = False
 
     def _add_char(mut self, c: Int) raises:
-        if len(self.scratch) >= FIELD_LIMIT:
+        if self.field_len >= FIELD_LIMIT:
             raise Error("field larger than field limit (131072)")
-        self.scratch.append(UInt8(c))
+        if not self.field_owned and self.position != self.field_start + self.field_len:
+            self.scratch.extend(self.input[self.field_start:self.field_start + self.field_len])
+            self.field_owned = True
+        if self.field_owned:
+            self.scratch.append(UInt8(c))
+        self.field_len += 1
 
-    def _save_owned(mut self, var data: List[UInt8], mut row: List[CsvField]) raises:
+    def _save_field(mut self) raises:
         var q = self.dialect.quoting
-        var null = self.unquoted and len(data) == 0 and (q == QUOTE_NOTNULL or q == QUOTE_STRINGS)
-        if self.unquoted and len(data) != 0 and (q == QUOTE_NONNUMERIC or q == QUOTE_STRINGS):
-            if not _is_float_bytes(data):
+        var null = self.unquoted and self.field_len == 0 and (q == QUOTE_NOTNULL or q == QUOTE_STRINGS)
+        var start = self.field_offset if self.field_owned else self.field_start
+        if self.unquoted and self.field_len != 0 and (q == QUOTE_NONNUMERIC or q == QUOTE_STRINGS):
+            if self.field_owned:
+                if not _is_float_bytes(Span(self.scratch)[start:start + self.field_len]):
+                    raise Error("could not convert string to float")
+            elif not _is_float_bytes(self.input[start:start + self.field_len]):
                 raise Error("could not convert string to float")
-        row.append(CsvField(data^, null))
+        self.fields.append(_Field(start, self.field_len, self.field_owned, null))
+        self.field_start = self.position + 1
+        self.field_offset = len(self.scratch)
+        self.field_len = 0
+        self.field_owned = False
         self.unquoted = True
 
-    def _save_field(mut self, mut row: List[CsvField]) raises:
-        self._save_owned(List[UInt8](Span(self.scratch)), row)
-        self.scratch.clear()
-
-    def _process(mut self, c: Int, mut row: List[CsvField]) raises -> Bool:
+    def _process(mut self, c: Int) raises -> Bool:
         if self.state == START_RECORD:
             if c == -1:
                 return True
@@ -146,18 +204,19 @@ struct Reader:
         if self.state == START_FIELD:
             self.unquoted = True
             if c == -1 or c == 10 or c == 13:
-                self._save_field(row)
+                self._save_field()
                 self.state = START_RECORD if c == -1 else EAT_CRNL
                 return c == -1
             if c == Int(self.dialect.quotechar) and self.dialect.quoting != QUOTE_NONE:
                 self.unquoted = False
+                self.field_owned = True
                 self.state = IN_QUOTED_FIELD
             elif self.dialect.has_escape and c == Int(self.dialect.escapechar):
                 self.state = ESCAPED_CHAR
             elif c == 32 and self.dialect.skipinitialspace:
                 pass
             elif c == Int(self.dialect.delimiter):
-                self._save_field(row)
+                self._save_field()
             else:
                 self._add_char(c)
                 self.state = IN_FIELD
@@ -170,13 +229,13 @@ struct Reader:
             return False
         if self.state == IN_FIELD or self.state == AFTER_ESCAPED_CRNL:
             if c == -1 or c == 10 or c == 13:
-                self._save_field(row)
+                self._save_field()
                 self.state = START_RECORD if c == -1 else EAT_CRNL
                 return c == -1
             if self.dialect.has_escape and c == Int(self.dialect.escapechar):
                 self.state = ESCAPED_CHAR
             elif c == Int(self.dialect.delimiter):
-                self._save_field(row)
+                self._save_field()
                 self.state = START_FIELD
             else:
                 self._add_char(c)
@@ -200,10 +259,10 @@ struct Reader:
                 self._add_char(c)
                 self.state = IN_QUOTED_FIELD
             elif c == Int(self.dialect.delimiter):
-                self._save_field(row)
+                self._save_field()
                 self.state = START_FIELD
             elif c == -1 or c == 10 or c == 13:
-                self._save_field(row)
+                self._save_field()
                 self.state = START_RECORD if c == -1 else EAT_CRNL
                 return c == -1
             elif not self.dialect.strict:
@@ -219,59 +278,73 @@ struct Reader:
             raise Error("new-line character seen in unquoted field")
         return False
 
-    def read_all(mut self, input: Span[UInt8, _]) raises -> List[List[CsvField]]:
-        self.dialect.validate()
-        self.state = START_RECORD
-        self.scratch.clear()
+    def reset(mut self):
+        self.position = 0
         self.line_num = 0
-        var rows = List[List[CsvField]]()
-        var row = List[CsvField]()
-        var i = 0
-        while i < len(input):
+        self.state = START_RECORD
+        self.fields.clear()
+        self.scratch.clear()
+        self._validated = False
+
+    def next(mut self) raises -> Bool:
+        if not self._validated:
+            self.dialect.validate()
+            self._validated = True
+        self.fields.clear()
+        self.scratch.clear()
+        self.state = START_RECORD
+        self.unquoted = True
+        self.field_start = self.position
+        self.field_offset = 0
+        self.field_len = 0
+        self.field_owned = False
+        while self.position < len(self.input):
             self.line_num += 1
-            while i < len(input):
-                if (self.state == START_RECORD or self.state == START_FIELD) and not (self.dialect.skipinitialspace and input[i] == 32):
-                    var end = _ordinary_end(input, i, self.dialect)
-                    if end > i and (end == len(input) or input[end] == self.dialect.delimiter or input[end] == 10 or input[end] == 13):
-                        if end - i > FIELD_LIMIT:
-                            raise Error("field larger than field limit (131072)")
-                        self.unquoted = True
-                        self._save_owned(List[UInt8](input[i:end]), row)
-                        i = end
-                        if i < len(input) and input[i] == self.dialect.delimiter:
-                            i += 1
-                            self.state = START_FIELD
-                        else:
-                            self.state = EAT_CRNL if i < len(input) else START_RECORD
-                        continue
+            while self.position < len(self.input):
                 if self.state == IN_FIELD or self.state == IN_QUOTED_FIELD:
-                    var end = _ordinary_end(input, i, self.dialect)
-                    if end > i:
-                        if len(self.scratch) + end - i > FIELD_LIMIT:
+                    var end = _ordinary_end(self.input, self.position, self.dialect)
+                    if end > self.position:
+                        if self.field_len + end - self.position > FIELD_LIMIT:
                             raise Error("field larger than field limit (131072)")
-                        self.scratch.extend(input[i:end])
-                        i = end
+                        if self.field_owned:
+                            self.scratch.extend(self.input[self.position:end])
+                        self.field_len += end - self.position
+                        self.position = end
                         continue
-                var c = Int(input[i])
-                _ = self._process(c, row)
-                i += 1
+                var c = Int(self.input[self.position])
+                _ = self._process(c)
+                self.position += 1
                 if c == 13:
-                    if i < len(input) and input[i] == 10:
-                        _ = self._process(10, row)
-                        i += 1
+                    if self.position < len(self.input) and self.input[self.position] == 10:
+                        _ = self._process(10)
+                        self.position += 1
                 if c == 10 or c == 13:
                     break
-            if self._process(-1, row):
-                rows.append(row^)
-                row = List[CsvField]()
-        if len(self.scratch) != 0 or self.state == IN_QUOTED_FIELD:
+            if self._process(-1):
+                return True
+        if self.field_len != 0 or self.state == IN_QUOTED_FIELD:
             if self.dialect.strict:
                 raise Error("unexpected end of data")
-            self._save_field(row)
-            rows.append(row^)
+            self._save_field()
+            return True
+        return False
+
+    def row(ref self) -> CsvRow[ImmOrigin(origin_of(self))]:
+        # Bind view types to the reader origin. Tested compilers still accept
+        # invalid retention: the documented next/reset/input contract applies.
+        return CsvRow(
+            Span[UInt8, ImmOrigin(origin_of(self))](unsafe_ptr=self.input.unsafe_ptr().as_imm().unsafe_origin_cast[ImmOrigin(origin_of(self))](), length=len(self.input)),
+            Span[UInt8, ImmOrigin(origin_of(self))](unsafe_ptr=self.scratch.unsafe_ptr().as_imm().unsafe_origin_cast[ImmOrigin(origin_of(self))](), length=len(self.scratch)),
+            Span[_Field, ImmOrigin(origin_of(self))](unsafe_ptr=self.fields.unsafe_ptr().as_imm().unsafe_origin_cast[ImmOrigin(origin_of(self))](), length=len(self.fields)))
+
+    def read_all(mut self) raises -> List[List[OwnedField]]:
+        self.reset()
+        var rows = List[List[OwnedField]]()
+        while self.next():
+            rows.append(self.row().to_list())
         return rows^
 
-def _is_float_bytes(b: List[UInt8]) -> Bool:
+def _is_float_bytes(b: Span[UInt8, _]) -> Bool:
     var start = 0
     var end = len(b)
     while start < end and (b[start] == 32 or (b[start] >= 9 and b[start] <= 13)):
@@ -280,11 +353,13 @@ def _is_float_bytes(b: List[UInt8]) -> Bool:
         end -= 1
     if start < end and (b[start] == 43 or b[start] == 45):
         start += 1
-    var word = String()
-    for i in range(start, end):
-        word += chr(Int(b[i] | 32))
-    if word == "inf" or word == "infinity" or word == "nan":
-        return True
+    if end - start == 3 or end - start == 8:
+        var word = UInt64(0)
+        for i in range(start, end):
+            word = (word << 8) | UInt64(b[i] | 32)
+        # Packed lowercase ASCII: inf, nan, infinity. No temporary String.
+        if word == 0x696e66 or word == 0x6e616e or word == 0x696e66696e697479:
+            return True
     var digits = 0
     var exponent_digits = 0
     var dot = False
@@ -318,7 +393,7 @@ def _special(c: UInt8, d: Dialect) -> Bool:
             return True
     return False
 
-def write_all(rows: List[List[CsvField]], dialect: Dialect) raises -> List[UInt8]:
+def write_all(rows: List[List[OwnedField]], dialect: Dialect) raises -> List[UInt8]:
     dialect.validate()
     var output = List[UInt8]()
     for row in rows:
