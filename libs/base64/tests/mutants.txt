@@ -1,0 +1,8 @@
+src/base64/codec.mojo|if strict and quad_pos == 0:|if False and quad_pos == 0:
+src/base64/codec.mojo|raise Error("Only base64 data is allowed")|pass
+src/base64/codec.mojo|if strict and i + 1 < n:|if False and i + 1 < n:
+src/base64/codec.mojo|if c == UInt8(ord('-')):|if False:
+src/base64/codec.mojo|if casefold:|if False:
+src/base64/codec.mojo|raise Error("Incorrect padding")|pass
+src/base64/codec.mojo|if leftover == 1:|if False:
+src/base64/codec.mojo|var ok = (c >= 48 and c <= 57) or (c >= 65 and c <= 70)|if False:
