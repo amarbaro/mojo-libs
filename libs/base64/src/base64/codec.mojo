@@ -25,22 +25,18 @@ def _b64decode_core(data: List[Byte], strict: Bool) raises -> List[Byte]:
     var quad_pos = 0
     var leftchar: Int = 0
     var pads = 0
-    var padding_started = False
-    var done_padding = False
     var i = 0
     while i < n:
         var this_ch = data[i]
         if this_ch == UInt8(ord('=')):
-            padding_started = True
-            if strict and quad_pos == 0:
-                raise Error("Excess padding not allowed")
-            if quad_pos >= 2 and quad_pos + (pads + 1) >= 4:
-                pads += 1
-                if strict and i + 1 < n:
-                    raise Error("Excess data after padding")
-                done_padding = True
-                break
             pads += 1
+            if quad_pos >= 2 and quad_pos + pads <= 4:
+                i += 1
+                continue
+            if strict:
+                if quad_pos == 1:
+                    break
+                raise Error("Excess padding not allowed")
             i += 1
             continue
         var v = _a2b(this_ch)
@@ -49,7 +45,9 @@ def _b64decode_core(data: List[Byte], strict: Bool) raises -> List[Byte]:
                 raise Error("Only base64 data is allowed")
             i += 1
             continue
-        if strict and padding_started:
+        if strict and pads != 0:
+            if quad_pos + pads == 4:
+                raise Error("Excess data after padding")
             raise Error("Discontinuous padding not allowed")
         pads = 0
         if quad_pos == 0:
@@ -68,11 +66,10 @@ def _b64decode_core(data: List[Byte], strict: Bool) raises -> List[Byte]:
             out.append(UInt8((leftchar << 6) | v))
             leftchar = 0
         i += 1
-    if (not done_padding) and quad_pos != 0:
-        if quad_pos == 1:
-            raise Error("Invalid base64-encoded string: number of data characters (" + String(i) + ") cannot be 1 more than a multiple of 4")
-        else:
-            raise Error("Incorrect padding")
+    if quad_pos == 1:
+        raise Error("Invalid base64-encoded string: number of data characters (" + String((len(out) // 3) * 4 + 1) + ") cannot be 1 more than a multiple of 4")
+    if quad_pos != 0 and quad_pos + pads < 4:
+        raise Error("Incorrect padding")
     return out^
 
 def b64encode(s: Span[UInt8, _]) -> List[Byte]:
@@ -104,18 +101,40 @@ def b64encode_into(s: Span[UInt8, _], mut out: List[Byte]):
         out.append(UInt8(ord(_ALPHA[byte=((b1 & 15) << 2)])))
         out.append(UInt8(ord('=')))
 
+def _bytes_repr(data: List[Byte]) -> String:
+    var single = False
+    var double = False
+    for i in range(len(data)):
+        single = single or data[i] == 39
+        double = double or data[i] == 34
+    var quote = 34 if single and not double else 39
+    var result = String("b") + chr(quote)
+    comptime hexchars = "0123456789abcdef"
+    for i in range(len(data)):
+        var c = Int(data[i])
+        if c == quote or c == 92:
+            result += String("\\") + chr(c)
+        elif c == 9: result += "\\t"
+        elif c == 10: result += "\\n"
+        elif c == 13: result += "\\r"
+        elif c < 32 or c >= 127:
+            result += String("\\x") + String(hexchars[byte=c >> 4]) + String(hexchars[byte=c & 15])
+        else:
+            result += chr(c)
+    return result + chr(quote)
+
 def b64decode(s: Span[UInt8, _], altchars: List[Byte] = List[Byte](), validate: Bool = False) raises -> List[Byte]:
     var data = List[Byte]()
     for j in range(len(s)):
         data.append(s[j])
     if len(altchars) != 0:
         if len(altchars) != 2:
-            raise Error("altchars must be length 2")
+            raise Error(_bytes_repr(altchars))
         for j in range(len(data)):
-            if data[j] == altchars[0]:
-                data[j] = UInt8(ord('+'))
-            elif data[j] == altchars[1]:
+            if data[j] == altchars[1]:
                 data[j] = UInt8(ord('/'))
+            elif data[j] == altchars[0]:
+                data[j] = UInt8(ord('+'))
     return _b64decode_core(data, validate)
 
 def b64decode_into(s: Span[UInt8, _], mut out: List[Byte], altchars: List[Byte] = List[Byte](), validate: Bool = False) raises:
@@ -227,7 +246,7 @@ def _b32decode_with(alphabet: String, s: Span[UInt8, _], casefold: Bool, map01: 
         raise Error("Incorrect padding")
     if len(map01) != 0:
         if len(map01) != 1:
-            raise Error("map01 must be length 1")
+            raise Error(_bytes_repr(List[Byte](map01)))
         for j in range(len(data)):
             if data[j] == UInt8(ord('0')):
                 data[j] = UInt8(ord('O'))

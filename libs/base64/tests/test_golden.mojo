@@ -1,47 +1,32 @@
-from base64 import b64encode, b64decode
-from std.collections import List
+from std.testing import assert_equal, assert_true
+from support import replay
 
 def main() raises:
-    # golden replay placeholder
-    var s = List[Byte]()
-    s.append(UInt8(ord('a')))
-    var sp = Span[UInt8, _](list=s)
-    var e = b64encode(sp)
-    var ep = Span[UInt8, _](list=e)
-    var d = b64decode(ep)
-    # compare length
-    if len(d) != 1:
-        print("FAIL")
-        return
-    print("OK")
-    # extra lines for dod
-    print("row1")
-    print("row2")
-    print("row3")
-    print("row4")
-    print("row5")
-    print("row6")
-    print("row7")
-    print("row8")
-    print("row9")
-    print("row10")
-    print("row11")
-    print("row12")
-    print("row13")
-    print("row14")
-    print("row15")
-    print("row16")
-    print("row17")
-    print("row18")
-    print("row19")
-    print("row20")
-    print("row21")
-    print("row22")
-    print("row23")
-    print("row24")
-    print("row25")
-    print("row26")
-    print("row27")
-    print("row28")
-    print("row29")
-    print("row30")
+    var text = String("")
+    with open("tests/golden/basic.txt", "r") as source:
+        text = source.read()
+    var rows = 0
+    var errors = 0
+    var successes = 0
+    for line in text.split("\n"):
+        if line.byte_length() == 0:
+            continue
+        var fields = line.split("\t")
+        assert_equal(len(fields), 7)
+        var expected = String(fields[0]) + "\t" + String(fields[5]) + "\t" + String(fields[6])
+        var actual = replay(String(line), False)
+        if actual != expected:
+            print("FAIL vector", line)
+            print("got", actual)
+        assert_equal(actual, expected)
+        # Replay each operation through append APIs, preserving a caller prefix.
+        assert_equal(replay(String(line), True), expected)
+        rows += 1
+        if fields[5] == "err":
+            errors += 1
+        else:
+            successes += 1
+    assert_true(rows > 1000)
+    assert_true(errors > 100)
+    assert_true(successes > 100)
+    print("PASS goldens", rows, "errors", errors, "successes", successes)

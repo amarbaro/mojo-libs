@@ -11,12 +11,15 @@ for c in $($PY -I tools/oracle.py --list); do
   for run in 1 2; do
     for side in exp got; do
       w=$(mktemp -d "$PWD/$D/$c.$side.XXXX")
-      if [ $side = exp ]; then $PY -I tools/oracle.py "$c" "$w" > "$D/$c.$side" 2>&1 || true
-      else timeout 60 "$CASES" "$c" "$w" > "$D/$c.$side" 2>&1 || true; fi
+      if [ $side = exp ]; then
+        $PY -I tools/oracle.py "$c" "$w" > "$D/$c.$side" 2>&1 || { echo "FAIL oracle $c"; fail=$((fail+1)); }
+      else
+        scripts/capped.sh "$CASES" "$c" "$w" > "$D/$c.$side" 2>&1 || { echo "FAIL runner $c"; fail=$((fail+1)); }
+      fi
       rm -rf "$w"
     done
     [ -s "$D/$c.exp" ] || { echo "FAIL $c: empty oracle output"; fail=$((fail+1)); continue; }
-    cmp -s "$D/$c.exp" "$D/$c.got" || { echo "FAIL $c (run $run)"; diff "$D/$c.exp" "$D/$c.got" | head -6; fail=$((fail+1)); }
+    cmp -s "$D/$c.exp" "$D/$c.got" || { echo "FAIL $c (run $run)"; diff "$D/$c.exp" "$D/$c.got" | sed -n '1,6p' || true; fail=$((fail+1)); }
   done
   n=$((n+1))
 done
