@@ -21,3 +21,7 @@
 - Incomplete upstream license stub -> fetch the full pinned upstream LICENSE, never ship an ellipsis notice.
 - Promoted local verifier kept an absolute home path -> use HOME or a toolchain override, then run the repository audit.
 - Nested skill reads were invisible to the writing hook -> retain the skill receipt and use a supported file-write path without changing shared hooks.
+- A limited file listing missed a tracked fabricated generator -> check both git ls-files and the filesystem before claiming deletion.
+- A second mutation run began after a failed baseline -> the mutation runner now builds and passes the unmodified test suite before touching source.
+- A TERM restore trap continued its loop -> signal traps exit; an EXIT trap restores the source exactly once.
+- Unlabelled generator assertions obscured a failed check -> compare complete UUID bits and give each injected-state check its own message.

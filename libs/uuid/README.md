@@ -35,8 +35,12 @@ def main() raises:
 | `uuid4()`, `uuid6()`, `uuid7()`, `uuid8()` | Generate a UUID |
 | `UUID6Generator`, `UUID7Generator` | Caller-owned monotonic sequences |
 
-Use one generator instance for monotonic v6/v7 sequences. One-shot `uuid6`/`uuid7`
-do not share state. Default v6 nodes use random data, without hardware lookup.
+## Limits
+
+Use one generator instance for monotonic v6/v7 sequences. Convenience `uuid6()`/`uuid7()`
+are not monotonic across calls; use the generator for ordering. This is a
+documented divergence from CPython, with no parity claim for these helpers.
+Default v6 nodes use random data, without hardware lookup.
 UUID1/2, SafeUUID, Python object identity, arbitrary-precision integer arguments,
 and Python's full Unicode decimal-digit parsing are outside this interface.
 `UUIDError` exposes CPython's `kind` and exact `message`; it is a Mojo error value,

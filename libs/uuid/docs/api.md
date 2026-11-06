@@ -40,8 +40,16 @@ Value methods: `int() -> UInt128`, `hex() -> String`, `__str__() -> String`,
 Generators can raise an Error if the system RNG fails. Reuse a generator instance
 for monotonic sequences; synchronize shared instances externally.
 Internal `_uuid4_from(bytes)` and `_uuid7_from(ms,counter,tail)` assemble deterministic bits.
-RFC 9562 A.6 has its counter top bit set: test the assembler directly, because
+RFC 9562 A.6 has its counter top bit set: tests inject existing generator state, because
 CPython clears that bit when seeding its own monotonic generator.
 
 Constants: NAMESPACE_DNS, NAMESPACE_URL, NAMESPACE_OID, NAMESPACE_X500, NIL, MAX.
 See tests/golden/SOURCE for RFC sections. UUID1/2 and MAC lookup are omitted.
+
+## Limits
+
+Convenience `uuid6()`/`uuid7()` are not monotonic across calls; use the generator for ordering.
+This is a documented divergence from CPython; no CPython parity is claimed for those helpers.
+The explicit generators keep their own state: v6 bumps repeated/backward timestamps;
+v7 uses a 42-bit counter, bumps milliseconds on rollover, and stays ordered after clock rollback.
+No stdlib underscore globals are used.

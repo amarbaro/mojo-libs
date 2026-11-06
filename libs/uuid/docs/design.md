@@ -14,7 +14,7 @@ shared mutable storage and makes deterministic tests possible.
 
 RFC 9562 Appendix A.2-A.6/B.1-B.2 supply all generator goldens; Sections 5.9,
 5.10 and 6.6 supply constants. No generated golden files are accepted.
-A.6's fixed random fields are assembled directly: CPython's seeding policy clears
+A.6 uses injected generator state and an assembler cross-check: CPython clears
 the counter MSB and cannot generate that exact initial seed without state injection.
 Error messages come from CPython v3.14.0 uuid.py, verified by tools/check_reference.py.
 10,000 independent bit-by-bit formatter/parser cases exercise byte round trips.

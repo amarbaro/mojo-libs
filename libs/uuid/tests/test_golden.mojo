@@ -1,6 +1,8 @@
 """Replay every RFC final UUID through its generator and its textual parser."""
 from uuid import UUID, UUIDError, uuid3, uuid5, uuid6, uuid8, NAMESPACE_DNS, NAMESPACE_URL, NAMESPACE_OID, NAMESPACE_X500, NIL, MAX
 from uuid import _uuid4_from, _uuid7_from
+from uuid import UUID6Generator, UUID7Generator
+from std.collections import Array
 from support import check
 
 def golden_tests() raises:
@@ -23,9 +25,18 @@ def golden_tests() raises:
         elif section == "A.4":  # RFC 9562 Appendix A.4, DNS + www.example.com
             value = uuid5(dns, "www.example.com")
         elif section == "A.5":  # RFC 9562 Appendix A.5, timestamp + clock_seq + node
-            value = uuid6(0x9f6bdeced846, 0x33c8, 1645557742000000000)
+            var generator = UUID6Generator()
+            value = generator.next(1645557742000000000, 0x9f6bdeced846, 0x33c8)
+            check(uuid6(0x9f6bdeced846, 0x33c8, 1645557742000000000).int() == value.int(), "v6 state golden: " + value.__str__())
         elif section == "A.6":  # RFC 9562 Appendix A.6, exact rand_a/rand_b
-            value = _uuid7_from(1645557742000, (UInt64(0xcc3) << 30) | 0x18c4dc0c, 0x0c07398f)
+            # Inject an existing counter: this RFC example has the seed MSB set.
+            var counter = (UInt64(0xcc3) << 30) | 0x18c4dc0c
+            var generator = UUID7Generator()
+            generator.last_timestamp = 1645557742000
+            generator.counter = counter - 1
+            var entropy: Array[UInt8, 10] = [0, 0, 0, 0, 0, 0, 0x0c, 0x07, 0x39, 0x8f]
+            value = generator.from_random(1645557742000, entropy)
+            check(_uuid7_from(1645557742000, counter, 0x0c07398f).int() == value.int(), "v7 state golden: " + value.__str__())
         elif section == "B.1":  # RFC 9562 Appendix B.1, custom_a/b/c
             value = uuid8(0x2489e9ad2ee2, 0xe00, 0xec932d5f69181c0)
         elif section == "B.2":  # RFC 9562 Appendix B.2, SHA-256 custom blocks
