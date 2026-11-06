@@ -1,0 +1,8 @@
+src/csv/__init__.mojo|comptime QUOTE_MINIMAL = 0|comptime QUOTE_MINIMAL = 0.0
+src/csv/__init__.mojo|List[UInt8]|Nope[UInt8]
+src/csv/__init__.mojo|var state: Int|var state: Nope
+src/csv/__init__.mojo|Span[UInt8, _]|Span[UInt8, _]XXX
+src/csv/__init__.mojo|UInt8(ord(","))|UInt8(ord(",")
+src/csv/__init__.mojo|return rows^|return rows
+src/csv/__init__.mojo|struct Dialect(Copyable, Movable):|struct Dialect(Nonsense):
+src/csv/__init__.mojo|raise Error|raise Nope
