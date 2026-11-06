@@ -1,24 +1,20 @@
 #!/usr/bin/env bash
-# CI entry point (GitHub runner or local): install, build, then every gate. MOJO=path overrides the toolchain.
-# Ends with "PASS n/m" (or "FAIL k/m"): the README checks badge parses that line.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [ -z "${MOJO:-}" ]; then
-  command -v uv >/dev/null || { echo "FAIL setup: uv not installed"; exit 1; }
-  uv sync -q || { echo "FAIL setup: uv sync"; exit 1; }
+  uv sync -q || { echo 'FAIL setup: uv sync'; exit 1; }
   MOJO=.venv/bin/mojo
 fi
-"$MOJO" --version
-[ -x .venv/bin/python ] && export ORACLE_PY=${ORACLE_PY:-.venv/bin/python}
 mkdir -p .work/t
-for t in tests/cases:.work/cases tests/api:.work/t/api examples/quickstart:.work/t/quickstart; do
-  "$MOJO" build -O3 -I src -I ../mojo-hashlib-public/src ${MOJO_FLAGS:-} "${t%%:*}.mojo" -o "${t##*:}" 2>.work/build.err || { echo "FAIL build: ${t%%:*}.mojo"; cat .work/build.err; echo "FAIL 4/4"; exit 1; }
+"$MOJO" --version
+for entry in tests/cases:cases tests/api:api tests/differential:differential tests/bench:bench examples/quickstart:quickstart; do
+  scripts/run-capped.sh "$MOJO" build -O3 -I src -I ../mojo-hashlib-public/src "${entry%%:*}.mojo" -o ".work/t/${entry##*:}" > .work/build.err 2>&1 || { cat .work/build.err; echo "FAIL build: $entry"; exit 1; }
 done
-m=4; ok=0
-gate() { local name=$1; shift; if "$@"; then ok=$((ok+1)); echo "ok $name"; else echo "FAIL $name"; echo "FAIL $((m-ok))/$m"; exit 1; fi; }
-gate oracle env CASES=.work/cases scripts/check.sh
-gate mutants env MOJO="$MOJO" scripts/mutants.sh
-gate api .work/t/api
-gate quickstart sh -c '.work/t/quickstart > /dev/null'
-echo "PASS $ok/$m"
-echo "PASS ci"
+CASES=.work/t/cases scripts/check.sh
+scripts/run-capped.sh python3 -I tools/reference.py > .work/reference.exp
+scripts/run-capped.sh .work/t/differential > .work/reference.got
+cmp .work/reference.exp .work/reference.got || { echo 'FAIL differential: CPython values'; exit 1; }
+scripts/run-capped.sh .work/t/api
+scripts/run-capped.sh .work/t/quickstart
+MOJO="$MOJO" scripts/mutants.sh
+echo 'PASS 5/5'

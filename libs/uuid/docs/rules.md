@@ -1,0 +1,21 @@
+# Rules
+
+- Placeholder tests and fabricated expected rows -> fixtures come from RFC sections, and tests compare complete results.
+- Compile failures counted as killed mutants -> require successful compilation before a behavioural kill.
+- Byte fields shifted at UInt8 width -> widen before shifting, and exercise a nonzero high byte.
+- Little-endian UUID conversion skipped bytes 6/7 -> test all three reversed fields and round trips.
+- Guessed std.io.open and block variable scope -> use prelude open; declare file contents outside the with block.
+- Guessed upstream path case -> query the repository tree before fetching a source file.
+- Array positional constructor rejected -> initialize fixed arrays with a typed bracket literal.
+- Assigning a String from its own slice aliases -> materialize a temporary before replacing the owner.
+- Runtime Int shift on UInt128 rejected -> cast the shift count to the SIMD scalar type.
+- repo-net build queued an unrelated GPU embedding job -> stop its PID after local structural indexing; report the incomplete network build.
+- Convenience uuid6/uuid7 lacked persistent clock/counter state -> expose caller-owned generators; distinguish one-shot helpers from monotonic instances.
+- Optional UInt64 does not coerce integer literals -> use an Int adapter and explicit conversion to the UUID node bits.
+- Mutants launched before the current baseline compiled -> require a fresh successful case build before starting mutation tests.
+- Background job died with the harness process group -> detach persistent jobs with setsid and monitor them.
+- Self-authored expected messages repeated the same article bug -> copy complete CPython text and verify against its pinned source; 8-bit errors say "an".
+- Mutant expressions contained the pipe delimiter -> mutate a delimiter-free subexpression; malformed rows must never count as kills.
+- UUID hash truncated UInt128 to Int -> match CPython positive-integer hash reduction and compare it in differential tests.
+- Folded ASCII arithmetic could accept @ as a digit -> guard explicit decimal and a-f ranges before accumulating.
+- Incomplete upstream license stub -> fetch the full pinned upstream LICENSE, never ship an ellipsis notice.

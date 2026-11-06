@@ -1,8 +1,10 @@
-src/uuid/__init__.mojo|var v: UInt128 = 0|var v: UInt128X = 0
-src/uuid/__init__.mojo|var h = Md5()|var h = Md5X()
-src/uuid/__init__.mojo|h.update(name.as_bytes())|h.update(name.as_bytes()X)
-src/uuid/__init__.mojo|v |= UInt128(3) << 76|v |= UInt128(3) << 76X
-src/uuid/__init__.mojo|comptime NAMESPACE_DNS = UUID(UInt128(0x6ba7b8109dad11d180b400c04fd430c8))|comptime NAMESPACE_DNS = UUIDX(UInt128(0x6ba7b8109dad11d180b400c04fd430c8))
-src/uuid/__init__.mojo|return UUID(v)|return UUIDX(v)
-src/uuid/__init__.mojo|v &= ~((UInt128(0xf000) << 64) | (UInt128(0xc000) << 48))|v &= ~((UInt128(0xf000) << 64) | (UInt128(0xc000) << 48))X
-src/uuid/__init__.mojo|for i in range(16):|for i in range(16)X:
+src/uuid/__init__.mojo|var h = Md5()|var h = Sha1()
+src/uuid/__init__.mojo|h.update(Span(nb))|pass
+src/uuid/__init__.mojo|h.update(name.as_bytes())|pass
+src/uuid/__init__.mojo|v << 4|v << 3
+src/uuid/__init__.mojo|out[6] = b[7]|out[6] = b[6]
+src/uuid/__init__.mojo|if i == 8 or i == 13 or i == 18 or i == 23:|if i == 7 or i == 13 or i == 18 or i == 23:
+src/uuid/__init__.mojo|UInt128(3) << 76|UInt128(4) << 76
+src/uuid/__init__.mojo|UInt128(0x8000) << 48|UInt128(0x0000) << 48
+src/uuid/__init__.mojo|if next_counter > 0x3ffffffffff:|if next_counter > 0x7ffffffffff:
+src/uuid/__init__.mojo|next_counter += 1|next_counter += 2
