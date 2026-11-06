@@ -56,14 +56,16 @@ struct UUID(Copyable, Movable, ImplicitlyCopyable):
         if h.startswith("+") or negative:
             var unsigned = String(h[byte=1:])
             h = unsigned^
+        var had_prefix = False
         if h.startswith("0x") or h.startswith("0X"):
+            had_prefix = True
             var unprefixed = String(h[byte=2:])
             h = unprefixed^
         var v: UInt128 = 0
         var digit = False
         for i in range(h.byte_length()):
             var c = h[byte=i]
-            if c == "_" and (digit or (i == 0 and original.strip().startswith("0x"))):
+            if c == "_" and (digit or (i == 0 and had_prefix)):
                 digit = False
                 continue
             var d: UInt8

@@ -8,3 +8,4 @@ src/uuid/__init__.mojo|UInt128(3) << 76|UInt128(4) << 76
 src/uuid/__init__.mojo|UInt128(0x8000) << 48|UInt128(0x0000) << 48
 src/uuid/__init__.mojo|if next_counter > 0x3ffffffffff:|if next_counter > 0x7ffffffffff:
 src/uuid/__init__.mojo|next_counter += 1|next_counter += 2
+src/uuid/__init__.mojo|i == 0 and had_prefix|False

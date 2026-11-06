@@ -43,7 +43,7 @@ def error_tests() raises:
     expect_parse("_" + "0" * 31, "invalid literal for int() with base 16: '_0000000000000000000000000000000'")
     # CPython L216-220: accepted forms, including int() grammar.
     check(UUID("urn:uuid:{6ba7b810-9dad-11d1-80b4-00c04fd430c8}").hex() == "6ba7b8109dad11d180b400c04fd430c8")
-    for text in ["{{00000000000000000000000000000000}", "+" + "0" * 31, " " + "0" * 30 + " ", "0_" + "0" * 30, "0x" + "0" * 30, "0x_" + "0" * 29, "0" * 16 + "urn:uuid:" + "0" * 16]:
+    for text in ["{{00000000000000000000000000000000}", "+" + "0" * 31, " " + "0" * 30 + " ", "0_" + "0" * 30, "0x" + "0" * 30, "0x_" + "0" * 29, "0X_" + "0" * 29, "+0x_" + "0" * 28, "+0X_" + "0" * 28, "0" * 16 + "urn:uuid:" + "0" * 16]:
         check(UUID(text).int() == 0, "accepted form: " + text)
     # CPython L222-223, L229-230: both byte lengths and their own messages.
     for length in [0, 15, 17]:
