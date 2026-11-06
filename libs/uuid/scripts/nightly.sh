@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-M=/home/mario/Projects/mojo/mojo-nightly/.venv/bin/mojo
+cd "$(dirname "$0")/.."
+M=${NIGHTLY_MOJO:-$HOME/Projects/mojo/mojo-nightly/.venv/bin/mojo}
 mkdir -p .work/nightly
 "$M" --version
 scripts/run-capped.sh "$M" precompile -I src -I ../mojo-hashlib-public/src src/uuid -o .work/nightly/uuid.mojoc

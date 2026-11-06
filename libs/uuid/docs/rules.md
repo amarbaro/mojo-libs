@@ -19,3 +19,4 @@
 - UUID hash truncated UInt128 to Int -> match CPython positive-integer hash reduction and compare it in differential tests.
 - Folded ASCII arithmetic could accept @ as a digit -> guard explicit decimal and a-f ranges before accumulating.
 - Incomplete upstream license stub -> fetch the full pinned upstream LICENSE, never ship an ellipsis notice.
+- Promoted local verifier kept an absolute home path -> use HOME or a toolchain override, then run the repository audit.
