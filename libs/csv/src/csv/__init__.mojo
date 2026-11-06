@@ -15,6 +15,26 @@ comptime ESCAPE_IN_QUOTED_FIELD = 5
 comptime QUOTE_IN_QUOTED_FIELD = 6
 comptime EAT_CRNL = 7
 comptime AFTER_ESCAPED_CRNL = 8
+comptime FIELD_LIMIT = 131072
+
+
+@always_inline
+def _ordinary_end(input: Span[UInt8, _], start: Int, d: Dialect) -> Int:
+    var i = start
+    while i + 16 <= len(input):
+        var block = input.unsafe_ptr().unsafe_offset(i).unsafe_load[width=16, alignment=1]()
+        var special = block.eq(SIMD[DType.uint8, 16](d.delimiter)) | block.eq(SIMD[DType.uint8, 16](d.quotechar)) | block.eq(SIMD[DType.uint8, 16](10)) | block.eq(SIMD[DType.uint8, 16](13))
+        if d.has_escape:
+            special |= block.eq(SIMD[DType.uint8, 16](d.escapechar))
+        if special.reduce_or():
+            break
+        i += 16
+    while i < len(input):
+        var c = input[i]
+        if c == d.delimiter or c == d.quotechar or c == 10 or c == 13 or (d.has_escape and c == d.escapechar):
+            break
+        i += 1
+    return i
 
 struct Dialect(Copyable, Movable):
     var delimiter: UInt8
@@ -98,19 +118,22 @@ struct Reader:
         self.line_num = 0
 
     def _add_char(mut self, c: Int) raises:
-        if len(self.scratch) >= 131072:
+        if len(self.scratch) >= FIELD_LIMIT:
             raise Error("field larger than field limit (131072)")
         self.scratch.append(UInt8(c))
 
-    def _save_field(mut self, mut row: List[CsvField]) raises:
+    def _save_owned(mut self, var data: List[UInt8], mut row: List[CsvField]) raises:
         var q = self.dialect.quoting
-        var null = self.unquoted and len(self.scratch) == 0 and (q == QUOTE_NOTNULL or q == QUOTE_STRINGS)
-        if self.unquoted and len(self.scratch) != 0 and (q == QUOTE_NONNUMERIC or q == QUOTE_STRINGS):
-            if not _is_float_bytes(self.scratch):
+        var null = self.unquoted and len(data) == 0 and (q == QUOTE_NOTNULL or q == QUOTE_STRINGS)
+        if self.unquoted and len(data) != 0 and (q == QUOTE_NONNUMERIC or q == QUOTE_STRINGS):
+            if not _is_float_bytes(data):
                 raise Error("could not convert string to float")
-        row.append(CsvField(self.scratch.copy(), null))
-        self.scratch.clear()
+        row.append(CsvField(data^, null))
         self.unquoted = True
+
+    def _save_field(mut self, mut row: List[CsvField]) raises:
+        self._save_owned(List[UInt8](Span(self.scratch)), row)
+        self.scratch.clear()
 
     def _process(mut self, c: Int, mut row: List[CsvField]) raises -> Bool:
         if self.state == START_RECORD:
@@ -207,6 +230,28 @@ struct Reader:
         while i < len(input):
             self.line_num += 1
             while i < len(input):
+                if (self.state == START_RECORD or self.state == START_FIELD) and not (self.dialect.skipinitialspace and input[i] == 32):
+                    var end = _ordinary_end(input, i, self.dialect)
+                    if end > i and (end == len(input) or input[end] == self.dialect.delimiter or input[end] == 10 or input[end] == 13):
+                        if end - i > FIELD_LIMIT:
+                            raise Error("field larger than field limit (131072)")
+                        self.unquoted = True
+                        self._save_owned(List[UInt8](input[i:end]), row)
+                        i = end
+                        if i < len(input) and input[i] == self.dialect.delimiter:
+                            i += 1
+                            self.state = START_FIELD
+                        else:
+                            self.state = EAT_CRNL if i < len(input) else START_RECORD
+                        continue
+                if self.state == IN_FIELD or self.state == IN_QUOTED_FIELD:
+                    var end = _ordinary_end(input, i, self.dialect)
+                    if end > i:
+                        if len(self.scratch) + end - i > FIELD_LIMIT:
+                            raise Error("field larger than field limit (131072)")
+                        self.scratch.extend(input[i:end])
+                        i = end
+                        continue
                 var c = Int(input[i])
                 _ = self._process(c, row)
                 i += 1

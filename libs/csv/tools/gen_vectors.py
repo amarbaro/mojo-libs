@@ -102,6 +102,12 @@ def generate():
         case(f"empty-null-{mode}", b',"",\n', quoting=mode)
     case("limit-exact", b"a" * 131072)
     case("limit-over", b"a" * 131073)
+    for width in (0, 1, 15, 16, 17, 31, 32, 33, 63, 64, 65):
+        payload = b"a" * width
+        case(f"simd-plain-{width}", payload + b",z\n")
+        case(f"simd-quote-{width}", b'"' + payload + b'",z\n')
+        case(f"simd-escaped-{width}", payload + b"\\,z\n", escapechar="\\")
+        case(f"simd-quoted-escape-{width}", b'"' + payload + b'\\"z"\n', escapechar="\\")
     for mode in range(6):
         for idx, rows in enumerate([[], [[]], [[b""]], [[None]], [[None, b""]],
                                     [[b"a", b"b"], [b"c", b"d"]],

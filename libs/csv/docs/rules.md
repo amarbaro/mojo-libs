@@ -9,3 +9,6 @@
 - Random case 279 found strict EOF after an escaped newline accepted: preserve AFTER_ESCAPED_CRNL while falling through IN_FIELD; only explicit transitions change it.
 - Adding iterator vectors shadowed the generator output list: reserve distinct names for accumulators and case inputs; regenerate before committing vectors.
 - `ab-step --help` is unsupported: read a local tool's usage header before choosing its flags.
+- The first ab-step race inherited no CPU pin or memory scope: run the complete A/B driver under cap.sh and taskset; do not treat those exploratory numbers as the final receipt.
+- A typed LOC estimate was wrong: derive before/after counts with wc or mojo-loc and retain the command output beside the commit.
+- SIMD first-lane reduction regressed median throughput 50.66 to 46.57 MB/s: revert the arm; a vector operation is not automatically faster than a short scalar tail.

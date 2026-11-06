@@ -48,3 +48,6 @@ field-limit setter and size overflow. Byte controls cannot express multi-codepoi
 or non-byte delimiters. These are interface exclusions, not covered raises.
 The 131072 field limit counts bytes, rather than Unicode codepoints. Numeric
 validation supports ASCII float syntax. These byte-API differences are explicit.
+
+SIMD boundaries: simd-plain/quote/escaped/quoted-escape at payload lengths
+0, 1, 15, 16, 17, 31, 32, 33, 63, 64, 65 exercise vector and scalar tails.
