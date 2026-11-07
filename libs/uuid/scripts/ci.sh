@@ -7,7 +7,7 @@ if [ -z "${MOJO:-}" ]; then
 fi
 mkdir -p .work/t
 "$MOJO" --version
-for entry in tests/cases:cases tests/api:api tests/differential:differential tests/bench:bench examples/quickstart:quickstart; do
+for entry in tests/cases:cases tests/api:api tests/differential:differential tests/bench:bench examples/quickstart:quickstart tests/fuzz_probe:fuzz_probe; do
   scripts/run-capped.sh "$MOJO" build -O3 -I src -I ../mojo-hashlib-public/src "${entry%%:*}.mojo" -o ".work/t/${entry##*:}" > .work/build.err 2>&1 || { cat .work/build.err; echo "FAIL build: $entry"; exit 1; }
 done
 python3 -c 'import re; m = re.search(r"```mojo\n(.*?)```", open("README.md").read(), re.S); open(".work/t/readme_doctest.mojo", "w").write(m.group(1))'
@@ -17,7 +17,10 @@ CASES=.work/t/cases scripts/check.sh
 scripts/run-capped.sh python3 -I tools/reference.py > .work/reference.exp
 scripts/run-capped.sh .work/t/differential > .work/reference.got
 cmp .work/reference.exp .work/reference.got || { echo 'FAIL differential: CPython values'; exit 1; }
+scripts/run-capped.sh python3 -I tools/fuzz_ref.py .work/t/fuzz 7 5000
+scripts/run-capped.sh .work/t/fuzz_probe .work/t/fuzz.in | head -5000 > .work/t/fuzz.got
+diff -u .work/t/fuzz.exp .work/t/fuzz.got || { echo 'FAIL differential: fuzz probe vs CPython'; exit 1; }
 scripts/run-capped.sh .work/t/api
 scripts/run-capped.sh .work/t/quickstart
 MOJO="$MOJO" scripts/mutants.sh
-echo 'PASS 5/5'
+echo 'PASS 6/6'

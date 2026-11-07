@@ -45,7 +45,8 @@ UUID1/2, SafeUUID, Python object identity, arbitrary-precision integer arguments
 and Python's full Unicode decimal-digit parsing are outside this interface.
 `UUIDError` exposes CPython's `kind` and exact `message`; it is a Mojo error value,
 not a Python exception class. A version omitted from a constructor preserves bits;
-an explicit version must be 1 through 8.
+an explicit version must be 1 through 8. Parse differential fuzzing uses offline
+CPython oracle rows (`tools/`); committed goldens stay RFC 9562 only.
 
 Run `MOJO=mojo scripts/ci.sh` for RFC replay, constructor checks, an independent
 10,000-value brute oracle, generator checks, CPython differential comparison,
