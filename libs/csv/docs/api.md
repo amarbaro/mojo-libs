@@ -27,6 +27,7 @@ Numeric modes validate ASCII float syntax and return original byte lexemes.
 
 ## Row and field views: lifetime contract
 `len(row)` and `row[index] -> CsvField` expose fields, indexed from zero.
+`index` must satisfy 0 <= index < len(row); release builds do not check it.
 `CsvField.data: Span[UInt8]` views input for unquoted runs and retained reader
 scratch for quoted/escaped content. `is_null` distinguishes None from empty bytes.
 No per-field allocation occurs in iteration after buffer capacity is sufficient.

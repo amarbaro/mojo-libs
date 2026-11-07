@@ -10,7 +10,8 @@ scratch list for the row; field descriptors store offsets until all appends
 finish, so scratch growth cannot invalidate earlier fields in that row.
 Descriptor and scratch capacities survive next(). No per-field allocation is
 needed after capacity growth, including ASCII numeric validation. Writer writes
-straight into one result buffer. to_list()/read_all() explicitly allocate copies.
+straight into one result buffer, reserved once from the field byte sum; a 256-byte
+stack table flags special bytes and fields without one are copied in bulk. to_list()/read_all() explicitly allocate copies.
 
 All views expire on next()/reset(); input remains unchanged and outlives the
 reader and views. Tested compilers accept invalid retention, so this is a caller
@@ -48,3 +49,11 @@ or a golden/brute/lifetime failure. Receipts include source and binary hashes.
 
 Final same-consumption before/after: owned API 76.96 -> 112.08 MB/s median,
 0.649650 -> 0.446131 s; peak RSS 449140 -> 241324 KB. Both materialize records.
+
+Writer (`write_all`, same 714285 records, rows materialized outside the timer):
+before the byte table and reserve 242.5 MB/s with 326328 KB peak RSS, after
+468.2 MB/s with 290052 KB (7 alternating rounds, CPU 7, load 3); CPython
+`csv.writer` on the same rows 97.1 MB/s. Raw rounds: benchmarks/csv-writer.txt.
+
+Measured and reverted: quoted fields as input views (no scratch copy) +0.9%
+stream, 0% owned; SIMD width 32 -7%, width 8 +3% (short-field fixture). Kept 16.

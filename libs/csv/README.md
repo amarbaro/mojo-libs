@@ -1,6 +1,5 @@
 <!-- badges -->
-![CI](https://github.com/amarbaro/mojo-csv/actions/workflows/ci.yml/badge.svg)
-![License](https://img.shields.io/github/license/amarbaro/mojo-csv)
+[![ci](https://github.com/amarbaro/mojo-csv/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-csv/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-csv)](https://github.com/amarbaro/mojo-csv/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-csv)](https://github.com/amarbaro/mojo-csv/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-csv/badges/checks.json)](https://github.com/amarbaro/mojo-csv/actions/workflows/ci.yml)
 <!-- /badges -->
 
 # mojo-csv
@@ -10,6 +9,9 @@ Unquoted fields view the input; quoted and escaped fields use retained row
 scratch. Row iteration allocates only when buffers grow. Invalid UTF-8 bytes
 pass through. None and empty strings remain distinct in STRINGS/NOTNULL modes.
 Numeric modes validate ASCII float syntax and return its original byte lexeme.
+On 50 MB of mixed records (CPU 7, receipts in [docs/benchmarks](docs/benchmarks)) the
+reader streams at 227.50 MB/s against CPython 85.79 MB/s and `write_all` runs at
+468.2 MB/s against 97.1 MB/s.
 
 Install Mojo 1.2.0, then use `-I src` from this clone:
 
@@ -43,7 +45,7 @@ oracle using CPython 3.14: `python3 -I tools/gen_vectors.py`.
 
 See [API](docs/api.md), [design and measurements](docs/design.md),
 [oracle branch coverage](docs/oracle-coverage.md), and the
-[mojo-libs index](../mojo-libs/README.md).
+[mojo-libs index](https://github.com/amarbaro/mojo-libs).
 
 License: Apache-2.0; portions from CPython Modules/_csv.c under
 [PSF-2.0](LICENSE-PSF). See [NOTICE](NOTICE).

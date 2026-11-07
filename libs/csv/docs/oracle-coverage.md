@@ -56,3 +56,11 @@ The R vectors replay both next()/row() views and read_all() owning copies.
 Lifetime checks cover direct input pointers, retained scratch capacity and
 copies surviving next/reset. Invalid-retention examples are documented caller
 contract violations; successful compilation is not counted as a lifetime gate.
+
+Beyond the vectors: tests/test_limit.mojo pins the 131072 boundary for quoted,
+doubled-quote, escaped and CRLF fields (CPython 3.14.8 results). tests/test_dialect.mojo
+pins escapechar inference. ci.sh runs 20000 random reader cases (five delimiters,
+two quote bytes, four escape bytes, six quoting modes, numeric-heavy and 300-byte
+inputs, `line_num` per row) and 20000 random writer cases (None, empty, special
+fields, five terminators) against CPython; a corrupted expectation must fail.
+
