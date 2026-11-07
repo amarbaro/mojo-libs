@@ -6,9 +6,7 @@ from std.collections import Array
 from support import check
 
 def golden_tests() raises:
-    var text = String()
-    with open("tests/golden/rfc9562.txt", "r") as f:
-        text = f.read()
+    var text = open("tests/golden/rfc9562.txt", "r").read()
     var count = 0
     for line in text.split("\n"):
         if line.byte_length() == 0:
@@ -16,7 +14,7 @@ def golden_tests() raises:
         var row = line.split("|")
         var section = String(row[0])
         var expected = String(row[1]).lower()
-        var value = materialize[NIL]()
+        var value: UUID
         var dns = materialize[NAMESPACE_DNS]()
         if section == "A.2":  # RFC 9562 Appendix A.2, DNS + www.example.com
             value = uuid3(dns, "www.example.com")

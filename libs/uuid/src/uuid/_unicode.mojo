@@ -153,7 +153,7 @@ def _upper_bound[n: Int](ref table: Array[UInt32, n], cp: Int) -> Int:
 
 
 def is_printable(cp: Int) -> Bool:
-    """str.isprintable() of one codepoint."""
+    """Whether str.isprintable() accepts one codepoint."""
     if cp < 0x7F:
         return cp >= 32
     ref table = global_constant[_NONPRINTABLE]()

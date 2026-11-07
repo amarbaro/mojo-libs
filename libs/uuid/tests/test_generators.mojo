@@ -15,6 +15,18 @@ def generator_tests() raises:
     check(uuid6(1, 0x1234, 0).clock_seq() == 0x1234)
     check(uuid8(-1, -1, -1).__str__() == "ffffffff-ffff-8fff-bfff-ffffffffffff", "negative custom blocks mask")
     check(uuid8(0x1000000000000, 0x1000, 0x4000000000000000).__str__() == "00000000-0000-8000-8000-000000000000", "oversized custom blocks mask")
+    # Missing blocks are random inside their own bits only: fixed blocks survive, each random block fills its mask.
+    var seen_a: UInt128 = 0
+    var seen_b: UInt128 = 0
+    var seen_c: UInt128 = 0
+    for _ in range(128):
+        var only_a = uuid8(0x123456789abc)
+        check(only_a.int() >> 80 == 0x123456789abc and only_a.version() == 8, "fixed block a survives")
+        seen_b |= (uuid8(0x123, None, 0x321).int() >> 64) & 0xfff
+        seen_c |= uuid8(0x123, 0x456).int() & 0x3fffffffffffffff
+        seen_a |= uuid8(None, 0x456, 0x321).int() >> 80
+    check(seen_a == 0xffffffffffff and seen_b == 0xfff and seen_c == 0x3fffffffffffffff, "random blocks cover their mask")
+    check(uuid8(0x123, 0x456, 0x321).__str__() == "00000000-0123-8456-8000-000000000321", "explicit blocks")
     var g6 = UUID6Generator()
     var first6 = g6.next(1645557742000000000, 0x9f6bdeced846, 0x33c8)
     var second6 = g6.next(1645557742000000000, 0x9f6bdeced846, 0x33c8)

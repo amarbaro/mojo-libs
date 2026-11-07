@@ -500,38 +500,15 @@ def uuid7(timestamp_ms: Int = -1) raises -> UUID:
 
 
 def uuid8(a: Optional[Int] = None, b: Optional[Int] = None, c: Optional[Int] = None) raises -> UUID:
-    var aa = 0
-    if a:
-        aa = a.value()
-    else:
-        var r = Array[UInt8, 6](fill=0)
+    var rand: UInt128 = 0
+    if not a or not b or not c:
+        var r = Array[UInt8, 16](fill=0)
         _random_fill(r)
-        aa = 0
-        for i in range(6):
-            aa = (aa << 8) | Int(r[i])
-    var bb = 0
-    if b:
-        bb = b.value()
-    else:
-        var r = Array[UInt8, 2](fill=0)
-        _random_fill(r)
-        bb = (Int(r[0]) | (Int(r[1]) << 8)) & 0xfff
-    var cc = 0
-    if c:
-        cc = c.value()
-    else:
-        var r = Array[UInt8, 8](fill=0)
-        _random_fill(r)
-        cc = 0
-        for i in range(8):
-            cc = (cc << 8) | Int(r[i])
-        cc &= 0x3fff_ffff_ffff_ffff
-    var int_uuid_8 = (UInt128(aa) & 0xffff_ffff_ffff) << 80
-    int_uuid_8 |= (UInt128(bb) & 0xfff) << 64
-    int_uuid_8 |= UInt128(cc) & 0x3fff_ffff_ffff_ffff
-    int_uuid_8 |= UInt128(8) << 76
-    int_uuid_8 |= UInt128(0x8000) << 48
-    return UUID(int_uuid_8)
+        rand = _be_u128(r)
+    var aa = UInt128(a.value()) if a else rand >> 80
+    var bb = UInt128(b.value()) if b else rand >> 68
+    var cc = UInt128(c.value()) if c else rand
+    return UUID(_stamp(((aa & 0xffff_ffff_ffff) << 80) | ((bb & 0xfff) << 64) | (cc & 0x3fff_ffff_ffff_ffff), 8))
 
 
 struct UUID6Generator:
