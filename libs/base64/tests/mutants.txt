@@ -6,10 +6,10 @@ src/base64/codec.mojo|if strict and pads != 0:|if False:
 src/base64/codec.mojo|leftchar = v & 15|leftchar = v & 7
 src/base64/codec.mojo|if rem == 1:|if False:
 src/base64/codec.mojo|if r[j] == UInt8(ord('+')):|if False:
-src/base64/codec.mojo|if casefold:|if False:
-src/base64/codec.mojo|data[j] = map01[0]|data[j] = UInt8(ord('A'))
+src/base64/codec.mojo|if casefold and c >= 97 and c <= 122:|if False:
+src/base64/codec.mojo|c = map01[0]|c = UInt8(ord('A'))
 src/base64/codec.mojo|if leftover == 1:|if False:
-src/base64/codec.mojo|padchars not in (0,1,3,4,6)|padchars not in (0,1,2,3,4,6)
+src/base64/codec.mojo|padchars not in (0, 1, 3, 4, 6)|padchars not in (0, 1, 2, 3, 4, 6)
 src/base64/codec.mojo|var ok = (c >= 48 and c <= 57) or (c >= 65 and c <= 70)|var ok = (c >= 48 and c <= 57) or (c >= 65 and c <= 71)
 src/base64/codec.mojo|if this_ch == alt1:|if this_ch == alt0:
 src/base64/codec.mojo|elif c == 13: result += "\\r"|elif c == 13: result += "\\n"

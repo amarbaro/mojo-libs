@@ -214,11 +214,12 @@ def urlsafe_b64decode_into(s: Span[UInt8, _], mut out: List[Byte], validate: Boo
 comptime _B32ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
 comptime _B32HEX = "0123456789ABCDEFGHIJKLMNOPQRSTUV"
 
-def _b32_rev(alphabet: String, c: UInt8) -> Int:
+@always_inline
+def _make_b32_table(alphabet: String) -> Array[Int8, 256]:
+    var t = Array[Int8, 256](fill=-1)
     for k in range(32):
-        if UInt8(ord(alphabet[byte=k])) == c:
-            return k
-    return -1
+        t[Int(ord(alphabet[byte=k]))] = Int8(k)
+    return t^
 
 def _b32encode_with(alphabet: String, s: Span[UInt8, _]) -> List[Byte]:
     var out = List[Byte]()
@@ -270,39 +271,36 @@ def b32encode_into(s: Span[UInt8, _], mut out: List[Byte]):
         out.append(r[j])
 
 def _b32decode_with(alphabet: String, s: Span[UInt8, _], casefold: Bool, map01: Span[UInt8, _]) raises -> List[Byte]:
-    var data = List[Byte]()
-    for j in range(len(s)):
-        data.append(s[j])
-    if len(data) % 8 != 0:
+    var l = len(s)
+    if l % 8 != 0:
         raise Error("Incorrect padding")
-    if len(map01) != 0:
+    var has_map01 = len(map01) != 0
+    if has_map01:
         if len(map01) != 1:
             raise Error(_bytes_repr(List[Byte](map01)))
-        for j in range(len(data)):
-            if data[j] == UInt8(ord('0')):
-                data[j] = UInt8(ord('O'))
-            elif data[j] == UInt8(ord('1')):
-                data[j] = map01[0]
-    if casefold:
-        for j in range(len(data)):
-            var c = data[j]
-            if c >= 97 and c <= 122:
-                data[j] = c - 32
-    var l = len(data)
-    var stripped = List[Byte]()
-    for j in range(len(data)):
-        stripped.append(data[j])
-    while len(stripped) > 0 and stripped[len(stripped)-1] == UInt8(ord('=')):
-        _ = stripped.pop()
-    var padchars = l - len(stripped)
+
+    var end = l
+    while end > 0 and s[end - 1] == UInt8(ord('=')):
+        end -= 1
+    var padchars = l - end
+
+    var t = _make_b32_table(alphabet)
     var out = List[Byte]()
+    out.reserve((l * 5) // 8 + 5)
     var idx = 0
-    var nstripped = len(stripped)
     var acc_last: Int = 0
-    while idx + 8 <= nstripped:
+    while idx + 8 <= end:
         var acc: Int = 0
         for k in range(8):
-            var v = _b32_rev(alphabet, stripped[idx+k])
+            var c = s[idx + k]
+            if has_map01:
+                if c == UInt8(ord('0')):
+                    c = UInt8(ord('O'))
+                elif c == UInt8(ord('1')):
+                    c = map01[0]
+            if casefold and c >= 97 and c <= 122:
+                c -= 32
+            var v = Int(t[Int(c)])
             if v < 0:
                 raise Error("Non-base32 digit found")
             acc = (acc << 5) + v
@@ -313,11 +311,20 @@ def _b32decode_with(alphabet: String, s: Span[UInt8, _], casefold: Bool, map01: 
         out.append(UInt8(acc & 255))
         acc_last = acc
         idx += 8
-    if idx < nstripped:
+
+    if idx < end:
         var acc: Int = 0
-        var cnt = nstripped - idx
+        var cnt = end - idx
         for k in range(cnt):
-            var v = _b32_rev(alphabet, stripped[idx+k])
+            var c = s[idx + k]
+            if has_map01:
+                if c == UInt8(ord('0')):
+                    c = UInt8(ord('O'))
+                elif c == UInt8(ord('1')):
+                    c = map01[0]
+            if casefold and c >= 97 and c <= 122:
+                c -= 32
+            var v = Int(t[Int(c)])
             if v < 0:
                 raise Error("Non-base32 digit found")
             acc = (acc << 5) + v
@@ -327,17 +334,23 @@ def _b32decode_with(alphabet: String, s: Span[UInt8, _], casefold: Bool, map01: 
         out.append(UInt8((acc >> 8) & 255))
         out.append(UInt8(acc & 255))
         acc_last = acc
-    if l % 8 != 0 or padchars not in (0,1,3,4,6):
+
+    if padchars not in (0, 1, 3, 4, 6):
         raise Error("Incorrect padding")
+
     if padchars != 0 and len(out) > 0:
         acc_last <<= 5 * padchars
-        var b0 = (acc_last >> 32) & 255
-        var b1 = (acc_last >> 24) & 255
-        var b2 = (acc_last >> 16) & 255
-        var b3 = (acc_last >> 8) & 255
-        var b4 = acc_last & 255
-        var lastbytes = List[Byte]()
-        lastbytes.append(UInt8(b0)); lastbytes.append(UInt8(b1)); lastbytes.append(UInt8(b2)); lastbytes.append(UInt8(b3)); lastbytes.append(UInt8(b4))
+        var b0 = UInt8((acc_last >> 32) & 255)
+        var b1 = UInt8((acc_last >> 24) & 255)
+        var b2 = UInt8((acc_last >> 16) & 255)
+        var b3 = UInt8((acc_last >> 8) & 255)
+        var b4 = UInt8(acc_last & 255)
+        var lastbytes = Array[UInt8, 5](fill=0)
+        lastbytes[0] = b0
+        lastbytes[1] = b1
+        lastbytes[2] = b2
+        lastbytes[3] = b3
+        lastbytes[4] = b4
         var leftover = (43 - 5 * padchars) // 8
         var newlen = len(out) - (5 - leftover)
         while len(out) > newlen:
