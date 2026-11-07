@@ -1,33 +1,67 @@
-from std.collections import List
+from std.collections import List, Array
 
 comptime _ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
-def _a2b(c: UInt8) -> Int:
-    if c == UInt8(ord('=')):
-        return -2
-    if c >= 65 and c <= 90:
-        return Int(c) - 65
-    if c >= 97 and c <= 122:
-        return Int(c) - 71
-    if c >= 48 and c <= 57:
-        return Int(c) + 4
-    if c == UInt8(ord('+')):
-        return 62
-    if c == UInt8(ord('/')):
-        return 63
-    return -1
+@always_inline
+def _make_b64_table() -> Array[Int8, 256]:
+    var t = Array[Int8, 256](fill=-1)
+    for i in range(26):
+        t[65 + i] = Int8(i)
+        t[97 + i] = Int8(26 + i)
+    for i in range(10):
+        t[48 + i] = Int8(52 + i)
+    t[Int(ord('+'))] = 62
+    t[Int(ord('/'))] = 63
+    t[Int(ord('='))] = -2
+    return t^
 
-def _b64decode_core(data: List[Byte], strict: Bool) raises -> List[Byte]:
-    var out = List[Byte]()
-    var n = len(data)
-    if strict and n > 0 and data[0] == UInt8(ord('=')):
+def _b64decode_into_kernel(s: Span[UInt8, _], mut out: List[Byte], altchars: Span[UInt8, _], strict: Bool) raises:
+    var n = len(s)
+    if strict and n > 0 and s[0] == UInt8(ord('=')):
         raise Error("Leading padding not allowed")
+    var has_alt = len(altchars) != 0
+    var alt0: UInt8 = 0
+    var alt1: UInt8 = 0
+    if has_alt:
+        if len(altchars) != 2:
+            raise Error(_bytes_repr(List[Byte](altchars)))
+        alt0 = altchars[0]
+        alt1 = altchars[1]
+
+    var t = _make_b64_table()
     var quad_pos = 0
     var leftchar: Int = 0
     var pads = 0
     var i = 0
+    var orig_len = len(out)
+
+    # Fast 4-byte chunk loop for clean ASCII base64
+    if not has_alt:
+        while i + 4 <= n:
+            var c0 = Int(s[i])
+            var c1 = Int(s[i+1])
+            var c2 = Int(s[i+2])
+            var c3 = Int(s[i+3])
+            var v0 = Int(t[c0])
+            var v1 = Int(t[c1])
+            var v2 = Int(t[c2])
+            var v3 = Int(t[c3])
+            if (v0 | v1 | v2 | v3) >= 0:
+                var trip = (v0 << 18) | (v1 << 12) | (v2 << 6) | v3
+                out.append(UInt8(trip >> 16))
+                out.append(UInt8((trip >> 8) & 255))
+                out.append(UInt8(trip & 255))
+                i += 4
+            else:
+                break
+
     while i < n:
-        var this_ch = data[i]
+        var this_ch = s[i]
+        if has_alt:
+            if this_ch == alt1:
+                this_ch = UInt8(ord('/'))
+            elif this_ch == alt0:
+                this_ch = UInt8(ord('+'))
         if this_ch == UInt8(ord('=')):
             pads += 1
             if quad_pos >= 2 and quad_pos + pads <= 4:
@@ -39,7 +73,7 @@ def _b64decode_core(data: List[Byte], strict: Bool) raises -> List[Byte]:
                 raise Error("Excess padding not allowed")
             i += 1
             continue
-        var v = _a2b(this_ch)
+        var v = Int(t[Int(this_ch)])
         if v < 0:
             if strict:
                 raise Error("Only base64 data is allowed")
@@ -66,11 +100,11 @@ def _b64decode_core(data: List[Byte], strict: Bool) raises -> List[Byte]:
             out.append(UInt8((leftchar << 6) | v))
             leftchar = 0
         i += 1
+
     if quad_pos == 1:
-        raise Error("Invalid base64-encoded string: number of data characters (" + String((len(out) // 3) * 4 + 1) + ") cannot be 1 more than a multiple of 4")
+        raise Error("Invalid base64-encoded string: number of data characters (" + String(((len(out) - orig_len) // 3) * 4 + 1) + ") cannot be 1 more than a multiple of 4")
     if quad_pos != 0 and quad_pos + pads < 4:
         raise Error("Incorrect padding")
-    return out^
 
 def b64encode(s: Span[UInt8, _]) -> List[Byte]:
     var out = List[Byte]()
@@ -124,18 +158,10 @@ def _bytes_repr(data: List[Byte]) -> String:
     return result + chr(quote)
 
 def b64decode(s: Span[UInt8, _], altchars: List[Byte] = List[Byte](), validate: Bool = False) raises -> List[Byte]:
-    var data = List[Byte]()
-    for j in range(len(s)):
-        data.append(s[j])
-    if len(altchars) != 0:
-        if len(altchars) != 2:
-            raise Error(_bytes_repr(altchars))
-        for j in range(len(data)):
-            if data[j] == altchars[1]:
-                data[j] = UInt8(ord('/'))
-            elif data[j] == altchars[0]:
-                data[j] = UInt8(ord('+'))
-    return _b64decode_core(data, validate)
+    var out = List[Byte]()
+    out.reserve((len(s) * 3) // 4 + 3)
+    _b64decode_into_kernel(s, out, Span(altchars), validate)
+    return out^
 
 def b64decode_into(s: Span[UInt8, _], mut out: List[Byte], altchars: List[Byte] = List[Byte](), validate: Bool = False) raises:
     var r = b64decode(s, altchars, validate)
@@ -145,10 +171,13 @@ def b64decode_into(s: Span[UInt8, _], mut out: List[Byte], altchars: List[Byte] 
 # standard
 def standard_b64encode(s: Span[UInt8, _]) -> List[Byte]:
     return b64encode(s)
+
 def standard_b64encode_into(s: Span[UInt8, _], mut out: List[Byte]):
     b64encode_into(s, out)
+
 def standard_b64decode(s: Span[UInt8, _], validate: Bool = False) raises -> List[Byte]:
     return b64decode(s, List[Byte](), validate)
+
 def standard_b64decode_into(s: Span[UInt8, _], mut out: List[Byte], validate: Bool = False) raises:
     b64decode_into(s, out, List[Byte](), validate)
 
@@ -161,20 +190,21 @@ def urlsafe_b64encode(s: Span[UInt8, _]) -> List[Byte]:
         elif r[j] == UInt8(ord('/')):
             r[j] = UInt8(ord('_'))
     return r^
+
 def urlsafe_b64encode_into(s: Span[UInt8, _], mut out: List[Byte]):
     var r = urlsafe_b64encode(s)
     for j in range(len(r)):
         out.append(r[j])
+
 def urlsafe_b64decode(s: Span[UInt8, _], validate: Bool = False) raises -> List[Byte]:
-    var data = List[Byte]()
-    for j in range(len(s)):
-        var c = s[j]
-        if c == UInt8(ord('-')):
-            c = UInt8(ord('+'))
-        elif c == UInt8(ord('_')):
-            c = UInt8(ord('/'))
-        data.append(c)
-    return _b64decode_core(data, validate)
+    var out = List[Byte]()
+    out.reserve((len(s) * 3) // 4 + 3)
+    var alt = Array[UInt8, 2](fill=0)
+    alt[0] = UInt8(ord('-'))
+    alt[1] = UInt8(ord('_'))
+    _b64decode_into_kernel(s, out, Span(alt), validate)
+    return out^
+
 def urlsafe_b64decode_into(s: Span[UInt8, _], mut out: List[Byte], validate: Bool = False) raises:
     var r = urlsafe_b64decode(s, validate)
     for j in range(len(r)):
@@ -233,6 +263,7 @@ def _b32encode_with(alphabet: String, s: Span[UInt8, _]) -> List[Byte]:
 
 def b32encode(s: Span[UInt8, _]) -> List[Byte]:
     return _b32encode_with(_B32ALPHA, s)
+
 def b32encode_into(s: Span[UInt8, _], mut out: List[Byte]):
     var r = b32encode(s)
     for j in range(len(r)):
@@ -322,14 +353,17 @@ def _b32decode_with(alphabet: String, s: Span[UInt8, _], casefold: Bool, map01: 
     return out^
 
 def b32decode(s: Span[UInt8, _], casefold: Bool = False, map01: List[Byte] = List[Byte]()) raises -> List[Byte]:
-    return _b32decode_with(_B32ALPHA, s, casefold, map01)
+    return _b32decode_with(_B32ALPHA, s, casefold, Span(map01))
+
 def b32decode_into(s: Span[UInt8, _], mut out: List[Byte], casefold: Bool = False, map01: List[Byte] = List[Byte]()) raises:
     var r = b32decode(s, casefold, map01)
     for j in range(len(r)):
         out.append(r[j])
 
 def b32hexdecode(s: Span[UInt8, _], casefold: Bool = False) raises -> List[Byte]:
-    return _b32decode_with(_B32HEX, s, casefold, List[Byte]())
+    var empty = List[Byte]()
+    return _b32decode_with(_B32HEX, s, casefold, Span(empty))
+
 def b32hexdecode_into(s: Span[UInt8, _], mut out: List[Byte], casefold: Bool = False) raises:
     var r = b32hexdecode(s, casefold)
     for j in range(len(r)):
@@ -337,6 +371,7 @@ def b32hexdecode_into(s: Span[UInt8, _], mut out: List[Byte], casefold: Bool = F
 
 def b32hexencode(s: Span[UInt8, _]) -> List[Byte]:
     return _b32encode_with(_B32HEX, s)
+
 def b32hexencode_into(s: Span[UInt8, _], mut out: List[Byte]):
     var r = b32hexencode(s)
     for j in range(len(r)):
@@ -349,12 +384,14 @@ def b16encode(s: Span[UInt8, _]) -> List[Byte]:
     var out = List[Byte]()
     b16encode_into(s, out)
     return out^
+
 def b16encode_into(s: Span[UInt8, _], mut out: List[Byte]):
     for j in range(len(s)):
         var b = Int(s[j])
         out.append(UInt8(ord(_HEX[byte=(b >> 4) & 15])))
         out.append(UInt8(ord(_HEX[byte=b & 15])))
 
+@always_inline
 def _hexval(c: UInt8) -> Int:
     if c >= 48 and c <= 57:
         return Int(c) - 48
@@ -365,26 +402,27 @@ def _hexval(c: UInt8) -> Int:
     return 0
 
 def b16decode(s: Span[UInt8, _], casefold: Bool = False) raises -> List[Byte]:
-    var data = List[Byte]()
     for j in range(len(s)):
-        data.append(s[j])
-    if casefold:
-        for j in range(len(data)):
-            var c = data[j]
-            if c >= 97 and c <= 122:
-                data[j] = c - 32
-    for j in range(len(data)):
-        var c = data[j]
+        var c = s[j]
+        if casefold and c >= 97 and c <= 122:
+            c -= 32
         var ok = (c >= 48 and c <= 57) or (c >= 65 and c <= 70)
         if not ok:
             raise Error("Non-base16 digit found")
-    if len(data) % 2 != 0:
+    if len(s) % 2 != 0:
         raise Error("Odd-length string")
     var out = List[Byte]()
+    out.reserve(len(s) // 2)
     var j = 0
-    while j + 1 < len(data):
-        var hi = _hexval(data[j])
-        var lo = _hexval(data[j+1])
+    while j + 1 < len(s):
+        var c_hi = s[j]
+        if casefold and c_hi >= 97 and c_hi <= 122:
+            c_hi -= 32
+        var c_lo = s[j+1]
+        if casefold and c_lo >= 97 and c_lo <= 122:
+            c_lo -= 32
+        var hi = _hexval(c_hi)
+        var lo = _hexval(c_lo)
         out.append(UInt8((hi << 4) | lo))
         j += 2
     return out^
