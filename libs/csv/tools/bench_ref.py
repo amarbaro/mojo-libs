@@ -9,6 +9,18 @@ count = int(os.environ.get("BENCH_BYTES", "50000000")) // len(record)
 mode = os.environ.get("BENCH_MODE", "stream")
 data = record * count
 stream = io.StringIO(data.decode(), newline="")
+if mode == "write":
+    rows = list(csv.reader(stream))
+    out = io.StringIO(newline="")
+    started = time.perf_counter()
+    csv.writer(out).writerows(rows)
+    elapsed = time.perf_counter() - started
+    assert len(out.getvalue()) == len(data) and len(rows) == count
+    print(f"CPython write bytes {len(data)} rows {count}")
+    print(f"rows: {count}")
+    print(f"parse seconds: {elapsed:.9f}")
+    print(f"parse MB/s: {len(data) / elapsed / 1e6:.9f}")
+    raise SystemExit(0)
 started = time.perf_counter()
 if mode == "owned":
     rows = list(csv.reader(stream))

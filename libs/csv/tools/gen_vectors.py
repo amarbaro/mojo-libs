@@ -121,6 +121,10 @@ def generate():
                      escapechar="\\", quoting=mode, doublequote=double)
     case("writer-no-escape-quote", [[b'a"b']], op="W", doublequote=False)
     case("writer-custom-term", [[b"a!b"], [b"z"]], op="W", lineterminator="!")
+    # CR and LF always force quoting, even when the terminator does not contain them.
+    for term in ("\n", "\r", "!"):
+        for idx, field in enumerate((b"a\rb", b"a\nb")):
+            case(f"writer-eol-{term.encode().hex()}-{idx}", [[field, b"z"]], op="W", lineterminator=term)
     for mode in range(6):
         for null in (False, True):
             case(f"writer-space-{mode}-{null}", [[None if null else b"", b"x"]],

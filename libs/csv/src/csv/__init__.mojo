@@ -385,17 +385,28 @@ def _is_float_bytes(b: Span[UInt8, _]) -> Bool:
         i += 1
     return digits > 0 and (not exponent or exponent_digits > 0)
 
-def _special(c: UInt8, d: Dialect) -> Bool:
-    if c == d.delimiter or c == d.quotechar or c == 10 or c == 13 or (d.has_escape and c == d.escapechar):
-        return True
+def _special_table(d: Dialect) -> Array[UInt8, 256]:
+    # One 256-byte stack table per call replaces per-byte dialect and terminator compares.
+    var t = Array[UInt8, 256](fill=0)
+    t[Int(d.delimiter)] = 1
+    t[Int(d.quotechar)] = 1
+    t[10] = 1
+    t[13] = 1
+    if d.has_escape:
+        t[Int(d.escapechar)] = 1
     for b in d.lineterminator:
-        if c == b:
-            return True
-    return False
+        t[Int(b)] = 1
+    return t^
 
 def write_all(rows: List[List[OwnedField]], dialect: Dialect) raises -> List[UInt8]:
     dialect.validate()
-    var output = List[UInt8]()
+    var special = _special_table(dialect)
+    var capacity = 0
+    for row in rows:
+        capacity += len(dialect.lineterminator) + len(row)
+        for index in range(len(row)):
+            capacity += len(row[index].data) + 2
+    var output = List[UInt8](capacity=capacity)
     for row in rows:
         for index in range(len(row)):
             ref field = row[index]
@@ -407,9 +418,12 @@ def write_all(rows: List[List[OwnedField]], dialect: Dialect) raises -> List[UIn
                 if dialect.quoting == QUOTE_NONE or (field.is_null and (dialect.quoting == QUOTE_STRINGS or dialect.quoting == QUOTE_NOTNULL)):
                     raise Error("empty field must be quoted with space delimiter")
                 quoted = True
+            var plain = True
             for i in range(length):
                 var c = field.data[i]
-                if _special(c, dialect) and dialect.quoting != QUOTE_NONE:
+                if special[Int(c)] != 0:
+                    plain = False
+                if special[Int(c)] != 0 and dialect.quoting != QUOTE_NONE:
                     if c == dialect.quotechar and not dialect.doublequote:
                         pass
                     elif dialect.has_escape and c == dialect.escapechar:
@@ -422,9 +436,11 @@ def write_all(rows: List[List[OwnedField]], dialect: Dialect) raises -> List[UIn
                 quoted = True
             if quoted:
                 output.append(dialect.quotechar)
-            for i in range(length):
+            if plain:
+                output.extend(Span(field.data)[:length])
+            for i in range(0 if plain else length):
                 var c = field.data[i]
-                if _special(c, dialect):
+                if special[Int(c)] != 0:
                     if dialect.quoting == QUOTE_NONE or (dialect.has_escape and c == dialect.escapechar) or (c == dialect.quotechar and not dialect.doublequote):
                         if not dialect.has_escape:
                             raise Error("need to escape, but no escapechar set")

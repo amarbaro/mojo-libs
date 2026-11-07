@@ -1,5 +1,5 @@
 """Same materialized/streamed 50 MB input as tools/bench_ref.py."""
-from csv import Reader, Dialect, CsvField, OwnedField
+from csv import Reader, Dialect, CsvField, OwnedField, write_all
 from std.time import perf_counter_ns
 from std.sys import size_of
 from std.os import getenv
@@ -15,6 +15,19 @@ def main() raises:
             input.append(c)
     var reader = Reader(Dialect.excel(), Span(input))
     var count = 0
+    if mode == "write":
+        # Writer: materialize outside the timer, then time write_all alone.
+        var rows = reader.read_all()
+        var wstart = perf_counter_ns()
+        var out = write_all(rows, Dialect.excel())
+        var wsec = Float64(perf_counter_ns() - wstart) / 1e9
+        if len(out) != len(input) or len(rows) != records:
+            raise Error("benchmark writer result mismatch")
+        print("Mojo write bytes", len(out), "rows", len(rows))
+        print("rows:", len(rows))
+        print("parse seconds:", wsec)
+        print("parse MB/s:", Float64(len(out)) / wsec / 1e6)
+        return
     var started = perf_counter_ns()
     if mode == "owned":
         var rows = reader.read_all()

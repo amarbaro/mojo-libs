@@ -215,6 +215,12 @@ writer-escape-3-3-False|W|44|34|92|0|0|0|3|0d0a|s610d620a63|615c0d625c0a630d0a
 writer-escape-3-3-True|W|44|34|92|1|0|0|3|0d0a|s610d620a63|615c0d625c0a630d0a
 writer-no-escape-quote|W|44|34|-1|0|0|0|0|0d0a|s612262|!
 writer-custom-term|W|44|34|-1|1|0|0|0|21|s612162/s7a|2261216222217a21
+writer-eol-0a-0|W|44|34|-1|1|0|0|0|0a|s610d62,s7a|22610d62222c7a0a
+writer-eol-0a-1|W|44|34|-1|1|0|0|0|0a|s610a62,s7a|22610a62222c7a0a
+writer-eol-0d-0|W|44|34|-1|1|0|0|0|0d|s610d62,s7a|22610d62222c7a0d
+writer-eol-0d-1|W|44|34|-1|1|0|0|0|0d|s610a62,s7a|22610a62222c7a0d
+writer-eol-21-0|W|44|34|-1|1|0|0|0|21|s610d62,s7a|22610d62222c7a21
+writer-eol-21-1|W|44|34|-1|1|0|0|0|21|s610a62,s7a|22610a62222c7a21
 writer-space-0-False|W|32|34|-1|1|1|0|0|0d0a|s,s78|222220780d0a
 writer-space-0-True|W|32|34|-1|1|1|0|0|0d0a|n,s78|222220780d0a
 writer-space-1-False|W|32|34|-1|1|1|0|1|0d0a|s,s78|2222202278220d0a
