@@ -1,6 +1,6 @@
 from uuid import UUID, UUIDError, NAMESPACE_DNS, NIL, MAX
 from support import check
-from std.collections import Array
+from std.collections import Array, Dict, Set
 from std.sys import size_of
 
 def api_tests() raises:
@@ -28,7 +28,19 @@ def api_tests() raises:
     check(maximum.variant() == "reserved for future definition" and maximum.version() == 0)
     check(value.variant() == "specified in RFC 4122" and value.version() == 1)
     check(materialize[NAMESPACE_DNS]().hex() == "6ba7b8109dad11d180b400c04fd430c8")
-    print("PASS public API, fields, variants, comparison and 16-byte layout")
+    # Trait surface: key in Dict/Set, printable, String(uuid), equality operators.
+    var other = UUID("00000000-0000-0000-0000-000000000001")
+    var table = Dict[UUID, Int]()
+    table[value] = 1
+    table[other] = 2
+    table[UUID(value.int())] = 3
+    check(len(table) == 2 and table[value] == 3 and table[other] == 2, "UUID as Dict key")
+    var seen = Set[UUID]()
+    seen.add(value)
+    check(value in seen and other not in seen, "UUID in Set")
+    check(String(value) == "c232ab00-9414-11ec-b3c8-9f6bdeced846", "String(uuid)")
+    check(value != other and not (value != UUID(value.int())), "inequality")
+    print("PASS public API, fields, variants, comparison, traits and 16-byte layout")
 
 def main() raises:
     api_tests()

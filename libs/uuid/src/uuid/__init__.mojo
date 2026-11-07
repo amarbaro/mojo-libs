@@ -1,5 +1,6 @@
 """RFC 9562 UUID values and generators with CPython constructor error texts."""
 from std.bit import byte_swap
+from std.hash import Hasher
 from std.collections import Array
 from std.memory import bitcast
 from std.ffi import external_call
@@ -14,7 +15,7 @@ struct UUIDError(Copyable, Movable, Writable):
     def write_to(self, mut writer: Some[Writer]):
         writer.write(self.kind, ": ", self.message)
 
-struct UUID(Copyable, Movable, ImplicitlyCopyable):
+struct UUID(Comparable, Copyable, Hashable, ImplicitlyCopyable, Movable, Writable):
     var _int: UInt128
 
     def __init__(out self, value: UInt128):
@@ -92,6 +93,13 @@ struct UUID(Copyable, Movable, ImplicitlyCopyable):
 
     def __ge__(self, other: Self) -> Bool:
         return self._int >= other._int
+
+    def __hash__[H: Hasher](self, mut hasher: H):
+        var b = self.bytes()
+        hasher.update(Span(b))
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write(self.__str__())
 
     def __hash__(self) -> Int:
         return Int(self._int % ((UInt128(1) << 61) - 1))
