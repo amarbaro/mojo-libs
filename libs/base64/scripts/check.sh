@@ -7,7 +7,10 @@ cd "$(dirname "$0")/.."
 PY=${ORACLE_PY:-python3}
 D=${CHECK_DIR:-.work/check}
 mkdir -p "$D"; fail=0; n=0
-for c in $($PY -I tools/oracle.py --list); do
+# a failing or empty --list ran zero scenarios and still printed PASS (mojo-base64 review 2026-11-07)
+list=$($PY -I tools/oracle.py --list) || { echo "FAIL list: oracle --list exited non-zero"; exit 1; }
+[ -n "$list" ] || { echo "FAIL list: oracle listed no scenarios"; exit 1; }
+for c in $list; do
   for run in 1 2; do
     for side in exp got; do
       w=$(mktemp -d "$PWD/$D/$c.$side.XXXX")
