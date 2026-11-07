@@ -21,7 +21,7 @@ copy. URL-safe encode picks its table at compile time; no second pass.
 Base32 is still append-based (checked against CPython, not tuned).
 
 Performance, real calls, 64 MiB x3 and 1 KiB x10000, core 2, three alternating
-rounds, medians, GB/s. before = v0.1.0 (b16: 875f25f), CPython 3.14.8:
+rounds, medians, GB/s. before = 269509f (b16: 875f25f), CPython 3.14.8:
 
 | call | size | before | after | CPython |
 |---|---|---|---|---|
