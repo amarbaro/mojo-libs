@@ -10,3 +10,4 @@ src/uuid/__init__.mojo|if next_counter > 0x3ffffffffff:|if next_counter > 0x7fff
 src/uuid/__init__.mojo|next_counter += 1|next_counter += 2
 src/uuid/__init__.mojo|i == 0 and had_prefix|False
 src/uuid/__init__.mojo|result += "\\x"|result += "\\u"
+src/uuid/__init__.mojo|timestamp <= self.last_timestamp:|timestamp < self.last_timestamp:

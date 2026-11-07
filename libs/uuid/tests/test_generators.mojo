@@ -21,6 +21,12 @@ def generator_tests() raises:
     var backwards6 = g6.next(1645557741000000000, 0x9f6bdeced846, 0x33c8)
     check(second6.time() == first6.time() + 1, "v6 same timestamp")
     check(backwards6.time() == second6.time() + 1, "v6 backwards timestamp")
+    var g6_transition = UUID6Generator()
+    var before_epoch = g6_transition.next(-100, 0, 0)
+    var at_epoch = g6_transition.next(0, 0, 0)
+    check(at_epoch > before_epoch, "v6 pre-epoch then epoch ordered")
+    check(before_epoch.time() == 0x01b21dd213814000 - 1, "v6 pre-epoch timestamp")
+    check(at_epoch.time() == 0x01b21dd213814000, "v6 epoch timestamp")
     var random = Array[UInt8, 10](fill=0)
     random[9] = 17
     var g7 = UUID7Generator()

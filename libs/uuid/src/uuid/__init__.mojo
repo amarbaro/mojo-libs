@@ -374,6 +374,19 @@ def _random_fill[n: Int](mut buf: Array[UInt8, n]) raises:
         offset += got
 
 
+def _uuid6_from(timestamp: Int, clock_seq: Int, node: UInt64) -> UUID:
+    var time_hi_and_mid = (timestamp >> 12) & 0xffff_ffff_ffff
+    var time_lo = timestamp & 0x0fff
+    var clock_s = clock_seq & 0x3fff
+    var int_uuid_6: UInt128 = UInt128(time_hi_and_mid) << 80
+    int_uuid_6 |= UInt128(time_lo) << 64
+    int_uuid_6 |= UInt128(clock_s) << 48
+    int_uuid_6 |= UInt128(node) & 0xffff_ffff_ffff
+    int_uuid_6 |= UInt128(6) << 76
+    int_uuid_6 |= UInt128(0x8000) << 48
+    return UUID(int_uuid_6)
+
+
 def uuid6(node: Optional[Int] = None, clock_seq: Int = -1, timestamp_ns: Int = -1) raises -> UUID:
     var ns = timestamp_ns
     if ns < 0:
@@ -386,10 +399,7 @@ def uuid6(node: Optional[Int] = None, clock_seq: Int = -1, timestamp_ns: Int = -
         _random_fill(b)
         cs = Int(b[0]) | (Int(b[1]) << 8)
         cs &= 0x3fff
-    var time_hi_and_mid = (timestamp >> 12) & 0xffff_ffff_ffff
-    var time_lo = timestamp & 0x0fff
-    var clock_s = cs & 0x3fff
-    var nd: UInt64 = 0
+    var nd: UInt64
     if node:
         nd = UInt64(node.value())
     else:
@@ -399,13 +409,7 @@ def uuid6(node: Optional[Int] = None, clock_seq: Int = -1, timestamp_ns: Int = -
         for i in range(6):
             v = (v << 8) | UInt64(b[i])
         nd = v
-    var int_uuid_6: UInt128 = UInt128(time_hi_and_mid) << 80
-    int_uuid_6 |= UInt128(time_lo) << 64
-    int_uuid_6 |= UInt128(clock_s) << 48
-    int_uuid_6 |= UInt128(nd) & 0xffff_ffff_ffff
-    int_uuid_6 |= UInt128(6) << 76
-    int_uuid_6 |= UInt128(0x8000) << 48
-    return UUID(int_uuid_6)
+    return _uuid6_from(timestamp, cs, nd)
 
 
 def _uuid7_from(timestamp_ms: Int, counter: UInt64, tail: UInt32) -> UUID:
@@ -480,7 +484,7 @@ struct UUID6Generator:
         if timestamp <= self.last_timestamp:
             timestamp = self.last_timestamp + 1
         self.last_timestamp = timestamp
-        return uuid6(Int(node), clock_seq, (timestamp - 0x01b21dd213814000) * 100)
+        return _uuid6_from(timestamp, clock_seq, node)
 
 
 struct UUID7Generator:
