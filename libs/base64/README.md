@@ -37,9 +37,10 @@ Each call has an `_into` variant. All inputs are byte spans.
 
 ## Limits
 
-Performance: large-input decode within 0.5% of CPython (0.707 vs 0.710 GB/s);
-encode (-26% at 64 MiB, -37% at 1 KiB), small decode (-13%) and peak RSS
-(+8%, 270 vs 251 MB) remain worse; release blocked on perf.
+Performance (docs/design.md, medians, one pinned core): b64 encode 1.23 vs CPython
+0.77 GB/s at 64 MiB and 2.0 vs 1.1 at 1 KiB; decode 1.28 vs 0.64 and 1.19 vs 0.80;
+b16 faster than CPython in every size measured. Base32 is not tuned. Peak RSS of
+the b64 benchmark is 7.7% above CPython (270 vs 251 MB, allocator retention).
 Encode altchars, String inputs, Base85 and wrapped-line APIs are outside this API.
 Empty altchars/map01 lists mean None; nonempty lists require lengths 2/1.
 Error uses Mojo Error, not Python exception classes.

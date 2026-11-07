@@ -2,7 +2,7 @@
 name: mojo-base64
 description: Base16/32/64 byte codecs with CPython 3.14.8/3.14.9 oracle checks.
 metadata:
-  version: 0.1.0
+  version: 0.1.1
 ---
 
 # mojo-base64
@@ -34,7 +34,7 @@ Empty altchars/map01 means None; nonempty lengths must be 2/1.
 validate and casefold default False. map01 is applied before casefold.
 Errors use Mojo Error, with oracle-checked byte-input messages.
 CPython maintenance releases changed padding semantics; see docs/design.md.
-Decoders and some append APIs allocate scratch buffers.
+Codecs allocate nothing but the result (decode errors leave `out` untouched); never pass a span of `out` as input to its own `_into` call.
 
 ## Gate
 

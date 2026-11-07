@@ -37,7 +37,8 @@ Base64 rejects nonempty altchars lengths other than 2 using CPython's bytes
 repr text. In strict mode padding and nonalphabet errors follow current
 binascii branch order; invalid-length messages count data characters only.
 Permissive mode ignores nonalphabet and excess padding, then checks tail length.
-Duplicate altchars use the last mapping. Encoders have no altchars parameter.
+Duplicate altchars use the last mapping. altchars are validated and applied before
+the leading-padding check, as CPython translates first. Encoders have no altchars parameter.
 
 Base32 checks input length divisible by 8 before map01 length (must be 1).
 It applies map01 before casefold, rejects nonalphabet before validating terminal

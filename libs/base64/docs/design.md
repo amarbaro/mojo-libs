@@ -11,20 +11,35 @@ Base32 checks input length, map01 length, alphabet, then padding count.
 The tests compare output bytes and full error messages, not Python error types.
 Mojo errors use Error; empty optional byte lists represent Python None.
 
-Memory: codecs stream directly from non-owning Span views without
-input-sized scratch buffers. Base32 uses fixed inline arrays for quanta tails.
-All append APIs write directly into caller buffers, preserving prefixes.
-No per-character String allocations occur on the codec success path.
-Lookup tables are stack-backed Array[Int8, 256]; no dynamic tables are used.
+Memory: every codec writes through one pointer into spare capacity of the
+caller's List: one `reserve` (exact, so capacity == length, no slack), one
+uninitialized `resize`, no per-byte capacity check, no scratch buffer, no
+String. Decode grows the list only on success, so an error leaves the caller's
+prefix untouched. Alphabets live in static memory (`global_constant`, 64 B and
+256 B tables, no per-call build); altchars and casefold patch a 256 B stack
+copy. URL-safe encode picks its table at compile time; no second pass.
+Base32 is still append-based (checked against CPython, not tuned).
 
-Performance is measured with real calls on 64 MiB x3 and 1 KiB x10000.
-Three paired rounds on CPU 15, medians: before/after 64 MiB encode
-0.411/0.581 GB/s, decode 0.215/0.707 GB/s; 1 KiB encode 0.610/0.696,
-decode 0.213/0.701 GB/s. CPython: 0.787/0.710 GB/s large encode/decode,
-1.106/0.807 GB/s small. Full benchmark before/after: 1.71/0.82 s;
-peak RSS median 448492/270144 KB. Load average 12.3 on 16 CPUs.
-Large-input decode within 0.5% of CPython (0.707 vs 0.710 GB/s); encode (-26% at 64 MiB, -37% at 1 KiB), small decode (-13%) and peak RSS (+8%, 270 vs 251 MB) remain worse; release blocked on perf.
-The old literal 1 GB/s benchmark was removed because it measured nothing.
+Performance, real calls, 64 MiB x3 and 1 KiB x10000, core 2, three alternating
+rounds, medians, GB/s. before = v0.1.0 (b16: 875f25f), CPython 3.14.8:
+
+| call | size | before | after | CPython |
+|---|---|---|---|---|
+| b64encode | 64 MiB | 0.550 | 1.227 | 0.774 |
+| b64encode | 1 KiB | 0.683 | 2.015 | 1.133 |
+| b64decode | 64 MiB | 0.668 | 1.280 | 0.644 |
+| b64decode | 1 KiB | 0.613 | 1.189 | 0.798 |
+| b16encode | 64 MiB | 0.659 | 1.212 | 0.283 |
+| b16encode | 1 KiB | 0.649 | 1.698 | 0.535 |
+| b16decode | 64 MiB | 0.239 | 1.300 | 0.469 |
+| b16decode | 1 KiB | 0.238 | 1.432 | 0.491 |
+
+Peak RSS, b64 only: 270152 KB before and 270144 KB after, CPython 250828 KB
+(+7.7%). The result owns exactly its bytes; the gap is allocator retention
+of freed 64-87 MiB blocks, the same with a bare `List` fill/drop. The bench
+with b16 rows: 432700 KB, CPython 556764 KB. Bench numbers move 2x with host
+load: pin one idle core, alternate, compare medians.
+Base32 and sizes other than 1 KiB and 64 MiB were not benchmarked.
 
 Build: scripts/capped.sh .venv/bin/mojo build -O3 -I src tests/bench.mojo -o .work/bench.
 Compare: scripts/bench.sh BASELINE_BINARY .work/bench (three alternating rounds).
