@@ -1,4 +1,4 @@
-src/base64/codec.mojo|if strict and n > 0 and s[0] == UInt8(ord('=')):|if False:
+src/base64/codec.mojo|if strict and n > 0 and t.unsafe_offset(Int(p.unsafe_offset(0)[]))[] == 254:|if False:
 src/base64/codec.mojo|if quad_pos >= 2 and quad_pos + pads <= 4:|if quad_pos >= 2 and quad_pos + pads < 4:
 src/base64/codec.mojo|if quad_pos == 1:|if False:
 src/base64/codec.mojo|if v < 0:|if v < -1:

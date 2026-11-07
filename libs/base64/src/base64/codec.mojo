@@ -39,8 +39,6 @@ def _dec_ptr() -> Pointer[UInt8, ImmStaticOrigin]:
 
 def _b64decode_into_kernel(s: Span[UInt8, _], mut out: List[Byte], altchars: Span[UInt8, _], strict: Bool) raises:
     var n = len(s)
-    if strict and n > 0 and s[0] == UInt8(ord('=')):
-        raise Error("Leading padding not allowed")
     var has_alt = len(altchars) != 0
     if has_alt and len(altchars) != 2:
         raise Error(_bytes_repr(List[Byte](altchars)))
@@ -52,6 +50,9 @@ def _b64decode_into_kernel(s: Span[UInt8, _], mut out: List[Byte], altchars: Spa
         local[Int(altchars[1])] = 63
     var t = Pointer(to=local).unsafe_bitcast[UInt8]()
     var p = s.unsafe_ptr()
+    # CPython translates altchars first, so a leading alt char that maps to '+' is not padding.
+    if strict and n > 0 and t.unsafe_offset(Int(p.unsafe_offset(0)[]))[] == 254:
+        raise Error("Leading padding not allowed")
 
     # The output is written through a raw pointer; `out` only grows on success, so an error
     # leaves the caller's list untouched.
