@@ -5,18 +5,7 @@ if [ -z "${MOJO:-}" ]; then
   uv sync -q || { echo 'FAIL setup: uv sync'; exit 1; }
   MOJO=.venv/bin/mojo
 fi
-HASHLIB_SRC=${HASHLIB_SRC:-../mojo-hashlib-public/src}
-if [ ! -d "$HASHLIB_SRC" ] && [ -d "../mojo-hashlib/src" ]; then
-  HASHLIB_SRC="../mojo-hashlib/src"
-fi
-if [ ! -d "$HASHLIB_SRC" ]; then
-  if [ ! -d ".work/deps/mojo-hashlib" ]; then
-    mkdir -p .work/deps
-    git clone -q --depth 1 --branch v0.1.2 https://github.com/amarbaro/mojo-hashlib .work/deps/mojo-hashlib || { echo "FAIL setup: clone mojo-hashlib"; exit 1; }
-  fi
-  HASHLIB_SRC=".work/deps/mojo-hashlib/src"
-fi
-export HASHLIB_SRC
+. scripts/env.sh
 mkdir -p .work/t
 "$MOJO" --version
 for entry in tests/cases:cases tests/api:api tests/differential:differential tests/bench:bench examples/quickstart:quickstart tests/fuzz_probe:fuzz_probe; do

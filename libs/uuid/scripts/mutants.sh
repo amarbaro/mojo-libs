@@ -3,13 +3,13 @@
 # A surviving mutant means a blind gate.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-MOJO=${MOJO:-.venv/bin/mojo}; killed=0; n=0; bad=0; cur=""
+. scripts/env.sh
+killed=0; n=0; bad=0; cur=""
 mkdir -p .work
 restore() { if [ -n "$cur" ] && [ -f .work/orig.mojo ]; then cp .work/orig.mojo "$cur"; fi; }
 trap restore EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-HASHLIB_SRC=${HASHLIB_SRC:-../mojo-hashlib-public/src}
 scripts/run-capped.sh "$MOJO" build -I src -I "$HASHLIB_SRC" ${MOJO_FLAGS:-} tests/cases.mojo -o .work/mutant-baseline > .work/mutant-baseline.build 2>&1 || { echo 'FAIL mutant baseline: build'; exit 1; }
 CHECK_DIR=.work/mcheck CASES=.work/mutant-baseline scripts/check.sh > .work/mutant-baseline.txt 2>&1 || { cat .work/mutant-baseline.txt; echo 'FAIL mutant baseline: tests'; exit 1; }
 while IFS='|' read -r f from to; do
