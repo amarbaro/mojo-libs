@@ -10,6 +10,9 @@ mkdir -p .work/t
 for entry in tests/cases:cases tests/api:api tests/differential:differential tests/bench:bench examples/quickstart:quickstart; do
   scripts/run-capped.sh "$MOJO" build -O3 -I src -I ../mojo-hashlib-public/src "${entry%%:*}.mojo" -o ".work/t/${entry##*:}" > .work/build.err 2>&1 || { cat .work/build.err; echo "FAIL build: $entry"; exit 1; }
 done
+python3 -c 'import re; m = re.search(r"```mojo\n(.*?)```", open("README.md").read(), re.S); open(".work/t/readme_doctest.mojo", "w").write(m.group(1))'
+scripts/run-capped.sh "$MOJO" build -O3 -I src -I ../mojo-hashlib-public/src .work/t/readme_doctest.mojo -o .work/t/readme_doctest > .work/build.err 2>&1 || { cat .work/build.err; echo "FAIL build: readme doctest"; exit 1; }
+scripts/run-capped.sh .work/t/readme_doctest > /dev/null
 CASES=.work/t/cases scripts/check.sh
 scripts/run-capped.sh python3 -I tools/reference.py > .work/reference.exp
 scripts/run-capped.sh .work/t/differential > .work/reference.got
