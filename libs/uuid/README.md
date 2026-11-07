@@ -5,14 +5,16 @@
 <!-- /badges -->
 
 UUID values, parsing, formatting, and v3/v4/v5/v6/v7/v8 generation for Mojo.
-Uses CPython 3.14 constructor error texts and RFC 9562 test vectors.
-UUID values occupy 16 inline bytes. Requires Linux libc `getrandom` and `clock_gettime`,
-Mojo 1.2, and mojo-hashlib >=0.1.2,<0.2. Also tested on the current 1.3 nightly.
+Parses and reports errors like CPython 3.14's `uuid.UUID`, and checks generators against RFC 9562 vectors.
+A `UUID` is 16 inline bytes, hashable, comparable and printable. Parsing a canonical UUID takes
+9 ns and formatting one 29 ns, against 929 ns and 403 ns in CPython 3.14.9 (`docs/design.md`).
+Requires Linux libc `getrandom` and `clock_gettime`, Mojo 1.2, and mojo-hashlib >=0.1.2,<0.2.
+Also tested on the 1.3 nightly of 2026-11-03.
 
-From a clone, with mojo-hashlib-public beside it:
+From a clone, with a mojo-hashlib checkout beside it (`scripts/env.sh` clones the pinned tag otherwise):
 
 ```sh
-mojo run -I src -I ../mojo-hashlib-public/src examples/quickstart.mojo
+mojo run -I src -I ../mojo-hashlib/src examples/quickstart.mojo
 ```
 
 ```mojo
@@ -41,12 +43,12 @@ Use one generator instance for monotonic v6/v7 sequences. Convenience `uuid6()`/
 are not monotonic across calls; use the generator for ordering. This is a
 documented divergence from CPython, with no parity claim for these helpers.
 Default v6 nodes use random data, without hardware lookup.
-UUID1/2, SafeUUID, Python object identity, arbitrary-precision integer arguments,
-and Python's full Unicode decimal-digit parsing are outside this interface.
+UUID1/2, SafeUUID, Python object identity and arbitrary-precision integer arguments are outside
+this interface; `from_int` takes decimal text and does not reproduce CPython's 4300-digit limit.
 `UUIDError` exposes CPython's `kind` and exact `message`; it is a Mojo error value,
 not a Python exception class. A version omitted from a constructor preserves bits;
 an explicit version must be 1 through 8. Parse differential fuzzing uses offline
-CPython oracle rows (`tools/`); committed goldens stay RFC 9562 only.
+CPython oracle rows (`tools/`); committed goldens stay RFC 9562 only. The Unicode tables are Unicode 16.
 
 Run `MOJO=mojo scripts/ci.sh` for RFC replay, constructor checks, an independent
 10,000-value brute oracle, generator checks, CPython differential comparison,

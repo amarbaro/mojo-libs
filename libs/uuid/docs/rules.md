@@ -25,3 +25,10 @@
 - A second mutation run began after a failed baseline -> the mutation runner now builds and passes the unmodified test suite before touching source.
 - A TERM restore trap continued its loop -> signal traps exit; an EXIT trap restores the source exactly once.
 - Unlabelled generator assertions obscured a failed check -> compare complete UUID bits and give each injected-state check its own message.
+- Strip and digit rules assumed equal to CPython's int() -> list the reference's accepted sets from its source and run an edge list (Unicode spaces, Unicode digits, U+001C..U+001F) through the differential before writing the parser.
+- Struct shipped without Hashable/Writable, so it could not be a Dict key or printed -> the API test puts every public value type into a Dict, a Set, print and String() the day it is written.
+- Expected error text typed by hand (U+066A is printable, so CPython does not escape it; a "32 digit" row had 35) -> expected texts come from the oracle, counts from len(), never from memory.
+- Benchmark row at 0.0003 ns/op (compiler folded the loop) -> a row under 0.5 ns/op is suspect: feed the result into the checksum or drop the row, and say so in design.md.
+- Mutants whose pattern contains `|` break the FROM|TO format, and a wrong prefix offset that falls back to the slow path survives as an equivalent mutant -> patterns without `|`, and every new fast path gets a mutant that changes the result, not only the route.
+- Background job started as `cmd &` inside a backgrounded command reported "completed" at launch -> use `run_in_background` on the command itself and wait for its exit line in the log file.
+- Python tables (Nd, printable) can differ between CPython versions -> the generated `_unicode.mojo` names its Unicode version; fuzz rows use codepoints stable since Unicode 13.

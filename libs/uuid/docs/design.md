@@ -1,40 +1,60 @@
 # Design
 
-UUID is one UInt128: 16 inline bytes. No heap per UUID value.
-The hot paths are parsing and rendering a canonical 36-byte UUID.
-Formatting writes a fixed 36-byte stack buffer and returns one owned String.
-Hex formatting uses a 32-byte stack buffer. Byte conversion uses 16 inline bytes.
-Parsing normalizes CPython forms before scanning digits; normalization owns strings.
-Hashing uses mojo-hashlib's MD5 and SHA-1, not a Python runtime.
-Entropy comes from libc getrandom, checked for failure and partial reads.
-clock_gettime provides nanosecond resolution; wall-clock timestamps may go backwards.
-Explicit generator state handles repeats, rollback and the 42-bit v7 counter rollover.
-One-shot functions have no global monotonic state. Caller-owned state avoids hidden
-shared mutable storage and makes deterministic tests possible.
+UUID is one UInt128: 16 inline bytes, no heap per value. The hot paths are parsing and
+formatting a canonical 36-byte UUID. Parse scans the input bytes in place and decodes the 32
+hex digits in one SIMD step; format builds the digits in SIMD registers and writes them into a
+stack buffer, so the only heap block is the returned `String`. `bytes()` and `bytes_le()` are
+byte swaps stored into 16 inline bytes (little-endian hosts only, like the libc calls below).
 
-RFC 9562 Appendix A.2-A.6/B.1-B.2 supply all generator goldens; Sections 5.9,
-5.10 and 6.6 supply constants. No generated golden files are accepted.
-A.6 uses injected generator state and an assembler cross-check: CPython clears
-the counter MSB and cannot generate that exact initial seed without state injection.
-Error messages come from CPython v3.14.0 uuid.py, verified by tools/check_reference.py.
-10,000 independent bit-by-bit formatter/parser cases exercise byte round trips.
-256 generated UUIDs are compared directly with CPython for string, hex, bytes_le,
-clock sequence and node. Mutants must compile before the gate can kill them.
+## Parsing
 
-Baseline, same 10,000 operations: parse 998 ns/op, str 542 ns/op, uuid4 63 ns/op;
-initial wall 0.02 s, peak RSS 12048 KB.
-Command: scripts/run-capped.sh mojo build -O3 -I src -I ../mojo-hashlib-public/src
- tests/bench.mojo -o .work/bench-after
-Command: scripts/run-capped.sh /usr/bin/time -f '%e s %M KB' .work/bench-after
-Reference: scripts/run-capped.sh python3 -I tools/bench_ref.py
+`UUID(text)` takes three routes, cheapest first, all returning what CPython's `uuid.UUID(hex)` returns:
+1. `_scan_canonical`: compact, hyphenated, `{...}` and `urn:uuid:...` shapes. SIMD decode, 0 allocations.
+2. `_scan_general`: other shapes of the same grammar (hyphens anywhere, `urn:` or `uuid:` alone,
+   stacked braces). Byte loop, 0 allocations.
+3. `_parse_text`: everything else (CPython's replace/strip, then `_parse_int`, an `int(text, base)`
+   for base 10 and 16 with Unicode spaces and digits, signs, `0x`, underscores and the 128-bit range
+   check). Error texts quote like `repr()`. Tables: `src/uuid/_unicode.mojo` (Unicode 16, generated
+   by `tools/gen_unicode.py`, static `global_constant`).
 
-Rejected: Python runtime in the library, UUID heap allocation, hardware-node lookup,
-and fabricated fixtures generated from the implementation being checked.
+## Generators and traits
 
-Three alternating rounds pinned to CPU 0 (10,000 calls per operation), medians:
-parse 987 -> 44 ns/op; str 623 -> 97 ns/op; uuid4 46 -> 50 ns/op.
-Wall 0.02 -> 0.01 s; peak RSS 10124 -> 10544 KB (process startup included).
-UUID remains 16 bytes. Source 320 -> 491 lines; 10429 -> 16907 source bytes.
-CPython reference: parse 837.8, str 391.9, uuid4 697.3 ns/op, RSS 10524 KB.
-Run `MOJO=mojo scripts/bench.sh` with .work/bench-before preserved for paired results.
-Short runs show host noise, especially uuid4; no RNG speed improvement is claimed.
+Hashing uses mojo-hashlib's MD5 and SHA-1; entropy is libc `getrandom` (failure and partial reads
+checked); time is `clock_gettime`. One-shot helpers keep no state. `UUID6Generator` and
+`UUID7Generator` are caller-owned: repeats, clock rollback and the 42-bit v7 counter rollover need
+no hidden shared storage, and tests stay deterministic. `UUID` is `Comparable`, `Hashable` and
+`Writable` (`Dict[UUID, V]`, `Set[UUID]`, `print`, `String(uuid)`); `__hash__() -> Int` stays
+CPython's `hash(uuid)`, the `Hasher` overload feeds the 16 big-endian bytes.
+
+## Verification
+
+RFC 9562 Appendix A.2-A.6, B.1-B.2 and Sections 5.9, 5.10, 6.6 supply the goldens; error texts follow
+CPython v3.14.0. A.6 uses injected generator state (CPython clears the counter MSB). Also 10,000
+bit-by-bit formatter/parser rows, a CPython differential (`tools/reference.py`: accessors, name UUIDs,
+uuid8, v6/v7 replay), a seeded fuzz differential (`tools/fuzz_ref.py`) and compiling mutants that must
+all be killed. No fixture comes from the code under test.
+
+## Memory and speed
+
+Same operation, 100000 calls, pinned to one core, median of 5 rounds, ns/op (`scripts/bench.sh`):
+
+| op | before | after | CPython 3.14.9 |
+|---|---|---|---|
+| parse hyphenated | 50 | 9.3 | 929 |
+| parse compact | 49 | 6.3 | 636 |
+| parse urn | 679 | 9.8 | 777 |
+| parse braces | 656 | 9.5 | 896 |
+| str | 76 | 29 | 403 |
+| hex | 47 | 27 | 145 |
+| urn | 105 | 33 | 428 |
+| bytes / bytes_le | 27 / 27 | 0.2 / 0.2 | 93 / 348 |
+| uuid3 / uuid5 | 228 / 215 | 183 / 171 | 1360 / 1462 |
+| uuid4 / uuid7 generator | 48 / 45 | 35 / 46 | 962 / 1179 |
+
+One 36-byte `String` costs about 20 ns, the floor for `str`, `hex` and `urn`; uuid3 and uuid5
+are dominated by hashlib. The `bytes` rows are partly folded by the compiler (the loop reads one
+byte). Whole bench process: 0.2 s to 0.1 s wall; peak RSS 10148 to 10132 KB, which is runtime
+start-up (CPython 14884 KB). `UUID` stays 16 bytes.
+
+Rejected: a Python runtime, a heap block per UUID, hardware-node lookup, a buffered random pool
+(hidden shared state; `getrandom` costs about 35 ns per UUID).

@@ -1,8 +1,10 @@
 # Validation
 
 - `MOJO=mojo scripts/ci.sh`: full stable suite, differential rows, API, example, mutants.
-- `scripts/nightly.sh`: nightly package precompile, every tests/test_*.mojo and example.
-- `MOJO=mojo scripts/bench.sh`: paired benchmark with preserved .work/bench-before binary.
+- `NIGHTLY_MOJO=/path/to/nightly/mojo scripts/nightly.sh`: package precompile, every tests/test_*.mojo, tests/api.mojo and the example.
+- `scripts/bench.sh`: benchmark and CPython twin; `BEFORE=<older bench binary>` pairs it with an earlier build.
+- `python3 -I tools/fuzz_ref.py PREFIX SEED N`: writes PREFIX.in/.exp (edge list, then N random hex rows and N/5 `from_int` rows) from the installed CPython; `scripts/ci.sh` runs seed 7, 5000.
+- `python3 -I tools/gen_unicode.py > src/uuid/_unicode.mojo`: regenerates the Unicode tables (review the diff after a CPython upgrade).
 - `python3 -I tools/check_reference.py`: verify error expectations against pinned source.
 
 Fetch the pinned reference before that last check:
@@ -20,5 +22,5 @@ The fixed scaffold mutant runner compiles each changed source before checking it
 behaviour. Fields in tests/mutants.txt use `|` separators, so patterns must not
 contain that character. Its restore trap protects the source on interruption.
 
-Every compile and executable test uses scripts/run-capped.sh (4 GB, no swap,
-120 seconds). Stable dependency includes mojo-hashlib-public/src beside this clone.
+Every compile and executable test uses scripts/run-capped.sh (120 s wall-clock cap, CAP_SECONDS to change).
+mojo-hashlib resolves through scripts/env.sh: a sibling checkout, else the pinned v0.1.2 clone in .work/deps.
