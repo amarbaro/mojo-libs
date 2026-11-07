@@ -2,6 +2,7 @@
 """Deterministic CPython 3.14 vectors; tab-separated, byte fields hex."""
 import base64
 import itertools
+from itertools import chain
 import random
 from pathlib import Path
 
@@ -48,6 +49,11 @@ def vectors():
         for data in (b'', b'-w==', b'__8=', b'AAAA'):
             for strict in (False, True):
                 yield 'b64decode', data, strict, extra
+    # altchars are validated and applied before the leading '=' check (fuzz 2026-11-07)
+    for extra in (b'=_', b'_=', b'-=', b'!', b'abc', b'=='):
+        for data in (b'=QUJD', b'QUJD', b'=', b'==AA'):
+            for strict in (False, True):
+                yield 'b64decode', data, strict, extra
     for op in ('b32decode', 'b32hexdecode'):
         for pad in range(17):
             for char in (b'A', b'!', b'a'):
@@ -69,9 +75,57 @@ def vectors():
         yield rng.choice(OPS[1::2]), rng.randbytes(rng.randrange(65)), bool(rng.randrange(2)), b''
 
 
+JUNK = (b'=', b'\n', b' ', b'-', b'_', b'+', b'/', b'\xff', b'\x00', b'!', b'a', b'0', b'1', b'A', b'Z')
+
+
+def mutate(rng, data):
+    """Valid encoding with random insertions, replacements, deletions and truncation."""
+    data = bytearray(data)
+    for _ in range(rng.choice((0, 0, 1, 1, 2, 5))):
+        pos = rng.randrange(len(data) + 1)
+        kind = rng.randrange(4)
+        if kind == 0:
+            data[pos:pos] = rng.choice(JUNK) * rng.randrange(1, 4)
+        elif kind == 1 and pos < len(data):
+            data[pos] = rng.choice(JUNK)[0]
+        elif kind == 2 and pos < len(data):
+            del data[pos]
+        elif kind == 3:
+            del data[pos:]
+    return bytes(data)
+
+
+def random_vectors(seed, count):
+    """Long, alphabet-biased rows: the fast path, the slow path and every hand-off between them."""
+    rng = random.Random(seed)
+    for _ in range(count):
+        raw = rng.randbytes(rng.choice((0, 1, 2, 3, 5, 17, 64, 65, 129, 300, 1000)) + rng.randrange(3))
+        op = rng.choice(OPS)
+        if op.endswith('encode'):
+            yield op, raw, False, b''
+            continue
+        flag = bool(rng.randrange(2))
+        extra = b''
+        if op == 'b64decode':
+            extra = rng.choice((b'', b'', b'-_', b'+/', b'_-', b'!?', b'=_'))
+            enc = base64.b64encode(raw) if extra == b'' else base64.b64encode(raw, extra if len(extra) == 2 else None)
+        elif op == 'b32decode':
+            extra = rng.choice((b'', b'', b'I', b'L'))
+            enc = base64.b32encode(raw)
+        else:
+            enc = getattr(base64, op.replace('decode', 'encode'))(raw)
+        yield op, mutate(rng, enc), flag, extra
+
+
 def main():
+    import sys
+    if len(sys.argv) == 4:  # tools/gen_vectors.py SEED COUNT OUT: scratch fuzz file, not committed
+        rows = [(i, *v) for i, v in enumerate(random_vectors(int(sys.argv[1]), int(sys.argv[2])))]
+        Path(sys.argv[3]).write_text(''.join('\t'.join((str(i), op, d.hex(), str(int(f)), e.hex(), *evaluate(op, d, f, e))) + '\n' for i, op, d, f, e in rows))
+        print(f'fuzz: {len(rows)} rows -> {sys.argv[3]}')
+        return
     rows = []
-    for index, (op, data, flag, extra) in enumerate(vectors()):
+    for index, (op, data, flag, extra) in enumerate(chain(vectors(), random_vectors(7, 1500))):
         status, result = evaluate(op, data, flag, extra)
         rows.append('\t'.join((str(index), op, data.hex(), str(int(flag)), extra.hex(), status, result)))
     Path('tests/golden/basic.txt').write_text('\n'.join(rows) + '\n')

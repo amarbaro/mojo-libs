@@ -1,9 +1,13 @@
 from std.testing import assert_equal, assert_true
+from std.sys import argv
 from support import replay
 
 def main() raises:
     var text = String("")
-    with open("tests/golden/basic.txt", "r") as source:
+    var path = String("tests/golden/basic.txt")
+    if len(argv()) > 1:
+        path = String(argv()[1])
+    with open(path, "r") as source:
         text = source.read()
     var rows = 0
     var errors = 0
