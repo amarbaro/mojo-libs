@@ -23,7 +23,10 @@ Value methods: `int() -> UInt128`, `hex() -> String`, `__str__() -> String`,
 `urn() -> String`, `bytes()/bytes_le() -> Array[UInt8,16]`, `variant() -> String`,
 `version() -> Int` (0 for non-RFC variant), `time_low() -> UInt32`,
 `time_mid()/time_hi_version() -> UInt16`, `clock_seq_hi_variant()/clock_seq_low() -> UInt8`,
-`clock_seq() -> Int`, `node()/time() -> UInt64`. Ordering compares unsigned bits.
+`clock_seq() -> Int`, `node()/time() -> UInt64`, `__hash__() -> Int`.
+Ordering compares unsigned bits. `__hash__()` computes an `Int` hash value
+modulo the Mersenne prime 2^61 - 1 from the underlying 128-bit unsigned integer,
+matching unsigned-integer hash behavior and CPython differential parity.
 
 | Generator | Inputs |
 |---|---|
