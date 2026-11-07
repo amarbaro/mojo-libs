@@ -30,7 +30,7 @@ scripts/run-capped.sh python3 -I tools/reference.py > .work/reference.exp
 scripts/run-capped.sh .work/t/differential > .work/reference.got
 cmp .work/reference.exp .work/reference.got || { echo 'FAIL differential: CPython values'; exit 1; }
 scripts/run-capped.sh python3 -I tools/fuzz_ref.py .work/t/fuzz 7 5000
-scripts/run-capped.sh .work/t/fuzz_probe .work/t/fuzz.in | head -5000 > .work/t/fuzz.got
+scripts/run-capped.sh .work/t/fuzz_probe .work/t/fuzz.in > .work/t/fuzz.got
 diff -u .work/t/fuzz.exp .work/t/fuzz.got || { echo 'FAIL differential: fuzz probe vs CPython'; exit 1; }
 scripts/run-capped.sh .work/t/api
 scripts/run-capped.sh .work/t/quickstart
