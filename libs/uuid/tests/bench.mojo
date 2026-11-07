@@ -49,11 +49,15 @@ def main() raises:
     report("urn", start)
     start = perf_counter_ns()
     for i in range(N):
-        count += Int(UUID(base ^ UInt128(i)).bytes()[15])
+        var b = UUID(base ^ UInt128(i)).bytes()
+        for k in range(16):
+            count += Int(b[k])
     report("bytes", start)
     start = perf_counter_ns()
     for i in range(N):
-        count += Int(UUID(base ^ UInt128(i)).bytes_le()[15])
+        var b = UUID(base ^ UInt128(i)).bytes_le()
+        for k in range(16):
+            count += Int(b[k])
     report("bytes_le", start)
     start = perf_counter_ns()
     for i in range(N):

@@ -47,13 +47,13 @@ Same operation, 100000 calls, pinned to one core, median of 5 rounds, ns/op (`sc
 | str | 76 | 29 | 403 |
 | hex | 47 | 27 | 145 |
 | urn | 105 | 33 | 428 |
-| bytes / bytes_le | 27 / 27 | 0.2 / 0.2 | 93 / 348 |
+| bytes / bytes_le | 32 / 40 | 5.0 / 4.9 | 93 / 358 |
 | uuid3 / uuid5 | 228 / 215 | 183 / 171 | 1360 / 1462 |
 | uuid4 / uuid7 generator | 48 / 45 | 35 / 46 | 962 / 1179 |
 
 One 36-byte `String` costs about 20 ns, the floor for `str`, `hex` and `urn`; uuid3 and uuid5
-are dominated by hashlib. The `bytes` rows are partly folded by the compiler (the loop reads one
-byte). Whole bench process: 0.2 s to 0.1 s wall; peak RSS 10148 to 10132 KB, which is runtime
+are dominated by hashlib. The `bytes` rows sum all 16 result bytes into a sink, so the compiler
+cannot drop the work (an earlier version read one byte and measured 0.2 ns: folded, discarded). Whole bench process: 0.2 s to 0.1 s wall; peak RSS 10148 to 10132 KB, which is runtime
 start-up (CPython 14884 KB). `UUID` stays 16 bytes.
 
 Rejected: a Python runtime, a heap block per UUID, hardware-node lookup, a buffered random pool

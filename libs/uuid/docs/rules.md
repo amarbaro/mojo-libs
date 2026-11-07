@@ -33,3 +33,4 @@
 - Background job started as `cmd &` inside a backgrounded command reported "completed" at launch -> use `run_in_background` on the command itself and wait for its exit line in the log file.
 - Python tables (Nd, printable) can differ between CPython versions -> the generated `_unicode.mojo` names its Unicode version; fuzz rows use codepoints stable since Unicode 13.
 - Oracle script used uuid.uuid6/7/8 (CPython 3.14 only); the local gate passed and the Ubuntu 24.04 container (Python 3.12) failed -> a new oracle call is checked on the CI image with ci-local before "green"; scripts/env.sh resolves a 3.14 interpreter (system python3, else `uv run --python 3.14`).
+- Reported 0.2 ns/op for bytes()/bytes_le() while knowing the loop was folded (it read one byte of the result) -> a bench row consumes the whole result (sum every byte into a sink) or is dropped; a sub-ns row is never reported as a measurement.
