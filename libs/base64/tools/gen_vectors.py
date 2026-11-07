@@ -43,9 +43,11 @@ def vectors():
                  b'YQ==!', b'AA=!', b'AA==!', b'AA==A', b'A=!A', b'!AAA='):
         for strict in (False, True):
             yield 'b64decode', data, strict, b''
-    for extra in (b'!', b'abc', b'\x00\xff\n', b"'", b'"', b'-_', b'==', b'AA'):
+    for extra in (b'!', b'abc', b'\x00\xff\n', b"'", b'"', b'-_', b'==', b'AA',
+                  b'\\', b'\t', b'\r', b'\'"', b'\'"\\', b'\'"\t\r\\', b':,'):
         for data in (b'', b'-w==', b'__8=', b'AAAA'):
-            yield 'b64decode', data, False, extra
+            for strict in (False, True):
+                yield 'b64decode', data, strict, extra
     for op in ('b32decode', 'b32hexdecode'):
         for pad in range(17):
             for char in (b'A', b'!', b'a'):
@@ -55,7 +57,8 @@ def vectors():
             for fold in (False, True):
                 yield op, data, fold, b''
     for data in (b'01AAAAAA', b'01======', b'A', b'', b'!!!!!!!!'):
-        for extra in (b'I', b'L', b'i', b'!', b'IL', b'\x00\xff', b"'", b'"'):
+        for extra in (b'I', b'L', b'i', b'!', b'IL', b'\x00\xff', b"'", b'"',
+                      b'\\\\', b'\t\t', b'\r\r', b'\'"', b'\'"\\', b'\'"\t\r\\'):
             for fold in (False, True):
                 yield 'b32decode', data, fold, extra
     for data in (b'A', b'Z', b'AA!', b'aa', b'\xff0', b'A A', b'', b'0123456789ABCDEF', b'GG', b'AG'):

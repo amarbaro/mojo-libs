@@ -1485,862 +1485,1010 @@
 1484	b64decode	214141413d	0		ok	0000
 1485	b64decode	214141413d	1		err	Only base64 data is allowed
 1486	b64decode		0	21	err	b'!'
-1487	b64decode	2d773d3d	0	21	err	b'!'
-1488	b64decode	5f5f383d	0	21	err	b'!'
-1489	b64decode	41414141	0	21	err	b'!'
-1490	b64decode		0	616263	err	b'abc'
-1491	b64decode	2d773d3d	0	616263	err	b'abc'
-1492	b64decode	5f5f383d	0	616263	err	b'abc'
-1493	b64decode	41414141	0	616263	err	b'abc'
-1494	b64decode		0	00ff0a	err	b'\x00\xff\n'
-1495	b64decode	2d773d3d	0	00ff0a	err	b'\x00\xff\n'
-1496	b64decode	5f5f383d	0	00ff0a	err	b'\x00\xff\n'
-1497	b64decode	41414141	0	00ff0a	err	b'\x00\xff\n'
-1498	b64decode		0	27	err	b"'"
-1499	b64decode	2d773d3d	0	27	err	b"'"
-1500	b64decode	5f5f383d	0	27	err	b"'"
-1501	b64decode	41414141	0	27	err	b"'"
-1502	b64decode		0	22	err	b'"'
-1503	b64decode	2d773d3d	0	22	err	b'"'
-1504	b64decode	5f5f383d	0	22	err	b'"'
-1505	b64decode	41414141	0	22	err	b'"'
-1506	b64decode		0	2d5f	ok	
-1507	b64decode	2d773d3d	0	2d5f	ok	fb
-1508	b64decode	5f5f383d	0	2d5f	ok	ffff
-1509	b64decode	41414141	0	2d5f	ok	000000
-1510	b64decode		0	3d3d	ok	
-1511	b64decode	2d773d3d	0	3d3d	err	Incorrect padding
-1512	b64decode	5f5f383d	0	3d3d	err	Incorrect padding
-1513	b64decode	41414141	0	3d3d	ok	000000
-1514	b64decode		0	4141	ok	
-1515	b64decode	2d773d3d	0	4141	err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
-1516	b64decode	5f5f383d	0	4141	err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
-1517	b64decode	41414141	0	4141	ok	ffffff
-1518	b32decode	41414141414141414141414141414141	0		ok	00000000000000000000
-1519	b32decode	41414141414141414141414141414141	1		ok	00000000000000000000
-1520	b32decode	21212121212121212121212121212121	0		err	Non-base32 digit found
-1521	b32decode	21212121212121212121212121212121	1		err	Non-base32 digit found
-1522	b32decode	61616161616161616161616161616161	0		err	Non-base32 digit found
-1523	b32decode	61616161616161616161616161616161	1		ok	00000000000000000000
-1524	b32decode	4141414141414141414141414141413d	0		ok	000000000000000000
-1525	b32decode	4141414141414141414141414141413d	1		ok	000000000000000000
-1526	b32decode	2121212121212121212121212121213d	0		err	Non-base32 digit found
-1527	b32decode	2121212121212121212121212121213d	1		err	Non-base32 digit found
-1528	b32decode	6161616161616161616161616161613d	0		err	Non-base32 digit found
-1529	b32decode	6161616161616161616161616161613d	1		ok	000000000000000000
-1530	b32decode	41414141414141414141414141413d3d	0		err	Incorrect padding
-1531	b32decode	41414141414141414141414141413d3d	1		err	Incorrect padding
-1532	b32decode	21212121212121212121212121213d3d	0		err	Non-base32 digit found
-1533	b32decode	21212121212121212121212121213d3d	1		err	Non-base32 digit found
-1534	b32decode	61616161616161616161616161613d3d	0		err	Non-base32 digit found
-1535	b32decode	61616161616161616161616161613d3d	1		err	Incorrect padding
-1536	b32decode	414141414141414141414141413d3d3d	0		ok	0000000000000000
-1537	b32decode	414141414141414141414141413d3d3d	1		ok	0000000000000000
-1538	b32decode	212121212121212121212121213d3d3d	0		err	Non-base32 digit found
-1539	b32decode	212121212121212121212121213d3d3d	1		err	Non-base32 digit found
-1540	b32decode	616161616161616161616161613d3d3d	0		err	Non-base32 digit found
-1541	b32decode	616161616161616161616161613d3d3d	1		ok	0000000000000000
-1542	b32decode	4141414141414141414141413d3d3d3d	0		ok	00000000000000
-1543	b32decode	4141414141414141414141413d3d3d3d	1		ok	00000000000000
-1544	b32decode	2121212121212121212121213d3d3d3d	0		err	Non-base32 digit found
-1545	b32decode	2121212121212121212121213d3d3d3d	1		err	Non-base32 digit found
-1546	b32decode	6161616161616161616161613d3d3d3d	0		err	Non-base32 digit found
-1547	b32decode	6161616161616161616161613d3d3d3d	1		ok	00000000000000
-1548	b32decode	41414141414141414141413d3d3d3d3d	0		err	Incorrect padding
-1549	b32decode	41414141414141414141413d3d3d3d3d	1		err	Incorrect padding
-1550	b32decode	21212121212121212121213d3d3d3d3d	0		err	Non-base32 digit found
-1551	b32decode	21212121212121212121213d3d3d3d3d	1		err	Non-base32 digit found
-1552	b32decode	61616161616161616161613d3d3d3d3d	0		err	Non-base32 digit found
-1553	b32decode	61616161616161616161613d3d3d3d3d	1		err	Incorrect padding
-1554	b32decode	414141414141414141413d3d3d3d3d3d	0		ok	000000000000
-1555	b32decode	414141414141414141413d3d3d3d3d3d	1		ok	000000000000
-1556	b32decode	212121212121212121213d3d3d3d3d3d	0		err	Non-base32 digit found
-1557	b32decode	212121212121212121213d3d3d3d3d3d	1		err	Non-base32 digit found
-1558	b32decode	616161616161616161613d3d3d3d3d3d	0		err	Non-base32 digit found
-1559	b32decode	616161616161616161613d3d3d3d3d3d	1		ok	000000000000
-1560	b32decode	4141414141414141413d3d3d3d3d3d3d	0		err	Incorrect padding
-1561	b32decode	4141414141414141413d3d3d3d3d3d3d	1		err	Incorrect padding
-1562	b32decode	2121212121212121213d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1563	b32decode	2121212121212121213d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1564	b32decode	6161616161616161613d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1565	b32decode	6161616161616161613d3d3d3d3d3d3d	1		err	Incorrect padding
-1566	b32decode	41414141414141413d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1567	b32decode	41414141414141413d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1568	b32decode	21212121212121213d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1569	b32decode	21212121212121213d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1570	b32decode	61616161616161613d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1571	b32decode	61616161616161613d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1572	b32decode	414141414141413d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1573	b32decode	414141414141413d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1574	b32decode	212121212121213d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1575	b32decode	212121212121213d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1576	b32decode	616161616161613d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1577	b32decode	616161616161613d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1578	b32decode	4141414141413d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1579	b32decode	4141414141413d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1580	b32decode	2121212121213d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1581	b32decode	2121212121213d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1582	b32decode	6161616161613d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1583	b32decode	6161616161613d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1584	b32decode	41414141413d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1585	b32decode	41414141413d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1586	b32decode	21212121213d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1587	b32decode	21212121213d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1588	b32decode	61616161613d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1589	b32decode	61616161613d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1590	b32decode	414141413d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1591	b32decode	414141413d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1592	b32decode	212121213d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1593	b32decode	212121213d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1594	b32decode	616161613d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1595	b32decode	616161613d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1596	b32decode	4141413d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1597	b32decode	4141413d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1598	b32decode	2121213d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1599	b32decode	2121213d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1600	b32decode	6161613d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1601	b32decode	6161613d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1602	b32decode	41413d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1603	b32decode	41413d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1604	b32decode	21213d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1605	b32decode	21213d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1606	b32decode	61613d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1607	b32decode	61613d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1608	b32decode	413d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1609	b32decode	413d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1610	b32decode	213d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1611	b32decode	213d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1612	b32decode	613d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1613	b32decode	613d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1614	b32decode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1615	b32decode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1616	b32decode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1617	b32decode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1618	b32decode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1619	b32decode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1620	b32decode	41	0		err	Incorrect padding
-1621	b32decode	41	1		err	Incorrect padding
-1622	b32decode	3d41414141414141	0		err	Non-base32 digit found
-1623	b32decode	3d41414141414141	1		err	Non-base32 digit found
-1624	b32decode	61613d3d3d3d3d3d	0		err	Non-base32 digit found
-1625	b32decode	61613d3d3d3d3d3d	1		ok	00
-1626	b32decode	ff41414141414141	0		err	Non-base32 digit found
-1627	b32decode	ff41414141414141	1		err	Non-base32 digit found
-1628	b32decode		0		ok	
-1629	b32decode		1		ok	
-1630	b32decode	213d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1631	b32decode	213d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1632	b32hexdecode	41414141414141414141414141414141	0		ok	5294a5294a5294a5294a
-1633	b32hexdecode	41414141414141414141414141414141	1		ok	5294a5294a5294a5294a
-1634	b32hexdecode	21212121212121212121212121212121	0		err	Non-base32 digit found
-1635	b32hexdecode	21212121212121212121212121212121	1		err	Non-base32 digit found
-1636	b32hexdecode	61616161616161616161616161616161	0		err	Non-base32 digit found
-1637	b32hexdecode	61616161616161616161616161616161	1		ok	5294a5294a5294a5294a
-1638	b32hexdecode	4141414141414141414141414141413d	0		ok	5294a5294a5294a529
-1639	b32hexdecode	4141414141414141414141414141413d	1		ok	5294a5294a5294a529
-1640	b32hexdecode	2121212121212121212121212121213d	0		err	Non-base32 digit found
-1641	b32hexdecode	2121212121212121212121212121213d	1		err	Non-base32 digit found
-1642	b32hexdecode	6161616161616161616161616161613d	0		err	Non-base32 digit found
-1643	b32hexdecode	6161616161616161616161616161613d	1		ok	5294a5294a5294a529
-1644	b32hexdecode	41414141414141414141414141413d3d	0		err	Incorrect padding
-1645	b32hexdecode	41414141414141414141414141413d3d	1		err	Incorrect padding
-1646	b32hexdecode	21212121212121212121212121213d3d	0		err	Non-base32 digit found
-1647	b32hexdecode	21212121212121212121212121213d3d	1		err	Non-base32 digit found
-1648	b32hexdecode	61616161616161616161616161613d3d	0		err	Non-base32 digit found
-1649	b32hexdecode	61616161616161616161616161613d3d	1		err	Incorrect padding
-1650	b32hexdecode	414141414141414141414141413d3d3d	0		ok	5294a5294a5294a5
-1651	b32hexdecode	414141414141414141414141413d3d3d	1		ok	5294a5294a5294a5
-1652	b32hexdecode	212121212121212121212121213d3d3d	0		err	Non-base32 digit found
-1653	b32hexdecode	212121212121212121212121213d3d3d	1		err	Non-base32 digit found
-1654	b32hexdecode	616161616161616161616161613d3d3d	0		err	Non-base32 digit found
-1655	b32hexdecode	616161616161616161616161613d3d3d	1		ok	5294a5294a5294a5
-1656	b32hexdecode	4141414141414141414141413d3d3d3d	0		ok	5294a5294a5294
-1657	b32hexdecode	4141414141414141414141413d3d3d3d	1		ok	5294a5294a5294
-1658	b32hexdecode	2121212121212121212121213d3d3d3d	0		err	Non-base32 digit found
-1659	b32hexdecode	2121212121212121212121213d3d3d3d	1		err	Non-base32 digit found
-1660	b32hexdecode	6161616161616161616161613d3d3d3d	0		err	Non-base32 digit found
-1661	b32hexdecode	6161616161616161616161613d3d3d3d	1		ok	5294a5294a5294
-1662	b32hexdecode	41414141414141414141413d3d3d3d3d	0		err	Incorrect padding
-1663	b32hexdecode	41414141414141414141413d3d3d3d3d	1		err	Incorrect padding
-1664	b32hexdecode	21212121212121212121213d3d3d3d3d	0		err	Non-base32 digit found
-1665	b32hexdecode	21212121212121212121213d3d3d3d3d	1		err	Non-base32 digit found
-1666	b32hexdecode	61616161616161616161613d3d3d3d3d	0		err	Non-base32 digit found
-1667	b32hexdecode	61616161616161616161613d3d3d3d3d	1		err	Incorrect padding
-1668	b32hexdecode	414141414141414141413d3d3d3d3d3d	0		ok	5294a5294a52
-1669	b32hexdecode	414141414141414141413d3d3d3d3d3d	1		ok	5294a5294a52
-1670	b32hexdecode	212121212121212121213d3d3d3d3d3d	0		err	Non-base32 digit found
-1671	b32hexdecode	212121212121212121213d3d3d3d3d3d	1		err	Non-base32 digit found
-1672	b32hexdecode	616161616161616161613d3d3d3d3d3d	0		err	Non-base32 digit found
-1673	b32hexdecode	616161616161616161613d3d3d3d3d3d	1		ok	5294a5294a52
-1674	b32hexdecode	4141414141414141413d3d3d3d3d3d3d	0		err	Incorrect padding
-1675	b32hexdecode	4141414141414141413d3d3d3d3d3d3d	1		err	Incorrect padding
-1676	b32hexdecode	2121212121212121213d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1677	b32hexdecode	2121212121212121213d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1678	b32hexdecode	6161616161616161613d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1679	b32hexdecode	6161616161616161613d3d3d3d3d3d3d	1		err	Incorrect padding
-1680	b32hexdecode	41414141414141413d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1681	b32hexdecode	41414141414141413d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1682	b32hexdecode	21212121212121213d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1683	b32hexdecode	21212121212121213d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1684	b32hexdecode	61616161616161613d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1685	b32hexdecode	61616161616161613d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1686	b32hexdecode	414141414141413d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1687	b32hexdecode	414141414141413d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1688	b32hexdecode	212121212121213d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1689	b32hexdecode	212121212121213d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1690	b32hexdecode	616161616161613d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1691	b32hexdecode	616161616161613d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1692	b32hexdecode	4141414141413d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1693	b32hexdecode	4141414141413d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1694	b32hexdecode	2121212121213d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1695	b32hexdecode	2121212121213d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1696	b32hexdecode	6161616161613d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1697	b32hexdecode	6161616161613d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1698	b32hexdecode	41414141413d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1699	b32hexdecode	41414141413d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1700	b32hexdecode	21212121213d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1701	b32hexdecode	21212121213d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1702	b32hexdecode	61616161613d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1703	b32hexdecode	61616161613d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1704	b32hexdecode	414141413d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1705	b32hexdecode	414141413d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1706	b32hexdecode	212121213d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1707	b32hexdecode	212121213d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1708	b32hexdecode	616161613d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1709	b32hexdecode	616161613d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1710	b32hexdecode	4141413d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1711	b32hexdecode	4141413d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1712	b32hexdecode	2121213d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1713	b32hexdecode	2121213d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1714	b32hexdecode	6161613d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1715	b32hexdecode	6161613d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1716	b32hexdecode	41413d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1717	b32hexdecode	41413d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1718	b32hexdecode	21213d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1719	b32hexdecode	21213d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1720	b32hexdecode	61613d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1721	b32hexdecode	61613d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1722	b32hexdecode	413d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1723	b32hexdecode	413d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1724	b32hexdecode	213d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1725	b32hexdecode	213d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1726	b32hexdecode	613d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1727	b32hexdecode	613d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1728	b32hexdecode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1729	b32hexdecode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1730	b32hexdecode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1731	b32hexdecode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1732	b32hexdecode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
-1733	b32hexdecode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
-1734	b32hexdecode	41	0		err	Incorrect padding
-1735	b32hexdecode	41	1		err	Incorrect padding
-1736	b32hexdecode	3d41414141414141	0		err	Non-base32 digit found
-1737	b32hexdecode	3d41414141414141	1		err	Non-base32 digit found
-1738	b32hexdecode	61613d3d3d3d3d3d	0		err	Non-base32 digit found
-1739	b32hexdecode	61613d3d3d3d3d3d	1		ok	52
-1740	b32hexdecode	ff41414141414141	0		err	Non-base32 digit found
-1741	b32hexdecode	ff41414141414141	1		err	Non-base32 digit found
-1742	b32hexdecode		0		ok	
-1743	b32hexdecode		1		ok	
-1744	b32hexdecode	213d3d3d3d3d3d3d	0		err	Non-base32 digit found
-1745	b32hexdecode	213d3d3d3d3d3d3d	1		err	Non-base32 digit found
-1746	b32decode	3031414141414141	0	49	ok	7200000000
-1747	b32decode	3031414141414141	1	49	ok	7200000000
-1748	b32decode	3031414141414141	0	4c	ok	72c0000000
-1749	b32decode	3031414141414141	1	4c	ok	72c0000000
-1750	b32decode	3031414141414141	0	69	err	Non-base32 digit found
-1751	b32decode	3031414141414141	1	69	ok	7200000000
-1752	b32decode	3031414141414141	0	21	err	Non-base32 digit found
-1753	b32decode	3031414141414141	1	21	err	Non-base32 digit found
-1754	b32decode	3031414141414141	0	494c	err	b'IL'
-1755	b32decode	3031414141414141	1	494c	err	b'IL'
-1756	b32decode	3031414141414141	0	00ff	err	b'\x00\xff'
-1757	b32decode	3031414141414141	1	00ff	err	b'\x00\xff'
-1758	b32decode	3031414141414141	0	27	err	Non-base32 digit found
-1759	b32decode	3031414141414141	1	27	err	Non-base32 digit found
-1760	b32decode	3031414141414141	0	22	err	Non-base32 digit found
-1761	b32decode	3031414141414141	1	22	err	Non-base32 digit found
-1762	b32decode	30313d3d3d3d3d3d	0	49	ok	72
-1763	b32decode	30313d3d3d3d3d3d	1	49	ok	72
-1764	b32decode	30313d3d3d3d3d3d	0	4c	ok	72
-1765	b32decode	30313d3d3d3d3d3d	1	4c	ok	72
-1766	b32decode	30313d3d3d3d3d3d	0	69	err	Non-base32 digit found
-1767	b32decode	30313d3d3d3d3d3d	1	69	ok	72
-1768	b32decode	30313d3d3d3d3d3d	0	21	err	Non-base32 digit found
-1769	b32decode	30313d3d3d3d3d3d	1	21	err	Non-base32 digit found
-1770	b32decode	30313d3d3d3d3d3d	0	494c	err	b'IL'
-1771	b32decode	30313d3d3d3d3d3d	1	494c	err	b'IL'
-1772	b32decode	30313d3d3d3d3d3d	0	00ff	err	b'\x00\xff'
-1773	b32decode	30313d3d3d3d3d3d	1	00ff	err	b'\x00\xff'
-1774	b32decode	30313d3d3d3d3d3d	0	27	err	Non-base32 digit found
-1775	b32decode	30313d3d3d3d3d3d	1	27	err	Non-base32 digit found
-1776	b32decode	30313d3d3d3d3d3d	0	22	err	Non-base32 digit found
-1777	b32decode	30313d3d3d3d3d3d	1	22	err	Non-base32 digit found
-1778	b32decode	41	0	49	err	Incorrect padding
-1779	b32decode	41	1	49	err	Incorrect padding
-1780	b32decode	41	0	4c	err	Incorrect padding
-1781	b32decode	41	1	4c	err	Incorrect padding
-1782	b32decode	41	0	69	err	Incorrect padding
-1783	b32decode	41	1	69	err	Incorrect padding
-1784	b32decode	41	0	21	err	Incorrect padding
-1785	b32decode	41	1	21	err	Incorrect padding
-1786	b32decode	41	0	494c	err	Incorrect padding
-1787	b32decode	41	1	494c	err	Incorrect padding
-1788	b32decode	41	0	00ff	err	Incorrect padding
-1789	b32decode	41	1	00ff	err	Incorrect padding
-1790	b32decode	41	0	27	err	Incorrect padding
-1791	b32decode	41	1	27	err	Incorrect padding
-1792	b32decode	41	0	22	err	Incorrect padding
-1793	b32decode	41	1	22	err	Incorrect padding
-1794	b32decode		0	49	ok	
-1795	b32decode		1	49	ok	
-1796	b32decode		0	4c	ok	
-1797	b32decode		1	4c	ok	
-1798	b32decode		0	69	ok	
-1799	b32decode		1	69	ok	
-1800	b32decode		0	21	ok	
-1801	b32decode		1	21	ok	
-1802	b32decode		0	494c	err	b'IL'
-1803	b32decode		1	494c	err	b'IL'
-1804	b32decode		0	00ff	err	b'\x00\xff'
-1805	b32decode		1	00ff	err	b'\x00\xff'
-1806	b32decode		0	27	ok	
-1807	b32decode		1	27	ok	
-1808	b32decode		0	22	ok	
-1809	b32decode		1	22	ok	
-1810	b32decode	2121212121212121	0	49	err	Non-base32 digit found
-1811	b32decode	2121212121212121	1	49	err	Non-base32 digit found
-1812	b32decode	2121212121212121	0	4c	err	Non-base32 digit found
-1813	b32decode	2121212121212121	1	4c	err	Non-base32 digit found
-1814	b32decode	2121212121212121	0	69	err	Non-base32 digit found
-1815	b32decode	2121212121212121	1	69	err	Non-base32 digit found
-1816	b32decode	2121212121212121	0	21	err	Non-base32 digit found
-1817	b32decode	2121212121212121	1	21	err	Non-base32 digit found
-1818	b32decode	2121212121212121	0	494c	err	b'IL'
-1819	b32decode	2121212121212121	1	494c	err	b'IL'
-1820	b32decode	2121212121212121	0	00ff	err	b'\x00\xff'
-1821	b32decode	2121212121212121	1	00ff	err	b'\x00\xff'
-1822	b32decode	2121212121212121	0	27	err	Non-base32 digit found
-1823	b32decode	2121212121212121	1	27	err	Non-base32 digit found
-1824	b32decode	2121212121212121	0	22	err	Non-base32 digit found
-1825	b32decode	2121212121212121	1	22	err	Non-base32 digit found
-1826	b16decode	41	0		err	Odd-length string
-1827	b16decode	41	1		err	Odd-length string
-1828	b16decode	5a	0		err	Non-base16 digit found
-1829	b16decode	5a	1		err	Non-base16 digit found
-1830	b16decode	414121	0		err	Non-base16 digit found
-1831	b16decode	414121	1		err	Non-base16 digit found
-1832	b16decode	6161	0		err	Non-base16 digit found
-1833	b16decode	6161	1		ok	aa
-1834	b16decode	ff30	0		err	Non-base16 digit found
-1835	b16decode	ff30	1		err	Non-base16 digit found
-1836	b16decode	412041	0		err	Non-base16 digit found
-1837	b16decode	412041	1		err	Non-base16 digit found
-1838	b16decode		0		ok	
-1839	b16decode		1		ok	
-1840	b16decode	30313233343536373839414243444546	0		ok	0123456789abcdef
-1841	b16decode	30313233343536373839414243444546	1		ok	0123456789abcdef
-1842	b16decode	4747	0		err	Non-base16 digit found
-1843	b16decode	4747	1		err	Non-base16 digit found
-1844	b16decode	4147	0		err	Non-base16 digit found
-1845	b16decode	4147	1		err	Non-base16 digit found
-1846	b16decode	d11a6706fb40d6bd57526846b13e	0		err	Non-base16 digit found
-1847	standard_b64decode	6d2d3cadb3669cbd50e165e48b	0		ok	99f3de
-1848	b32hexdecode	f3e822086ecaa0075a69fc178ba8f83718aa8f3bd1f65e8144e61d9ab30fcb06a6c1ad8f2906e732b10f4db789d35ea68c088ab3818b	1		err	Incorrect padding
-1849	standard_b64decode	ac1dda96908137478bd536cf4b778ade1fe7a9010b3341c2bd2b4acec46edf287a43b9b21175306c76a81a57899322473081cd277bcd1e37f5	1		err	Only base64 data is allowed
-1850	b64decode	7dea42619767c21812e65b	1		err	Only base64 data is allowed
-1851	b32hexdecode	7ff59fce63911f0bd0b3cfba66de9c75853e4689789bf41f4c1d1ef9a18c1bec60	0		err	Incorrect padding
-1852	b32hexdecode	32dd53d4ae89eea07a4f579e2ff7ace2c1d298dcf01c945cbf59cd932cd33931f0d15eb411	0		err	Incorrect padding
-1853	b16decode	8acee7c54d54154a4c7a37fc313f6d14261af6daf82e983bb2dfd1dd19	1		err	Non-base16 digit found
-1854	urlsafe_b64decode	2f37bca2de4288d541a4655de9b2a329082ec45e5305f35aae40a235a49990ab85a85844fe7eaab34998c8efd8fafcaeaba5e5a5576f4712f09b	0		err	Incorrect padding
-1855	b32hexdecode	efbed42972af5676f7fd2361f34c1b45e66651fda26fe6ec2806d7a3612bb0	0		err	Incorrect padding
-1856	b16decode	a524c5d7cc32b0c439eea7c60df3510ef9e4a23aaba761d2a3b837084e7b17cefc87c1505bbcb26644	0		err	Non-base16 digit found
-1857	standard_b64decode	6fb16e3615d4caa7b19ecd7fd02148654d987ae265ca1feab2f091a4a9507775833b9324de2fcf43	0		err	Invalid base64-encoded string: number of data characters (13) cannot be 1 more than a multiple of 4
-1858	standard_b64decode	064c3cbf796da795c7d6ad6d75b8d7e5f0696295971c3f6697ccab5cb8672538ff	0		err	Incorrect padding
-1859	b32hexdecode	d8d645178af07ac195d10f0c963d71dc35f7111cdf9b2027c44da0a08194f4288cb6c5ca540434aee8ac126c3443ae98105a4310451c806222cdb161248c98	1		err	Incorrect padding
-1860	b32hexdecode	b99798f85b36a08ded0e5cdc2f2643f1906bf002a70d27aeb93981b84b43531d	1		err	Non-base32 digit found
-1861	b16decode	e9ae8e1c08d3224b9ac64c6fca067d28a33c277459afd400cc472df47206dbb8ede537e00bfe3cb8766d43	0		err	Non-base16 digit found
-1862	b32hexdecode	164edade6eac13a0a8e0664cd7	0		err	Incorrect padding
-1863	standard_b64decode	61e833c315475b2962be148a3f8f18f48f1054c7c5a324ec1e42c587dd6322ebd17a2500b46e54993be4fb5243157d	0		ok	6b719b4c17339d3442
-1864	b64decode	b0eaf3e08b053efc3908e8d42dcb88ceff3eb94e37bf4c3d1a2fd40ea9c2a93db83cc5e0e24d3e9176476bf22914	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
-1865	b16decode	60e6e6d048e9b71100315dfac5d2b6c2666e5f88b4b90dc450d731205d43de200c6ee5a81e1bac79ccac64f2b0edbf8cabc2452a43c0da4303a1158757df	1		err	Non-base16 digit found
-1866	standard_b64decode	e6d283b69aa3cc4ffa5b2466be1bc2fe39adf3ab8e685ea65f	1		err	Only base64 data is allowed
-1867	b32hexdecode	9721fa1e1dbe763fcfc385395c0064109bc68c565980620562669b9603cdcd8d93cce83af202a496b62a60385642d701569a2c126e1035b5a1	0		err	Incorrect padding
-1868	standard_b64decode	269bc9e7fbad0a08	1		err	Only base64 data is allowed
-1869	b64decode	3b494a47a72042abe71f447c3a39d836333c0b8a6f30df212ba22db97def	1		err	Only base64 data is allowed
-1870	standard_b64decode	9d1fb8cef21435685fb4be3054bc25182b75d018fa17b3a8d35e596edf3eb35a11a66f6cbcff3d69b3ed8e77ac6724dd1ab7a4baa629de0d639e61ac	0		ok	e61d13fae627668962c2071a
-1871	b64decode	ab346cba0789dc5671a1f3cc5e9296dc270ef91b04f1a73f000c0c31ef87b130e4054a897d56d872b4fce223616f006c12f92e	1		err	Only base64 data is allowed
-1872	b32decode	bf4fdedf7c225bec926c4c1334047171bb8bdacee75f81dc6ea520db1ee28c	0		err	Incorrect padding
-1873	b64decode	f8	0		ok	
-1874	standard_b64decode	7ac00a6817fa527c3e4e3a7b8124b83671ba59dd66	0		ok	ce144deaa61f
-1875	standard_b64decode	27418d0048333dfc24aef263fc58e443cf4930edc6d9b8c8cd3cfec8ba6d7b74f2170649ea374a6c18d253b2c3c412f5	1		err	Only base64 data is allowed
-1876	standard_b64decode	520bf54bec3ebb374656fdf7d6c2f80ec0284594854559bc	0		ok	44aec5544118
-1877	b16decode	2b62a20ec220d60cbaa98c95eacf0e7a64cdba8067f45cebcad94bdafbe1f787e5824d28e0a88f0e	0		err	Non-base16 digit found
-1878	standard_b64decode	8138549810e26511	0		err	Incorrect padding
-1879	b32decode	8b710cf199dee9e3783fd691f8073f	0		err	Incorrect padding
-1880	b32hexdecode	e352526b929b49a86b95	1		err	Incorrect padding
-1881	urlsafe_b64decode	5b2973ab8d5858b79a5a6e50dd851a3d1150ff43a63852658121	1		err	Only base64 data is allowed
-1882	b32decode	3b25d4edf2307ac05b488cef832f9212737f620227335275ed4a049fc2b59affe45920904d2d00ff	0		err	Non-base32 digit found
-1883	b64decode	cca88181af2ce44368ace8213e16eaee99a45859815080e14e9c11	0		err	Incorrect padding
-1884	urlsafe_b64decode	b818622820dd2c70324f70d50c55108b43311bb466c3714dece9969c7ccfddfb594ebbfc	0		err	Invalid base64-encoded string: number of data characters (13) cannot be 1 more than a multiple of 4
-1885	b16decode	5e9087eec7d7d3a91aa5841a6eb75df0c5edcce00fe76022ef09b443acbb8c1d5736c4e3661b	0		err	Non-base16 digit found
-1886	urlsafe_b64decode	ab20d69a2dd3eb35a76eb5b7aa00c7570bf41e34d2cfffaf296b5da28a7e58dae6729443	1		err	Only base64 data is allowed
-1887	urlsafe_b64decode	49dfa01760a2	1		err	Only base64 data is allowed
-1888	urlsafe_b64decode	ce5ee80055	0		err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
-1889	b16decode	bf6f5d291f4fc1bdc9211c7199ed3a8d3c9fa6b4c9e37c6db097978fa6b679021c	0		err	Non-base16 digit found
-1890	b16decode	3bceab8bde233909eb04a8d558f0845e581f95	0		err	Non-base16 digit found
-1891	b32decode	de4bb50ae704ea4e2acd595d89a623e6	0		err	Non-base32 digit found
-1892	urlsafe_b64decode	36ec9bae472ee13ffa25bcaac3ae501acaae8a5abcb2b5c7548f	1		err	Only base64 data is allowed
-1893	b32hexdecode	99dbfeecb5ae0cee4cd19a3c94cc56ddb79929	0		err	Incorrect padding
-1894	b32decode	94ea2d	1		err	Incorrect padding
-1895	b32decode	0b614d449130c1283f6091c9a4f786b3a727ac1b1a41ee61905246dfdbe909	1		err	Incorrect padding
-1896	standard_b64decode	d0d10bd1f2a91febd46ed675e33683591afd204e17ac0ed2cb	0		err	Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4
-1897	standard_b64decode	eff7a8	0		ok	
-1898	b32decode	aa875247093c46ddf08ec511500b86f716bcf8c558bc744771b6e459b52538a40b6968829e525166f4ad	1		err	Incorrect padding
-1899	b64decode	db9685e0a22c6cf8ccffde42b62d	1		err	Only base64 data is allowed
-1900	b64decode	cce4b8980c923f6f44f37e58ba	1		err	Only base64 data is allowed
-1901	b32decode	e32a9c6229f145e62d469b93a930	1		err	Incorrect padding
-1902	b64decode	e3d66e00f47f1985767ef2ec007f77ce6cfdd789a5ded5af74902cb86b15b5f0aa70f0bd8180aebc434faeabfae47032569e3d5d81696e	0		err	Incorrect padding
-1903	b16decode	e71c879f86c65c50e6c2d3a9938717d9d671e71fa0d041b8337869e690ebe14cdec7d28196472d4fb9aa	1		err	Non-base16 digit found
-1904	urlsafe_b64decode	26407cb2200fb04bfbf9ed8df6ee9520b66e1c31fe5ea26ba1d038aa67acbbf03faa0f616cb564ad0ebf85bfa6431ee70e8d2c	1		err	Only base64 data is allowed
-1905	b32decode		1		ok	
-1906	urlsafe_b64decode	48260d6e9b7d27c9e6e17994242c4e9baac99aa7faec7e520977	1		err	Only base64 data is allowed
-1907	b32decode	8e4cdc82c2ba2279353e32cb44c9b3e6c78cb7f55947c8cbf867bc	0		err	Incorrect padding
-1908	b16decode	d039a648a9a9f483f2a9	1		err	Non-base16 digit found
-1909	b64decode	40563cac65a6774fff0c8239f6e77acee82dfa324bfdb8250fbe4006d40b	0		ok	55ec0ef73d8a
-1910	b32decode	642796744cce186ae2	0		err	Incorrect padding
-1911	b16decode	95808f7e63a64f66b4c3753e443cc725e96af3a7cc0508b087626b01a15a85e438353fc039d545dc2dbf21c509d9ade21b	1		err	Non-base16 digit found
-1912	standard_b64decode	ba24dacd30433df52c4627b213e19884d6bdec76db0c	0		ok	d0216f
-1913	b64decode	e18222226fa329cdfedbf276c15fe6aa4d42f8870485e6fc58ba158f25906f9852703a51a3cb35f3921058c1517d34e4f47d4c7152c8d69ca4d0	1		err	Only base64 data is allowed
-1914	b32hexdecode	396eafe58892be28f73360be30ee8adc8843847999c537739f605a428e7174c0701a4b3f0d4101d7afc73da362e0fd46915d0cc4b9b215c785	1		err	Incorrect padding
-1915	b16decode	af044c46977d9b70f7f2d5135be0aab6f17a254974c5073c191f8f45fa55	1		err	Non-base16 digit found
-1916	b32hexdecode	877b6c2396d69c26333b	1		err	Incorrect padding
-1917	b16decode	8ee2d7b4ac9dc536514d711054c8346a6e5868	1		err	Non-base16 digit found
-1918	b32hexdecode	2f2e706a5ca5f00f3c19f3340e5b38d59f868e6b8bc0b463817ea3e7ff5511c5763a8695171f31f26ecb0db2c60b000558ca52db25b772e101fec3	1		err	Incorrect padding
-1919	b32decode		1		ok	
-1920	urlsafe_b64decode	95907bdabb9e42e4b10214f47350f2d58dfa446babd2c889df2f5dbf52fa10bca153cf8b0329c4ccf5c26e9ae6f6d6e538	1		err	Only base64 data is allowed
-1921	standard_b64decode	5ef2926fbf08537cba2b6e074c258c63ee950c56374d3bab133edcad360e53cc8167	0		ok	a12fa72dc57b33a4a0
-1922	b32decode	7f9810fb793b4c9f9c53bc88f945e706	1		err	Non-base32 digit found
-1923	b32hexdecode	947d15	1		err	Incorrect padding
-1924	standard_b64decode	21cb852e2b74df0ca49a994273f30c616862cd535c5e2f36d92c6774b92aac539f6f665635f3dfc2171630e1646a0e6158d33b473ab783c01c82f3	1		err	Only base64 data is allowed
-1925	urlsafe_b64decode	65076678864df604c0bf	0		ok	79fc4c
-1926	urlsafe_b64decode	f7d76fa638f990119fe3fec753ab10f5a364d9a6705b4e0a6d6d15c1	0		ok	a3c49da4d9a6
-1927	standard_b64decode	b8b3d7d6f69f37058dda0f9f8b8702270248113d9404502079	0		ok	ec73f2
-1928	b32hexdecode	98770c77f02210b3df2f99411d6f53c407ea6f5eb73af42ac81b9b	0		err	Incorrect padding
-1929	standard_b64decode	155cac1bd5ae249463dc9206b68ccbed1b6edc4f026a6793bda166add76674e8a2d04af51d1460	1		err	Only base64 data is allowed
-1930	b16decode	46817413b4b993973b1bccb0a757a0d42af592a091602b3e1a	1		err	Non-base16 digit found
-1931	b16decode	f68bd5cb3339ddfba0f4e090ca5ac8	0		err	Non-base16 digit found
-1932	urlsafe_b64decode	637659a9bfbbdd5e0926a71176a586810c65c5a52ced5a57ce2b3d03cdc97dd93df8886b6c4784d2eddb7d7d6398041bb163fb6ef6f5	1		err	Only base64 data is allowed
-1933	b16decode	f82d12b58e6d2a27ea157c6fc94f172d4202dabbd2319185514929f7996084a6a61e2445836eac9dd024e6ce16106ceb1ab3c589e3e64ec6c67b	1		err	Non-base16 digit found
-1934	b32decode	808d8252a0df09da6cc5d83ea3c9aad43c6143ef248a2f166cd76747de94b2e16773	0		err	Incorrect padding
-1935	b32decode	d1161e5601e25807e7de8a7e8d0bd8d9e6203453870e8d2e9d12d07c877c4d3606cfd55adebd3ecc3b62234246722057	1		err	Non-base32 digit found
-1936	b32hexdecode	2352488e6a439902fdae4184bf3ab4f2f212e93027bbea159082c93d35d056b8ac0b68	1		err	Incorrect padding
-1937	b32hexdecode	1fc6cbb0ea3ce17963e459a5c34d3bb68577a67d2d91bb7213a6fdca6a04	0		err	Incorrect padding
-1938	urlsafe_b64decode	06d586678df618b1433f493ebb84634eb248f9a9bad3e094d71f785e	1		err	Only base64 data is allowed
-1939	b32hexdecode	5dd1ed6c5f3d23ffe69ff5be4d42e68c1bbdae542941105a3b4deeb356a6287462c75a4527d87e4ec9fd5b40	0		err	Incorrect padding
-1940	b64decode	06c0c750bc239b1e0a742dbe61612e892bb66cf3bcdb1ec3	0		err	Incorrect padding
-1941	standard_b64decode	c83115bd4270f47bfeadc84603677eb9d62aef96ecea02fafc9cc2	1		err	Only base64 data is allowed
-1942	b64decode	e6ced64b3e563c3aa2b3625c93e1ef2dbd68614d253a9f03	0		err	Incorrect padding
-1943	urlsafe_b64decode	8a646bf90d	1		err	Only base64 data is allowed
-1944	b16decode	f66c4ba30a7953dee2fcb6c0f039aa7d	0		err	Non-base16 digit found
-1945	b64decode	e0652a78aa038d7a3f90c2701d8138571e75322f9bda2af75906270d606ca2403b8be9f0	1		err	Only base64 data is allowed
-1946	b64decode	43c39466511ae37d	0		err	Incorrect padding
-1947	b32hexdecode	d394d7263126	1		err	Incorrect padding
-1948	b64decode	70d7521ecddfdd8ed090b2c36f618a6a2ba2379bdac49b98a1fd6dcaaa509e	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
-1949	b32hexdecode	6fea54733dbe93e8ee295671ab551f4cf9e133dc4f95a99650b072fdc7cac76d45662d4e63b391918ba5fb9ed0406b0f	0		err	Non-base32 digit found
-1950	standard_b64decode	31d9bf4392d111a9b4b3c814c0e43428e9cd673d790b7f2c5d4f8d	0		err	Incorrect padding
-1951	standard_b64decode		1		ok	
-1952	b32decode	10f88f4afb155b08c506423be73dc149b90efbb4323b60480dfef6b3cf2f0fdca2653b7430d638124d75f8af87a9c13b376f85ec13dab943f818afc9	0		err	Incorrect padding
-1953	b32decode	b570688ba61c8d39a263cba52426	1		err	Incorrect padding
-1954	standard_b64decode	4f70440f68ea792aca	1		err	Only base64 data is allowed
-1955	b32hexdecode	565c6c7023a4d51f0397fc7776334db085ebd84d21bf21b35ccc0a67e83a53f125edb145	1		err	Incorrect padding
-1956	b32decode	46ee1899fc50340ab1e3	1		err	Incorrect padding
-1957	b16decode	3cfa8c9a6e1c1840f1149f06ed3261175eca9a3a41ce3ff656d19eac376201d66bd54adcad3f409396	0		err	Non-base16 digit found
-1958	b16decode	2bec84937f9f4c0a8c1c5bc38cd59ac1bb4cd92cebbd72786ad0da847f53c9a63571	1		err	Non-base16 digit found
-1959	standard_b64decode	444081a25c5b72d0febde17d020114f88da95b17f4995278d3f913593e808968feb25355bddf3052b4de8dabc00ec71a706594dbd12b29	1		err	Only base64 data is allowed
-1960	b32decode	3fa4c84918139fa93e34f8f1e30984661cdd45d0fd1cb0c2b021d38cbffb640991786f7425168b164232845002369d402112c252b209ad1da1065ef8b3c5c5	1		err	Incorrect padding
-1961	b32hexdecode		1		ok	
-1962	b32decode	d2680530b884	1		err	Incorrect padding
-1963	b32hexdecode	92c91aa08998297170bd8ec2fc6d360d94641c3438cc5d4494a8998c36158a2156f67bed3f47bc4946602870e1297fe19483c0b28d12167cb6c7151ffc6307	0		err	Incorrect padding
-1964	b16decode	38528d4f1ec9038d702b80033659608df9137268	0		err	Non-base16 digit found
-1965	standard_b64decode	ed722176b69272f2e342121ed0a5	0		ok	aefac1
-1966	b32decode	b46f45824edb95b4832cff452b935d6ae077b0d59a17857bf04ff1fa4b65e3780326653e74	0		err	Incorrect padding
-1967	b32decode	158dffeb60cf709936131c823d070dbf8d861be1f235f222	0		err	Non-base32 digit found
-1968	urlsafe_b64decode	4910025713e72aef1fd9a7c9b318fb816b6d6544d0870fd2e91da800b92268483a7adeb9ff276e4c64d264d6ed8c4196c9db7594ff	1		err	Only base64 data is allowed
-1969	standard_b64decode	b36ae08912ccfd7bfa0a5a58eac81a55b8754a8dbb9f4bc39d3b1e8b97d69060f4769174d267cfee1e00605257379ede90854b30c30b14fbb2	0		err	Incorrect padding
-1970	b32hexdecode	85bfca3b8caa23db2f158ac6928e28692a782c0bf800745131ffa4bea8f8147970d089b4238fd6e96f7eb8cf545d986162	0		err	Incorrect padding
-1971	b32decode	efac5120	1		err	Incorrect padding
-1972	b64decode	b2b48619e4baa486bfb412e9173df974f8d1ed032314f2b88e5ee724ce5bf4688976f5deafbf9fa7b3164ff88f378427bcf1271330893078	1		err	Only base64 data is allowed
-1973	urlsafe_b64decode	f2b15ba6748b8f145f4a0ddacddf1c54a10a33da48b1a2ac7ed9fddbd5789b88b34b48610b7e42f492b4105127e975a0fdb7	1		err	Only base64 data is allowed
-1974	b32hexdecode	cdd2119e	0		err	Incorrect padding
-1975	standard_b64decode	2b4e57ff718a3c3aa0142cbf9d19231708c1186f615774fa8c9133198996a7c22f4c3da2	0		ok	f8d5aaa1a5addff2
-1976	b32decode	6a0faab107cfa94cb9cc46e75f1669076610c60b53	0		err	Incorrect padding
-1977	urlsafe_b64decode	ea95f55f477d416ee00f44251fb9833e1a84fa8723397c695ba9e09013788aae668ee2ca5435182e670c842b2c	0		err	Invalid base64-encoded string: number of data characters (13) cannot be 1 more than a multiple of 4
-1978	b32hexdecode	aa56a59e6be8e1ae7705a73dec1e677f9d29afe931c94995f25ca324a1b3703bbbeb0d76c5b74da3b5a804418169a675	1		err	Non-base32 digit found
-1979	b16decode	e6	1		err	Non-base16 digit found
-1980	urlsafe_b64decode	109de812f333157165f6faf109fd7658cabdd6fc	1		err	Only base64 data is allowed
-1981	b16decode	ef62b8b0f26f06400331f3749ad665d880d8574d94e2ff3232f2d6ffa1417b62523174da0586b37bfea04d1b5083b93c2917a1616992	1		err	Non-base16 digit found
-1982	b32hexdecode	d01021fe38f403b3303e944b5dd59d05ca915afa7b577dd4d3bf81a87d865365b458444602	0		err	Incorrect padding
-1983	b32hexdecode	1dee34d586b876e723be26e71b054449e6f596c6da1882ccfe09e93a889c689ba9694bcdccb4315a66ae1038a363f9a27b7dac303eb9f29eec132940f881ad	0		err	Incorrect padding
-1984	b16decode	047745e73918a1a0119476a5	0		err	Non-base16 digit found
-1985	urlsafe_b64decode	ec938a08e4f25e94b18b675d03ee7bbb4f34a42116fb12175a5edde8dc5b8c4b5adda353e6e75abf20695e6a75bff62cb54967337139d521	1		err	Only base64 data is allowed
-1986	b32hexdecode	4a48dae93e5ac44599da99d45a951f2a8ccac841ae1cffe91adf1ed3fe4ab6f11a615a7b947ba6f7ad0776ced4638e4b66831ebfd055d2defc0ab6561c2fe2cd	0		err	Non-base32 digit found
-1987	b32decode	dca60824661210c1f7	0		err	Incorrect padding
-1988	b16decode	70fd9ef7c1b582d8a774f9cd330aac8e1b6fa35dcc161e1724226acaa2d602655d2c9003b48eb34399cd5c89e882a31f6c74	1		err	Non-base16 digit found
-1989	b16decode	fabaa59505e38a61abf089d2f1f677a33ff8b6f083e5185ff791bc1ba016c2ac3b	1		err	Non-base16 digit found
-1990	b64decode	17364eeade582e9c4c85ab38f78bcca5e5fd2e10d8d4a9a2382fe8d2a03cda76cca0cde81ecb79b34d	1		err	Only base64 data is allowed
-1991	b64decode	34d99b0b3d323ef2ebbb860945d6ea4dfe	1		err	Only base64 data is allowed
-1992	b64decode	ccda1b3c1a6d23e382a79c89	0		err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
-1993	b32decode	5b9cfa5e03fca4ab329e0af3576e3ebe4fc64cb2985b2bf22d0e4a8a11e44b6bdfef5b96875705beef6602ba0dd08e275d7aaae259df356aa8a7	0		err	Incorrect padding
-1994	b32decode	17c865f037ea96f3da0c9d4733186008cf3bb6b03c0ddb5e6efc9e37cf8d81716596d771609557f3bee0713ca9c8feda1afed85c	0		err	Incorrect padding
-1995	b16decode	411d628b1d90d5e64de353faa05e13a5980cd25bf535800fcd7aec659b2aa0462b4b9730e067dcf7fddb451f5ef2f2	1		err	Non-base16 digit found
-1996	b64decode	72be46a4ceceb5a3bb8ede98469299f8a9ae77059bb6f20c5e6bc9	1		err	Only base64 data is allowed
-1997	standard_b64decode	986577c9af2e8890465a8834506f9011	0		err	Incorrect padding
-1998	b32hexdecode	723d24d0195ca4de2fcda53b867a1c54ee043dc6451cc6258ee4c9	0		err	Incorrect padding
-1999	urlsafe_b64decode	f696cefc152a47217c8f4b8a9cdf2a406bcc	0		err	Incorrect padding
-2000	b64decode	dbbd21	0		ok	
-2001	urlsafe_b64decode	ab10bf96d9afe252ae3a0a042e669b2c1620ef43b3056a0d6d3f7320e1bd	1		err	Only base64 data is allowed
-2002	b32hexdecode	79ebe3bee55645106841eb79c272	1		err	Incorrect padding
-2003	b32hexdecode	9ba0b6739692fb80077cb738f2	0		err	Incorrect padding
-2004	b16decode	4646427591f9b1a48b6bcaf6057df907e140920fbe61a3ffef8e9e7abb8ee8d87163d066206d	0		err	Non-base16 digit found
-2005	b32decode	8d49d012c95836e65cafae1494eb75525561b99bbf34f925118dd0108c174e20ce7267467945d39ff95011a2c175da955416618c4aa54fb6	1		err	Non-base32 digit found
-2006	b32decode	93b126749fcb6b811540fd9a098b216e6dc263197d5808cbe0d0a7b3813d4a1ded9f50daa7	0		err	Incorrect padding
-2007	b32decode	e1ee59e3148e7e3ab1afef69e438c4560fbfd1d309811874692e1366364c7e6ab9e2c7baaf8b5718352b0350f467406d7b8b0150598244aa41	1		err	Incorrect padding
-2008	standard_b64decode	12a62f11ec815a17aa00efd45c70da1581eddd17a1758f6e4572b818ee619dbe11bc21bdcec8655fbd1cd0cf123f4f2103506e8ed3e95a0f48932296	1		err	Only base64 data is allowed
-2009	b16decode	39c12a695067855a9fbba4dfc153aa	1		err	Non-base16 digit found
-2010	b16decode	e5f8e8f7a249	1		err	Non-base16 digit found
-2011	urlsafe_b64decode	cc77f293f6c9e581e50c763627	1		err	Only base64 data is allowed
-2012	standard_b64decode	0e12a15960646ad8016a678e5e	0		err	Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4
-2013	urlsafe_b64decode	4c0fa6ce8d4fda6dbd165cd8ae729b8fdde27bf9567576c4396c84d1	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
-2014	b32hexdecode	d679690777bf2f2e520cf5450a11e4b326452dc3c09e194f07e2e9ebb9bffe56dc59	0		err	Incorrect padding
-2015	standard_b64decode	576bfa90e7bc47a899cd9966b259d0115124	0		err	Incorrect padding
-2016	b64decode	cb464e6060247a6b6721227496f5445762f94b28a5ccbb5e77c74f	1		err	Only base64 data is allowed
-2017	b32hexdecode	a6b622e2a0c5770dd427	0		err	Incorrect padding
-2018	b32hexdecode	bc3689ace214	1		err	Incorrect padding
-2019	b32decode	5f53547c4d55699bc7ce297113f2076a2d43ee451a872f3726f443c1b7202983e624231d863f5d58e8d10e6eab45631c3cd782489fad	1		err	Incorrect padding
-2020	b32hexdecode	e878a00b7fe5733849fb2f6568a104fc505c6d99cd30060eecc7f701f7125534abd1294dc200f2	0		err	Incorrect padding
-2021	standard_b64decode	0135194aa2d3ff53564bb71e4e96fa0111a5547f40513cbf3a683f6eb055fa2c	0		err	Incorrect padding
-2022	b32decode	6b311180ee81088f7db356d57f3405abb62263ce2fb3aa5a238a731265	0		err	Incorrect padding
-2023	b32decode	b275	0		err	Incorrect padding
-2024	urlsafe_b64decode	5a52ca920942886749b9a1b50953e0a3c7fded6a32ab1d4a98007c1d8332b067eada5605e2dc58f7fc0124537be1ff2bc27223cd96f2	1		err	Only base64 data is allowed
-2025	b16decode	12ae8f16dd57cc6f812030d8b8d8191b09fd493e287f886fd044c09607e18366d16822863f3722144af75065dade	1		err	Non-base16 digit found
-2026	b16decode	4ef2b8383cfc4355cb4474c7ddbe0a2b4c998d135c08af8207031ba290d9301dbeb7d587e7378c82aca331	1		err	Non-base16 digit found
-2027	urlsafe_b64decode	851d7c3cca65511a525e7d252b2287418032	0		err	Incorrect padding
-2028	b32hexdecode	2b789dc273cf57c25c70cfa72f5a4a1372592d	1		err	Incorrect padding
-2029	b32decode	65c35eae875f95ec7fe8cde19b888290d91c9ba41fe9a2a2935b8dfcc7a8e09f61c6bd527e483fddc3b091f8e05191a0927aee50e324a52670	0		err	Incorrect padding
-2030	b32decode	8574a2a1d2a3854d1843dccb6703514600496797cd4b610ea3e2185a89d4e081bf28fe1288e3764f69c1347691a0b073f6a0a009b658900e	1		err	Non-base32 digit found
-2031	urlsafe_b64decode	95dc08a57e7d3fddfa	0		ok	
-2032	b32hexdecode	9d716d626f457476c27790946cade78d858348f43b92b4cae9ed29bd162e58e5ec76800a6bbf21737b7fb7e8891850cfb7175892d8d1dea633763030ff934f52	1		err	Non-base32 digit found
-2033	b32hexdecode	f24a2df57ef4d60f9d7b55735b197f1a859bcf	1		err	Incorrect padding
-2034	b16decode	9b1f2a81c69568a52c2c	0		err	Non-base16 digit found
-2035	standard_b64decode	9e42b1fd51f27d705d5b2986a6d0d28517351c9c7997a328a46a285d3e3a735fd9e7fdeabfb66b485ebb2d63681ca568005343c6b33a9f56	0		err	Incorrect padding
-2036	b16decode	7499df10199d6654a38a31185eadd68eca44aaad2bdff5623edbbd48b9cb8240cf9b46b9163f00da14a8	0		err	Non-base16 digit found
-2037	urlsafe_b64decode	bb6a2e95a97be2a93424	1		err	Only base64 data is allowed
-2038	urlsafe_b64decode	c9f90221229f54985e2576b592e920f03025b0152fc2404f4984158f1c0e6e6062f9bba4be5baaca170a1754c1e02cd0b720	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
-2039	b16decode	324d2c8228c4a05cb7c1aa046933d35cdcd8114feeb5252e0dd57ff39454d5365ac57b5739639af23ed022c44e407c7c48412731fe39	0		err	Non-base16 digit found
-2040	standard_b64decode	ec07b94b65752cd8c9	0		err	Incorrect padding
-2041	b32hexdecode	db3174a9	1		err	Incorrect padding
-2042	b32hexdecode	9924e598a1b67060e91b7d2780088929	0		err	Non-base32 digit found
-2043	b16decode	f3729fb85f5d0b705c6d2f0bb6072e69e9b9425dad	0		err	Non-base16 digit found
-2044	b32decode	06b59cc0c216a0bfe923a7c86ef1ec72f49de73b74f4b48882253a3da849394f495731f7	1		err	Incorrect padding
-2045	standard_b64decode	1784a5ad631f77f258010792083f04fcd8fdca70a7a83076cdecf9c420312248042333c75a64c261357ebe809a0787	1		err	Only base64 data is allowed
-2046	standard_b64decode	18531fcd4a39cb9a08166e23d70d7ddff0350040cda75b0da4	1		err	Only base64 data is allowed
-2047	urlsafe_b64decode	db5f1eb66d658cd835a31284d9	0		ok	fe67b9
-2048	urlsafe_b64decode	ea9f5bc3bb3a0a29d545	1		err	Only base64 data is allowed
-2049	b32hexdecode	4b7abfd4b333fe6f5f8a7a17ab2348f216e9	0		err	Incorrect padding
-2050	b32decode	8d6833ee93dbd30618af366a5c3ea20dc9017e65c8898380b1f0bb5fa7f35b3c50c8db62a33699fe0c18e414	1		err	Incorrect padding
-2051	standard_b64decode	549551	0		err	Incorrect padding
-2052	b16decode	f5eb97cac37c632519ba3923fb3cce099aed7049a379daea5d416bd46bcef2780bc631b232a8c3d48723	1		err	Non-base16 digit found
-2053	b32decode		0		ok	
-2054	b64decode	2d2635374d24c0d5f9ea4626426f7e8cd1a5b2f0190f2cbaf290df9b84081c87	1		err	Only base64 data is allowed
-2055	b64decode	7ffdd53cba3e184d0574311fc74e390c0c5f0a3dccaf796b315792a3caf83ccb6883709f	1		err	Only base64 data is allowed
-2056	b64decode	802a31d6c6b4b7e7c6cef47fc398	0		err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
-2057	b16decode	7285f2b7b973c1240ccd904aa199e26d3d8566003229649de626525a953d	1		err	Non-base16 digit found
-2058	standard_b64decode	6a150386e0f482f9505c	0		err	Incorrect padding
-2059	b32hexdecode	855152c9da4a03fdd48df38119e7dc8d01a134059dc6f46321a692dfd0c55a787912250b2b52bba267a70a634d6625fbd6be905f3539ef40f42350bf78732804	1		err	Non-base32 digit found
-2060	b64decode	a86dba3dca05a2bb68fe37a8c872d5a01eb7891a2d1d81c5ba9df794df3635bccab5b5c186f01f559f212722	0		err	Incorrect padding
-2061	urlsafe_b64decode	fa1d42d0f1408ea404a4d22cf00594d495e375c7495b47afab86f17657f716fbbb0705b2de04817a70b9a1	0		ok	06e206bd6ce9
-2062	standard_b64decode	93ba4eb7ef69b4c6	1		err	Only base64 data is allowed
-2063	b64decode	a8779b3356e3360b252286ca75741033aa28c3e20e59ba0a2de3ca509466f1ee1722614f83	1		err	Only base64 data is allowed
-2064	b32hexdecode	ce2bd94081fa5f0973acd7c07f459ba59627ec304d903e49dfa8625b531cb5dcbb3be5c784e23c0ca7f4a4ddcc02dea72904f9541986f1450a98dd1f	1		err	Incorrect padding
-2065	b32decode	ec6949be7d94927070f606e507cadbf4d726fb62b01acb56fdf245f9c040d32fb92c077f80662bb163b15d7fab720a5e9c9fec	1		err	Incorrect padding
-2066	b64decode	628f341432453c6e03613a9adbc0befe4ef584d26765322ecc35a48bbc46344b93e93a5254db431a70657f14118ff253940032a9af4b	1		err	Only base64 data is allowed
-2067	b32decode	433ba92a2a6d94b0d2faa371bcfbfe59ec167772a2c9d70a178210ba86c1bade6c175fe9b353415a15e8669d31cc86ffc342586f4946	0		err	Incorrect padding
-2068	b64decode	5ff5015df69a59833ea014cd7d50f9bf80daedadcee3f4288401eaf3f0d4f807ec318d244c6442d9cbe5899b673b97ad0f04c8	1		err	Only base64 data is allowed
-2069	b64decode	a534361174316a3c90c84cc7ff6429a5	1		err	Only base64 data is allowed
-2070	urlsafe_b64decode	dc4610f3f8f1369180674a08ab7ee79a3cb94727c902d7ad16202e735f19e6f2b887f75edc443c5f4c01a6710a8159c313	0		ok	17a8091acfc3fcba98
-2071	b32hexdecode	348fe56572907b50dc9c49a67b3658479c8ce63f71a4e4f5f7f70a1daf41a2060b3055bc42d8a02f5858c17f8a84	1		err	Incorrect padding
-2072	b32hexdecode	c1cb0343851264c6a659a242d23bb4	1		err	Incorrect padding
-2073	standard_b64decode	1fb7a8b18d5c9eead023a6ffc14bbf7d44e33e33872a651ff518bf22eed252da1a13f512	1		err	Only base64 data is allowed
-2074	standard_b64decode	d6964cff2f74791643cb7dcf71ea92aec717b2f7081474d8382890fc0981d051678cf7aa23ddf0580072a4b5eed89f10ea9ccc8c09becb8a	1		err	Only base64 data is allowed
-2075	urlsafe_b64decode	041f39b6e6f8a5b5b42265edb89141b3084f40a3	0		ok	f5e00e
-2076	urlsafe_b64decode	0f9c111f97a531fc0e737333ebd0c4ca446f8d2310be9a3c8be355ca	1		err	Only base64 data is allowed
-2077	b64decode	5b59d48daac580925ff6705eb7e8a77753c6bccdf7aba6fbd8bb388de0af3821c4a5a89ca8f95de2c9371216d410	1		err	Only base64 data is allowed
-2078	b32decode	9dfd938673de2969ddf7e7c4a8a2d068e45ec6d201ae2c93a653e112726a1520cae0edf8b1b92851484d70a4877afc124987317331d84077699f1bae84	1		err	Incorrect padding
-2079	standard_b64decode	50568dc43c1e5df7d94d08216912c06e52aebb807024e9	0		err	Incorrect padding
-2080	b64decode	361bdb4d70f7262ab2aa762905e59952fa4aef	0		err	Incorrect padding
-2081	urlsafe_b64decode	941c8fd8a92930147dab2740a1d74032fa1993a2c175d3f47af1038d456c424603290b20	1		err	Only base64 data is allowed
-2082	b32hexdecode	3da2a88093c017a4b82b2b	0		err	Incorrect padding
-2083	standard_b64decode	dc0bb0d790a886ec83454990b4b58b0a08af42d3bfc320dd3b7c43076405cb147962a30b61f7d3f24f36a4	1		err	Only base64 data is allowed
-2084	b16decode	c36c57c4749577926d6ea56a885a3c9e54ed94a316d1c0077f7f	1		err	Non-base16 digit found
-2085	b16decode	8845a27b8151b03ef00a00cecf71aece478f5baf02aef56753a0244cf5771b74225cae1248b0	0		err	Non-base16 digit found
-2086	standard_b64decode	ce2f666ad3e1f77b78aee5762ada3a342edc16574b164e9ba578c7240f68055022498adc4ca1e6b70eb8be51ce83f4bb7219effcd1e75bdc	1		err	Only base64 data is allowed
-2087	b32decode	e0f0bac2eeb8db5eebbcd583c05fc88f	0		err	Non-base32 digit found
-2088	urlsafe_b64decode	09bf6a778f985d1f120679446db91873ae9c773f9a8e102416a6c818f40c	1		err	Only base64 data is allowed
-2089	b32decode	0aa48e3f649472f6ccca84ddafd7fde6bc13e228871540d06dd5d2533d570aef354ce3937fdf9bb8c0150e50b2f798302cec5bc328	1		err	Incorrect padding
-2090	b32hexdecode	48b7ae7f471a0be14882fc4e8ea8537fd4e1ee0507750d17e7c6faf11b85ab64ecce64812e110d7576c678f77664a03d66b413372d0a569555575a	0		err	Incorrect padding
-2091	b64decode	f162b17e7ffdf698fcffe0e19cfec4d7f1957da7714f2aac406178785fce2649ab906489	0		ok	6ea39ac7121d
-2092	b64decode	668f49227e9ee8e1e57eb443fff73dba739aa35dec1d8cc3bda83b670112ae5d7c01950b77848c6695ab180d4ffafd91fc3ad38feed431	1		err	Only base64 data is allowed
-2093	b32hexdecode	06fad212a6c1e762fce31681a36c4a73fefcafc33b6fc38c37c69b473b9a47d35f0c35fd	0		err	Incorrect padding
-2094	standard_b64decode	bfdfd66412ed895f68627ecb	1		err	Only base64 data is allowed
-2095	b32hexdecode	c76545c1a6b4ee241075f53219033b9a61da5582ca4dc166101b058052254e0a3400990b0544f609c8d01423adb6	1		err	Incorrect padding
-2096	b32decode	a9f92026a4e3339b4c47a4e4162ff883dbafc823dc91f553722e6eee5908f29c212f8b51efbb9929e9ab986433fe98fddef9d29d9d0844bdb4d7	1		err	Incorrect padding
-2097	b32hexdecode	1765df81e9c50ad48c9f7c82566c47881e97667dcef86fb5efcd1b901d13bf4caa8f927967ead4d0514204	1		err	Incorrect padding
-2098	urlsafe_b64decode	f598dafa1662a26ae4806d95c34e	0		ok	6e398d
-2099	b32hexdecode	6bcdf943e5f191f750cfd4a744656cc8f1b7d8f8ef8db2c6dce4169407d9df93dd45403a87adadb8aa9c250d13c8619514b1fe7ab3ada62b18173486	1		err	Incorrect padding
-2100	standard_b64decode	4701150805f79392f292bdf2a55655b3ea1c221cf73dd7305e14d904e7e770	1		err	Only base64 data is allowed
-2101	b32decode	fac0b7691ca0c4b0c63e3234627e0e693e7780	1		err	Incorrect padding
-2102	b16decode	89afadb45f5923	0		err	Non-base16 digit found
-2103	b32hexdecode	effa84ff18b287a95585767aaaab8586a3967760001752503457e9f4f7ae552c4c82ac7508f880e988	1		err	Incorrect padding
-2104	b32hexdecode	12b905ad5c1fa1c54a991ede0f838eb8c65c45aebde7afa41c2cbccd21fb7cb1623dad4397fa2d9c343af37b31	0		err	Incorrect padding
-2105	urlsafe_b64decode	c9e29039523205f1b3ab10f9236975fbc477304c4cad6bc5d82cfc49496374b452281035b3b0	1		err	Only base64 data is allowed
-2106	urlsafe_b64decode	3a2a4b59591d7c8fcbfc06ef276f3aef6daf9fcb3dffbeb8285001468790ac492d24331f2160cf929e1d37adb18e0e8b4da33361a28e50e519cdebfa65	1		err	Only base64 data is allowed
-2107	standard_b64decode	85dec40a4124a2499c708ff4bbf6d1b6e3453b147847ab5837e58bec8c8f3f71d8c8eda741	1		err	Only base64 data is allowed
-2108	standard_b64decode	9ba4f4d3223ee08926f4684502a8daeeb669e08f494838b245	0		err	Incorrect padding
-2109	b64decode	feba113e83f6fe0c1c3d7aabac26bae7d655f287f99dc539e45550a39b3b	0		err	Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4
-2110	b64decode	6b1f8e5419c7a4b76676ef78934fbd190c9962aea8ec50c5280a312321925301a0b3eaf6c3e7e38c275b58fa1a7ad9ed90d36e28	1		err	Only base64 data is allowed
-2111	b16decode	e1103a7a24b489a6e18b0f33156383c11812c3f618e48849f20b3852defa1049e79059a57d47250f638e6ee84f29cbc4c0e5e616b10cfda65f67fa92	0		err	Non-base16 digit found
-2112	b32hexdecode	526cc9e9	0		err	Incorrect padding
-2113	b32decode	5b8d15efed2f6deb6d914d09bfa646ffa16911d6a165	1		err	Incorrect padding
-2114	standard_b64decode	963d72e03a62970943555f02956e634cedf265910cfc4f9ade0e781b6637afedc87ca5fb55	1		err	Only base64 data is allowed
-2115	b32decode	708aa6e3438045f06ced5a220e0ddfd9f81414819e35d077ada6d8457a165c312b6d0ecf096bd61c9bb6a7544c39992946a12abb296b7b753507f6a51cdc41	0		err	Incorrect padding
-2116	b64decode	f8bf6fcaa1b5864b301c5a91958da5ac4a48ddc1b50473310d3ced2c9383679cc86a2cdb9a8883a398a4e5	1		err	Only base64 data is allowed
-2117	b32decode	5b723416ff019d66155a54ab80286b1819d24d2f8ab84ffbd323ff23966e3a7a108fd752b64092ef3f	0		err	Incorrect padding
-2118	urlsafe_b64decode	ec1e4b3c59425d722932f6c06ebd594452a03bf4e752625480524c4dd5251c954bd40eb91317a892ce73ed02b925f542a7	1		err	Only base64 data is allowed
-2119	b16decode	4961e70ff707f4aad2fb431e412024774bdc8a4eb633e3280462c967a2af	1		err	Non-base16 digit found
-2120	b16decode	d39582a35e8587ea057fcdf095874b	1		err	Non-base16 digit found
-2121	b32hexdecode	d3cf1838949415f55090312207216a7a522b3727617b7974df8c6bbf	1		err	Incorrect padding
-2122	b32decode	4ab9e1c152c29a892b8b4fcdd01702aa7ac05ad3e2d2e9376e3b09c3f2e4593f41e32aae659c36c1fe4b879877c785df322091c9d073f514a99a8786	1		err	Incorrect padding
-2123	b32hexdecode	298afe13898cd0ea8c5c6d903ab7b91c1f60cf0f5e892ad4b2bd328ca3ad23e79f996781f18bc033b3939c926289	0		err	Incorrect padding
-2124	standard_b64decode	4e98bfda691a358573761c71ebe7c11d32d427ae1e3195348def87b7822a499579d4237d87f34717e6	1		err	Only base64 data is allowed
-2125	b64decode	a31ac721e3356483ce43596aaebef074dd7b5c9062d6c70e40550d8fb56c5e762f813aac360192ce4e33e44e3fe228b9a5bf920508e55c652441	0		err	Invalid base64-encoded string: number of data characters (17) cannot be 1 more than a multiple of 4
-2126	b16decode	03350c942d10b212cd1c980b956e776c300b3358736c4cb3915210	0		err	Non-base16 digit found
-2127	b64decode	dcc61f08d1c67e49ea80ab688d41132e625adbc45277ab2274480dc47afb3aa4c80c74fa7db7b2bae37158a55b74baf61cd79c6bbfabdc5f87d92bfe	1		err	Only base64 data is allowed
-2128	b32decode	574e2a6076438b14826ac7ae7b2ad2f6423c6ba9a0c0e2df08950f8aa99e0b22a9024ea7d8bd3bdc9972075954be5e1e	0		err	Non-base32 digit found
-2129	b32hexdecode	9739628780d1992020e954ba42ae8dfad939023985deb6d526a0e3007ff994c163fbd105945d7efa5e84614c626c87766aac	1		err	Incorrect padding
-2130	b32hexdecode	fbbfc7d2a343cb3af3f25c3fc289eb75b0ec9d58dc08b62715fb90463c4140300220faef9da40de05a2b9bb9fe25f7c3	0		err	Non-base32 digit found
-2131	b64decode	629b6b9d7e141cc4e949adefaadf3de2bb3698e3ed5c0104644e9c3deac3c13412fa3911eb5dd4195cb90c98627498082cf6497299	0		ok	6e423a74de3d6ed22b
-2132	standard_b64decode	a0dcfa6670	0		err	Incorrect padding
-2133	b32hexdecode	f56b1fc1d16c1ddd041bacc6d71d730ed7ecdf237351ff80ee54fe	1		err	Incorrect padding
-2134	standard_b64decode	ae63d593e72111996010c5c5fc0c2bacd18381d1f31b175229bea53c1b6f404d397752e022b7ac24	0		ok	73e46833dc11
-2135	b32decode	d67c704670eb9a0f0d14858e3f39d2f2107f7797fced34e159dc36bc61275de95987d52c41a0	1		err	Incorrect padding
-2136	b32hexdecode	8a98000c5b03e8f8ee912b589cce0bf1895cb0a48f1addab905993617c7d2ac903364386d8949851824441b25440946a6eac8368182033260d7ec54cb15f60	0		err	Incorrect padding
-2137	b32hexdecode	4e17b03d4f686ed92a2eb039c10ffd4c9cd287dbdec023b5623cf424be5847ce1fd18876517a2cea3d71c00e9d86f88f4f3ba569f7d5c0f76d42a06a	0		err	Incorrect padding
-2138	b32decode	0665474149e00d34841d8c54dd838ea5b3f53d14980217eca33a2573bbddd8	1		err	Incorrect padding
-2139	b64decode	2e81310d02e6b9449e148e6044c375ac0947df9a7419599a	0		err	Incorrect padding
-2140	b64decode	3195fdcd5489fec275e26b9663116cb97d2ee4ab3ed3108f	0		err	Incorrect padding
-2141	b32decode	95d695dea54d33e825263d55ebba9d4d3a3ffff463d7b3e8ec03	0		err	Incorrect padding
-2142	standard_b64decode	157a33bf66f3e3ffc4d11bc18e9a7a	0		ok	cf77f3
-2143	b16decode	a1ad896541ba45ea2ccb443d9e11558d755c5552fe1388c67648	1		err	Non-base16 digit found
-2144	b32decode	4dc3f44ef5b3f5426dab115cdaf14783c0f6ffe18c904d7ffa0a4c778d633e19ca6385cdaeaf37fb8e18f0b878	1		err	Incorrect padding
-2145	standard_b64decode	51a81b50f153f769e701b40bd49e019018aa34dd496ba5384bb7c2bde2305b25c9fc26049717c2429bd3a58d514cef	1		err	Only base64 data is allowed
-2146	urlsafe_b64decode	fb9f39322d0d72542380e23ae92d3d61b9dd91	0		err	Incorrect padding
-2147	b32decode	892ae0410a9a6bc366d953d2a045167dfd156df7fb173bb9631646a4c40956bd0fac977da8e3f8755c112b	1		err	Incorrect padding
-2148	standard_b64decode	aa7766b8c175ea8b6d4c027d21c11d2fea	0		err	Incorrect padding
-2149	b32hexdecode	5531cdd6	0		err	Incorrect padding
-2150	b16decode	f1b5abc3a201	1		err	Non-base16 digit found
-2151	standard_b64decode	ce5866119b1009b500e1a926511857022c03fe3761b67781930cbd745f	0		ok	5df416edac2d
-2152	b32hexdecode	c0dbc6a87906e47c44ff0604e958b101c6133f882783388d007b4d695eaa0803222a480421ea8787569fe1b8b7685546df21268928163cfa966b644904	1		err	Incorrect padding
-2153	standard_b64decode	c43f05ebef06a8182a1f3e8626	0		ok	
-2154	standard_b64decode	ebe3b1d0e5a6bc5add646f4488f280cb05019b65ff9a3a14eb4e805f548a94f5	1		err	Only base64 data is allowed
-2155	b32decode	73e97ffd42147eb2ffc7d1395523cb4c1a5a1daf43e0fbd39bd10dd94fa314	0		err	Incorrect padding
-2156	b64decode	707217615c2f8e6072d77d8d6278db796a8c5d0e03ec01a383536b02f1a8edb341cbdf2becea2a1524b8f67f8b8867d8b3146f	1		err	Only base64 data is allowed
-2157	b32hexdecode	610911e5a2703587428f4deb	0		err	Incorrect padding
-2158	standard_b64decode	1ad3b9e68be83cde76c439b143c236e300c418910a63ba797c6645	0		ok	bfd0ba7327c4
-2159	b64decode	d44939e6530f048bb72e4290f8d879a85f406c082d2dea2dc3a1c3ed849fb5d9118250	0		err	Incorrect padding
-2160	standard_b64decode	b0bf93c0d6c918d20d4174b6b3a826d2f665	0		err	Incorrect padding
-2161	urlsafe_b64decode	96905f90f4958f3dc0fb1291aea8abd5000f75d9	1		err	Only base64 data is allowed
-2162	b16decode	d7be4362cc9b6fc193f05fbd4ccdd3231b155eca33e40cfddca776b0a7c862b94dd61314c2f53380d6be	1		err	Non-base16 digit found
-2163	b64decode	0b04e56f0dca6d3be461b3d6	0		err	Incorrect padding
-2164	urlsafe_b64decode	ea2c0bf8e9b107c68c6b8d531f8c9507bbe155a28dc2f8455b9c96c8a91b1afee54157732f30987d0c47673a5871165b938d	1		err	Only base64 data is allowed
-2165	b32decode	7e7b00ae76e9fb954ccb21a91d724c61b40cf015c3acc5	1		err	Incorrect padding
-2166	standard_b64decode	70710015a6d0994427	1		err	Only base64 data is allowed
-2167	b16decode	9e0c5abd1d44be631dd31151bcd9565ceb461b	0		err	Non-base16 digit found
-2168	b64decode	b935da718d8d235c989ae7c2ee690f459cd62b1aa9faeb21891c59167ee8f82f6dac546e6be772	1		err	Only base64 data is allowed
-2169	b64decode	42f116	1		err	Only base64 data is allowed
-2170	b32hexdecode	2c0cd098ea651999f9d0c8	1		err	Incorrect padding
-2171	b32decode	4a	1		err	Incorrect padding
-2172	b32decode	be5d8fb90adab0e63d8f	0		err	Incorrect padding
-2173	b32hexdecode	70de70af71a777617c77642bb7058b239adfd7444d	1		err	Incorrect padding
-2174	b32decode	b3463210a91ace2ab1f1466fe86fa546cd6b	1		err	Incorrect padding
-2175	b32decode	bdae725cd6646f40f1	0		err	Incorrect padding
-2176	b16decode	2eb203988801de9dc0720f329f6b36759d8a621b1f71af221711fe4d9c81bb012818e6f2d9114c65e92f0c558df973d748eac49ed377406160f4d7cd07b9dc	1		err	Non-base16 digit found
-2177	b32decode	4fdd3c6e1800c3d08834d3d229bf08dce559aaa69fd566f977222a98b30dd922a753e94c881c17526c9a	0		err	Incorrect padding
-2178	b32decode	d1a2792ddb5ceef67907f3654f60fef78201b3519e589c4af2b920bc9dc0e8b14fe505a2aaa7b27d	0		err	Non-base32 digit found
-2179	urlsafe_b64decode	17c0c147d6c805d1938c2ec99365976498a8715d9ac0271de1f39beedf81589087182633cf309c970fc14cff1e59ae8b	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
-2180	b16decode	1cf8f3	1		err	Non-base16 digit found
-2181	b16decode	7f953e704f1e35cc9fae944a7ce2ced42da75db1e961b411a7d1	1		err	Non-base16 digit found
-2182	b16decode	203ea123964f22a2bd70864d6719f53d3fbfaf40f2229ea842ee752768bb19b7131d526c58ef00ca6f7882600161ef125809f672208e9efd6a31129920af7a	1		err	Non-base16 digit found
-2183	b32hexdecode	ad376aec74d29eebc650a0de0bd513b11bc1156b0a552c8b017169099baf6cca6ee6eaf7eb1f0a5cf24d9eb344963fe5c4b1f2cfbdab728962950498c1c95fa3	0		err	Non-base32 digit found
-2184	b64decode	df9458a8fd6029aaaddbe15ac328952a25c8a1a58b75d89c2007570b342f90	1		err	Only base64 data is allowed
-2185	urlsafe_b64decode	b12e1f1b5442b30283473e199dad3c421f10d53884adbb829fc231bf39eecf840da8d88ed4d89c944cc60ab09fa04293398995388b1e72	1		err	Only base64 data is allowed
-2186	b32decode	6b38b8c52459f7addfd4ad96cc7fc0b090861e804d3897265bc84f583d7269fff6bc4906d1e2967b31bfc31a3372a14b965d7d6ae100a9ebcc33f6	0		err	Incorrect padding
-2187	b64decode	07112c59bb0bd84fd337d357ebad9074c5c8	0		err	Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4
-2188	b32hexdecode	49352a59aac9e579b9d2fd189fa42b704898d4b8df135fb25794d3732a0da4517c5632116b1bde4c3359700b785868cfb09cf5b5663a761d4b23c805d9	1		err	Incorrect padding
-2189	b16decode	dd0059adc115d0cc1f1c132aee	0		err	Non-base16 digit found
-2190	b32hexdecode	3ffe498d61a7fe28f8bcbb54d342528f378b266d5df5	1		err	Incorrect padding
-2191	standard_b64decode	e4f837a1433b382fab0db72f616cf6a3c35445a8135da06e13e344650a257907e07bc5bcb61c369d7cab12e2a4da8332591773	1		err	Only base64 data is allowed
-2192	b32decode		0		ok	
-2193	standard_b64decode	506798c0249929b454ea08cf1a2fc7cb822d04109112cd93046c0c1ab52faccc093adf	0		err	Incorrect padding
-2194	urlsafe_b64decode	bf7573324606227521272c1d80972943a716b3abaebfd5dc6ed24e7dc1541887024c46f7c69e9ca350	1		err	Only base64 data is allowed
-2195	b32hexdecode	e4f045963a503e1ddc9611590eaf1b5ad9da73d8ef593675017b0b9e4bc32a2c7f2651d0d15170ac3fa7bbb4b0fff4cc254c	0		err	Incorrect padding
-2196	b16decode	eef02c507d2e2c1e3d1a133d55622d4e1d	0		err	Non-base16 digit found
-2197	urlsafe_b64decode	216bc58224547263cbb7116bca5caf984b23	1		err	Only base64 data is allowed
-2198	b32decode	556b967c4b3cb0a21ab09189fcd184b181224eebc32fa5	0		err	Incorrect padding
-2199	b32hexdecode	192e597d7d13f1495679ea2340b1e52fd3508850d7	1		err	Incorrect padding
-2200	b32hexdecode	7cdd92dde95b	0		err	Incorrect padding
-2201	b32decode	c0f0f331e0fdb1d0502a4a62c780bdf68f	1		err	Incorrect padding
-2202	b32decode	84c1666af5e3cbb52f2603d79d44a0715e691b7de81fd12af5e6291500e9bd90b07ce60780d9becb569bd4c23c9f74388067c64a89b45e08cbc25c468f39	1		err	Incorrect padding
-2203	standard_b64decode	e977ce9012ad15be8aaec5c5c24d13c4f4dacc7ee5daba8c482ec4825f65fb1c77639d92a4a53c1d095e9444b3ce6dc6ab01098b60a9c2d2abfd	1		err	Only base64 data is allowed
-2204	b32hexdecode	6ba18fc2b8	1		err	Incorrect padding
-2205	b32hexdecode	3bf161fd11f0d66cbdf6371a55c169bcb1837fd45b0757a72d58c0	0		err	Incorrect padding
-2206	urlsafe_b64decode	b2a82173	1		err	Only base64 data is allowed
-2207	urlsafe_b64decode	89e2667003ad83dd0274fe	0		err	Incorrect padding
-2208	standard_b64decode	8e368acf4f34d4bc222e82960c0f6bb053f1c259ffaf6ddcf3b5	1		err	Only base64 data is allowed
-2209	standard_b64decode	7ae2ebc89906e5344c7e43d0b632fa34ce	0		err	Incorrect padding
-2210	b32hexdecode	e28d43881930f54752aacb9851bcec896cc71a2b81f6da520ec19ffa0ade3cb48f1bea4a44be114a92cc9e92	1		err	Incorrect padding
-2211	b32hexdecode	57f4b522b23978f65b2b06c0	1		err	Incorrect padding
-2212	b64decode	acd4f6dd8ed1e8a721be7b2059b090b30e57b7dd2d07f8210ad9ea3fdb357025f91db6	1		err	Only base64 data is allowed
-2213	standard_b64decode	dd2a4d7d395c6524d428d293a218e5a1a2a5ca445557b8a0d5a70a6a354b0b60d5bab573d0085513d46d35a2c7d06acb4fe1	0		err	Incorrect padding
-2214	b32decode	8718d8b139b9b3efdbde97e0c8727b5e02ef6674ebd943f3b37bf07ce73ac95309fb94	0		err	Incorrect padding
-2215	b16decode	e85a1ebb77d7def8ee5c75	1		err	Non-base16 digit found
-2216	b64decode	c9b3c3375d46d7f71a17fd6d243729d3cbe53b3687a3a57e86d4be44414aa752ce530ed45f8e9948361f7756058b1c8cf393	0		err	Incorrect padding
-2217	b32hexdecode	bd44cec9d951ff57de51e7e40eb9bbae661423c3a28c640c72eac20be1ba7d19144d4da0cfffacc8311d32d68626a775ca032b04e301ce1f0350efed8fdb	0		err	Incorrect padding
-2218	b32decode	224c2c00421ce9fdea9141f54d41846d2e20cb3369cee5fea48e47b051e9cee8410ec521826fd4e1693766a6d60e474d21bfb228b235dadfc7ee	1		err	Incorrect padding
-2219	b64decode	038319400c8319153d27315fc63f1daa5a745fe7960b1fa618da5f2a47ee410d10a47665189a27a080da354edab9	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
-2220	b32decode	198e25b428f55d18314700	0		err	Incorrect padding
-2221	b32decode	069df8213a61fb9739	1		err	Incorrect padding
-2222	b64decode	b2	1		err	Only base64 data is allowed
-2223	b64decode	0d04acb10f3bd6212f904a7adfcd211208439c3af6de1062c966de16024f13bbfd2f53ced6aa381a7d6a6b1a6bcd3750c385185e88e1	1		err	Only base64 data is allowed
-2224	standard_b64decode	8b8101c653e138d01bf3cec0050edfdf00df15228c553ea47a5331fe1bdb58adc70492244f6c8311fd63cf8765da3390	0		ok	4bc5334b55ce95c7b7
-2225	b32hexdecode	0d5baa703a70e7593c4ef1b840cd8a3672dac9a0bf	0		err	Incorrect padding
-2226	b32decode	088126dcf9589d37c62f3116891d87e5fc14b819a1e6d7233a47a0c0463b871fe550ee9637e1e1ba4bea4f62533dfe59a17797f6bd6bec6d	1		err	Non-base32 digit found
-2227	standard_b64decode	2c5ae7469cda05a5f2529115c2df873fd366ab8d0213db99861d9a993a9fb8	1		err	Only base64 data is allowed
-2228	b16decode	740fd9	1		err	Non-base16 digit found
-2229	standard_b64decode	52ae72bf6fcb4964caa4a84be0616ba5123ef80dab38a7c8	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
-2230	b32decode	c2c4dc1ca688b73d2ea4e47f1f5d59a31ec80b98bed72d12bdc83d87487383e3ef584afad6d216036755a4fc97ee705cef	1		err	Incorrect padding
-2231	standard_b64decode	784e5edc5cf4c6d6916081916fb6bd6bd7ab8b5d5b00de8b464ad5aedcac3a2cdb0142c3156a9478c60757f41b09c4fcc5	0		err	Incorrect padding
-2232	b64decode	4df787030f931e43	0		err	Incorrect padding
-2233	b64decode	2bb1dcf2e80eca	1		err	Only base64 data is allowed
-2234	b32hexdecode	5102eaa0f4db6eb6b2be4480345261c443c0596a2e6d6f6caadca9b31da7fb6638fd1915	0		err	Incorrect padding
-2235	urlsafe_b64decode	d50e564fc5c13a14e482	0		err	Incorrect padding
-2236	standard_b64decode	cefa0664e6be20968d1b61a210a862c3d986a3d52be25ba652aa59ae36c7a5a41febec108e44674fb2	1		err	Only base64 data is allowed
-2237	b16decode	9decd20eba39963ea60a12168c67b4ec15513a6ffc4bb11d5d2d1074bf9c	0		err	Non-base16 digit found
-2238	urlsafe_b64decode	27d1931ef7023e036cf938b5f54f2023987a95b3e702	0		ok	97c3b3
-2239	b32decode	e5ade3854db76884b3d771c868cf8fd2d21684b859025e428515be2ad8d5325f3f867e204058f1bfa1bdf7c7	1		err	Incorrect padding
-2240	b16decode	98747cc587ad5fe63ce4830748c355	1		err	Non-base16 digit found
-2241	urlsafe_b64decode	06ab5043f1d05ab6	0		err	Incorrect padding
-2242	b32decode	f099c2826414315cec41310ef370e67fb000ffdb0b731f9133bdb82a57c9205e8077452894494f41f8e2f8c5e4f9571a7cc6eee4b0eaeb9293ac	0		err	Incorrect padding
-2243	standard_b64decode		0		ok	
-2244	b64decode	0772c50b7390c5784f902d5d58f10a628cf793ebeaf26b262e62d02d8160ee	0		ok	aecc4e5db91b
-2245	b32hexdecode	f5d57939ec9d61520d2d8e3fcbca8f6a2d7575ea08ca64b8e444e75159297145118a74d32268f013592e5092255b705f360f911e80	0		err	Incorrect padding
-2246	standard_b64decode	b318e9cdeac5098463f03dfbe5f9c10b488c3ef4d602a366b429a511	1		err	Only base64 data is allowed
-2247	urlsafe_b64decode	59fec953875c1d16c765978d4551ed7497440a02ca7f715e592f5f33d3f9a54a6fa3559077d5c8	1		err	Only base64 data is allowed
-2248	b16decode	42e6c376222e475e840e79974cabcbf89fe24c7eedf96eff91fbc9c576a0c6	0		err	Non-base16 digit found
-2249	b16decode	b6848b260ffba101d29ab1ee6320f86895fb1e0676bda53bc9b4a28a39af58	0		err	Non-base16 digit found
-2250	urlsafe_b64decode		1		ok	
-2251	b16decode	2a679c1a419e873402eca1873f79adfb208df83c010d796bbf9af57d6b3910f69648550fa4f9f8	0		err	Non-base16 digit found
-2252	b16decode	1098d017360c3d0bb1a3d8eb43c9413baea1b4e52ef772d8adf00e853a17be69b36ab3	1		err	Non-base16 digit found
-2253	b32decode	5262ad9406bc77186381	0		err	Incorrect padding
-2254	b16decode	26172813127b86971bb35c911fc5f10fa6095b6fc3ec95a94802d7f6301976218a129d3cb247ab4a554dd042027bd5d9a450	1		err	Non-base16 digit found
-2255	b16decode	0a3b6c5142f0e77374e69e4503f2cd3b23b71e13dccc8cf186f9e433d339d8223cf3a9c7255428c595	0		err	Non-base16 digit found
-2256	standard_b64decode	967a142a64ce167354634f7750	1		err	Only base64 data is allowed
-2257	b64decode	1c4df2f608ca34c5c8a5273576d6b0732441ed4ee3e19d762b8fd743ca453cdab8a7b21ec7d22517347b5928ce	1		err	Only base64 data is allowed
-2258	b16decode	299a0b37d5	1		err	Non-base16 digit found
-2259	standard_b64decode	5c690eb633448b3f10e9f7	1		err	Only base64 data is allowed
-2260	b32decode	c8e35bad804c	1		err	Incorrect padding
-2261	standard_b64decode	9abcf3	1		err	Only base64 data is allowed
-2262	b32decode	70ea3f186e7748768c99161a6a2dcccd971d37cb1e7ac923938f171f9b0f03	0		err	Incorrect padding
-2263	standard_b64decode	aad8b832c842dcd29b878c66971a4b5f	0		ok	d817ca
-2264	b32hexdecode	6099dcea8a3110d0315c32134fb29405a2f845ff453d811017c49f32a6fb09e7a5	1		err	Incorrect padding
-2265	standard_b64decode	8530b3e7eb0ae7d8af50d4	1		err	Only base64 data is allowed
-2266	b64decode	3c4e39f176	0		err	Incorrect padding
-2267	standard_b64decode	60f959d2de4c74b952a21e65bc23027fce268c077a8efa61b20ae7ae75da396de2173d2c79069c5a6ca2f73611a086e8aa22e92f346546	1		err	Only base64 data is allowed
-2268	b32decode	21c9de08a116369dae5a829e2e37f29dc0eb3e	1		err	Incorrect padding
-2269	b32decode	d1c6fde1a9eef98c67c5a17a00539c0f65eb741628669f471f4a0d624ee621233cf9526ba3aa0f3335e084a4429678e21b2a15cc	0		err	Incorrect padding
-2270	b16decode	49fd	1		err	Non-base16 digit found
-2271	b16decode	7099cc7ace84658b95210cc87af4137cb29e12586833a5e9e882ce9039d89c80d3aa545299f46c63fe453b452e	0		err	Non-base16 digit found
-2272	urlsafe_b64decode	716e800736d750e59d5689cfff484ec70d34eb47bdd5ff0ec8f003cf	1		err	Only base64 data is allowed
-2273	b32hexdecode	b8c44fc42a4c80959429e6ff744c963b95be56f9fd2bdd286f67a219508f733f424428a89330bc3d0f1d3b4488	0		err	Incorrect padding
-2274	standard_b64decode	ef79d45a80a969effd44d7d6f8b0d5fda26560d84f64782cf4e9142d789d8e3cde5baf97f2bb68511acb63ceaa74f4bcb2	1		err	Only base64 data is allowed
-2275	b32hexdecode	7c15b4	1		err	Incorrect padding
-2276	b32hexdecode	70e727904347c8f2d014303083c331d6edfc	1		err	Incorrect padding
-2277	b32hexdecode	cb49f12cdd3d8d7df7fdb709801b1b175f06610e47348d3b9592069aeedc033839001a0554c586	1		err	Incorrect padding
-2278	b64decode	903efbeab6ef379d6c2b9333f23473ce5ec3672117fc3b57863989b791026e2da03735eb3bb06bcd23d8	1		err	Only base64 data is allowed
-2279	b64decode	d025	0		ok	
-2280	b64decode	af2de7f5606e911231a5a35f549a5cb429e121f154fa81a930c04565353005968c3edd19cddd2856287b404d9652	0		ok	9f54d3d047b9d15311
-2281	standard_b64decode	0731b6ca83efa6a382f3edf5f523b97c9dad30a6067c3951ca8b982c8af009b5d488fff7bcbedd8f8c2c8db1f3d6bce3a8ccc8ed081c9d	1		err	Only base64 data is allowed
-2282	standard_b64decode	f1c7dd608af78b4e3518e7bb196f41b0cc7b654b9920	0		err	Incorrect padding
-2283	b16decode		1		ok	
-2284	b32hexdecode	ffe89c2e	1		err	Incorrect padding
-2285	b32hexdecode	03e4bfa3ace6c790cbf7a61a77c5caeff5fb057f2a3401243b74c754	0		err	Incorrect padding
-2286	standard_b64decode	a13b7dfbe5f9cb517babfa2ad522dda20959a4e2e6628cf661bfb616906d58d283c87eb5fdba86abd53b9ca3	1		err	Only base64 data is allowed
-2287	b32decode	43	0		err	Incorrect padding
-2288	standard_b64decode	2c22b959b855b441	0		err	Incorrect padding
-2289	b16decode		0		ok	
-2290	b32decode	43a88abbc5646e6bbf0e17f8f627952af9ff71e2e628fd69079f3a7ecdb8bbe1bc4ef3603649ea59023ac88b43c71660cb38f719aeb12cd4	1		err	Non-base32 digit found
-2291	b32hexdecode	6ddba3298a9287735a9ede12de0398ccf8e383d882bd8d0883217f4b	0		err	Incorrect padding
-2292	urlsafe_b64decode	2021a0f3c542cf1a2bccfe1217be8057bf038c2bb4764fe311021e6071093129bb	0		ok	07e5bebceab5
-2293	b32hexdecode	e0ed8356ac6212980d3bfc	1		err	Incorrect padding
-2294	b16decode	346b6e	0		err	Non-base16 digit found
-2295	b32hexdecode	18f4372841d4b50d2908ec195c9dc254a9f49e34c12c72f9e8cea230b290c668b47b7bb2f24fda8d2f7dd7b82964f2ec9793dfbaa9458a	1		err	Incorrect padding
-2296	b16decode	f372224cebf6cf3c3bf28d1891e8b40c5f3d956499815f92bab0b68c61b400d749c9ae7d	0		err	Non-base16 digit found
-2297	b64decode	b40efa009595776de3cf6e16a197674b18efead246287aa9e1f505a09bb9a79941cdf67a5ce31d333822d4189606	0		err	Incorrect padding
-2298	standard_b64decode	037420fa94c3f9141bed3b79044001d839fe911d803ff04eddabedc8936bc065cdd08f787d	1		err	Only base64 data is allowed
-2299	b64decode	3360542f6e33fb5e29a6afe24464a661911b915e49e6c32f19541e72c8036c0b585d674301d49270db090e77493c6e4339	1		err	Only base64 data is allowed
-2300	b32hexdecode	f67fb0267b92c0	0		err	Incorrect padding
-2301	b64decode	12e5e4cef7669c8a6307fb69782880f88328a7c1f74ff896b0463e3adfdab88d7ba19c0fb97b3ed79b621963	1		err	Only base64 data is allowed
-2302	b32hexdecode	4d679d927111b4e10e09533c3c53ec796092814cf56536141ae611651a681ce7c1cc9bda05bddcb671f7e308c5b8898020783b920c3984e60b254e84	0		err	Incorrect padding
-2303	b64decode	d3cb412c76b1f5f27d8afffbbd4fcb2a3accdff8f46e3e362948f7ce2a7f5631dab94d20c7ceec0a2c4c626c89f50f14e3e9fffc874fe1ae6f	0		err	Incorrect padding
-2304	b16decode	1c1c88d51e0b559833d70442371adb512ae9	0		err	Non-base16 digit found
-2305	b64decode	63e26d8e940eb965756c538dd10b7d53ebb84bdbde18b546d4480a85f9c949756d1fcbea1f7c9bdf1a462a03f8615bc9b3	1		err	Only base64 data is allowed
-2306	b64decode	9df54e260a6bf025b74c0c91ffd9829645532a95300525c22135fff6c2e68cf00ef8a619a617c8ec2ee20a1bf70a0c90c53d90c719	1		err	Only base64 data is allowed
-2307	b32hexdecode	eea1bde0ea1630694c759e430b230f623d2aa0a7e4484f7c601d70929ff1e49b5c951979a35997090448152c	1		err	Incorrect padding
-2308	b32decode	5e45459ec7d4d09b79c049aeb8c893b1d766	0		err	Incorrect padding
-2309	b32decode	7882c5b03fffd13c50559e0cda75e9be3be6a77963d7bbebb5f1c144e9d8a3e50346585f9afb2d057e56	1		err	Incorrect padding
-2310	urlsafe_b64decode	edcac4d7b6c1da7d4546b5dbf40939b2667652af44c62419268af5f8723b70de6a5b3a	0		err	Incorrect padding
-2311	urlsafe_b64decode	8fe326c6672869d3056d24523cb5f8442e9992ba159eb16a81e9df9a8e1443a5db80db16b38d1c30de56147114b01d367ebbd6e93ba9efd2	1		err	Only base64 data is allowed
-2312	b16decode	06276ec2c06f3984aa1800de4d94b85f26322ed23e81630e00b7e883591d9fca1b6bb2280446cc105ec3a54f1c57a6b5d555bd81b83f44674cf2b922cfc7	0		err	Non-base16 digit found
-2313	standard_b64decode	34d50be07fe53ad576d462339d1a44d64badc00e1498de3f	0		err	Incorrect padding
-2314	b32decode	9c1504eb415c	0		err	Incorrect padding
-2315	urlsafe_b64decode	f54ed1d26105d77657f64f8158029e658c37aaa2bb8c4eecae21b61f6a7161ae4dfdd207baa7ef3d4dfb595f20217d	1		err	Only base64 data is allowed
-2316	standard_b64decode	bfc83d96f934248d6cdd8959f2b320583e07dc29217a70d6346cfde462893742b3eabbbfcfe8b3d4568258b0dbec2317984efa48c2fe0607c2f7f562	0		ok	e25617ce9e256fb0555cd1db
-2317	standard_b64decode	9ba36bdbdf76aa3850b0baa545f1a039816f7dad6452ec34a9e244	1		err	Only base64 data is allowed
-2318	b32hexdecode	58dd	0		err	Incorrect padding
-2319	b32decode	7224baa5cde0562c4c70e499e27905cd	0		err	Non-base32 digit found
-2320	standard_b64decode	bc6cbc9b69161ace05c668f14b9b324e1d2976b6e8e98ef77f2799b508a18aa4	1		err	Only base64 data is allowed
-2321	b32decode	298d01da86014559e9e48075dafc8240788cdc377f8579776b61594d24ba5cad7b864885be0806d327a6a49fffc9ab65	0		err	Non-base32 digit found
-2322	b64decode	49a7bb8f9336b8a52f7a019829b5ea9b1c835d4817eb684c0bb335af0dbdac1b9e35537b02a057107eaf16563905fd	1		err	Only base64 data is allowed
-2323	b16decode	a7b68adc40eee1460986da425174f7a7cc3d0ab64a94c2f3e59b72e4b081c6a613937d4cd75d383026	0		err	Non-base16 digit found
-2324	b64decode	fc8318a9f35ed0514d0246ae8d6bd2230204a6b8863c8406e454c8a744d3537f9e225affdfbeac4b8cc26942365b2be81e276b	1		err	Only base64 data is allowed
-2325	b32decode	9d0a4195	0		err	Incorrect padding
-2326	urlsafe_b64decode	3d8bb2af80d8dd88f58468a37703efc839c8c979f01e12e8739dcff0	1		err	Leading padding not allowed
-2327	b32hexdecode	5d656dd8f33e842bfe1834d78c6f59a85ff661e01a58e98e6aeb5e2e9a6e354bb783fc188578	0		err	Incorrect padding
-2328	b16decode	d0d4a5b9a89fefceccb21c8faf9b4ec3d5c6a1e94191dd2e1c9269f222a101aee6	1		err	Non-base16 digit found
-2329	b16decode	279be5385adaf35a042c39	1		err	Non-base16 digit found
-2330	b32decode	6694265f8102b44214f6e79533ef464b3604b9765827e9d931ed261eb9157578dac5bd0dbcf4cbdd67a2	0		err	Incorrect padding
-2331	b32decode	09491f80d941ac1e3b5514de683542aeed12b561107fa387	1		err	Non-base32 digit found
-2332	b32decode	2af8efdeafda	0		err	Incorrect padding
-2333	standard_b64decode	b036b957efcbc068bb96b8fcfc6ec4917d7f91e4344f18e8fc	1		err	Only base64 data is allowed
-2334	standard_b64decode	75d9c5dc4f0c36b76cdc2b2e7fb068c7620fb0142f19d27c07342755155d8ba1b17694fcf85a442d	1		err	Only base64 data is allowed
-2335	b16decode	6be73401c2b973	1		err	Non-base16 digit found
-2336	standard_b64decode	c9038793db34b5c335348f2882ec547dea9403c9c3	0		ok	e39e13
-2337	standard_b64decode	4f3d2ca2a5cbed6d9ecb4467969cd46da6b91ff788e7367a700621623bff3101c55da8090dfaa588f5cf0c3319790cbbd592835fb237f3	0		err	Invalid base64-encoded string: number of data characters (13) cannot be 1 more than a multiple of 4
-2338	urlsafe_b64decode	ba269604d45d3fad65420e01e58d6ea0186ccdbb47dfb23f	0		err	Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4
-2339	b16decode	4547e54fff9b012106164b1a275d3062caa8da804a1fb396128f5d4ecad5c12a62a6b610eb6de7d2b332b40b	1		err	Non-base16 digit found
-2340	urlsafe_b64decode	223153ba0f9f3185e7b2ab98fd922c86445d7c5636af046f444452e3f7d2d0afbe47d7fe3b064022c956bd57b0f502ff5016c1e6a5597c7df75b	0		err	Incorrect padding
-2341	standard_b64decode	d55be504fa9e793afb1f6d3964bc27ba9b1021fcb5b396211c9010361d72ecbba01b9c05091cf69638aa2f819695422b8b871f	1		err	Only base64 data is allowed
-2342	b16decode	719c0c60	1		err	Non-base16 digit found
-2343	b32hexdecode	53680b98a3fe	0		err	Incorrect padding
-2344	b16decode	0e3550a703f60bd6fecb0d050c	0		err	Non-base16 digit found
-2345	b32decode	884f58611feda31fc7b21a8cf874b340c0097279baa2adb37056332789509b34d91af8b188a88caf9a155ca17ac86102d8f7154d5a3bbe6b	0		err	Non-base32 digit found
+1487	b64decode		1	21	err	b'!'
+1488	b64decode	2d773d3d	0	21	err	b'!'
+1489	b64decode	2d773d3d	1	21	err	b'!'
+1490	b64decode	5f5f383d	0	21	err	b'!'
+1491	b64decode	5f5f383d	1	21	err	b'!'
+1492	b64decode	41414141	0	21	err	b'!'
+1493	b64decode	41414141	1	21	err	b'!'
+1494	b64decode		0	616263	err	b'abc'
+1495	b64decode		1	616263	err	b'abc'
+1496	b64decode	2d773d3d	0	616263	err	b'abc'
+1497	b64decode	2d773d3d	1	616263	err	b'abc'
+1498	b64decode	5f5f383d	0	616263	err	b'abc'
+1499	b64decode	5f5f383d	1	616263	err	b'abc'
+1500	b64decode	41414141	0	616263	err	b'abc'
+1501	b64decode	41414141	1	616263	err	b'abc'
+1502	b64decode		0	00ff0a	err	b'\x00\xff\n'
+1503	b64decode		1	00ff0a	err	b'\x00\xff\n'
+1504	b64decode	2d773d3d	0	00ff0a	err	b'\x00\xff\n'
+1505	b64decode	2d773d3d	1	00ff0a	err	b'\x00\xff\n'
+1506	b64decode	5f5f383d	0	00ff0a	err	b'\x00\xff\n'
+1507	b64decode	5f5f383d	1	00ff0a	err	b'\x00\xff\n'
+1508	b64decode	41414141	0	00ff0a	err	b'\x00\xff\n'
+1509	b64decode	41414141	1	00ff0a	err	b'\x00\xff\n'
+1510	b64decode		0	27	err	b"'"
+1511	b64decode		1	27	err	b"'"
+1512	b64decode	2d773d3d	0	27	err	b"'"
+1513	b64decode	2d773d3d	1	27	err	b"'"
+1514	b64decode	5f5f383d	0	27	err	b"'"
+1515	b64decode	5f5f383d	1	27	err	b"'"
+1516	b64decode	41414141	0	27	err	b"'"
+1517	b64decode	41414141	1	27	err	b"'"
+1518	b64decode		0	22	err	b'"'
+1519	b64decode		1	22	err	b'"'
+1520	b64decode	2d773d3d	0	22	err	b'"'
+1521	b64decode	2d773d3d	1	22	err	b'"'
+1522	b64decode	5f5f383d	0	22	err	b'"'
+1523	b64decode	5f5f383d	1	22	err	b'"'
+1524	b64decode	41414141	0	22	err	b'"'
+1525	b64decode	41414141	1	22	err	b'"'
+1526	b64decode		0	2d5f	ok	
+1527	b64decode		1	2d5f	ok	
+1528	b64decode	2d773d3d	0	2d5f	ok	fb
+1529	b64decode	2d773d3d	1	2d5f	ok	fb
+1530	b64decode	5f5f383d	0	2d5f	ok	ffff
+1531	b64decode	5f5f383d	1	2d5f	ok	ffff
+1532	b64decode	41414141	0	2d5f	ok	000000
+1533	b64decode	41414141	1	2d5f	ok	000000
+1534	b64decode		0	3d3d	ok	
+1535	b64decode		1	3d3d	ok	
+1536	b64decode	2d773d3d	0	3d3d	err	Incorrect padding
+1537	b64decode	2d773d3d	1	3d3d	err	Only base64 data is allowed
+1538	b64decode	5f5f383d	0	3d3d	err	Incorrect padding
+1539	b64decode	5f5f383d	1	3d3d	err	Only base64 data is allowed
+1540	b64decode	41414141	0	3d3d	ok	000000
+1541	b64decode	41414141	1	3d3d	ok	000000
+1542	b64decode		0	4141	ok	
+1543	b64decode		1	4141	ok	
+1544	b64decode	2d773d3d	0	4141	err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
+1545	b64decode	2d773d3d	1	4141	err	Only base64 data is allowed
+1546	b64decode	5f5f383d	0	4141	err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
+1547	b64decode	5f5f383d	1	4141	err	Only base64 data is allowed
+1548	b64decode	41414141	0	4141	ok	ffffff
+1549	b64decode	41414141	1	4141	ok	ffffff
+1550	b64decode		0	5c	err	b'\\'
+1551	b64decode		1	5c	err	b'\\'
+1552	b64decode	2d773d3d	0	5c	err	b'\\'
+1553	b64decode	2d773d3d	1	5c	err	b'\\'
+1554	b64decode	5f5f383d	0	5c	err	b'\\'
+1555	b64decode	5f5f383d	1	5c	err	b'\\'
+1556	b64decode	41414141	0	5c	err	b'\\'
+1557	b64decode	41414141	1	5c	err	b'\\'
+1558	b64decode		0	09	err	b'\t'
+1559	b64decode		1	09	err	b'\t'
+1560	b64decode	2d773d3d	0	09	err	b'\t'
+1561	b64decode	2d773d3d	1	09	err	b'\t'
+1562	b64decode	5f5f383d	0	09	err	b'\t'
+1563	b64decode	5f5f383d	1	09	err	b'\t'
+1564	b64decode	41414141	0	09	err	b'\t'
+1565	b64decode	41414141	1	09	err	b'\t'
+1566	b64decode		0	0d	err	b'\r'
+1567	b64decode		1	0d	err	b'\r'
+1568	b64decode	2d773d3d	0	0d	err	b'\r'
+1569	b64decode	2d773d3d	1	0d	err	b'\r'
+1570	b64decode	5f5f383d	0	0d	err	b'\r'
+1571	b64decode	5f5f383d	1	0d	err	b'\r'
+1572	b64decode	41414141	0	0d	err	b'\r'
+1573	b64decode	41414141	1	0d	err	b'\r'
+1574	b64decode		0	2722	ok	
+1575	b64decode		1	2722	ok	
+1576	b64decode	2d773d3d	0	2722	err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
+1577	b64decode	2d773d3d	1	2722	err	Only base64 data is allowed
+1578	b64decode	5f5f383d	0	2722	err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
+1579	b64decode	5f5f383d	1	2722	err	Only base64 data is allowed
+1580	b64decode	41414141	0	2722	ok	000000
+1581	b64decode	41414141	1	2722	ok	000000
+1582	b64decode		0	27225c	err	b'\'"\\'
+1583	b64decode		1	27225c	err	b'\'"\\'
+1584	b64decode	2d773d3d	0	27225c	err	b'\'"\\'
+1585	b64decode	2d773d3d	1	27225c	err	b'\'"\\'
+1586	b64decode	5f5f383d	0	27225c	err	b'\'"\\'
+1587	b64decode	5f5f383d	1	27225c	err	b'\'"\\'
+1588	b64decode	41414141	0	27225c	err	b'\'"\\'
+1589	b64decode	41414141	1	27225c	err	b'\'"\\'
+1590	b64decode		0	2722090d5c	err	b'\'"\t\r\\'
+1591	b64decode		1	2722090d5c	err	b'\'"\t\r\\'
+1592	b64decode	2d773d3d	0	2722090d5c	err	b'\'"\t\r\\'
+1593	b64decode	2d773d3d	1	2722090d5c	err	b'\'"\t\r\\'
+1594	b64decode	5f5f383d	0	2722090d5c	err	b'\'"\t\r\\'
+1595	b64decode	5f5f383d	1	2722090d5c	err	b'\'"\t\r\\'
+1596	b64decode	41414141	0	2722090d5c	err	b'\'"\t\r\\'
+1597	b64decode	41414141	1	2722090d5c	err	b'\'"\t\r\\'
+1598	b64decode		0	3a2c	ok	
+1599	b64decode		1	3a2c	ok	
+1600	b64decode	2d773d3d	0	3a2c	err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
+1601	b64decode	2d773d3d	1	3a2c	err	Only base64 data is allowed
+1602	b64decode	5f5f383d	0	3a2c	err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
+1603	b64decode	5f5f383d	1	3a2c	err	Only base64 data is allowed
+1604	b64decode	41414141	0	3a2c	ok	000000
+1605	b64decode	41414141	1	3a2c	ok	000000
+1606	b32decode	41414141414141414141414141414141	0		ok	00000000000000000000
+1607	b32decode	41414141414141414141414141414141	1		ok	00000000000000000000
+1608	b32decode	21212121212121212121212121212121	0		err	Non-base32 digit found
+1609	b32decode	21212121212121212121212121212121	1		err	Non-base32 digit found
+1610	b32decode	61616161616161616161616161616161	0		err	Non-base32 digit found
+1611	b32decode	61616161616161616161616161616161	1		ok	00000000000000000000
+1612	b32decode	4141414141414141414141414141413d	0		ok	000000000000000000
+1613	b32decode	4141414141414141414141414141413d	1		ok	000000000000000000
+1614	b32decode	2121212121212121212121212121213d	0		err	Non-base32 digit found
+1615	b32decode	2121212121212121212121212121213d	1		err	Non-base32 digit found
+1616	b32decode	6161616161616161616161616161613d	0		err	Non-base32 digit found
+1617	b32decode	6161616161616161616161616161613d	1		ok	000000000000000000
+1618	b32decode	41414141414141414141414141413d3d	0		err	Incorrect padding
+1619	b32decode	41414141414141414141414141413d3d	1		err	Incorrect padding
+1620	b32decode	21212121212121212121212121213d3d	0		err	Non-base32 digit found
+1621	b32decode	21212121212121212121212121213d3d	1		err	Non-base32 digit found
+1622	b32decode	61616161616161616161616161613d3d	0		err	Non-base32 digit found
+1623	b32decode	61616161616161616161616161613d3d	1		err	Incorrect padding
+1624	b32decode	414141414141414141414141413d3d3d	0		ok	0000000000000000
+1625	b32decode	414141414141414141414141413d3d3d	1		ok	0000000000000000
+1626	b32decode	212121212121212121212121213d3d3d	0		err	Non-base32 digit found
+1627	b32decode	212121212121212121212121213d3d3d	1		err	Non-base32 digit found
+1628	b32decode	616161616161616161616161613d3d3d	0		err	Non-base32 digit found
+1629	b32decode	616161616161616161616161613d3d3d	1		ok	0000000000000000
+1630	b32decode	4141414141414141414141413d3d3d3d	0		ok	00000000000000
+1631	b32decode	4141414141414141414141413d3d3d3d	1		ok	00000000000000
+1632	b32decode	2121212121212121212121213d3d3d3d	0		err	Non-base32 digit found
+1633	b32decode	2121212121212121212121213d3d3d3d	1		err	Non-base32 digit found
+1634	b32decode	6161616161616161616161613d3d3d3d	0		err	Non-base32 digit found
+1635	b32decode	6161616161616161616161613d3d3d3d	1		ok	00000000000000
+1636	b32decode	41414141414141414141413d3d3d3d3d	0		err	Incorrect padding
+1637	b32decode	41414141414141414141413d3d3d3d3d	1		err	Incorrect padding
+1638	b32decode	21212121212121212121213d3d3d3d3d	0		err	Non-base32 digit found
+1639	b32decode	21212121212121212121213d3d3d3d3d	1		err	Non-base32 digit found
+1640	b32decode	61616161616161616161613d3d3d3d3d	0		err	Non-base32 digit found
+1641	b32decode	61616161616161616161613d3d3d3d3d	1		err	Incorrect padding
+1642	b32decode	414141414141414141413d3d3d3d3d3d	0		ok	000000000000
+1643	b32decode	414141414141414141413d3d3d3d3d3d	1		ok	000000000000
+1644	b32decode	212121212121212121213d3d3d3d3d3d	0		err	Non-base32 digit found
+1645	b32decode	212121212121212121213d3d3d3d3d3d	1		err	Non-base32 digit found
+1646	b32decode	616161616161616161613d3d3d3d3d3d	0		err	Non-base32 digit found
+1647	b32decode	616161616161616161613d3d3d3d3d3d	1		ok	000000000000
+1648	b32decode	4141414141414141413d3d3d3d3d3d3d	0		err	Incorrect padding
+1649	b32decode	4141414141414141413d3d3d3d3d3d3d	1		err	Incorrect padding
+1650	b32decode	2121212121212121213d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1651	b32decode	2121212121212121213d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1652	b32decode	6161616161616161613d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1653	b32decode	6161616161616161613d3d3d3d3d3d3d	1		err	Incorrect padding
+1654	b32decode	41414141414141413d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1655	b32decode	41414141414141413d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1656	b32decode	21212121212121213d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1657	b32decode	21212121212121213d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1658	b32decode	61616161616161613d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1659	b32decode	61616161616161613d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1660	b32decode	414141414141413d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1661	b32decode	414141414141413d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1662	b32decode	212121212121213d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1663	b32decode	212121212121213d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1664	b32decode	616161616161613d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1665	b32decode	616161616161613d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1666	b32decode	4141414141413d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1667	b32decode	4141414141413d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1668	b32decode	2121212121213d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1669	b32decode	2121212121213d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1670	b32decode	6161616161613d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1671	b32decode	6161616161613d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1672	b32decode	41414141413d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1673	b32decode	41414141413d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1674	b32decode	21212121213d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1675	b32decode	21212121213d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1676	b32decode	61616161613d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1677	b32decode	61616161613d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1678	b32decode	414141413d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1679	b32decode	414141413d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1680	b32decode	212121213d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1681	b32decode	212121213d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1682	b32decode	616161613d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1683	b32decode	616161613d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1684	b32decode	4141413d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1685	b32decode	4141413d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1686	b32decode	2121213d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1687	b32decode	2121213d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1688	b32decode	6161613d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1689	b32decode	6161613d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1690	b32decode	41413d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1691	b32decode	41413d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1692	b32decode	21213d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1693	b32decode	21213d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1694	b32decode	61613d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1695	b32decode	61613d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1696	b32decode	413d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1697	b32decode	413d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1698	b32decode	213d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1699	b32decode	213d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1700	b32decode	613d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1701	b32decode	613d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1702	b32decode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1703	b32decode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1704	b32decode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1705	b32decode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1706	b32decode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1707	b32decode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1708	b32decode	41	0		err	Incorrect padding
+1709	b32decode	41	1		err	Incorrect padding
+1710	b32decode	3d41414141414141	0		err	Non-base32 digit found
+1711	b32decode	3d41414141414141	1		err	Non-base32 digit found
+1712	b32decode	61613d3d3d3d3d3d	0		err	Non-base32 digit found
+1713	b32decode	61613d3d3d3d3d3d	1		ok	00
+1714	b32decode	ff41414141414141	0		err	Non-base32 digit found
+1715	b32decode	ff41414141414141	1		err	Non-base32 digit found
+1716	b32decode		0		ok	
+1717	b32decode		1		ok	
+1718	b32decode	213d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1719	b32decode	213d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1720	b32hexdecode	41414141414141414141414141414141	0		ok	5294a5294a5294a5294a
+1721	b32hexdecode	41414141414141414141414141414141	1		ok	5294a5294a5294a5294a
+1722	b32hexdecode	21212121212121212121212121212121	0		err	Non-base32 digit found
+1723	b32hexdecode	21212121212121212121212121212121	1		err	Non-base32 digit found
+1724	b32hexdecode	61616161616161616161616161616161	0		err	Non-base32 digit found
+1725	b32hexdecode	61616161616161616161616161616161	1		ok	5294a5294a5294a5294a
+1726	b32hexdecode	4141414141414141414141414141413d	0		ok	5294a5294a5294a529
+1727	b32hexdecode	4141414141414141414141414141413d	1		ok	5294a5294a5294a529
+1728	b32hexdecode	2121212121212121212121212121213d	0		err	Non-base32 digit found
+1729	b32hexdecode	2121212121212121212121212121213d	1		err	Non-base32 digit found
+1730	b32hexdecode	6161616161616161616161616161613d	0		err	Non-base32 digit found
+1731	b32hexdecode	6161616161616161616161616161613d	1		ok	5294a5294a5294a529
+1732	b32hexdecode	41414141414141414141414141413d3d	0		err	Incorrect padding
+1733	b32hexdecode	41414141414141414141414141413d3d	1		err	Incorrect padding
+1734	b32hexdecode	21212121212121212121212121213d3d	0		err	Non-base32 digit found
+1735	b32hexdecode	21212121212121212121212121213d3d	1		err	Non-base32 digit found
+1736	b32hexdecode	61616161616161616161616161613d3d	0		err	Non-base32 digit found
+1737	b32hexdecode	61616161616161616161616161613d3d	1		err	Incorrect padding
+1738	b32hexdecode	414141414141414141414141413d3d3d	0		ok	5294a5294a5294a5
+1739	b32hexdecode	414141414141414141414141413d3d3d	1		ok	5294a5294a5294a5
+1740	b32hexdecode	212121212121212121212121213d3d3d	0		err	Non-base32 digit found
+1741	b32hexdecode	212121212121212121212121213d3d3d	1		err	Non-base32 digit found
+1742	b32hexdecode	616161616161616161616161613d3d3d	0		err	Non-base32 digit found
+1743	b32hexdecode	616161616161616161616161613d3d3d	1		ok	5294a5294a5294a5
+1744	b32hexdecode	4141414141414141414141413d3d3d3d	0		ok	5294a5294a5294
+1745	b32hexdecode	4141414141414141414141413d3d3d3d	1		ok	5294a5294a5294
+1746	b32hexdecode	2121212121212121212121213d3d3d3d	0		err	Non-base32 digit found
+1747	b32hexdecode	2121212121212121212121213d3d3d3d	1		err	Non-base32 digit found
+1748	b32hexdecode	6161616161616161616161613d3d3d3d	0		err	Non-base32 digit found
+1749	b32hexdecode	6161616161616161616161613d3d3d3d	1		ok	5294a5294a5294
+1750	b32hexdecode	41414141414141414141413d3d3d3d3d	0		err	Incorrect padding
+1751	b32hexdecode	41414141414141414141413d3d3d3d3d	1		err	Incorrect padding
+1752	b32hexdecode	21212121212121212121213d3d3d3d3d	0		err	Non-base32 digit found
+1753	b32hexdecode	21212121212121212121213d3d3d3d3d	1		err	Non-base32 digit found
+1754	b32hexdecode	61616161616161616161613d3d3d3d3d	0		err	Non-base32 digit found
+1755	b32hexdecode	61616161616161616161613d3d3d3d3d	1		err	Incorrect padding
+1756	b32hexdecode	414141414141414141413d3d3d3d3d3d	0		ok	5294a5294a52
+1757	b32hexdecode	414141414141414141413d3d3d3d3d3d	1		ok	5294a5294a52
+1758	b32hexdecode	212121212121212121213d3d3d3d3d3d	0		err	Non-base32 digit found
+1759	b32hexdecode	212121212121212121213d3d3d3d3d3d	1		err	Non-base32 digit found
+1760	b32hexdecode	616161616161616161613d3d3d3d3d3d	0		err	Non-base32 digit found
+1761	b32hexdecode	616161616161616161613d3d3d3d3d3d	1		ok	5294a5294a52
+1762	b32hexdecode	4141414141414141413d3d3d3d3d3d3d	0		err	Incorrect padding
+1763	b32hexdecode	4141414141414141413d3d3d3d3d3d3d	1		err	Incorrect padding
+1764	b32hexdecode	2121212121212121213d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1765	b32hexdecode	2121212121212121213d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1766	b32hexdecode	6161616161616161613d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1767	b32hexdecode	6161616161616161613d3d3d3d3d3d3d	1		err	Incorrect padding
+1768	b32hexdecode	41414141414141413d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1769	b32hexdecode	41414141414141413d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1770	b32hexdecode	21212121212121213d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1771	b32hexdecode	21212121212121213d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1772	b32hexdecode	61616161616161613d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1773	b32hexdecode	61616161616161613d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1774	b32hexdecode	414141414141413d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1775	b32hexdecode	414141414141413d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1776	b32hexdecode	212121212121213d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1777	b32hexdecode	212121212121213d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1778	b32hexdecode	616161616161613d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1779	b32hexdecode	616161616161613d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1780	b32hexdecode	4141414141413d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1781	b32hexdecode	4141414141413d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1782	b32hexdecode	2121212121213d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1783	b32hexdecode	2121212121213d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1784	b32hexdecode	6161616161613d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1785	b32hexdecode	6161616161613d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1786	b32hexdecode	41414141413d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1787	b32hexdecode	41414141413d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1788	b32hexdecode	21212121213d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1789	b32hexdecode	21212121213d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1790	b32hexdecode	61616161613d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1791	b32hexdecode	61616161613d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1792	b32hexdecode	414141413d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1793	b32hexdecode	414141413d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1794	b32hexdecode	212121213d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1795	b32hexdecode	212121213d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1796	b32hexdecode	616161613d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1797	b32hexdecode	616161613d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1798	b32hexdecode	4141413d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1799	b32hexdecode	4141413d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1800	b32hexdecode	2121213d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1801	b32hexdecode	2121213d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1802	b32hexdecode	6161613d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1803	b32hexdecode	6161613d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1804	b32hexdecode	41413d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1805	b32hexdecode	41413d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1806	b32hexdecode	21213d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1807	b32hexdecode	21213d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1808	b32hexdecode	61613d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1809	b32hexdecode	61613d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1810	b32hexdecode	413d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1811	b32hexdecode	413d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1812	b32hexdecode	213d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1813	b32hexdecode	213d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1814	b32hexdecode	613d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1815	b32hexdecode	613d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1816	b32hexdecode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1817	b32hexdecode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1818	b32hexdecode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1819	b32hexdecode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1820	b32hexdecode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	0		err	Incorrect padding
+1821	b32hexdecode	3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d3d	1		err	Incorrect padding
+1822	b32hexdecode	41	0		err	Incorrect padding
+1823	b32hexdecode	41	1		err	Incorrect padding
+1824	b32hexdecode	3d41414141414141	0		err	Non-base32 digit found
+1825	b32hexdecode	3d41414141414141	1		err	Non-base32 digit found
+1826	b32hexdecode	61613d3d3d3d3d3d	0		err	Non-base32 digit found
+1827	b32hexdecode	61613d3d3d3d3d3d	1		ok	52
+1828	b32hexdecode	ff41414141414141	0		err	Non-base32 digit found
+1829	b32hexdecode	ff41414141414141	1		err	Non-base32 digit found
+1830	b32hexdecode		0		ok	
+1831	b32hexdecode		1		ok	
+1832	b32hexdecode	213d3d3d3d3d3d3d	0		err	Non-base32 digit found
+1833	b32hexdecode	213d3d3d3d3d3d3d	1		err	Non-base32 digit found
+1834	b32decode	3031414141414141	0	49	ok	7200000000
+1835	b32decode	3031414141414141	1	49	ok	7200000000
+1836	b32decode	3031414141414141	0	4c	ok	72c0000000
+1837	b32decode	3031414141414141	1	4c	ok	72c0000000
+1838	b32decode	3031414141414141	0	69	err	Non-base32 digit found
+1839	b32decode	3031414141414141	1	69	ok	7200000000
+1840	b32decode	3031414141414141	0	21	err	Non-base32 digit found
+1841	b32decode	3031414141414141	1	21	err	Non-base32 digit found
+1842	b32decode	3031414141414141	0	494c	err	b'IL'
+1843	b32decode	3031414141414141	1	494c	err	b'IL'
+1844	b32decode	3031414141414141	0	00ff	err	b'\x00\xff'
+1845	b32decode	3031414141414141	1	00ff	err	b'\x00\xff'
+1846	b32decode	3031414141414141	0	27	err	Non-base32 digit found
+1847	b32decode	3031414141414141	1	27	err	Non-base32 digit found
+1848	b32decode	3031414141414141	0	22	err	Non-base32 digit found
+1849	b32decode	3031414141414141	1	22	err	Non-base32 digit found
+1850	b32decode	3031414141414141	0	5c5c	err	b'\\\\'
+1851	b32decode	3031414141414141	1	5c5c	err	b'\\\\'
+1852	b32decode	3031414141414141	0	0909	err	b'\t\t'
+1853	b32decode	3031414141414141	1	0909	err	b'\t\t'
+1854	b32decode	3031414141414141	0	0d0d	err	b'\r\r'
+1855	b32decode	3031414141414141	1	0d0d	err	b'\r\r'
+1856	b32decode	3031414141414141	0	2722	err	b'\'"'
+1857	b32decode	3031414141414141	1	2722	err	b'\'"'
+1858	b32decode	3031414141414141	0	27225c	err	b'\'"\\'
+1859	b32decode	3031414141414141	1	27225c	err	b'\'"\\'
+1860	b32decode	3031414141414141	0	2722090d5c	err	b'\'"\t\r\\'
+1861	b32decode	3031414141414141	1	2722090d5c	err	b'\'"\t\r\\'
+1862	b32decode	30313d3d3d3d3d3d	0	49	ok	72
+1863	b32decode	30313d3d3d3d3d3d	1	49	ok	72
+1864	b32decode	30313d3d3d3d3d3d	0	4c	ok	72
+1865	b32decode	30313d3d3d3d3d3d	1	4c	ok	72
+1866	b32decode	30313d3d3d3d3d3d	0	69	err	Non-base32 digit found
+1867	b32decode	30313d3d3d3d3d3d	1	69	ok	72
+1868	b32decode	30313d3d3d3d3d3d	0	21	err	Non-base32 digit found
+1869	b32decode	30313d3d3d3d3d3d	1	21	err	Non-base32 digit found
+1870	b32decode	30313d3d3d3d3d3d	0	494c	err	b'IL'
+1871	b32decode	30313d3d3d3d3d3d	1	494c	err	b'IL'
+1872	b32decode	30313d3d3d3d3d3d	0	00ff	err	b'\x00\xff'
+1873	b32decode	30313d3d3d3d3d3d	1	00ff	err	b'\x00\xff'
+1874	b32decode	30313d3d3d3d3d3d	0	27	err	Non-base32 digit found
+1875	b32decode	30313d3d3d3d3d3d	1	27	err	Non-base32 digit found
+1876	b32decode	30313d3d3d3d3d3d	0	22	err	Non-base32 digit found
+1877	b32decode	30313d3d3d3d3d3d	1	22	err	Non-base32 digit found
+1878	b32decode	30313d3d3d3d3d3d	0	5c5c	err	b'\\\\'
+1879	b32decode	30313d3d3d3d3d3d	1	5c5c	err	b'\\\\'
+1880	b32decode	30313d3d3d3d3d3d	0	0909	err	b'\t\t'
+1881	b32decode	30313d3d3d3d3d3d	1	0909	err	b'\t\t'
+1882	b32decode	30313d3d3d3d3d3d	0	0d0d	err	b'\r\r'
+1883	b32decode	30313d3d3d3d3d3d	1	0d0d	err	b'\r\r'
+1884	b32decode	30313d3d3d3d3d3d	0	2722	err	b'\'"'
+1885	b32decode	30313d3d3d3d3d3d	1	2722	err	b'\'"'
+1886	b32decode	30313d3d3d3d3d3d	0	27225c	err	b'\'"\\'
+1887	b32decode	30313d3d3d3d3d3d	1	27225c	err	b'\'"\\'
+1888	b32decode	30313d3d3d3d3d3d	0	2722090d5c	err	b'\'"\t\r\\'
+1889	b32decode	30313d3d3d3d3d3d	1	2722090d5c	err	b'\'"\t\r\\'
+1890	b32decode	41	0	49	err	Incorrect padding
+1891	b32decode	41	1	49	err	Incorrect padding
+1892	b32decode	41	0	4c	err	Incorrect padding
+1893	b32decode	41	1	4c	err	Incorrect padding
+1894	b32decode	41	0	69	err	Incorrect padding
+1895	b32decode	41	1	69	err	Incorrect padding
+1896	b32decode	41	0	21	err	Incorrect padding
+1897	b32decode	41	1	21	err	Incorrect padding
+1898	b32decode	41	0	494c	err	Incorrect padding
+1899	b32decode	41	1	494c	err	Incorrect padding
+1900	b32decode	41	0	00ff	err	Incorrect padding
+1901	b32decode	41	1	00ff	err	Incorrect padding
+1902	b32decode	41	0	27	err	Incorrect padding
+1903	b32decode	41	1	27	err	Incorrect padding
+1904	b32decode	41	0	22	err	Incorrect padding
+1905	b32decode	41	1	22	err	Incorrect padding
+1906	b32decode	41	0	5c5c	err	Incorrect padding
+1907	b32decode	41	1	5c5c	err	Incorrect padding
+1908	b32decode	41	0	0909	err	Incorrect padding
+1909	b32decode	41	1	0909	err	Incorrect padding
+1910	b32decode	41	0	0d0d	err	Incorrect padding
+1911	b32decode	41	1	0d0d	err	Incorrect padding
+1912	b32decode	41	0	2722	err	Incorrect padding
+1913	b32decode	41	1	2722	err	Incorrect padding
+1914	b32decode	41	0	27225c	err	Incorrect padding
+1915	b32decode	41	1	27225c	err	Incorrect padding
+1916	b32decode	41	0	2722090d5c	err	Incorrect padding
+1917	b32decode	41	1	2722090d5c	err	Incorrect padding
+1918	b32decode		0	49	ok	
+1919	b32decode		1	49	ok	
+1920	b32decode		0	4c	ok	
+1921	b32decode		1	4c	ok	
+1922	b32decode		0	69	ok	
+1923	b32decode		1	69	ok	
+1924	b32decode		0	21	ok	
+1925	b32decode		1	21	ok	
+1926	b32decode		0	494c	err	b'IL'
+1927	b32decode		1	494c	err	b'IL'
+1928	b32decode		0	00ff	err	b'\x00\xff'
+1929	b32decode		1	00ff	err	b'\x00\xff'
+1930	b32decode		0	27	ok	
+1931	b32decode		1	27	ok	
+1932	b32decode		0	22	ok	
+1933	b32decode		1	22	ok	
+1934	b32decode		0	5c5c	err	b'\\\\'
+1935	b32decode		1	5c5c	err	b'\\\\'
+1936	b32decode		0	0909	err	b'\t\t'
+1937	b32decode		1	0909	err	b'\t\t'
+1938	b32decode		0	0d0d	err	b'\r\r'
+1939	b32decode		1	0d0d	err	b'\r\r'
+1940	b32decode		0	2722	err	b'\'"'
+1941	b32decode		1	2722	err	b'\'"'
+1942	b32decode		0	27225c	err	b'\'"\\'
+1943	b32decode		1	27225c	err	b'\'"\\'
+1944	b32decode		0	2722090d5c	err	b'\'"\t\r\\'
+1945	b32decode		1	2722090d5c	err	b'\'"\t\r\\'
+1946	b32decode	2121212121212121	0	49	err	Non-base32 digit found
+1947	b32decode	2121212121212121	1	49	err	Non-base32 digit found
+1948	b32decode	2121212121212121	0	4c	err	Non-base32 digit found
+1949	b32decode	2121212121212121	1	4c	err	Non-base32 digit found
+1950	b32decode	2121212121212121	0	69	err	Non-base32 digit found
+1951	b32decode	2121212121212121	1	69	err	Non-base32 digit found
+1952	b32decode	2121212121212121	0	21	err	Non-base32 digit found
+1953	b32decode	2121212121212121	1	21	err	Non-base32 digit found
+1954	b32decode	2121212121212121	0	494c	err	b'IL'
+1955	b32decode	2121212121212121	1	494c	err	b'IL'
+1956	b32decode	2121212121212121	0	00ff	err	b'\x00\xff'
+1957	b32decode	2121212121212121	1	00ff	err	b'\x00\xff'
+1958	b32decode	2121212121212121	0	27	err	Non-base32 digit found
+1959	b32decode	2121212121212121	1	27	err	Non-base32 digit found
+1960	b32decode	2121212121212121	0	22	err	Non-base32 digit found
+1961	b32decode	2121212121212121	1	22	err	Non-base32 digit found
+1962	b32decode	2121212121212121	0	5c5c	err	b'\\\\'
+1963	b32decode	2121212121212121	1	5c5c	err	b'\\\\'
+1964	b32decode	2121212121212121	0	0909	err	b'\t\t'
+1965	b32decode	2121212121212121	1	0909	err	b'\t\t'
+1966	b32decode	2121212121212121	0	0d0d	err	b'\r\r'
+1967	b32decode	2121212121212121	1	0d0d	err	b'\r\r'
+1968	b32decode	2121212121212121	0	2722	err	b'\'"'
+1969	b32decode	2121212121212121	1	2722	err	b'\'"'
+1970	b32decode	2121212121212121	0	27225c	err	b'\'"\\'
+1971	b32decode	2121212121212121	1	27225c	err	b'\'"\\'
+1972	b32decode	2121212121212121	0	2722090d5c	err	b'\'"\t\r\\'
+1973	b32decode	2121212121212121	1	2722090d5c	err	b'\'"\t\r\\'
+1974	b16decode	41	0		err	Odd-length string
+1975	b16decode	41	1		err	Odd-length string
+1976	b16decode	5a	0		err	Non-base16 digit found
+1977	b16decode	5a	1		err	Non-base16 digit found
+1978	b16decode	414121	0		err	Non-base16 digit found
+1979	b16decode	414121	1		err	Non-base16 digit found
+1980	b16decode	6161	0		err	Non-base16 digit found
+1981	b16decode	6161	1		ok	aa
+1982	b16decode	ff30	0		err	Non-base16 digit found
+1983	b16decode	ff30	1		err	Non-base16 digit found
+1984	b16decode	412041	0		err	Non-base16 digit found
+1985	b16decode	412041	1		err	Non-base16 digit found
+1986	b16decode		0		ok	
+1987	b16decode		1		ok	
+1988	b16decode	30313233343536373839414243444546	0		ok	0123456789abcdef
+1989	b16decode	30313233343536373839414243444546	1		ok	0123456789abcdef
+1990	b16decode	4747	0		err	Non-base16 digit found
+1991	b16decode	4747	1		err	Non-base16 digit found
+1992	b16decode	4147	0		err	Non-base16 digit found
+1993	b16decode	4147	1		err	Non-base16 digit found
+1994	b16decode	d11a6706fb40d6bd57526846b13e	0		err	Non-base16 digit found
+1995	standard_b64decode	6d2d3cadb3669cbd50e165e48b	0		ok	99f3de
+1996	b32hexdecode	f3e822086ecaa0075a69fc178ba8f83718aa8f3bd1f65e8144e61d9ab30fcb06a6c1ad8f2906e732b10f4db789d35ea68c088ab3818b	1		err	Incorrect padding
+1997	standard_b64decode	ac1dda96908137478bd536cf4b778ade1fe7a9010b3341c2bd2b4acec46edf287a43b9b21175306c76a81a57899322473081cd277bcd1e37f5	1		err	Only base64 data is allowed
+1998	b64decode	7dea42619767c21812e65b	1		err	Only base64 data is allowed
+1999	b32hexdecode	7ff59fce63911f0bd0b3cfba66de9c75853e4689789bf41f4c1d1ef9a18c1bec60	0		err	Incorrect padding
+2000	b32hexdecode	32dd53d4ae89eea07a4f579e2ff7ace2c1d298dcf01c945cbf59cd932cd33931f0d15eb411	0		err	Incorrect padding
+2001	b16decode	8acee7c54d54154a4c7a37fc313f6d14261af6daf82e983bb2dfd1dd19	1		err	Non-base16 digit found
+2002	urlsafe_b64decode	2f37bca2de4288d541a4655de9b2a329082ec45e5305f35aae40a235a49990ab85a85844fe7eaab34998c8efd8fafcaeaba5e5a5576f4712f09b	0		err	Incorrect padding
+2003	b32hexdecode	efbed42972af5676f7fd2361f34c1b45e66651fda26fe6ec2806d7a3612bb0	0		err	Incorrect padding
+2004	b16decode	a524c5d7cc32b0c439eea7c60df3510ef9e4a23aaba761d2a3b837084e7b17cefc87c1505bbcb26644	0		err	Non-base16 digit found
+2005	standard_b64decode	6fb16e3615d4caa7b19ecd7fd02148654d987ae265ca1feab2f091a4a9507775833b9324de2fcf43	0		err	Invalid base64-encoded string: number of data characters (13) cannot be 1 more than a multiple of 4
+2006	standard_b64decode	064c3cbf796da795c7d6ad6d75b8d7e5f0696295971c3f6697ccab5cb8672538ff	0		err	Incorrect padding
+2007	b32hexdecode	d8d645178af07ac195d10f0c963d71dc35f7111cdf9b2027c44da0a08194f4288cb6c5ca540434aee8ac126c3443ae98105a4310451c806222cdb161248c98	1		err	Incorrect padding
+2008	b32hexdecode	b99798f85b36a08ded0e5cdc2f2643f1906bf002a70d27aeb93981b84b43531d	1		err	Non-base32 digit found
+2009	b16decode	e9ae8e1c08d3224b9ac64c6fca067d28a33c277459afd400cc472df47206dbb8ede537e00bfe3cb8766d43	0		err	Non-base16 digit found
+2010	b32hexdecode	164edade6eac13a0a8e0664cd7	0		err	Incorrect padding
+2011	standard_b64decode	61e833c315475b2962be148a3f8f18f48f1054c7c5a324ec1e42c587dd6322ebd17a2500b46e54993be4fb5243157d	0		ok	6b719b4c17339d3442
+2012	b64decode	b0eaf3e08b053efc3908e8d42dcb88ceff3eb94e37bf4c3d1a2fd40ea9c2a93db83cc5e0e24d3e9176476bf22914	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
+2013	b16decode	60e6e6d048e9b71100315dfac5d2b6c2666e5f88b4b90dc450d731205d43de200c6ee5a81e1bac79ccac64f2b0edbf8cabc2452a43c0da4303a1158757df	1		err	Non-base16 digit found
+2014	standard_b64decode	e6d283b69aa3cc4ffa5b2466be1bc2fe39adf3ab8e685ea65f	1		err	Only base64 data is allowed
+2015	b32hexdecode	9721fa1e1dbe763fcfc385395c0064109bc68c565980620562669b9603cdcd8d93cce83af202a496b62a60385642d701569a2c126e1035b5a1	0		err	Incorrect padding
+2016	standard_b64decode	269bc9e7fbad0a08	1		err	Only base64 data is allowed
+2017	b64decode	3b494a47a72042abe71f447c3a39d836333c0b8a6f30df212ba22db97def	1		err	Only base64 data is allowed
+2018	standard_b64decode	9d1fb8cef21435685fb4be3054bc25182b75d018fa17b3a8d35e596edf3eb35a11a66f6cbcff3d69b3ed8e77ac6724dd1ab7a4baa629de0d639e61ac	0		ok	e61d13fae627668962c2071a
+2019	b64decode	ab346cba0789dc5671a1f3cc5e9296dc270ef91b04f1a73f000c0c31ef87b130e4054a897d56d872b4fce223616f006c12f92e	1		err	Only base64 data is allowed
+2020	b32decode	bf4fdedf7c225bec926c4c1334047171bb8bdacee75f81dc6ea520db1ee28c	0		err	Incorrect padding
+2021	b64decode	f8	0		ok	
+2022	standard_b64decode	7ac00a6817fa527c3e4e3a7b8124b83671ba59dd66	0		ok	ce144deaa61f
+2023	standard_b64decode	27418d0048333dfc24aef263fc58e443cf4930edc6d9b8c8cd3cfec8ba6d7b74f2170649ea374a6c18d253b2c3c412f5	1		err	Only base64 data is allowed
+2024	standard_b64decode	520bf54bec3ebb374656fdf7d6c2f80ec0284594854559bc	0		ok	44aec5544118
+2025	b16decode	2b62a20ec220d60cbaa98c95eacf0e7a64cdba8067f45cebcad94bdafbe1f787e5824d28e0a88f0e	0		err	Non-base16 digit found
+2026	standard_b64decode	8138549810e26511	0		err	Incorrect padding
+2027	b32decode	8b710cf199dee9e3783fd691f8073f	0		err	Incorrect padding
+2028	b32hexdecode	e352526b929b49a86b95	1		err	Incorrect padding
+2029	urlsafe_b64decode	5b2973ab8d5858b79a5a6e50dd851a3d1150ff43a63852658121	1		err	Only base64 data is allowed
+2030	b32decode	3b25d4edf2307ac05b488cef832f9212737f620227335275ed4a049fc2b59affe45920904d2d00ff	0		err	Non-base32 digit found
+2031	b64decode	cca88181af2ce44368ace8213e16eaee99a45859815080e14e9c11	0		err	Incorrect padding
+2032	urlsafe_b64decode	b818622820dd2c70324f70d50c55108b43311bb466c3714dece9969c7ccfddfb594ebbfc	0		err	Invalid base64-encoded string: number of data characters (13) cannot be 1 more than a multiple of 4
+2033	b16decode	5e9087eec7d7d3a91aa5841a6eb75df0c5edcce00fe76022ef09b443acbb8c1d5736c4e3661b	0		err	Non-base16 digit found
+2034	urlsafe_b64decode	ab20d69a2dd3eb35a76eb5b7aa00c7570bf41e34d2cfffaf296b5da28a7e58dae6729443	1		err	Only base64 data is allowed
+2035	urlsafe_b64decode	49dfa01760a2	1		err	Only base64 data is allowed
+2036	urlsafe_b64decode	ce5ee80055	0		err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
+2037	b16decode	bf6f5d291f4fc1bdc9211c7199ed3a8d3c9fa6b4c9e37c6db097978fa6b679021c	0		err	Non-base16 digit found
+2038	b16decode	3bceab8bde233909eb04a8d558f0845e581f95	0		err	Non-base16 digit found
+2039	b32decode	de4bb50ae704ea4e2acd595d89a623e6	0		err	Non-base32 digit found
+2040	urlsafe_b64decode	36ec9bae472ee13ffa25bcaac3ae501acaae8a5abcb2b5c7548f	1		err	Only base64 data is allowed
+2041	b32hexdecode	99dbfeecb5ae0cee4cd19a3c94cc56ddb79929	0		err	Incorrect padding
+2042	b32decode	94ea2d	1		err	Incorrect padding
+2043	b32decode	0b614d449130c1283f6091c9a4f786b3a727ac1b1a41ee61905246dfdbe909	1		err	Incorrect padding
+2044	standard_b64decode	d0d10bd1f2a91febd46ed675e33683591afd204e17ac0ed2cb	0		err	Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4
+2045	standard_b64decode	eff7a8	0		ok	
+2046	b32decode	aa875247093c46ddf08ec511500b86f716bcf8c558bc744771b6e459b52538a40b6968829e525166f4ad	1		err	Incorrect padding
+2047	b64decode	db9685e0a22c6cf8ccffde42b62d	1		err	Only base64 data is allowed
+2048	b64decode	cce4b8980c923f6f44f37e58ba	1		err	Only base64 data is allowed
+2049	b32decode	e32a9c6229f145e62d469b93a930	1		err	Incorrect padding
+2050	b64decode	e3d66e00f47f1985767ef2ec007f77ce6cfdd789a5ded5af74902cb86b15b5f0aa70f0bd8180aebc434faeabfae47032569e3d5d81696e	0		err	Incorrect padding
+2051	b16decode	e71c879f86c65c50e6c2d3a9938717d9d671e71fa0d041b8337869e690ebe14cdec7d28196472d4fb9aa	1		err	Non-base16 digit found
+2052	urlsafe_b64decode	26407cb2200fb04bfbf9ed8df6ee9520b66e1c31fe5ea26ba1d038aa67acbbf03faa0f616cb564ad0ebf85bfa6431ee70e8d2c	1		err	Only base64 data is allowed
+2053	b32decode		1		ok	
+2054	urlsafe_b64decode	48260d6e9b7d27c9e6e17994242c4e9baac99aa7faec7e520977	1		err	Only base64 data is allowed
+2055	b32decode	8e4cdc82c2ba2279353e32cb44c9b3e6c78cb7f55947c8cbf867bc	0		err	Incorrect padding
+2056	b16decode	d039a648a9a9f483f2a9	1		err	Non-base16 digit found
+2057	b64decode	40563cac65a6774fff0c8239f6e77acee82dfa324bfdb8250fbe4006d40b	0		ok	55ec0ef73d8a
+2058	b32decode	642796744cce186ae2	0		err	Incorrect padding
+2059	b16decode	95808f7e63a64f66b4c3753e443cc725e96af3a7cc0508b087626b01a15a85e438353fc039d545dc2dbf21c509d9ade21b	1		err	Non-base16 digit found
+2060	standard_b64decode	ba24dacd30433df52c4627b213e19884d6bdec76db0c	0		ok	d0216f
+2061	b64decode	e18222226fa329cdfedbf276c15fe6aa4d42f8870485e6fc58ba158f25906f9852703a51a3cb35f3921058c1517d34e4f47d4c7152c8d69ca4d0	1		err	Only base64 data is allowed
+2062	b32hexdecode	396eafe58892be28f73360be30ee8adc8843847999c537739f605a428e7174c0701a4b3f0d4101d7afc73da362e0fd46915d0cc4b9b215c785	1		err	Incorrect padding
+2063	b16decode	af044c46977d9b70f7f2d5135be0aab6f17a254974c5073c191f8f45fa55	1		err	Non-base16 digit found
+2064	b32hexdecode	877b6c2396d69c26333b	1		err	Incorrect padding
+2065	b16decode	8ee2d7b4ac9dc536514d711054c8346a6e5868	1		err	Non-base16 digit found
+2066	b32hexdecode	2f2e706a5ca5f00f3c19f3340e5b38d59f868e6b8bc0b463817ea3e7ff5511c5763a8695171f31f26ecb0db2c60b000558ca52db25b772e101fec3	1		err	Incorrect padding
+2067	b32decode		1		ok	
+2068	urlsafe_b64decode	95907bdabb9e42e4b10214f47350f2d58dfa446babd2c889df2f5dbf52fa10bca153cf8b0329c4ccf5c26e9ae6f6d6e538	1		err	Only base64 data is allowed
+2069	standard_b64decode	5ef2926fbf08537cba2b6e074c258c63ee950c56374d3bab133edcad360e53cc8167	0		ok	a12fa72dc57b33a4a0
+2070	b32decode	7f9810fb793b4c9f9c53bc88f945e706	1		err	Non-base32 digit found
+2071	b32hexdecode	947d15	1		err	Incorrect padding
+2072	standard_b64decode	21cb852e2b74df0ca49a994273f30c616862cd535c5e2f36d92c6774b92aac539f6f665635f3dfc2171630e1646a0e6158d33b473ab783c01c82f3	1		err	Only base64 data is allowed
+2073	urlsafe_b64decode	65076678864df604c0bf	0		ok	79fc4c
+2074	urlsafe_b64decode	f7d76fa638f990119fe3fec753ab10f5a364d9a6705b4e0a6d6d15c1	0		ok	a3c49da4d9a6
+2075	standard_b64decode	b8b3d7d6f69f37058dda0f9f8b8702270248113d9404502079	0		ok	ec73f2
+2076	b32hexdecode	98770c77f02210b3df2f99411d6f53c407ea6f5eb73af42ac81b9b	0		err	Incorrect padding
+2077	standard_b64decode	155cac1bd5ae249463dc9206b68ccbed1b6edc4f026a6793bda166add76674e8a2d04af51d1460	1		err	Only base64 data is allowed
+2078	b16decode	46817413b4b993973b1bccb0a757a0d42af592a091602b3e1a	1		err	Non-base16 digit found
+2079	b16decode	f68bd5cb3339ddfba0f4e090ca5ac8	0		err	Non-base16 digit found
+2080	urlsafe_b64decode	637659a9bfbbdd5e0926a71176a586810c65c5a52ced5a57ce2b3d03cdc97dd93df8886b6c4784d2eddb7d7d6398041bb163fb6ef6f5	1		err	Only base64 data is allowed
+2081	b16decode	f82d12b58e6d2a27ea157c6fc94f172d4202dabbd2319185514929f7996084a6a61e2445836eac9dd024e6ce16106ceb1ab3c589e3e64ec6c67b	1		err	Non-base16 digit found
+2082	b32decode	808d8252a0df09da6cc5d83ea3c9aad43c6143ef248a2f166cd76747de94b2e16773	0		err	Incorrect padding
+2083	b32decode	d1161e5601e25807e7de8a7e8d0bd8d9e6203453870e8d2e9d12d07c877c4d3606cfd55adebd3ecc3b62234246722057	1		err	Non-base32 digit found
+2084	b32hexdecode	2352488e6a439902fdae4184bf3ab4f2f212e93027bbea159082c93d35d056b8ac0b68	1		err	Incorrect padding
+2085	b32hexdecode	1fc6cbb0ea3ce17963e459a5c34d3bb68577a67d2d91bb7213a6fdca6a04	0		err	Incorrect padding
+2086	urlsafe_b64decode	06d586678df618b1433f493ebb84634eb248f9a9bad3e094d71f785e	1		err	Only base64 data is allowed
+2087	b32hexdecode	5dd1ed6c5f3d23ffe69ff5be4d42e68c1bbdae542941105a3b4deeb356a6287462c75a4527d87e4ec9fd5b40	0		err	Incorrect padding
+2088	b64decode	06c0c750bc239b1e0a742dbe61612e892bb66cf3bcdb1ec3	0		err	Incorrect padding
+2089	standard_b64decode	c83115bd4270f47bfeadc84603677eb9d62aef96ecea02fafc9cc2	1		err	Only base64 data is allowed
+2090	b64decode	e6ced64b3e563c3aa2b3625c93e1ef2dbd68614d253a9f03	0		err	Incorrect padding
+2091	urlsafe_b64decode	8a646bf90d	1		err	Only base64 data is allowed
+2092	b16decode	f66c4ba30a7953dee2fcb6c0f039aa7d	0		err	Non-base16 digit found
+2093	b64decode	e0652a78aa038d7a3f90c2701d8138571e75322f9bda2af75906270d606ca2403b8be9f0	1		err	Only base64 data is allowed
+2094	b64decode	43c39466511ae37d	0		err	Incorrect padding
+2095	b32hexdecode	d394d7263126	1		err	Incorrect padding
+2096	b64decode	70d7521ecddfdd8ed090b2c36f618a6a2ba2379bdac49b98a1fd6dcaaa509e	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
+2097	b32hexdecode	6fea54733dbe93e8ee295671ab551f4cf9e133dc4f95a99650b072fdc7cac76d45662d4e63b391918ba5fb9ed0406b0f	0		err	Non-base32 digit found
+2098	standard_b64decode	31d9bf4392d111a9b4b3c814c0e43428e9cd673d790b7f2c5d4f8d	0		err	Incorrect padding
+2099	standard_b64decode		1		ok	
+2100	b32decode	10f88f4afb155b08c506423be73dc149b90efbb4323b60480dfef6b3cf2f0fdca2653b7430d638124d75f8af87a9c13b376f85ec13dab943f818afc9	0		err	Incorrect padding
+2101	b32decode	b570688ba61c8d39a263cba52426	1		err	Incorrect padding
+2102	standard_b64decode	4f70440f68ea792aca	1		err	Only base64 data is allowed
+2103	b32hexdecode	565c6c7023a4d51f0397fc7776334db085ebd84d21bf21b35ccc0a67e83a53f125edb145	1		err	Incorrect padding
+2104	b32decode	46ee1899fc50340ab1e3	1		err	Incorrect padding
+2105	b16decode	3cfa8c9a6e1c1840f1149f06ed3261175eca9a3a41ce3ff656d19eac376201d66bd54adcad3f409396	0		err	Non-base16 digit found
+2106	b16decode	2bec84937f9f4c0a8c1c5bc38cd59ac1bb4cd92cebbd72786ad0da847f53c9a63571	1		err	Non-base16 digit found
+2107	standard_b64decode	444081a25c5b72d0febde17d020114f88da95b17f4995278d3f913593e808968feb25355bddf3052b4de8dabc00ec71a706594dbd12b29	1		err	Only base64 data is allowed
+2108	b32decode	3fa4c84918139fa93e34f8f1e30984661cdd45d0fd1cb0c2b021d38cbffb640991786f7425168b164232845002369d402112c252b209ad1da1065ef8b3c5c5	1		err	Incorrect padding
+2109	b32hexdecode		1		ok	
+2110	b32decode	d2680530b884	1		err	Incorrect padding
+2111	b32hexdecode	92c91aa08998297170bd8ec2fc6d360d94641c3438cc5d4494a8998c36158a2156f67bed3f47bc4946602870e1297fe19483c0b28d12167cb6c7151ffc6307	0		err	Incorrect padding
+2112	b16decode	38528d4f1ec9038d702b80033659608df9137268	0		err	Non-base16 digit found
+2113	standard_b64decode	ed722176b69272f2e342121ed0a5	0		ok	aefac1
+2114	b32decode	b46f45824edb95b4832cff452b935d6ae077b0d59a17857bf04ff1fa4b65e3780326653e74	0		err	Incorrect padding
+2115	b32decode	158dffeb60cf709936131c823d070dbf8d861be1f235f222	0		err	Non-base32 digit found
+2116	urlsafe_b64decode	4910025713e72aef1fd9a7c9b318fb816b6d6544d0870fd2e91da800b92268483a7adeb9ff276e4c64d264d6ed8c4196c9db7594ff	1		err	Only base64 data is allowed
+2117	standard_b64decode	b36ae08912ccfd7bfa0a5a58eac81a55b8754a8dbb9f4bc39d3b1e8b97d69060f4769174d267cfee1e00605257379ede90854b30c30b14fbb2	0		err	Incorrect padding
+2118	b32hexdecode	85bfca3b8caa23db2f158ac6928e28692a782c0bf800745131ffa4bea8f8147970d089b4238fd6e96f7eb8cf545d986162	0		err	Incorrect padding
+2119	b32decode	efac5120	1		err	Incorrect padding
+2120	b64decode	b2b48619e4baa486bfb412e9173df974f8d1ed032314f2b88e5ee724ce5bf4688976f5deafbf9fa7b3164ff88f378427bcf1271330893078	1		err	Only base64 data is allowed
+2121	urlsafe_b64decode	f2b15ba6748b8f145f4a0ddacddf1c54a10a33da48b1a2ac7ed9fddbd5789b88b34b48610b7e42f492b4105127e975a0fdb7	1		err	Only base64 data is allowed
+2122	b32hexdecode	cdd2119e	0		err	Incorrect padding
+2123	standard_b64decode	2b4e57ff718a3c3aa0142cbf9d19231708c1186f615774fa8c9133198996a7c22f4c3da2	0		ok	f8d5aaa1a5addff2
+2124	b32decode	6a0faab107cfa94cb9cc46e75f1669076610c60b53	0		err	Incorrect padding
+2125	urlsafe_b64decode	ea95f55f477d416ee00f44251fb9833e1a84fa8723397c695ba9e09013788aae668ee2ca5435182e670c842b2c	0		err	Invalid base64-encoded string: number of data characters (13) cannot be 1 more than a multiple of 4
+2126	b32hexdecode	aa56a59e6be8e1ae7705a73dec1e677f9d29afe931c94995f25ca324a1b3703bbbeb0d76c5b74da3b5a804418169a675	1		err	Non-base32 digit found
+2127	b16decode	e6	1		err	Non-base16 digit found
+2128	urlsafe_b64decode	109de812f333157165f6faf109fd7658cabdd6fc	1		err	Only base64 data is allowed
+2129	b16decode	ef62b8b0f26f06400331f3749ad665d880d8574d94e2ff3232f2d6ffa1417b62523174da0586b37bfea04d1b5083b93c2917a1616992	1		err	Non-base16 digit found
+2130	b32hexdecode	d01021fe38f403b3303e944b5dd59d05ca915afa7b577dd4d3bf81a87d865365b458444602	0		err	Incorrect padding
+2131	b32hexdecode	1dee34d586b876e723be26e71b054449e6f596c6da1882ccfe09e93a889c689ba9694bcdccb4315a66ae1038a363f9a27b7dac303eb9f29eec132940f881ad	0		err	Incorrect padding
+2132	b16decode	047745e73918a1a0119476a5	0		err	Non-base16 digit found
+2133	urlsafe_b64decode	ec938a08e4f25e94b18b675d03ee7bbb4f34a42116fb12175a5edde8dc5b8c4b5adda353e6e75abf20695e6a75bff62cb54967337139d521	1		err	Only base64 data is allowed
+2134	b32hexdecode	4a48dae93e5ac44599da99d45a951f2a8ccac841ae1cffe91adf1ed3fe4ab6f11a615a7b947ba6f7ad0776ced4638e4b66831ebfd055d2defc0ab6561c2fe2cd	0		err	Non-base32 digit found
+2135	b32decode	dca60824661210c1f7	0		err	Incorrect padding
+2136	b16decode	70fd9ef7c1b582d8a774f9cd330aac8e1b6fa35dcc161e1724226acaa2d602655d2c9003b48eb34399cd5c89e882a31f6c74	1		err	Non-base16 digit found
+2137	b16decode	fabaa59505e38a61abf089d2f1f677a33ff8b6f083e5185ff791bc1ba016c2ac3b	1		err	Non-base16 digit found
+2138	b64decode	17364eeade582e9c4c85ab38f78bcca5e5fd2e10d8d4a9a2382fe8d2a03cda76cca0cde81ecb79b34d	1		err	Only base64 data is allowed
+2139	b64decode	34d99b0b3d323ef2ebbb860945d6ea4dfe	1		err	Only base64 data is allowed
+2140	b64decode	ccda1b3c1a6d23e382a79c89	0		err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
+2141	b32decode	5b9cfa5e03fca4ab329e0af3576e3ebe4fc64cb2985b2bf22d0e4a8a11e44b6bdfef5b96875705beef6602ba0dd08e275d7aaae259df356aa8a7	0		err	Incorrect padding
+2142	b32decode	17c865f037ea96f3da0c9d4733186008cf3bb6b03c0ddb5e6efc9e37cf8d81716596d771609557f3bee0713ca9c8feda1afed85c	0		err	Incorrect padding
+2143	b16decode	411d628b1d90d5e64de353faa05e13a5980cd25bf535800fcd7aec659b2aa0462b4b9730e067dcf7fddb451f5ef2f2	1		err	Non-base16 digit found
+2144	b64decode	72be46a4ceceb5a3bb8ede98469299f8a9ae77059bb6f20c5e6bc9	1		err	Only base64 data is allowed
+2145	standard_b64decode	986577c9af2e8890465a8834506f9011	0		err	Incorrect padding
+2146	b32hexdecode	723d24d0195ca4de2fcda53b867a1c54ee043dc6451cc6258ee4c9	0		err	Incorrect padding
+2147	urlsafe_b64decode	f696cefc152a47217c8f4b8a9cdf2a406bcc	0		err	Incorrect padding
+2148	b64decode	dbbd21	0		ok	
+2149	urlsafe_b64decode	ab10bf96d9afe252ae3a0a042e669b2c1620ef43b3056a0d6d3f7320e1bd	1		err	Only base64 data is allowed
+2150	b32hexdecode	79ebe3bee55645106841eb79c272	1		err	Incorrect padding
+2151	b32hexdecode	9ba0b6739692fb80077cb738f2	0		err	Incorrect padding
+2152	b16decode	4646427591f9b1a48b6bcaf6057df907e140920fbe61a3ffef8e9e7abb8ee8d87163d066206d	0		err	Non-base16 digit found
+2153	b32decode	8d49d012c95836e65cafae1494eb75525561b99bbf34f925118dd0108c174e20ce7267467945d39ff95011a2c175da955416618c4aa54fb6	1		err	Non-base32 digit found
+2154	b32decode	93b126749fcb6b811540fd9a098b216e6dc263197d5808cbe0d0a7b3813d4a1ded9f50daa7	0		err	Incorrect padding
+2155	b32decode	e1ee59e3148e7e3ab1afef69e438c4560fbfd1d309811874692e1366364c7e6ab9e2c7baaf8b5718352b0350f467406d7b8b0150598244aa41	1		err	Incorrect padding
+2156	standard_b64decode	12a62f11ec815a17aa00efd45c70da1581eddd17a1758f6e4572b818ee619dbe11bc21bdcec8655fbd1cd0cf123f4f2103506e8ed3e95a0f48932296	1		err	Only base64 data is allowed
+2157	b16decode	39c12a695067855a9fbba4dfc153aa	1		err	Non-base16 digit found
+2158	b16decode	e5f8e8f7a249	1		err	Non-base16 digit found
+2159	urlsafe_b64decode	cc77f293f6c9e581e50c763627	1		err	Only base64 data is allowed
+2160	standard_b64decode	0e12a15960646ad8016a678e5e	0		err	Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4
+2161	urlsafe_b64decode	4c0fa6ce8d4fda6dbd165cd8ae729b8fdde27bf9567576c4396c84d1	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
+2162	b32hexdecode	d679690777bf2f2e520cf5450a11e4b326452dc3c09e194f07e2e9ebb9bffe56dc59	0		err	Incorrect padding
+2163	standard_b64decode	576bfa90e7bc47a899cd9966b259d0115124	0		err	Incorrect padding
+2164	b64decode	cb464e6060247a6b6721227496f5445762f94b28a5ccbb5e77c74f	1		err	Only base64 data is allowed
+2165	b32hexdecode	a6b622e2a0c5770dd427	0		err	Incorrect padding
+2166	b32hexdecode	bc3689ace214	1		err	Incorrect padding
+2167	b32decode	5f53547c4d55699bc7ce297113f2076a2d43ee451a872f3726f443c1b7202983e624231d863f5d58e8d10e6eab45631c3cd782489fad	1		err	Incorrect padding
+2168	b32hexdecode	e878a00b7fe5733849fb2f6568a104fc505c6d99cd30060eecc7f701f7125534abd1294dc200f2	0		err	Incorrect padding
+2169	standard_b64decode	0135194aa2d3ff53564bb71e4e96fa0111a5547f40513cbf3a683f6eb055fa2c	0		err	Incorrect padding
+2170	b32decode	6b311180ee81088f7db356d57f3405abb62263ce2fb3aa5a238a731265	0		err	Incorrect padding
+2171	b32decode	b275	0		err	Incorrect padding
+2172	urlsafe_b64decode	5a52ca920942886749b9a1b50953e0a3c7fded6a32ab1d4a98007c1d8332b067eada5605e2dc58f7fc0124537be1ff2bc27223cd96f2	1		err	Only base64 data is allowed
+2173	b16decode	12ae8f16dd57cc6f812030d8b8d8191b09fd493e287f886fd044c09607e18366d16822863f3722144af75065dade	1		err	Non-base16 digit found
+2174	b16decode	4ef2b8383cfc4355cb4474c7ddbe0a2b4c998d135c08af8207031ba290d9301dbeb7d587e7378c82aca331	1		err	Non-base16 digit found
+2175	urlsafe_b64decode	851d7c3cca65511a525e7d252b2287418032	0		err	Incorrect padding
+2176	b32hexdecode	2b789dc273cf57c25c70cfa72f5a4a1372592d	1		err	Incorrect padding
+2177	b32decode	65c35eae875f95ec7fe8cde19b888290d91c9ba41fe9a2a2935b8dfcc7a8e09f61c6bd527e483fddc3b091f8e05191a0927aee50e324a52670	0		err	Incorrect padding
+2178	b32decode	8574a2a1d2a3854d1843dccb6703514600496797cd4b610ea3e2185a89d4e081bf28fe1288e3764f69c1347691a0b073f6a0a009b658900e	1		err	Non-base32 digit found
+2179	urlsafe_b64decode	95dc08a57e7d3fddfa	0		ok	
+2180	b32hexdecode	9d716d626f457476c27790946cade78d858348f43b92b4cae9ed29bd162e58e5ec76800a6bbf21737b7fb7e8891850cfb7175892d8d1dea633763030ff934f52	1		err	Non-base32 digit found
+2181	b32hexdecode	f24a2df57ef4d60f9d7b55735b197f1a859bcf	1		err	Incorrect padding
+2182	b16decode	9b1f2a81c69568a52c2c	0		err	Non-base16 digit found
+2183	standard_b64decode	9e42b1fd51f27d705d5b2986a6d0d28517351c9c7997a328a46a285d3e3a735fd9e7fdeabfb66b485ebb2d63681ca568005343c6b33a9f56	0		err	Incorrect padding
+2184	b16decode	7499df10199d6654a38a31185eadd68eca44aaad2bdff5623edbbd48b9cb8240cf9b46b9163f00da14a8	0		err	Non-base16 digit found
+2185	urlsafe_b64decode	bb6a2e95a97be2a93424	1		err	Only base64 data is allowed
+2186	urlsafe_b64decode	c9f90221229f54985e2576b592e920f03025b0152fc2404f4984158f1c0e6e6062f9bba4be5baaca170a1754c1e02cd0b720	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
+2187	b16decode	324d2c8228c4a05cb7c1aa046933d35cdcd8114feeb5252e0dd57ff39454d5365ac57b5739639af23ed022c44e407c7c48412731fe39	0		err	Non-base16 digit found
+2188	standard_b64decode	ec07b94b65752cd8c9	0		err	Incorrect padding
+2189	b32hexdecode	db3174a9	1		err	Incorrect padding
+2190	b32hexdecode	9924e598a1b67060e91b7d2780088929	0		err	Non-base32 digit found
+2191	b16decode	f3729fb85f5d0b705c6d2f0bb6072e69e9b9425dad	0		err	Non-base16 digit found
+2192	b32decode	06b59cc0c216a0bfe923a7c86ef1ec72f49de73b74f4b48882253a3da849394f495731f7	1		err	Incorrect padding
+2193	standard_b64decode	1784a5ad631f77f258010792083f04fcd8fdca70a7a83076cdecf9c420312248042333c75a64c261357ebe809a0787	1		err	Only base64 data is allowed
+2194	standard_b64decode	18531fcd4a39cb9a08166e23d70d7ddff0350040cda75b0da4	1		err	Only base64 data is allowed
+2195	urlsafe_b64decode	db5f1eb66d658cd835a31284d9	0		ok	fe67b9
+2196	urlsafe_b64decode	ea9f5bc3bb3a0a29d545	1		err	Only base64 data is allowed
+2197	b32hexdecode	4b7abfd4b333fe6f5f8a7a17ab2348f216e9	0		err	Incorrect padding
+2198	b32decode	8d6833ee93dbd30618af366a5c3ea20dc9017e65c8898380b1f0bb5fa7f35b3c50c8db62a33699fe0c18e414	1		err	Incorrect padding
+2199	standard_b64decode	549551	0		err	Incorrect padding
+2200	b16decode	f5eb97cac37c632519ba3923fb3cce099aed7049a379daea5d416bd46bcef2780bc631b232a8c3d48723	1		err	Non-base16 digit found
+2201	b32decode		0		ok	
+2202	b64decode	2d2635374d24c0d5f9ea4626426f7e8cd1a5b2f0190f2cbaf290df9b84081c87	1		err	Only base64 data is allowed
+2203	b64decode	7ffdd53cba3e184d0574311fc74e390c0c5f0a3dccaf796b315792a3caf83ccb6883709f	1		err	Only base64 data is allowed
+2204	b64decode	802a31d6c6b4b7e7c6cef47fc398	0		err	Invalid base64-encoded string: number of data characters (1) cannot be 1 more than a multiple of 4
+2205	b16decode	7285f2b7b973c1240ccd904aa199e26d3d8566003229649de626525a953d	1		err	Non-base16 digit found
+2206	standard_b64decode	6a150386e0f482f9505c	0		err	Incorrect padding
+2207	b32hexdecode	855152c9da4a03fdd48df38119e7dc8d01a134059dc6f46321a692dfd0c55a787912250b2b52bba267a70a634d6625fbd6be905f3539ef40f42350bf78732804	1		err	Non-base32 digit found
+2208	b64decode	a86dba3dca05a2bb68fe37a8c872d5a01eb7891a2d1d81c5ba9df794df3635bccab5b5c186f01f559f212722	0		err	Incorrect padding
+2209	urlsafe_b64decode	fa1d42d0f1408ea404a4d22cf00594d495e375c7495b47afab86f17657f716fbbb0705b2de04817a70b9a1	0		ok	06e206bd6ce9
+2210	standard_b64decode	93ba4eb7ef69b4c6	1		err	Only base64 data is allowed
+2211	b64decode	a8779b3356e3360b252286ca75741033aa28c3e20e59ba0a2de3ca509466f1ee1722614f83	1		err	Only base64 data is allowed
+2212	b32hexdecode	ce2bd94081fa5f0973acd7c07f459ba59627ec304d903e49dfa8625b531cb5dcbb3be5c784e23c0ca7f4a4ddcc02dea72904f9541986f1450a98dd1f	1		err	Incorrect padding
+2213	b32decode	ec6949be7d94927070f606e507cadbf4d726fb62b01acb56fdf245f9c040d32fb92c077f80662bb163b15d7fab720a5e9c9fec	1		err	Incorrect padding
+2214	b64decode	628f341432453c6e03613a9adbc0befe4ef584d26765322ecc35a48bbc46344b93e93a5254db431a70657f14118ff253940032a9af4b	1		err	Only base64 data is allowed
+2215	b32decode	433ba92a2a6d94b0d2faa371bcfbfe59ec167772a2c9d70a178210ba86c1bade6c175fe9b353415a15e8669d31cc86ffc342586f4946	0		err	Incorrect padding
+2216	b64decode	5ff5015df69a59833ea014cd7d50f9bf80daedadcee3f4288401eaf3f0d4f807ec318d244c6442d9cbe5899b673b97ad0f04c8	1		err	Only base64 data is allowed
+2217	b64decode	a534361174316a3c90c84cc7ff6429a5	1		err	Only base64 data is allowed
+2218	urlsafe_b64decode	dc4610f3f8f1369180674a08ab7ee79a3cb94727c902d7ad16202e735f19e6f2b887f75edc443c5f4c01a6710a8159c313	0		ok	17a8091acfc3fcba98
+2219	b32hexdecode	348fe56572907b50dc9c49a67b3658479c8ce63f71a4e4f5f7f70a1daf41a2060b3055bc42d8a02f5858c17f8a84	1		err	Incorrect padding
+2220	b32hexdecode	c1cb0343851264c6a659a242d23bb4	1		err	Incorrect padding
+2221	standard_b64decode	1fb7a8b18d5c9eead023a6ffc14bbf7d44e33e33872a651ff518bf22eed252da1a13f512	1		err	Only base64 data is allowed
+2222	standard_b64decode	d6964cff2f74791643cb7dcf71ea92aec717b2f7081474d8382890fc0981d051678cf7aa23ddf0580072a4b5eed89f10ea9ccc8c09becb8a	1		err	Only base64 data is allowed
+2223	urlsafe_b64decode	041f39b6e6f8a5b5b42265edb89141b3084f40a3	0		ok	f5e00e
+2224	urlsafe_b64decode	0f9c111f97a531fc0e737333ebd0c4ca446f8d2310be9a3c8be355ca	1		err	Only base64 data is allowed
+2225	b64decode	5b59d48daac580925ff6705eb7e8a77753c6bccdf7aba6fbd8bb388de0af3821c4a5a89ca8f95de2c9371216d410	1		err	Only base64 data is allowed
+2226	b32decode	9dfd938673de2969ddf7e7c4a8a2d068e45ec6d201ae2c93a653e112726a1520cae0edf8b1b92851484d70a4877afc124987317331d84077699f1bae84	1		err	Incorrect padding
+2227	standard_b64decode	50568dc43c1e5df7d94d08216912c06e52aebb807024e9	0		err	Incorrect padding
+2228	b64decode	361bdb4d70f7262ab2aa762905e59952fa4aef	0		err	Incorrect padding
+2229	urlsafe_b64decode	941c8fd8a92930147dab2740a1d74032fa1993a2c175d3f47af1038d456c424603290b20	1		err	Only base64 data is allowed
+2230	b32hexdecode	3da2a88093c017a4b82b2b	0		err	Incorrect padding
+2231	standard_b64decode	dc0bb0d790a886ec83454990b4b58b0a08af42d3bfc320dd3b7c43076405cb147962a30b61f7d3f24f36a4	1		err	Only base64 data is allowed
+2232	b16decode	c36c57c4749577926d6ea56a885a3c9e54ed94a316d1c0077f7f	1		err	Non-base16 digit found
+2233	b16decode	8845a27b8151b03ef00a00cecf71aece478f5baf02aef56753a0244cf5771b74225cae1248b0	0		err	Non-base16 digit found
+2234	standard_b64decode	ce2f666ad3e1f77b78aee5762ada3a342edc16574b164e9ba578c7240f68055022498adc4ca1e6b70eb8be51ce83f4bb7219effcd1e75bdc	1		err	Only base64 data is allowed
+2235	b32decode	e0f0bac2eeb8db5eebbcd583c05fc88f	0		err	Non-base32 digit found
+2236	urlsafe_b64decode	09bf6a778f985d1f120679446db91873ae9c773f9a8e102416a6c818f40c	1		err	Only base64 data is allowed
+2237	b32decode	0aa48e3f649472f6ccca84ddafd7fde6bc13e228871540d06dd5d2533d570aef354ce3937fdf9bb8c0150e50b2f798302cec5bc328	1		err	Incorrect padding
+2238	b32hexdecode	48b7ae7f471a0be14882fc4e8ea8537fd4e1ee0507750d17e7c6faf11b85ab64ecce64812e110d7576c678f77664a03d66b413372d0a569555575a	0		err	Incorrect padding
+2239	b64decode	f162b17e7ffdf698fcffe0e19cfec4d7f1957da7714f2aac406178785fce2649ab906489	0		ok	6ea39ac7121d
+2240	b64decode	668f49227e9ee8e1e57eb443fff73dba739aa35dec1d8cc3bda83b670112ae5d7c01950b77848c6695ab180d4ffafd91fc3ad38feed431	1		err	Only base64 data is allowed
+2241	b32hexdecode	06fad212a6c1e762fce31681a36c4a73fefcafc33b6fc38c37c69b473b9a47d35f0c35fd	0		err	Incorrect padding
+2242	standard_b64decode	bfdfd66412ed895f68627ecb	1		err	Only base64 data is allowed
+2243	b32hexdecode	c76545c1a6b4ee241075f53219033b9a61da5582ca4dc166101b058052254e0a3400990b0544f609c8d01423adb6	1		err	Incorrect padding
+2244	b32decode	a9f92026a4e3339b4c47a4e4162ff883dbafc823dc91f553722e6eee5908f29c212f8b51efbb9929e9ab986433fe98fddef9d29d9d0844bdb4d7	1		err	Incorrect padding
+2245	b32hexdecode	1765df81e9c50ad48c9f7c82566c47881e97667dcef86fb5efcd1b901d13bf4caa8f927967ead4d0514204	1		err	Incorrect padding
+2246	urlsafe_b64decode	f598dafa1662a26ae4806d95c34e	0		ok	6e398d
+2247	b32hexdecode	6bcdf943e5f191f750cfd4a744656cc8f1b7d8f8ef8db2c6dce4169407d9df93dd45403a87adadb8aa9c250d13c8619514b1fe7ab3ada62b18173486	1		err	Incorrect padding
+2248	standard_b64decode	4701150805f79392f292bdf2a55655b3ea1c221cf73dd7305e14d904e7e770	1		err	Only base64 data is allowed
+2249	b32decode	fac0b7691ca0c4b0c63e3234627e0e693e7780	1		err	Incorrect padding
+2250	b16decode	89afadb45f5923	0		err	Non-base16 digit found
+2251	b32hexdecode	effa84ff18b287a95585767aaaab8586a3967760001752503457e9f4f7ae552c4c82ac7508f880e988	1		err	Incorrect padding
+2252	b32hexdecode	12b905ad5c1fa1c54a991ede0f838eb8c65c45aebde7afa41c2cbccd21fb7cb1623dad4397fa2d9c343af37b31	0		err	Incorrect padding
+2253	urlsafe_b64decode	c9e29039523205f1b3ab10f9236975fbc477304c4cad6bc5d82cfc49496374b452281035b3b0	1		err	Only base64 data is allowed
+2254	urlsafe_b64decode	3a2a4b59591d7c8fcbfc06ef276f3aef6daf9fcb3dffbeb8285001468790ac492d24331f2160cf929e1d37adb18e0e8b4da33361a28e50e519cdebfa65	1		err	Only base64 data is allowed
+2255	standard_b64decode	85dec40a4124a2499c708ff4bbf6d1b6e3453b147847ab5837e58bec8c8f3f71d8c8eda741	1		err	Only base64 data is allowed
+2256	standard_b64decode	9ba4f4d3223ee08926f4684502a8daeeb669e08f494838b245	0		err	Incorrect padding
+2257	b64decode	feba113e83f6fe0c1c3d7aabac26bae7d655f287f99dc539e45550a39b3b	0		err	Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4
+2258	b64decode	6b1f8e5419c7a4b76676ef78934fbd190c9962aea8ec50c5280a312321925301a0b3eaf6c3e7e38c275b58fa1a7ad9ed90d36e28	1		err	Only base64 data is allowed
+2259	b16decode	e1103a7a24b489a6e18b0f33156383c11812c3f618e48849f20b3852defa1049e79059a57d47250f638e6ee84f29cbc4c0e5e616b10cfda65f67fa92	0		err	Non-base16 digit found
+2260	b32hexdecode	526cc9e9	0		err	Incorrect padding
+2261	b32decode	5b8d15efed2f6deb6d914d09bfa646ffa16911d6a165	1		err	Incorrect padding
+2262	standard_b64decode	963d72e03a62970943555f02956e634cedf265910cfc4f9ade0e781b6637afedc87ca5fb55	1		err	Only base64 data is allowed
+2263	b32decode	708aa6e3438045f06ced5a220e0ddfd9f81414819e35d077ada6d8457a165c312b6d0ecf096bd61c9bb6a7544c39992946a12abb296b7b753507f6a51cdc41	0		err	Incorrect padding
+2264	b64decode	f8bf6fcaa1b5864b301c5a91958da5ac4a48ddc1b50473310d3ced2c9383679cc86a2cdb9a8883a398a4e5	1		err	Only base64 data is allowed
+2265	b32decode	5b723416ff019d66155a54ab80286b1819d24d2f8ab84ffbd323ff23966e3a7a108fd752b64092ef3f	0		err	Incorrect padding
+2266	urlsafe_b64decode	ec1e4b3c59425d722932f6c06ebd594452a03bf4e752625480524c4dd5251c954bd40eb91317a892ce73ed02b925f542a7	1		err	Only base64 data is allowed
+2267	b16decode	4961e70ff707f4aad2fb431e412024774bdc8a4eb633e3280462c967a2af	1		err	Non-base16 digit found
+2268	b16decode	d39582a35e8587ea057fcdf095874b	1		err	Non-base16 digit found
+2269	b32hexdecode	d3cf1838949415f55090312207216a7a522b3727617b7974df8c6bbf	1		err	Incorrect padding
+2270	b32decode	4ab9e1c152c29a892b8b4fcdd01702aa7ac05ad3e2d2e9376e3b09c3f2e4593f41e32aae659c36c1fe4b879877c785df322091c9d073f514a99a8786	1		err	Incorrect padding
+2271	b32hexdecode	298afe13898cd0ea8c5c6d903ab7b91c1f60cf0f5e892ad4b2bd328ca3ad23e79f996781f18bc033b3939c926289	0		err	Incorrect padding
+2272	standard_b64decode	4e98bfda691a358573761c71ebe7c11d32d427ae1e3195348def87b7822a499579d4237d87f34717e6	1		err	Only base64 data is allowed
+2273	b64decode	a31ac721e3356483ce43596aaebef074dd7b5c9062d6c70e40550d8fb56c5e762f813aac360192ce4e33e44e3fe228b9a5bf920508e55c652441	0		err	Invalid base64-encoded string: number of data characters (17) cannot be 1 more than a multiple of 4
+2274	b16decode	03350c942d10b212cd1c980b956e776c300b3358736c4cb3915210	0		err	Non-base16 digit found
+2275	b64decode	dcc61f08d1c67e49ea80ab688d41132e625adbc45277ab2274480dc47afb3aa4c80c74fa7db7b2bae37158a55b74baf61cd79c6bbfabdc5f87d92bfe	1		err	Only base64 data is allowed
+2276	b32decode	574e2a6076438b14826ac7ae7b2ad2f6423c6ba9a0c0e2df08950f8aa99e0b22a9024ea7d8bd3bdc9972075954be5e1e	0		err	Non-base32 digit found
+2277	b32hexdecode	9739628780d1992020e954ba42ae8dfad939023985deb6d526a0e3007ff994c163fbd105945d7efa5e84614c626c87766aac	1		err	Incorrect padding
+2278	b32hexdecode	fbbfc7d2a343cb3af3f25c3fc289eb75b0ec9d58dc08b62715fb90463c4140300220faef9da40de05a2b9bb9fe25f7c3	0		err	Non-base32 digit found
+2279	b64decode	629b6b9d7e141cc4e949adefaadf3de2bb3698e3ed5c0104644e9c3deac3c13412fa3911eb5dd4195cb90c98627498082cf6497299	0		ok	6e423a74de3d6ed22b
+2280	standard_b64decode	a0dcfa6670	0		err	Incorrect padding
+2281	b32hexdecode	f56b1fc1d16c1ddd041bacc6d71d730ed7ecdf237351ff80ee54fe	1		err	Incorrect padding
+2282	standard_b64decode	ae63d593e72111996010c5c5fc0c2bacd18381d1f31b175229bea53c1b6f404d397752e022b7ac24	0		ok	73e46833dc11
+2283	b32decode	d67c704670eb9a0f0d14858e3f39d2f2107f7797fced34e159dc36bc61275de95987d52c41a0	1		err	Incorrect padding
+2284	b32hexdecode	8a98000c5b03e8f8ee912b589cce0bf1895cb0a48f1addab905993617c7d2ac903364386d8949851824441b25440946a6eac8368182033260d7ec54cb15f60	0		err	Incorrect padding
+2285	b32hexdecode	4e17b03d4f686ed92a2eb039c10ffd4c9cd287dbdec023b5623cf424be5847ce1fd18876517a2cea3d71c00e9d86f88f4f3ba569f7d5c0f76d42a06a	0		err	Incorrect padding
+2286	b32decode	0665474149e00d34841d8c54dd838ea5b3f53d14980217eca33a2573bbddd8	1		err	Incorrect padding
+2287	b64decode	2e81310d02e6b9449e148e6044c375ac0947df9a7419599a	0		err	Incorrect padding
+2288	b64decode	3195fdcd5489fec275e26b9663116cb97d2ee4ab3ed3108f	0		err	Incorrect padding
+2289	b32decode	95d695dea54d33e825263d55ebba9d4d3a3ffff463d7b3e8ec03	0		err	Incorrect padding
+2290	standard_b64decode	157a33bf66f3e3ffc4d11bc18e9a7a	0		ok	cf77f3
+2291	b16decode	a1ad896541ba45ea2ccb443d9e11558d755c5552fe1388c67648	1		err	Non-base16 digit found
+2292	b32decode	4dc3f44ef5b3f5426dab115cdaf14783c0f6ffe18c904d7ffa0a4c778d633e19ca6385cdaeaf37fb8e18f0b878	1		err	Incorrect padding
+2293	standard_b64decode	51a81b50f153f769e701b40bd49e019018aa34dd496ba5384bb7c2bde2305b25c9fc26049717c2429bd3a58d514cef	1		err	Only base64 data is allowed
+2294	urlsafe_b64decode	fb9f39322d0d72542380e23ae92d3d61b9dd91	0		err	Incorrect padding
+2295	b32decode	892ae0410a9a6bc366d953d2a045167dfd156df7fb173bb9631646a4c40956bd0fac977da8e3f8755c112b	1		err	Incorrect padding
+2296	standard_b64decode	aa7766b8c175ea8b6d4c027d21c11d2fea	0		err	Incorrect padding
+2297	b32hexdecode	5531cdd6	0		err	Incorrect padding
+2298	b16decode	f1b5abc3a201	1		err	Non-base16 digit found
+2299	standard_b64decode	ce5866119b1009b500e1a926511857022c03fe3761b67781930cbd745f	0		ok	5df416edac2d
+2300	b32hexdecode	c0dbc6a87906e47c44ff0604e958b101c6133f882783388d007b4d695eaa0803222a480421ea8787569fe1b8b7685546df21268928163cfa966b644904	1		err	Incorrect padding
+2301	standard_b64decode	c43f05ebef06a8182a1f3e8626	0		ok	
+2302	standard_b64decode	ebe3b1d0e5a6bc5add646f4488f280cb05019b65ff9a3a14eb4e805f548a94f5	1		err	Only base64 data is allowed
+2303	b32decode	73e97ffd42147eb2ffc7d1395523cb4c1a5a1daf43e0fbd39bd10dd94fa314	0		err	Incorrect padding
+2304	b64decode	707217615c2f8e6072d77d8d6278db796a8c5d0e03ec01a383536b02f1a8edb341cbdf2becea2a1524b8f67f8b8867d8b3146f	1		err	Only base64 data is allowed
+2305	b32hexdecode	610911e5a2703587428f4deb	0		err	Incorrect padding
+2306	standard_b64decode	1ad3b9e68be83cde76c439b143c236e300c418910a63ba797c6645	0		ok	bfd0ba7327c4
+2307	b64decode	d44939e6530f048bb72e4290f8d879a85f406c082d2dea2dc3a1c3ed849fb5d9118250	0		err	Incorrect padding
+2308	standard_b64decode	b0bf93c0d6c918d20d4174b6b3a826d2f665	0		err	Incorrect padding
+2309	urlsafe_b64decode	96905f90f4958f3dc0fb1291aea8abd5000f75d9	1		err	Only base64 data is allowed
+2310	b16decode	d7be4362cc9b6fc193f05fbd4ccdd3231b155eca33e40cfddca776b0a7c862b94dd61314c2f53380d6be	1		err	Non-base16 digit found
+2311	b64decode	0b04e56f0dca6d3be461b3d6	0		err	Incorrect padding
+2312	urlsafe_b64decode	ea2c0bf8e9b107c68c6b8d531f8c9507bbe155a28dc2f8455b9c96c8a91b1afee54157732f30987d0c47673a5871165b938d	1		err	Only base64 data is allowed
+2313	b32decode	7e7b00ae76e9fb954ccb21a91d724c61b40cf015c3acc5	1		err	Incorrect padding
+2314	standard_b64decode	70710015a6d0994427	1		err	Only base64 data is allowed
+2315	b16decode	9e0c5abd1d44be631dd31151bcd9565ceb461b	0		err	Non-base16 digit found
+2316	b64decode	b935da718d8d235c989ae7c2ee690f459cd62b1aa9faeb21891c59167ee8f82f6dac546e6be772	1		err	Only base64 data is allowed
+2317	b64decode	42f116	1		err	Only base64 data is allowed
+2318	b32hexdecode	2c0cd098ea651999f9d0c8	1		err	Incorrect padding
+2319	b32decode	4a	1		err	Incorrect padding
+2320	b32decode	be5d8fb90adab0e63d8f	0		err	Incorrect padding
+2321	b32hexdecode	70de70af71a777617c77642bb7058b239adfd7444d	1		err	Incorrect padding
+2322	b32decode	b3463210a91ace2ab1f1466fe86fa546cd6b	1		err	Incorrect padding
+2323	b32decode	bdae725cd6646f40f1	0		err	Incorrect padding
+2324	b16decode	2eb203988801de9dc0720f329f6b36759d8a621b1f71af221711fe4d9c81bb012818e6f2d9114c65e92f0c558df973d748eac49ed377406160f4d7cd07b9dc	1		err	Non-base16 digit found
+2325	b32decode	4fdd3c6e1800c3d08834d3d229bf08dce559aaa69fd566f977222a98b30dd922a753e94c881c17526c9a	0		err	Incorrect padding
+2326	b32decode	d1a2792ddb5ceef67907f3654f60fef78201b3519e589c4af2b920bc9dc0e8b14fe505a2aaa7b27d	0		err	Non-base32 digit found
+2327	urlsafe_b64decode	17c0c147d6c805d1938c2ec99365976498a8715d9ac0271de1f39beedf81589087182633cf309c970fc14cff1e59ae8b	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
+2328	b16decode	1cf8f3	1		err	Non-base16 digit found
+2329	b16decode	7f953e704f1e35cc9fae944a7ce2ced42da75db1e961b411a7d1	1		err	Non-base16 digit found
+2330	b16decode	203ea123964f22a2bd70864d6719f53d3fbfaf40f2229ea842ee752768bb19b7131d526c58ef00ca6f7882600161ef125809f672208e9efd6a31129920af7a	1		err	Non-base16 digit found
+2331	b32hexdecode	ad376aec74d29eebc650a0de0bd513b11bc1156b0a552c8b017169099baf6cca6ee6eaf7eb1f0a5cf24d9eb344963fe5c4b1f2cfbdab728962950498c1c95fa3	0		err	Non-base32 digit found
+2332	b64decode	df9458a8fd6029aaaddbe15ac328952a25c8a1a58b75d89c2007570b342f90	1		err	Only base64 data is allowed
+2333	urlsafe_b64decode	b12e1f1b5442b30283473e199dad3c421f10d53884adbb829fc231bf39eecf840da8d88ed4d89c944cc60ab09fa04293398995388b1e72	1		err	Only base64 data is allowed
+2334	b32decode	6b38b8c52459f7addfd4ad96cc7fc0b090861e804d3897265bc84f583d7269fff6bc4906d1e2967b31bfc31a3372a14b965d7d6ae100a9ebcc33f6	0		err	Incorrect padding
+2335	b64decode	07112c59bb0bd84fd337d357ebad9074c5c8	0		err	Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4
+2336	b32hexdecode	49352a59aac9e579b9d2fd189fa42b704898d4b8df135fb25794d3732a0da4517c5632116b1bde4c3359700b785868cfb09cf5b5663a761d4b23c805d9	1		err	Incorrect padding
+2337	b16decode	dd0059adc115d0cc1f1c132aee	0		err	Non-base16 digit found
+2338	b32hexdecode	3ffe498d61a7fe28f8bcbb54d342528f378b266d5df5	1		err	Incorrect padding
+2339	standard_b64decode	e4f837a1433b382fab0db72f616cf6a3c35445a8135da06e13e344650a257907e07bc5bcb61c369d7cab12e2a4da8332591773	1		err	Only base64 data is allowed
+2340	b32decode		0		ok	
+2341	standard_b64decode	506798c0249929b454ea08cf1a2fc7cb822d04109112cd93046c0c1ab52faccc093adf	0		err	Incorrect padding
+2342	urlsafe_b64decode	bf7573324606227521272c1d80972943a716b3abaebfd5dc6ed24e7dc1541887024c46f7c69e9ca350	1		err	Only base64 data is allowed
+2343	b32hexdecode	e4f045963a503e1ddc9611590eaf1b5ad9da73d8ef593675017b0b9e4bc32a2c7f2651d0d15170ac3fa7bbb4b0fff4cc254c	0		err	Incorrect padding
+2344	b16decode	eef02c507d2e2c1e3d1a133d55622d4e1d	0		err	Non-base16 digit found
+2345	urlsafe_b64decode	216bc58224547263cbb7116bca5caf984b23	1		err	Only base64 data is allowed
+2346	b32decode	556b967c4b3cb0a21ab09189fcd184b181224eebc32fa5	0		err	Incorrect padding
+2347	b32hexdecode	192e597d7d13f1495679ea2340b1e52fd3508850d7	1		err	Incorrect padding
+2348	b32hexdecode	7cdd92dde95b	0		err	Incorrect padding
+2349	b32decode	c0f0f331e0fdb1d0502a4a62c780bdf68f	1		err	Incorrect padding
+2350	b32decode	84c1666af5e3cbb52f2603d79d44a0715e691b7de81fd12af5e6291500e9bd90b07ce60780d9becb569bd4c23c9f74388067c64a89b45e08cbc25c468f39	1		err	Incorrect padding
+2351	standard_b64decode	e977ce9012ad15be8aaec5c5c24d13c4f4dacc7ee5daba8c482ec4825f65fb1c77639d92a4a53c1d095e9444b3ce6dc6ab01098b60a9c2d2abfd	1		err	Only base64 data is allowed
+2352	b32hexdecode	6ba18fc2b8	1		err	Incorrect padding
+2353	b32hexdecode	3bf161fd11f0d66cbdf6371a55c169bcb1837fd45b0757a72d58c0	0		err	Incorrect padding
+2354	urlsafe_b64decode	b2a82173	1		err	Only base64 data is allowed
+2355	urlsafe_b64decode	89e2667003ad83dd0274fe	0		err	Incorrect padding
+2356	standard_b64decode	8e368acf4f34d4bc222e82960c0f6bb053f1c259ffaf6ddcf3b5	1		err	Only base64 data is allowed
+2357	standard_b64decode	7ae2ebc89906e5344c7e43d0b632fa34ce	0		err	Incorrect padding
+2358	b32hexdecode	e28d43881930f54752aacb9851bcec896cc71a2b81f6da520ec19ffa0ade3cb48f1bea4a44be114a92cc9e92	1		err	Incorrect padding
+2359	b32hexdecode	57f4b522b23978f65b2b06c0	1		err	Incorrect padding
+2360	b64decode	acd4f6dd8ed1e8a721be7b2059b090b30e57b7dd2d07f8210ad9ea3fdb357025f91db6	1		err	Only base64 data is allowed
+2361	standard_b64decode	dd2a4d7d395c6524d428d293a218e5a1a2a5ca445557b8a0d5a70a6a354b0b60d5bab573d0085513d46d35a2c7d06acb4fe1	0		err	Incorrect padding
+2362	b32decode	8718d8b139b9b3efdbde97e0c8727b5e02ef6674ebd943f3b37bf07ce73ac95309fb94	0		err	Incorrect padding
+2363	b16decode	e85a1ebb77d7def8ee5c75	1		err	Non-base16 digit found
+2364	b64decode	c9b3c3375d46d7f71a17fd6d243729d3cbe53b3687a3a57e86d4be44414aa752ce530ed45f8e9948361f7756058b1c8cf393	0		err	Incorrect padding
+2365	b32hexdecode	bd44cec9d951ff57de51e7e40eb9bbae661423c3a28c640c72eac20be1ba7d19144d4da0cfffacc8311d32d68626a775ca032b04e301ce1f0350efed8fdb	0		err	Incorrect padding
+2366	b32decode	224c2c00421ce9fdea9141f54d41846d2e20cb3369cee5fea48e47b051e9cee8410ec521826fd4e1693766a6d60e474d21bfb228b235dadfc7ee	1		err	Incorrect padding
+2367	b64decode	038319400c8319153d27315fc63f1daa5a745fe7960b1fa618da5f2a47ee410d10a47665189a27a080da354edab9	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
+2368	b32decode	198e25b428f55d18314700	0		err	Incorrect padding
+2369	b32decode	069df8213a61fb9739	1		err	Incorrect padding
+2370	b64decode	b2	1		err	Only base64 data is allowed
+2371	b64decode	0d04acb10f3bd6212f904a7adfcd211208439c3af6de1062c966de16024f13bbfd2f53ced6aa381a7d6a6b1a6bcd3750c385185e88e1	1		err	Only base64 data is allowed
+2372	standard_b64decode	8b8101c653e138d01bf3cec0050edfdf00df15228c553ea47a5331fe1bdb58adc70492244f6c8311fd63cf8765da3390	0		ok	4bc5334b55ce95c7b7
+2373	b32hexdecode	0d5baa703a70e7593c4ef1b840cd8a3672dac9a0bf	0		err	Incorrect padding
+2374	b32decode	088126dcf9589d37c62f3116891d87e5fc14b819a1e6d7233a47a0c0463b871fe550ee9637e1e1ba4bea4f62533dfe59a17797f6bd6bec6d	1		err	Non-base32 digit found
+2375	standard_b64decode	2c5ae7469cda05a5f2529115c2df873fd366ab8d0213db99861d9a993a9fb8	1		err	Only base64 data is allowed
+2376	b16decode	740fd9	1		err	Non-base16 digit found
+2377	standard_b64decode	52ae72bf6fcb4964caa4a84be0616ba5123ef80dab38a7c8	0		err	Invalid base64-encoded string: number of data characters (9) cannot be 1 more than a multiple of 4
+2378	b32decode	c2c4dc1ca688b73d2ea4e47f1f5d59a31ec80b98bed72d12bdc83d87487383e3ef584afad6d216036755a4fc97ee705cef	1		err	Incorrect padding
+2379	standard_b64decode	784e5edc5cf4c6d6916081916fb6bd6bd7ab8b5d5b00de8b464ad5aedcac3a2cdb0142c3156a9478c60757f41b09c4fcc5	0		err	Incorrect padding
+2380	b64decode	4df787030f931e43	0		err	Incorrect padding
+2381	b64decode	2bb1dcf2e80eca	1		err	Only base64 data is allowed
+2382	b32hexdecode	5102eaa0f4db6eb6b2be4480345261c443c0596a2e6d6f6caadca9b31da7fb6638fd1915	0		err	Incorrect padding
+2383	urlsafe_b64decode	d50e564fc5c13a14e482	0		err	Incorrect padding
+2384	standard_b64decode	cefa0664e6be20968d1b61a210a862c3d986a3d52be25ba652aa59ae36c7a5a41febec108e44674fb2	1		err	Only base64 data is allowed
+2385	b16decode	9decd20eba39963ea60a12168c67b4ec15513a6ffc4bb11d5d2d1074bf9c	0		err	Non-base16 digit found
+2386	urlsafe_b64decode	27d1931ef7023e036cf938b5f54f2023987a95b3e702	0		ok	97c3b3
+2387	b32decode	e5ade3854db76884b3d771c868cf8fd2d21684b859025e428515be2ad8d5325f3f867e204058f1bfa1bdf7c7	1		err	Incorrect padding
+2388	b16decode	98747cc587ad5fe63ce4830748c355	1		err	Non-base16 digit found
+2389	urlsafe_b64decode	06ab5043f1d05ab6	0		err	Incorrect padding
+2390	b32decode	f099c2826414315cec41310ef370e67fb000ffdb0b731f9133bdb82a57c9205e8077452894494f41f8e2f8c5e4f9571a7cc6eee4b0eaeb9293ac	0		err	Incorrect padding
+2391	standard_b64decode		0		ok	
+2392	b64decode	0772c50b7390c5784f902d5d58f10a628cf793ebeaf26b262e62d02d8160ee	0		ok	aecc4e5db91b
+2393	b32hexdecode	f5d57939ec9d61520d2d8e3fcbca8f6a2d7575ea08ca64b8e444e75159297145118a74d32268f013592e5092255b705f360f911e80	0		err	Incorrect padding
+2394	standard_b64decode	b318e9cdeac5098463f03dfbe5f9c10b488c3ef4d602a366b429a511	1		err	Only base64 data is allowed
+2395	urlsafe_b64decode	59fec953875c1d16c765978d4551ed7497440a02ca7f715e592f5f33d3f9a54a6fa3559077d5c8	1		err	Only base64 data is allowed
+2396	b16decode	42e6c376222e475e840e79974cabcbf89fe24c7eedf96eff91fbc9c576a0c6	0		err	Non-base16 digit found
+2397	b16decode	b6848b260ffba101d29ab1ee6320f86895fb1e0676bda53bc9b4a28a39af58	0		err	Non-base16 digit found
+2398	urlsafe_b64decode		1		ok	
+2399	b16decode	2a679c1a419e873402eca1873f79adfb208df83c010d796bbf9af57d6b3910f69648550fa4f9f8	0		err	Non-base16 digit found
+2400	b16decode	1098d017360c3d0bb1a3d8eb43c9413baea1b4e52ef772d8adf00e853a17be69b36ab3	1		err	Non-base16 digit found
+2401	b32decode	5262ad9406bc77186381	0		err	Incorrect padding
+2402	b16decode	26172813127b86971bb35c911fc5f10fa6095b6fc3ec95a94802d7f6301976218a129d3cb247ab4a554dd042027bd5d9a450	1		err	Non-base16 digit found
+2403	b16decode	0a3b6c5142f0e77374e69e4503f2cd3b23b71e13dccc8cf186f9e433d339d8223cf3a9c7255428c595	0		err	Non-base16 digit found
+2404	standard_b64decode	967a142a64ce167354634f7750	1		err	Only base64 data is allowed
+2405	b64decode	1c4df2f608ca34c5c8a5273576d6b0732441ed4ee3e19d762b8fd743ca453cdab8a7b21ec7d22517347b5928ce	1		err	Only base64 data is allowed
+2406	b16decode	299a0b37d5	1		err	Non-base16 digit found
+2407	standard_b64decode	5c690eb633448b3f10e9f7	1		err	Only base64 data is allowed
+2408	b32decode	c8e35bad804c	1		err	Incorrect padding
+2409	standard_b64decode	9abcf3	1		err	Only base64 data is allowed
+2410	b32decode	70ea3f186e7748768c99161a6a2dcccd971d37cb1e7ac923938f171f9b0f03	0		err	Incorrect padding
+2411	standard_b64decode	aad8b832c842dcd29b878c66971a4b5f	0		ok	d817ca
+2412	b32hexdecode	6099dcea8a3110d0315c32134fb29405a2f845ff453d811017c49f32a6fb09e7a5	1		err	Incorrect padding
+2413	standard_b64decode	8530b3e7eb0ae7d8af50d4	1		err	Only base64 data is allowed
+2414	b64decode	3c4e39f176	0		err	Incorrect padding
+2415	standard_b64decode	60f959d2de4c74b952a21e65bc23027fce268c077a8efa61b20ae7ae75da396de2173d2c79069c5a6ca2f73611a086e8aa22e92f346546	1		err	Only base64 data is allowed
+2416	b32decode	21c9de08a116369dae5a829e2e37f29dc0eb3e	1		err	Incorrect padding
+2417	b32decode	d1c6fde1a9eef98c67c5a17a00539c0f65eb741628669f471f4a0d624ee621233cf9526ba3aa0f3335e084a4429678e21b2a15cc	0		err	Incorrect padding
+2418	b16decode	49fd	1		err	Non-base16 digit found
+2419	b16decode	7099cc7ace84658b95210cc87af4137cb29e12586833a5e9e882ce9039d89c80d3aa545299f46c63fe453b452e	0		err	Non-base16 digit found
+2420	urlsafe_b64decode	716e800736d750e59d5689cfff484ec70d34eb47bdd5ff0ec8f003cf	1		err	Only base64 data is allowed
+2421	b32hexdecode	b8c44fc42a4c80959429e6ff744c963b95be56f9fd2bdd286f67a219508f733f424428a89330bc3d0f1d3b4488	0		err	Incorrect padding
+2422	standard_b64decode	ef79d45a80a969effd44d7d6f8b0d5fda26560d84f64782cf4e9142d789d8e3cde5baf97f2bb68511acb63ceaa74f4bcb2	1		err	Only base64 data is allowed
+2423	b32hexdecode	7c15b4	1		err	Incorrect padding
+2424	b32hexdecode	70e727904347c8f2d014303083c331d6edfc	1		err	Incorrect padding
+2425	b32hexdecode	cb49f12cdd3d8d7df7fdb709801b1b175f06610e47348d3b9592069aeedc033839001a0554c586	1		err	Incorrect padding
+2426	b64decode	903efbeab6ef379d6c2b9333f23473ce5ec3672117fc3b57863989b791026e2da03735eb3bb06bcd23d8	1		err	Only base64 data is allowed
+2427	b64decode	d025	0		ok	
+2428	b64decode	af2de7f5606e911231a5a35f549a5cb429e121f154fa81a930c04565353005968c3edd19cddd2856287b404d9652	0		ok	9f54d3d047b9d15311
+2429	standard_b64decode	0731b6ca83efa6a382f3edf5f523b97c9dad30a6067c3951ca8b982c8af009b5d488fff7bcbedd8f8c2c8db1f3d6bce3a8ccc8ed081c9d	1		err	Only base64 data is allowed
+2430	standard_b64decode	f1c7dd608af78b4e3518e7bb196f41b0cc7b654b9920	0		err	Incorrect padding
+2431	b16decode		1		ok	
+2432	b32hexdecode	ffe89c2e	1		err	Incorrect padding
+2433	b32hexdecode	03e4bfa3ace6c790cbf7a61a77c5caeff5fb057f2a3401243b74c754	0		err	Incorrect padding
+2434	standard_b64decode	a13b7dfbe5f9cb517babfa2ad522dda20959a4e2e6628cf661bfb616906d58d283c87eb5fdba86abd53b9ca3	1		err	Only base64 data is allowed
+2435	b32decode	43	0		err	Incorrect padding
+2436	standard_b64decode	2c22b959b855b441	0		err	Incorrect padding
+2437	b16decode		0		ok	
+2438	b32decode	43a88abbc5646e6bbf0e17f8f627952af9ff71e2e628fd69079f3a7ecdb8bbe1bc4ef3603649ea59023ac88b43c71660cb38f719aeb12cd4	1		err	Non-base32 digit found
+2439	b32hexdecode	6ddba3298a9287735a9ede12de0398ccf8e383d882bd8d0883217f4b	0		err	Incorrect padding
+2440	urlsafe_b64decode	2021a0f3c542cf1a2bccfe1217be8057bf038c2bb4764fe311021e6071093129bb	0		ok	07e5bebceab5
+2441	b32hexdecode	e0ed8356ac6212980d3bfc	1		err	Incorrect padding
+2442	b16decode	346b6e	0		err	Non-base16 digit found
+2443	b32hexdecode	18f4372841d4b50d2908ec195c9dc254a9f49e34c12c72f9e8cea230b290c668b47b7bb2f24fda8d2f7dd7b82964f2ec9793dfbaa9458a	1		err	Incorrect padding
+2444	b16decode	f372224cebf6cf3c3bf28d1891e8b40c5f3d956499815f92bab0b68c61b400d749c9ae7d	0		err	Non-base16 digit found
+2445	b64decode	b40efa009595776de3cf6e16a197674b18efead246287aa9e1f505a09bb9a79941cdf67a5ce31d333822d4189606	0		err	Incorrect padding
+2446	standard_b64decode	037420fa94c3f9141bed3b79044001d839fe911d803ff04eddabedc8936bc065cdd08f787d	1		err	Only base64 data is allowed
+2447	b64decode	3360542f6e33fb5e29a6afe24464a661911b915e49e6c32f19541e72c8036c0b585d674301d49270db090e77493c6e4339	1		err	Only base64 data is allowed
+2448	b32hexdecode	f67fb0267b92c0	0		err	Incorrect padding
+2449	b64decode	12e5e4cef7669c8a6307fb69782880f88328a7c1f74ff896b0463e3adfdab88d7ba19c0fb97b3ed79b621963	1		err	Only base64 data is allowed
+2450	b32hexdecode	4d679d927111b4e10e09533c3c53ec796092814cf56536141ae611651a681ce7c1cc9bda05bddcb671f7e308c5b8898020783b920c3984e60b254e84	0		err	Incorrect padding
+2451	b64decode	d3cb412c76b1f5f27d8afffbbd4fcb2a3accdff8f46e3e362948f7ce2a7f5631dab94d20c7ceec0a2c4c626c89f50f14e3e9fffc874fe1ae6f	0		err	Incorrect padding
+2452	b16decode	1c1c88d51e0b559833d70442371adb512ae9	0		err	Non-base16 digit found
+2453	b64decode	63e26d8e940eb965756c538dd10b7d53ebb84bdbde18b546d4480a85f9c949756d1fcbea1f7c9bdf1a462a03f8615bc9b3	1		err	Only base64 data is allowed
+2454	b64decode	9df54e260a6bf025b74c0c91ffd9829645532a95300525c22135fff6c2e68cf00ef8a619a617c8ec2ee20a1bf70a0c90c53d90c719	1		err	Only base64 data is allowed
+2455	b32hexdecode	eea1bde0ea1630694c759e430b230f623d2aa0a7e4484f7c601d70929ff1e49b5c951979a35997090448152c	1		err	Incorrect padding
+2456	b32decode	5e45459ec7d4d09b79c049aeb8c893b1d766	0		err	Incorrect padding
+2457	b32decode	7882c5b03fffd13c50559e0cda75e9be3be6a77963d7bbebb5f1c144e9d8a3e50346585f9afb2d057e56	1		err	Incorrect padding
+2458	urlsafe_b64decode	edcac4d7b6c1da7d4546b5dbf40939b2667652af44c62419268af5f8723b70de6a5b3a	0		err	Incorrect padding
+2459	urlsafe_b64decode	8fe326c6672869d3056d24523cb5f8442e9992ba159eb16a81e9df9a8e1443a5db80db16b38d1c30de56147114b01d367ebbd6e93ba9efd2	1		err	Only base64 data is allowed
+2460	b16decode	06276ec2c06f3984aa1800de4d94b85f26322ed23e81630e00b7e883591d9fca1b6bb2280446cc105ec3a54f1c57a6b5d555bd81b83f44674cf2b922cfc7	0		err	Non-base16 digit found
+2461	standard_b64decode	34d50be07fe53ad576d462339d1a44d64badc00e1498de3f	0		err	Incorrect padding
+2462	b32decode	9c1504eb415c	0		err	Incorrect padding
+2463	urlsafe_b64decode	f54ed1d26105d77657f64f8158029e658c37aaa2bb8c4eecae21b61f6a7161ae4dfdd207baa7ef3d4dfb595f20217d	1		err	Only base64 data is allowed
+2464	standard_b64decode	bfc83d96f934248d6cdd8959f2b320583e07dc29217a70d6346cfde462893742b3eabbbfcfe8b3d4568258b0dbec2317984efa48c2fe0607c2f7f562	0		ok	e25617ce9e256fb0555cd1db
+2465	standard_b64decode	9ba36bdbdf76aa3850b0baa545f1a039816f7dad6452ec34a9e244	1		err	Only base64 data is allowed
+2466	b32hexdecode	58dd	0		err	Incorrect padding
+2467	b32decode	7224baa5cde0562c4c70e499e27905cd	0		err	Non-base32 digit found
+2468	standard_b64decode	bc6cbc9b69161ace05c668f14b9b324e1d2976b6e8e98ef77f2799b508a18aa4	1		err	Only base64 data is allowed
+2469	b32decode	298d01da86014559e9e48075dafc8240788cdc377f8579776b61594d24ba5cad7b864885be0806d327a6a49fffc9ab65	0		err	Non-base32 digit found
+2470	b64decode	49a7bb8f9336b8a52f7a019829b5ea9b1c835d4817eb684c0bb335af0dbdac1b9e35537b02a057107eaf16563905fd	1		err	Only base64 data is allowed
+2471	b16decode	a7b68adc40eee1460986da425174f7a7cc3d0ab64a94c2f3e59b72e4b081c6a613937d4cd75d383026	0		err	Non-base16 digit found
+2472	b64decode	fc8318a9f35ed0514d0246ae8d6bd2230204a6b8863c8406e454c8a744d3537f9e225affdfbeac4b8cc26942365b2be81e276b	1		err	Only base64 data is allowed
+2473	b32decode	9d0a4195	0		err	Incorrect padding
+2474	urlsafe_b64decode	3d8bb2af80d8dd88f58468a37703efc839c8c979f01e12e8739dcff0	1		err	Leading padding not allowed
+2475	b32hexdecode	5d656dd8f33e842bfe1834d78c6f59a85ff661e01a58e98e6aeb5e2e9a6e354bb783fc188578	0		err	Incorrect padding
+2476	b16decode	d0d4a5b9a89fefceccb21c8faf9b4ec3d5c6a1e94191dd2e1c9269f222a101aee6	1		err	Non-base16 digit found
+2477	b16decode	279be5385adaf35a042c39	1		err	Non-base16 digit found
+2478	b32decode	6694265f8102b44214f6e79533ef464b3604b9765827e9d931ed261eb9157578dac5bd0dbcf4cbdd67a2	0		err	Incorrect padding
+2479	b32decode	09491f80d941ac1e3b5514de683542aeed12b561107fa387	1		err	Non-base32 digit found
+2480	b32decode	2af8efdeafda	0		err	Incorrect padding
+2481	standard_b64decode	b036b957efcbc068bb96b8fcfc6ec4917d7f91e4344f18e8fc	1		err	Only base64 data is allowed
+2482	standard_b64decode	75d9c5dc4f0c36b76cdc2b2e7fb068c7620fb0142f19d27c07342755155d8ba1b17694fcf85a442d	1		err	Only base64 data is allowed
+2483	b16decode	6be73401c2b973	1		err	Non-base16 digit found
+2484	standard_b64decode	c9038793db34b5c335348f2882ec547dea9403c9c3	0		ok	e39e13
+2485	standard_b64decode	4f3d2ca2a5cbed6d9ecb4467969cd46da6b91ff788e7367a700621623bff3101c55da8090dfaa588f5cf0c3319790cbbd592835fb237f3	0		err	Invalid base64-encoded string: number of data characters (13) cannot be 1 more than a multiple of 4
+2486	urlsafe_b64decode	ba269604d45d3fad65420e01e58d6ea0186ccdbb47dfb23f	0		err	Invalid base64-encoded string: number of data characters (5) cannot be 1 more than a multiple of 4
+2487	b16decode	4547e54fff9b012106164b1a275d3062caa8da804a1fb396128f5d4ecad5c12a62a6b610eb6de7d2b332b40b	1		err	Non-base16 digit found
+2488	urlsafe_b64decode	223153ba0f9f3185e7b2ab98fd922c86445d7c5636af046f444452e3f7d2d0afbe47d7fe3b064022c956bd57b0f502ff5016c1e6a5597c7df75b	0		err	Incorrect padding
+2489	standard_b64decode	d55be504fa9e793afb1f6d3964bc27ba9b1021fcb5b396211c9010361d72ecbba01b9c05091cf69638aa2f819695422b8b871f	1		err	Only base64 data is allowed
+2490	b16decode	719c0c60	1		err	Non-base16 digit found
+2491	b32hexdecode	53680b98a3fe	0		err	Incorrect padding
+2492	b16decode	0e3550a703f60bd6fecb0d050c	0		err	Non-base16 digit found
+2493	b32decode	884f58611feda31fc7b21a8cf874b340c0097279baa2adb37056332789509b34d91af8b188a88caf9a155ca17ac86102d8f7154d5a3bbe6b	0		err	Non-base32 digit found
