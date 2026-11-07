@@ -1,5 +1,7 @@
 """RFC 9562 UUID values and generators with CPython constructor error texts."""
+from std.bit import byte_swap
 from std.collections import Array
+from std.memory import bitcast
 from std.ffi import external_call
 from hashlib import Md5, Sha1
 from ._unicode import decimal_digit, is_printable, is_space
@@ -22,35 +24,11 @@ struct UUID(Copyable, Movable, ImplicitlyCopyable):
         raise UUIDError("TypeError", "one of the hex, bytes, bytes_le, fields, or int arguments must be given")
 
     def __init__(out self, hex: String, version: Optional[Int] = None) raises UUIDError:
-        # Canonical ASCII inputs need no normalization allocation.
-        if hex.byte_length() == 32 or hex.byte_length() == 36:
-            var bits: UInt128 = 0
-            var digits = 0
-            for c in hex.as_bytes():
-                if c == 45:
-                    continue
-                var d = Int(c) - 48
-                var folded = Int(c) | 32
-                if folded >= 97 and folded <= 102:
-                    d = folded - 87
-                elif c < 48 or c > 57:
-                    digits = -1
-                    break
-                bits = (bits << 4) | UInt128(d)
-                digits += 1
-            if digits == 32:
-                self._int = bits
-                if version:
-                    self._apply_version(version.value())
-                return
-        var h = hex.replace("urn:", "")
-        h = h.replace("uuid:", "")
-        var tmp = h.strip("{}")
-        var tmp2 = tmp.replace("-", "")
-        h = tmp2
-        if h.count_codepoints() != 32:
-            raise UUIDError("ValueError", "badly formed hexadecimal UUID string")
-        self._int = _parse_int(h, 16)
+        var bits: UInt128 = 0
+        if _scan_canonical(hex.as_bytes(), bits):
+            self._int = bits
+        else:
+            self._int = _parse_text(hex)
         if version:
             self._apply_version(version.value())
 
@@ -95,11 +73,7 @@ struct UUID(Copyable, Movable, ImplicitlyCopyable):
     def _apply_version(mut self, version: Int) raises UUIDError:
         if version < 1 or version > 8:
             raise UUIDError("ValueError", "illegal version number")
-        var v = self._int
-        v &= ~((UInt128(0xf000) << 64) | (UInt128(0xc000) << 48))
-        v |= UInt128(0x8000) << 48
-        v |= UInt128(version) << 76
-        self._int = v
+        self._int = _stamp(self._int, version)
 
     def int(self) -> UInt128:
         return self._int
@@ -124,41 +98,35 @@ struct UUID(Copyable, Movable, ImplicitlyCopyable):
 
     def __str__(self) -> String:
         var chars = Array[UInt8, 36](fill=45)
-        var v = self._int
-        var hexd = "0123456789abcdef"
-        for i in range(35, -1, -1):
-            if i == 8 or i == 13 or i == 18 or i == 23:
-                continue
-            chars[i] = hexd.as_bytes()[Int(v & 0xf)]
-            v >>= 4
+        _put_canonical(self._int, chars, 0)
         return String(unsafe_from_utf8=Span(chars))
 
     def hex(self) -> String:
         return _hex128(self._int)
 
     def urn(self) -> String:
-        return "urn:uuid:" + self.__str__()
+        var chars = Array[UInt8, 45](fill=45)
+        var prefix: Array[UInt8, 9] = [117, 114, 110, 58, 117, 117, 105, 100, 58]
+        for i in range(9):
+            chars[i] = prefix[i]
+        _put_canonical(self._int, chars, 9)
+        return String(unsafe_from_utf8=Span(chars))
 
     def bytes(self) -> Array[UInt8, 16]:
         var out = Array[UInt8, 16](fill=0)
-        var v = self._int
-        for i in range(15, -1, -1):
-            out[i] = UInt8(v & 0xff)
-            v >>= 8
+        var p = out.unsafe_ptr().unsafe_bitcast[UInt64]()
+        p.unsafe_store[alignment=1](0, byte_swap(UInt64(self._int >> 64)))
+        p.unsafe_store[alignment=1](1, byte_swap(UInt64(self._int & 0xffffffffffffffff)))
         return out^
 
     def bytes_le(self) -> Array[UInt8, 16]:
-        var b = self.bytes()
         var out = Array[UInt8, 16](fill=0)
-        # reorder
-        for i in range(4):
-            out[i] = b[3-i]
-        for i in range(2):
-            out[4+i] = b[5-i]
-        out[6] = b[7]
-        out[7] = b[6]
-        for i in range(8):
-            out[8+i] = b[8+i]
+        var hi = UInt64(self._int >> 64)
+        # little-endian host: time_low, time_mid, time_hi_version stored natively, the rest big-endian
+        out.unsafe_ptr().unsafe_bitcast[UInt32]().unsafe_store[alignment=1](0, UInt32(hi >> 32))
+        out.unsafe_ptr().unsafe_offset(4).unsafe_bitcast[UInt16]().unsafe_store[alignment=1](0, UInt16((hi >> 16) & 0xffff))
+        out.unsafe_ptr().unsafe_offset(6).unsafe_bitcast[UInt16]().unsafe_store[alignment=1](0, UInt16(hi & 0xffff))
+        out.unsafe_ptr().unsafe_offset(8).unsafe_bitcast[UInt64]().unsafe_store[alignment=1](0, byte_swap(UInt64(self._int & 0xffffffffffffffff)))
         return out^
 
     def variant(self) -> String:
@@ -173,7 +141,7 @@ struct UUID(Copyable, Movable, ImplicitlyCopyable):
             return "reserved for future definition"
 
     def version(self) -> Int:
-        if self.variant() != "specified in RFC 4122":
+        if ((self._int >> 62) & 3) != 2:
             return 0
         return Int((self._int >> 76) & 0xf)
 
@@ -212,6 +180,117 @@ struct UUID(Copyable, Movable, ImplicitlyCopyable):
             return (time_hi << 48) | (UInt64(self.time_mid()) << 32) | time_lo
 
 
+@always_inline
+def _decode32(c: SIMD[DType.uint8, 32], mut bits: UInt128) -> Bool:
+    """Decode 32 ASCII hex digits into bits; False if any byte is not a hex digit."""
+    var d = c - 48
+    var l = (c | 32) - 97
+    var is_digit = d.le(9)
+    var is_letter = l.le(5)
+    var val = is_digit.select(d, l + 10)
+    var pair = val.deinterleave()
+    var packed = (pair[0] << 4) | pair[1]
+    var raw = bitcast[DType.uint64, 2](packed)
+    bits = (UInt128(byte_swap(raw[0])) << 64) | UInt128(byte_swap(raw[1]))
+    return (is_digit | is_letter).reduce_and()
+
+
+def _scan_canonical(b: Span[UInt8, _], mut bits: UInt128) -> Bool:
+    """In-place scan of [urn:uuid:]32 hex digits with hyphens or {...}; False means use _scan_general."""
+    var n = len(b)
+    var off = 0
+    if n == 45 and b[0] == 117 and b[1] == 114 and b[2] == 110 and b[3] == 58 and b[4] == 117 and b[5] == 117 and b[6] == 105 and b[7] == 100 and b[8] == 58:
+        off = 9
+        n = 36
+    elif n == 38 and b[0] == 123 and b[37] == 125:
+        off = 1
+        n = 36
+    var p = b.unsafe_ptr()
+    if n == 32 and off == 0:
+        return _decode32(p.unsafe_load[width=32, alignment=1](0), bits)
+    if n != 36 or b[off + 8] != 45 or b[off + 13] != 45 or b[off + 18] != 45 or b[off + 23] != 45:
+        return _scan_general(b, bits)
+    var chars = Array[UInt8, 32](fill=0)
+    var q = chars.unsafe_ptr()
+    q.unsafe_store[alignment=1](0, p.unsafe_offset(off).unsafe_load[width=8, alignment=1](0))
+    q.unsafe_offset(8).unsafe_store[alignment=1](0, p.unsafe_offset(off + 9).unsafe_load[width=4, alignment=1](0))
+    q.unsafe_offset(12).unsafe_store[alignment=1](0, p.unsafe_offset(off + 14).unsafe_load[width=4, alignment=1](0))
+    q.unsafe_offset(16).unsafe_store[alignment=1](0, p.unsafe_offset(off + 19).unsafe_load[width=4, alignment=1](0))
+    q.unsafe_offset(20).unsafe_store[alignment=1](0, p.unsafe_offset(off + 24).unsafe_load[width=8, alignment=1](0))
+    q.unsafe_offset(28).unsafe_store[alignment=1](0, p.unsafe_offset(off + 32).unsafe_load[width=4, alignment=1](0))
+    return _decode32(q.unsafe_load[width=32, alignment=1](0), bits)
+
+
+def _scan_general(b: Span[UInt8, _], mut bits: UInt128) -> Bool:
+    """Any other shape of the same grammar: prefixes, braces and hyphens anywhere, still without allocating."""
+    var i = 0
+    var n = len(b)
+    if n >= 4 and b[0] == 117 and b[1] == 114 and b[2] == 110 and b[3] == 58:
+        i = 4
+    if n - i >= 5 and b[i] == 117 and b[i + 1] == 117 and b[i + 2] == 105 and b[i + 3] == 100 and b[i + 4] == 58:
+        i += 5
+    while i < n and (b[i] == 123 or b[i] == 125):
+        i += 1
+    while n > i and (b[n - 1] == 123 or b[n - 1] == 125):
+        n -= 1
+    var v: UInt128 = 0
+    var digits = 0
+    while i < n:
+        var c = Int(b[i])
+        i += 1
+        if c == 45:
+            continue
+        var d = c - 48
+        if d < 0 or d > 9:
+            d = (c | 32) - 87
+            if d < 10 or d > 15:
+                return False
+        if digits == 32:
+            return False
+        v = (v << 4) | UInt128(d)
+        digits += 1
+    bits = v
+    return digits == 32
+
+
+def _parse_text(hex: String) raises UUIDError -> UInt128:
+    """CPython uuid.py L216-220 for any text: normalise, count codepoints, int(hex, 16)."""
+    var h = hex.replace("urn:", "")
+    h = h.replace("uuid:", "")
+    var tmp = h.strip("{}")
+    var tmp2 = tmp.replace("-", "")
+    h = tmp2
+    if h.count_codepoints() != 32:
+        raise UUIDError("ValueError", "badly formed hexadecimal UUID string")
+    return _parse_int(h, 16)
+
+
+@always_inline
+def _hex32(v: UInt128) -> SIMD[DType.uint8, 32]:
+    """The 32 lowercase hex digits of v, computed in SIMD registers."""
+    var raw = SIMD[DType.uint64, 2](byte_swap(UInt64(v >> 64)), byte_swap(UInt64(v & 0xffffffffffffffff)))
+    var b = bitcast[DType.uint8, 16](raw)
+    var nib = (b >> 4).interleave(b & 15)
+    return nib + 48 + nib.gt(9).select(SIMD[DType.uint8, 32](39), SIMD[DType.uint8, 32](0))
+
+
+def _put_canonical[n: Int](v: UInt128, mut buf: Array[UInt8, n], at: Int):
+    """Write the 36-byte hyphenated form of v at buf[at:]; hyphen slots are left as they are."""
+    var h = _hex32(v)
+    var p = buf.unsafe_ptr().unsafe_offset(at)
+    p.unsafe_store[alignment=1](0, h.slice[8, offset=0]())
+    p.unsafe_offset(9).unsafe_store[alignment=1](0, h.slice[4, offset=8]())
+    p.unsafe_offset(14).unsafe_store[alignment=1](0, h.slice[4, offset=12]())
+    p.unsafe_offset(19).unsafe_store[alignment=1](0, h.slice[4, offset=16]())
+    p.unsafe_offset(24).unsafe_store[alignment=1](0, h.slice[8, offset=20]())
+    p.unsafe_offset(32).unsafe_store[alignment=1](0, h.slice[4, offset=28]())
+
+
+def _stamp(v: UInt128, version: Int) -> UInt128:
+    """Set RFC variant 10 and the version nibble."""
+    return (v & ~((UInt128(0xf000) << 64) | (UInt128(0xc000) << 48))) | (UInt128(0x8000) << 48) | (UInt128(version) << 76)
+
+
 def _parse_int(text: String, base: Int) raises UUIDError -> UInt128:
     """CPython int(text, base) for base 10 or 16, then the 128-bit range check of uuid.UUID(int=)."""
     var cps = List[Int](capacity=text.byte_length())
@@ -247,8 +326,7 @@ def _parse_int(text: String, base: Int) raises UUIDError -> UInt128:
         if d < 0:
             raise UUIDError("ValueError", "invalid literal for int() with base " + String(base) + ": " + _repr(text))
         if base == 16:
-            overflow = overflow or (v >> 124) != 0
-            v = (v << 4) | UInt128(d)
+            v = (v << 4) | UInt128(d)  # _parse_text passes at most 32 codepoints: no overflow
         else:
             overflow = overflow or v > (UInt128(0xffffffffffffffffffffffffffffffff) - UInt128(d)) // 10
             v = v * 10 + UInt128(d)
@@ -290,13 +368,8 @@ def _repr(value: String) -> String:
 
 
 def _hex128(v: UInt128) -> String:
-    var hexd = "0123456789abcdef"
-    var x = v
     var chars = Array[UInt8, 32](fill=0)
-    for i in range(31, -1, -1):
-        var idx = Int(x & 0xf)
-        chars[i] = UInt8(ord(hexd[byte=idx]))
-        x >>= 4
+    chars.unsafe_ptr().unsafe_store[alignment=1](0, _hex32(v))
     return String(unsafe_from_utf8=Span(chars))
 
 
@@ -308,11 +381,10 @@ comptime NIL = UUID(UInt128(0))
 comptime MAX = UUID(UInt128(0xffffffffffffffffffffffffffffffff))
 
 
-def _uuid_from_bytes(buf: Array[UInt8, 16]) -> UInt128:
-    var v: UInt128 = 0
-    for i in range(16):
-        v = (v << 8) | UInt128(buf[i])
-    return v
+def _be_u128[n: Int](ref buf: Array[UInt8, n]) -> UInt128:
+    """First 16 bytes of buf as a big-endian integer."""
+    var p = buf.unsafe_ptr().unsafe_bitcast[UInt64]()
+    return (UInt128(byte_swap(p.unsafe_load[alignment=1](0))) << 64) | UInt128(byte_swap(p.unsafe_load[alignment=1](1)))
 
 
 def uuid3(namespace: UUID, name: String) raises -> UUID:
@@ -320,14 +392,7 @@ def uuid3(namespace: UUID, name: String) raises -> UUID:
     var nb = namespace.bytes()
     h.update(Span(nb))
     h.update(name.as_bytes())
-    var d = h.digest()
-    var v: UInt128 = 0
-    for i in range(16):
-        v = (v << 8) | UInt128(d[i])
-    v &= ~((UInt128(0xf000) << 64) | (UInt128(0xc000) << 48))
-    v |= UInt128(3) << 76
-    v |= UInt128(0x8000) << 48
-    return UUID(v)
+    return UUID(_stamp(_be_u128(h.digest()), 3))
 
 
 def uuid4() raises -> UUID:
@@ -337,11 +402,7 @@ def uuid4() raises -> UUID:
 
 
 def _uuid4_from(buf: Array[UInt8, 16]) -> UUID:
-    var v = _uuid_from_bytes(buf)
-    v &= ~((UInt128(0xf000) << 64) | (UInt128(0xc000) << 48))
-    v |= UInt128(4) << 76
-    v |= UInt128(0x8000) << 48
-    return UUID(v)
+    return UUID(_stamp(_be_u128(buf), 4))
 
 
 def uuid5(namespace: UUID, name: String) raises -> UUID:
@@ -349,14 +410,7 @@ def uuid5(namespace: UUID, name: String) raises -> UUID:
     var nb = namespace.bytes()
     h.update(Span(nb))
     h.update(name.as_bytes())
-    var d = h.digest()
-    var v: UInt128 = 0
-    for i in range(16):
-        v = (v << 8) | UInt128(d[i])
-    v &= ~((UInt128(0xf000) << 64) | (UInt128(0xc000) << 48))
-    v |= UInt128(5) << 76
-    v |= UInt128(0x8000) << 48
-    return UUID(v)
+    return UUID(_stamp(_be_u128(h.digest()), 5))
 
 
 def _now_ns() -> Int:

@@ -61,6 +61,14 @@ def error_tests() raises:
     expect_parse("0" * 31 + chr(0xe0001), "invalid literal for int() with base 16: '" + "0" * 31 + "\\U000e0001'")
     expect_parse("0" * 31 + chr(0xe000), "invalid literal for int() with base 16: '" + "0" * 31 + "\\ue000'")
     expect_parse("0" * 31 + chr(0x378), "invalid literal for int() with base 16: '" + "0" * 31 + "\\u0378'")
+    # Shapes next to the canonical ones must not be taken for them.
+    expect_parse("{" + "0" * 8 + "-" + "0" * 4 + "-" + "0" * 4 + "-" + "0" * 4 + "-" + "0" * 12 + "x", "badly formed hexadecimal UUID string")
+    expect_parse("0" * 36, "badly formed hexadecimal UUID string")
+    expect_parse("0" * 31 + chr(0x66a), "invalid literal for int() with base 16: '" + "0" * 31 + chr(0x66a) + "'")
+    check(UUID("0" * 7 + "-" + "0" * 8 + "-" + "0" * 4 + "-" + "0" * 4 + "-" + "0" * 9).int() == 0, "hyphens anywhere")
+    check(UUID("{" + "0" * 32 + "}").int() == 0 and UUID("urn:uuid:" + "0" * 32).int() == 0 and UUID("uuid:" + "0" * 32).int() == 0, "forms around 32 digits")
+    expect_parse("0" * 31 + "g", "invalid literal for int() with base 16: '" + "0" * 31 + "g'")
+    expect_parse("{{" + "0" * 31 + "g}}", "invalid literal for int() with base 16: '" + "0" * 31 + "g'")
     # CPython L222-223, L229-230: both byte lengths and their own messages.
     for length in [0, 15, 17]:
         var data = List[UInt8](length=length, fill=0)

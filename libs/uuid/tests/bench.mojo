@@ -17,6 +17,8 @@ def main() raises:
     var dns = materialize[NAMESPACE_DNS]()
     var checksum: UInt128 = 0
     var count = 0
+    for _ in range(N):  # warm-up: clocks and caches settle before the first timed row
+        checksum ^= UUID(text).int()
     var start = perf_counter_ns()
     for _ in range(N):
         checksum ^= UUID(text).int()
