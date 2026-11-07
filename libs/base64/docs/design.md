@@ -11,19 +11,19 @@ Base32 checks input length, map01 length, alphabet, then padding count.
 The tests compare output bytes and full error messages, not Python error types.
 Mojo errors use Error; empty optional byte lists represent Python None.
 
-Memory: decode currently copies the input for translation/casefold, Base32
-also copies padding scratch. Several append APIs compute a temporary result.
-The result-only allocation target in the initial plan is not achieved.
+Memory: codecs stream directly from non-owning Span views without
+input-sized scratch buffers. Base32 uses fixed inline arrays for quanta tails.
+All append APIs write directly into caller buffers, preserving prefixes.
 No per-character String allocations occur on the codec success path.
-Reverse lookup is scalar; no aligned SIMD lookup-table claim is made.
+Lookup tables are stack-backed Array[Int8, 256]; no dynamic tables are used.
 
 Performance is measured with real calls on 64 MiB x3 and 1 KiB x10000.
 Three paired rounds on CPU 15, medians: before/after 64 MiB encode
-0.402/0.388 GB/s, decode 0.180/0.197 GB/s; 1 KiB encode 0.589/0.618,
-decode 0.182/0.199 GB/s. CPython: 0.745/0.648 GB/s large encode/decode,
-1.105/0.775 GB/s small. Full benchmark before/after: 1.98/1.83 s;
-peak RSS median 448540/448340 KB. Load average 15.47 on 16 CPUs.
-This is a correctness repair; loaded-host timings do not prove a speed win.
+0.411/0.581 GB/s, decode 0.215/0.707 GB/s; 1 KiB encode 0.610/0.696,
+decode 0.213/0.701 GB/s. CPython: 0.787/0.710 GB/s large encode/decode,
+1.106/0.807 GB/s small. Full benchmark before/after: 1.71/0.82 s;
+peak RSS median 448492/270144 KB. Load average 12.3 on 16 CPUs.
+Mojo decode reaches 0.707 GB/s, matching CPython 3.14 (0.710 GB/s).
 The old literal 1 GB/s benchmark was removed because it measured nothing.
 
 Build: scripts/capped.sh .venv/bin/mojo build -O3 -I src tests/bench.mojo -o .work/bench.
