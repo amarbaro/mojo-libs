@@ -12,7 +12,7 @@ fi
 if [ ! -d "$HASHLIB_SRC" ]; then
   if [ ! -d ".work/deps/mojo-hashlib" ]; then
     mkdir -p .work/deps
-    git clone -q --depth 1 https://github.com/amarbaro/mojo-hashlib .work/deps/mojo-hashlib || { echo "FAIL setup: clone mojo-hashlib"; exit 1; }
+    git clone -q --depth 1 --branch v0.1.2 https://github.com/amarbaro/mojo-hashlib .work/deps/mojo-hashlib || { echo "FAIL setup: clone mojo-hashlib"; exit 1; }
   fi
   HASHLIB_SRC=".work/deps/mojo-hashlib/src"
 fi
