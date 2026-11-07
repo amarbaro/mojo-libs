@@ -9,6 +9,3 @@ dependencies = ["mojo>=1.2.0,<1.3"]
 [project.urls]
 Homepage = "https://github.com/amarbaro/mojo-csv"
 Repository = "https://github.com/amarbaro/mojo-csv"
-
-[tool.mojo]
-packages = ["src/csv"]
