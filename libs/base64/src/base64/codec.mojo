@@ -431,64 +431,75 @@ def b32hexencode_into(s: Span[UInt8, _], mut out: List[Byte]):
     _b32encode_into_with(_B32HEX, s, out)
 
 # b16
-comptime _HEX = "0123456789ABCDEF"
+def _hex_table() -> SIMD[DType.uint8, 16]:
+    var t = SIMD[DType.uint8, 16](0)
+    for i in range(10):
+        t[i] = UInt8(48 + i)
+    for i in range(6):
+        t[10 + i] = UInt8(65 + i)
+    return t
+
+# value 0..15, 255 for anything that is not an uppercase hex digit
+def _hexdec_table() -> SIMD[DType.uint8, 256]:
+    var t = SIMD[DType.uint8, 256](255)
+    var h = _hex_table()
+    for i in range(16):
+        t[Int(h[i])] = UInt8(i)
+    return t
+
+comptime _HEX = _hex_table()
+comptime _HEXDEC = _hexdec_table()
 
 def b16encode(s: Span[UInt8, _]) -> List[Byte]:
     var out = List[Byte]()
-    out.reserve(len(s) * 2)
     b16encode_into(s, out)
     return out^
 
 def b16encode_into(s: Span[UInt8, _], mut out: List[Byte]):
-    for j in range(len(s)):
-        var b = Int(s[j])
-        out.append(UInt8(ord(_HEX[byte=(b >> 4) & 15])))
-        out.append(UInt8(ord(_HEX[byte=b & 15])))
-
-@always_inline
-def _hexval(c: UInt8) -> Int:
-    if c >= 48 and c <= 57:
-        return Int(c) - 48
-    if c >= 65 and c <= 70:
-        return Int(c) - 55
-    if c >= 97 and c <= 102:
-        return Int(c) - 87
-    return 0
+    var n = len(s)
+    var base = len(out)
+    out.reserve(base + n * 2)
+    out.resize(unsafe_uninit_length=base + n * 2)
+    var o = out.unsafe_ptr().unsafe_offset(base)
+    var p = s.unsafe_ptr()
+    var t = Pointer(to=global_constant[_HEX]()).unsafe_bitcast[UInt8]()
+    for j in range(n):
+        var b = Int(p.unsafe_offset(j)[])
+        o.unsafe_offset(2 * j)[] = t.unsafe_offset(b >> 4)[]
+        o.unsafe_offset(2 * j + 1)[] = t.unsafe_offset(b & 15)[]
 
 def _b16decode_into_kernel(s: Span[UInt8, _], mut out: List[Byte], casefold: Bool) raises:
-    for j in range(len(s)):
-        var c = s[j]
-        if casefold and c >= 97 and c <= 122:
-            c -= 32
-        var ok = (c >= 48 and c <= 57) or (c >= 65 and c <= 70)
-        if not ok:
-            raise Error("Non-base16 digit found")
-    if len(s) % 2 != 0:
-        raise Error("Odd-length string")
+    var n = len(s)
+    var local = _HEXDEC
+    if casefold:
+        for i in range(6):
+            local[97 + i] = UInt8(10 + i)
+    var t = Pointer(to=local).unsafe_bitcast[UInt8]()
+    var p = s.unsafe_ptr()
+    var orig_len = len(out)
+    out.reserve(orig_len + n // 2)
+    var o = out.unsafe_ptr().unsafe_offset(orig_len)
+    var bad: UInt8 = 0
     var j = 0
-    while j + 1 < len(s):
-        var c_hi = s[j]
-        if casefold and c_hi >= 97 and c_hi <= 122:
-            c_hi -= 32
-        var c_lo = s[j+1]
-        if casefold and c_lo >= 97 and c_lo <= 122:
-            c_lo -= 32
-        var hi = _hexval(c_hi)
-        var lo = _hexval(c_lo)
-        out.append(UInt8((hi << 4) | lo))
+    while j + 1 < n:
+        var hi = t.unsafe_offset(Int(p.unsafe_offset(j)[]))[]
+        var lo = t.unsafe_offset(Int(p.unsafe_offset(j + 1)[]))[]
+        bad |= hi | lo
+        o.unsafe_offset(j // 2)[] = (hi << 4) | (lo & 15)
         j += 2
+    if j < n:
+        bad |= t.unsafe_offset(Int(p.unsafe_offset(j)[]))[]
+    # CPython checks every digit (regex) before the length (unhexlify)
+    if bad > 15:
+        raise Error("Non-base16 digit found")
+    if n % 2 != 0:
+        raise Error("Odd-length string")
+    out.resize(unsafe_uninit_length=orig_len + n // 2)
 
 def b16decode(s: Span[UInt8, _], casefold: Bool = False) raises -> List[Byte]:
     var out = List[Byte]()
-    out.reserve(len(s) // 2)
-    b16decode_into(s, out, casefold)
+    _b16decode_into_kernel(s, out, casefold)
     return out^
 
 def b16decode_into(s: Span[UInt8, _], mut out: List[Byte], casefold: Bool = False) raises:
-    var orig_len = len(out)
-    try:
-        _b16decode_into_kernel(s, out, casefold)
-    except e:
-        while len(out) > orig_len:
-            _ = out.pop()
-        raise e
+    _b16decode_into_kernel(s, out, casefold)

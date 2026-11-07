@@ -1,4 +1,4 @@
-from base64 import b64encode, b64decode
+from base64 import b64encode, b64decode, b16encode, b16decode
 from std.time import perf_counter_ns
 
 def main() raises:
@@ -19,4 +19,17 @@ def main() raises:
             checksum += len(result)
         elapsed = Float64(perf_counter_ns() - start)
         print("decode bytes", n, "iterations", iterations, "GB/s", Float64(n * iterations) / elapsed)
+        var hex = b16encode(data)
+        start = perf_counter_ns()
+        for _ in range(iterations):
+            var result = b16encode(data)
+            checksum += len(result)
+        elapsed = Float64(perf_counter_ns() - start)
+        print("b16encode bytes", n, "iterations", iterations, "GB/s", Float64(n * iterations) / elapsed)
+        start = perf_counter_ns()
+        for _ in range(iterations):
+            var result = b16decode(hex)
+            checksum += len(result)
+        elapsed = Float64(perf_counter_ns() - start)
+        print("b16decode bytes", n, "iterations", iterations, "GB/s", Float64(n * iterations) / elapsed)
         print("checksum", checksum)
