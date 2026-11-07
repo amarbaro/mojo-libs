@@ -13,3 +13,4 @@ src/csv/__init__.mojo|return digits > 0 and (not exponent or exponent_digits > 0
 src/csv/__init__.mojo|output.extend(Span(field.data)[:length])|output.extend(Span(field.data)[:1])
 src/csv/__init__.mojo|    t[13] = 1|    t[13] = 0
 src/csv/__init__.mojo|        t[Int(b)] = 1|        t[Int(b)] = 0
+src/csv/__init__.mojo|self.has_escape = has_escape or escapechar != 0|self.has_escape = has_escape

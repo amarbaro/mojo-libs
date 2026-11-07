@@ -41,7 +41,7 @@ STRINGS/NOTNULL distinguish unquoted None from quoted empty bytes.
 Numeric read modes validate ASCII float syntax but return original bytes.
 All non-null writer fields are strings; NONNUMERIC quotes them all.
 The field limit is 131072 bytes. Controls are bytes, not Unicode characters.
-Set has_escape=True with escapechar. Set dialect before iteration, not during it.
+A nonzero escapechar enables escaping; pass has_escape=True only for a NUL escape. Set dialect before iteration, not during it.
 Invalid UTF-8 passes through. Errors have library-specific text.
 
 ## Gate

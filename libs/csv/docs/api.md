@@ -6,7 +6,8 @@
 `Dialect(delimiter: UInt8=44, quotechar: UInt8=34, escapechar: UInt8=0,
 has_escape: Bool=False, doublequote: Bool=True, skipinitialspace: Bool=False,
 strict: Bool=False, quoting: Int=QUOTE_MINIMAL)` creates a byte dialect.
-`lineterminator: List[UInt8]` defaults to CRLF. Presets: `Dialect.excel()`,
+A nonzero `escapechar` enables escaping by itself; `has_escape=True` is only
+needed to choose NUL as the escape byte. `lineterminator: List[UInt8]` defaults to CRLF. Presets: `Dialect.excel()`,
 `Dialect.excel_tab()`, `Dialect.unix_dialect()`.
 `validate() raises` rejects quoting outside 0..5, CR/LF controls, quote/escape
 space with skipinitialspace, collisions, and controls inside the terminator.

@@ -51,7 +51,7 @@ struct Dialect(Copyable, Movable):
         self.delimiter = delimiter
         self.quotechar = quotechar
         self.escapechar = escapechar
-        self.has_escape = has_escape
+        self.has_escape = has_escape or escapechar != 0
         self.doublequote = doublequote
         self.skipinitialspace = skipinitialspace
         self.strict = strict
