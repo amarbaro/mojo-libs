@@ -256,8 +256,37 @@ struct UUID(Copyable, Movable, ImplicitlyCopyable):
 
 
 def _repr(value: String) -> String:
-    var quote = "\"" if "'" in value and not "\"" in value else "'"
-    return quote + value.replace("\\", "\\\\").replace(quote, "\\" + quote).replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r") + quote
+    var quote_code = 34 if "'" in value and not "\"" in value else 39
+    var quote = "\"" if quote_code == 34 else "'"
+    var result = String(quote)
+    var hexd = "0123456789abcdef"
+    for cp in value.codepoints():
+        var c = Int(cp)
+        if c == quote_code:
+            result += "\\"
+            result += quote
+        elif c == 92:
+            result += "\\\\"
+        elif c == 9:
+            result += "\\t"
+        elif c == 10:
+            result += "\\n"
+        elif c == 13:
+            result += "\\r"
+        elif c < 32 or c == 127 or (c >= 128 and c <= 160) or c == 173:
+            result += "\\x"
+            result += hexd[byte=(c >> 4) & 0xf]
+            result += hexd[byte=c & 0xf]
+        elif c == 0x200b or c == 0xfeff:
+            result += "\\u"
+            result += hexd[byte=(c >> 12) & 0xf]
+            result += hexd[byte=(c >> 8) & 0xf]
+            result += hexd[byte=(c >> 4) & 0xf]
+            result += hexd[byte=c & 0xf]
+        else:
+            result += chr(c)
+    result += quote
+    return result
 
 
 def _hex128(v: UInt128) -> String:

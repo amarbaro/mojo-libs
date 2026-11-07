@@ -41,6 +41,10 @@ def error_tests() raises:
     expect_parse("é" * 32, "invalid literal for int() with base 16: 'éééééééééééééééééééééééééééééééé'")
     expect_parse("0" * 31 + "_", "invalid literal for int() with base 16: '0000000000000000000000000000000_'")
     expect_parse("_" + "0" * 31, "invalid literal for int() with base 16: '_0000000000000000000000000000000'")
+    expect_parse("0" * 31 + chr(0), "invalid literal for int() with base 16: '" + "0" * 31 + "\\x00'")
+    expect_parse("0" * 15 + chr(11) + "0" * 16, "invalid literal for int() with base 16: '" + "0" * 15 + "\\x0b" + "0" * 16 + "'")
+    expect_parse("0" * 15 + chr(12) + "0" * 16, "invalid literal for int() with base 16: '" + "0" * 15 + "\\x0c" + "0" * 16 + "'")
+    expect_parse("0" * 31 + chr(127), "invalid literal for int() with base 16: '" + "0" * 31 + "\\x7f'")
     # CPython L216-220: accepted forms, including int() grammar.
     check(UUID("urn:uuid:{6ba7b810-9dad-11d1-80b4-00c04fd430c8}").hex() == "6ba7b8109dad11d180b400c04fd430c8")
     for text in ["{{00000000000000000000000000000000}", "+" + "0" * 31, " " + "0" * 30 + " ", "0_" + "0" * 30, "0x" + "0" * 30, "0x_" + "0" * 29, "0X_" + "0" * 29, "+0x_" + "0" * 28, "+0X_" + "0" * 28, "0" * 16 + "urn:uuid:" + "0" * 16]:
