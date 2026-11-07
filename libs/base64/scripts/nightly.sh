@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-MOJO=${MOJO_NIGHTLY:-$HOME/Projects/mojo/mojo-nightly/.venv/bin/mojo}
+MOJO=${MOJO_NIGHTLY:?FAIL setup: set MOJO_NIGHTLY to a nightly mojo binary}
 mkdir -p .work
 "$MOJO" --version
 scripts/capped.sh "$MOJO" precompile -I src src/base64 -o .work/base64-nightly.mojoc
