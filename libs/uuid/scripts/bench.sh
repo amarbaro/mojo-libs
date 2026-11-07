@@ -15,4 +15,4 @@ for round in $(seq "${ROUNDS:-3}"); do
   done
 done
 echo 'CPython reference'
-scripts/run-capped.sh /usr/bin/time -f '%e s %M KB' taskset -c "$CPU" python3 -I tools/bench_ref.py
+scripts/run-capped.sh /usr/bin/time -f '%e s %M KB' taskset -c "$CPU" $PYTHON -I tools/bench_ref.py

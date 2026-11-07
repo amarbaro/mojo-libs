@@ -3,7 +3,7 @@
 - `MOJO=mojo scripts/ci.sh`: full stable suite, differential rows, API, example, mutants.
 - `NIGHTLY_MOJO=/path/to/nightly/mojo scripts/nightly.sh`: package precompile, every tests/test_*.mojo, tests/api.mojo and the example.
 - `scripts/bench.sh`: benchmark and CPython twin; `BEFORE=<older bench binary>` pairs it with an earlier build.
-- `python3 -I tools/fuzz_ref.py PREFIX SEED N`: writes PREFIX.in/.exp (edge list, then N random hex rows and N/5 `from_int` rows) from the installed CPython; `scripts/ci.sh` runs seed 7, 5000.
+- `$PYTHON -I tools/fuzz_ref.py PREFIX SEED N` (`PYTHON` from scripts/env.sh: CPython >= 3.14, else `uv run --python 3.14`): writes PREFIX.in/.exp (edge list, then N random hex rows and N/5 `from_int` rows) from the installed CPython; `scripts/ci.sh` runs seed 7, 5000.
 - `python3 -I tools/gen_unicode.py > src/uuid/_unicode.mojo`: regenerates the Unicode tables (review the diff after a CPython upgrade).
 - `python3 -I tools/check_reference.py`: verify error expectations against pinned source.
 
