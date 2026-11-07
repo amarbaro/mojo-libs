@@ -8,6 +8,9 @@ def main() raises:
         _ = lines.pop()
     for line in lines:
         try:
-            print("ok", UUID(String(line)).__str__())
+            if line.startswith("#int#"):
+                print("ok", UUID.from_int(String(line[byte=5:])).__str__())
+            else:
+                print("ok", UUID(String(line)).__str__())
         except e:
             print("err", e)

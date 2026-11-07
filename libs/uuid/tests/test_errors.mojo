@@ -3,6 +3,7 @@ Source: https://github.com/python/cpython/blob/v3.14.0/Lib/uuid.py
 Integer literal errors are emitted by int(hex,16) at uuid.py line 220.
 """
 from uuid import UUID, UUIDError
+from uuid import _repr
 from support import check
 from std.collections import Array
 
@@ -49,6 +50,17 @@ def error_tests() raises:
     check(UUID("urn:uuid:{6ba7b810-9dad-11d1-80b4-00c04fd430c8}").hex() == "6ba7b8109dad11d180b400c04fd430c8")
     for text in ["{{00000000000000000000000000000000}", "+" + "0" * 31, " " + "0" * 30 + " ", "0_" + "0" * 30, "0x" + "0" * 30, "0x_" + "0" * 29, "0X_" + "0" * 29, "+0x_" + "0" * 28, "+0X_" + "0" * 28, "0" * 16 + "urn:uuid:" + "0" * 16]:
         check(UUID(text).int() == 0, "accepted form: " + text)
+    # int() strips the non-ASCII Unicode spaces but not U+001C..U+001F, and reads Unicode decimal digits (pinned from CPython 3.14.9).
+    for ws in [0x85, 0xa0, 0x1680, 0x2003, 0x2028, 0x3000]:
+        check(UUID(chr(ws) + "0" * 30 + chr(ws)).int() == 0, "space " + String(ws))
+    expect_parse(chr(0x1c) + "0" * 31, "invalid literal for int() with base 16: '\\x1c" + "0" * 31 + "'")
+    check(UUID(chr(0x663) + "0" * 31).hex() == "3" + "0" * 31, "Arabic-Indic digit")
+    check(UUID(chr(0xff10) * 32).int() == 0 and UUID(chr(0x1d7ff) * 32).hex() == "9" * 32, "fullwidth and math digits")
+    expect_parse("0" * 30 + "g" + chr(0xa0), "invalid literal for int() with base 16: '" + "0" * 30 + "g\\xa0'")
+    expect_parse("0" * 30 + "g" + chr(0x2003), "invalid literal for int() with base 16: '" + "0" * 30 + "g\\u2003'")
+    expect_parse("0" * 31 + chr(0xe0001), "invalid literal for int() with base 16: '" + "0" * 31 + "\\U000e0001'")
+    expect_parse("0" * 31 + chr(0xe000), "invalid literal for int() with base 16: '" + "0" * 31 + "\\ue000'")
+    expect_parse("0" * 31 + chr(0x378), "invalid literal for int() with base 16: '" + "0" * 31 + "\\u0378'")
     # CPython L222-223, L229-230: both byte lengths and their own messages.
     for length in [0, 15, 17]:
         var data = List[UInt8](length=length, fill=0)
@@ -93,6 +105,17 @@ def error_tests() raises:
         else:
             raise Error("accepted out-of-range int")
     check(UUID.from_int("340282366920938463463374607431768211455").hex() == "f" * 32)
+    # from_int follows int(text) then UUID(int=): invalid literals name the text, grammar as int() base 10.
+    for bad in ["", " ", "abc", "1__0", "_1", "1_", "0x1", "- 5", "9" * 39 + "x"]:
+        try:
+            _ = UUID.from_int(bad)
+        except e:
+            check(e.kind == "ValueError")
+            check(e.message == "invalid literal for int() with base 10: " + _repr(bad), bad + ": " + e.message)
+        else:
+            raise Error("accepted invalid int literal " + bad)
+    check(UUID.from_int(" +5\u3000").int() == 5 and UUID.from_int("1_0").int() == 10 and UUID.from_int("-0").int() == 0)
+    check(UUID.from_int("00012").int() == 12 and UUID.from_int(chr(0x663)).int() == 3)
     for version in [-1, 0, 9]:
         expect_version(version)
     for version in range(1, 9):

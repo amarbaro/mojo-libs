@@ -2,6 +2,7 @@
 from std.collections import Array
 from std.ffi import external_call
 from hashlib import Md5, Sha1
+from ._unicode import decimal_digit, is_printable, is_space
 
 @fieldwise_init
 struct UUIDError(Copyable, Movable, Writable):
@@ -49,41 +50,7 @@ struct UUID(Copyable, Movable, ImplicitlyCopyable):
         h = tmp2
         if h.count_codepoints() != 32:
             raise UUIDError("ValueError", "badly formed hexadecimal UUID string")
-        var original = h
-        var trimmed = String(h.strip())
-        h = trimmed^
-        var negative = h.startswith("-")
-        if h.startswith("+") or negative:
-            var unsigned = String(h[byte=1:])
-            h = unsigned^
-        var had_prefix = False
-        if h.startswith("0x") or h.startswith("0X"):
-            had_prefix = True
-            var unprefixed = String(h[byte=2:])
-            h = unprefixed^
-        var v: UInt128 = 0
-        var digit = False
-        for i in range(h.byte_length()):
-            var c = h[byte=i]
-            if c == "_" and (digit or (i == 0 and had_prefix)):
-                digit = False
-                continue
-            var d: UInt8
-            if c >= "0" and c <= "9":
-                d = UInt8(ord(String(c)) - 48)
-            elif c >= "a" and c <= "f":
-                d = UInt8(ord(String(c)) - 87)
-            elif c >= "A" and c <= "F":
-                d = UInt8(ord(String(c)) - 55)
-            else:
-                raise UUIDError("ValueError", "invalid literal for int() with base 16: " + _repr(original))
-            v = (v << 4) | UInt128(d)
-            digit = True
-        if not digit:
-            raise UUIDError("ValueError", "invalid literal for int() with base 16: " + _repr(original))
-        if negative and v != 0:
-            raise UUIDError("ValueError", "int is out of range (need a 128-bit value)")
-        self._int = v
+        self._int = _parse_int(h, 16)
         if version:
             self._apply_version(version.value())
 
@@ -120,17 +87,7 @@ struct UUID(Copyable, Movable, ImplicitlyCopyable):
 
     @staticmethod
     def from_int(value: String, version: Optional[Int] = None) raises UUIDError -> Self:
-        var v: UInt128 = 0
-        if value.byte_length() == 0:
-            raise UUIDError("ValueError", "invalid literal for int() with base 10: " + _repr(value))
-        for c in value.codepoints():
-            var d = Int(c) - 48
-            if d < 0 or d > 9:
-                raise UUIDError("ValueError", "int is out of range (need a 128-bit value)")
-            if v > (UInt128(0xffffffffffffffffffffffffffffffff) - UInt128(d)) // 10:
-                raise UUIDError("ValueError", "int is out of range (need a 128-bit value)")
-            v = v * 10 + UInt128(d)
-        var result = Self(v)
+        var result = Self(_parse_int(value, 10))
         if version:
             result._apply_version(version.value())
         return result
@@ -255,6 +212,54 @@ struct UUID(Copyable, Movable, ImplicitlyCopyable):
             return (time_hi << 48) | (UInt64(self.time_mid()) << 32) | time_lo
 
 
+def _parse_int(text: String, base: Int) raises UUIDError -> UInt128:
+    """CPython int(text, base) for base 10 or 16, then the 128-bit range check of uuid.UUID(int=)."""
+    var cps = List[Int](capacity=text.byte_length())
+    for cp in text.codepoints():
+        cps.append(Int(cp))
+    var lo = 0
+    var hi = len(cps)
+    while lo < hi and is_space(cps[lo]):
+        lo += 1
+    while hi > lo and is_space(cps[hi - 1]):
+        hi -= 1
+    var negative = False
+    if lo < hi and (cps[lo] == 43 or cps[lo] == 45):
+        negative = cps[lo] == 45
+        lo += 1
+    var after_prefix = False
+    if base == 16 and hi - lo >= 2 and cps[lo] == 48 and (cps[lo + 1] | 32) == 120:
+        after_prefix = True
+        lo += 2
+    var v: UInt128 = 0
+    var overflow = False
+    var digit = False
+    for i in range(lo, hi):
+        var c = cps[i]
+        if c == 95 and (digit or (after_prefix and i == lo)):
+            digit = False
+            continue
+        var d = decimal_digit(c)
+        if d < 0 and base == 16:
+            var folded = c | 32
+            if folded >= 97 and folded <= 102:
+                d = folded - 87
+        if d < 0:
+            raise UUIDError("ValueError", "invalid literal for int() with base " + String(base) + ": " + _repr(text))
+        if base == 16:
+            overflow = overflow or (v >> 124) != 0
+            v = (v << 4) | UInt128(d)
+        else:
+            overflow = overflow or v > (UInt128(0xffffffffffffffffffffffffffffffff) - UInt128(d)) // 10
+            v = v * 10 + UInt128(d)
+        digit = True
+    if not digit:
+        raise UUIDError("ValueError", "invalid literal for int() with base " + String(base) + ": " + _repr(text))
+    if overflow or (negative and v != 0):
+        raise UUIDError("ValueError", "int is out of range (need a 128-bit value)")
+    return v
+
+
 def _repr(value: String) -> String:
     var quote_code = 34 if "'" in value and not "\"" in value else 39
     var quote = "\"" if quote_code == 34 else "'"
@@ -273,16 +278,11 @@ def _repr(value: String) -> String:
             result += "\\n"
         elif c == 13:
             result += "\\r"
-        elif c < 32 or c == 127 or (c >= 128 and c <= 160) or c == 173:
-            result += "\\x"
-            result += hexd[byte=(c >> 4) & 0xf]
-            result += hexd[byte=c & 0xf]
-        elif c == 0x200b or c == 0xfeff:
-            result += "\\u"
-            result += hexd[byte=(c >> 12) & 0xf]
-            result += hexd[byte=(c >> 8) & 0xf]
-            result += hexd[byte=(c >> 4) & 0xf]
-            result += hexd[byte=c & 0xf]
+        elif not is_printable(c):
+            var digits = 2 if c <= 0xff else (4 if c <= 0xffff else 8)
+            result += "\\x" if digits == 2 else ("\\u" if digits == 4 else "\\U")
+            for k in range(digits - 1, -1, -1):
+                result += hexd[byte=(c >> (4 * k)) & 0xf]
         else:
             result += chr(c)
     result += quote
