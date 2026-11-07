@@ -1,6 +1,7 @@
 # Python-exact number formatting. One exact decimal expansion of the double (base-1e9 limbs on
 # the stack), then every type is a rounding of that digit string: half-to-even on the exact binary
 # value, as CPython does.
+from std.math import isfinite
 from std.memory import bitcast
 from std.bit import count_trailing_zeros
 from std.collections import Array
@@ -161,7 +162,8 @@ def _fixed_fast(bits: UInt64, prec: Int, mut out: List[UInt8]) -> Bool:
     return True
 
 
-def _body(x: Float64, kind: UInt8, prec: Int, pct: Bool) -> List[UInt8]:
+def _body(x: Float64, kind: UInt8, prec_in: Int, pct: Bool) -> List[UInt8]:
+    var prec = max(prec_in, 0)  # a negative precision would size a negative buffer
     var v = x * 100.0 if pct else x
     var out = List[UInt8](capacity=prec + 24)
     if v != v:
@@ -307,9 +309,9 @@ def _spec(s: String) raises -> _Spec:
         r.align = b[0]
         i = 1
     if i < n and b[i] == 48:
-        raise Error("pyformat: zero padding and sign flags are not supported: '" + s + "'")
+        raise Error("pyformat: zero padding is not supported: '" + s + "'")
     while i < n and b[i] >= 48 and b[i] <= 57:
-        r.width = r.width * 10 + Int(b[i]) - 48
+        r.width = _digit(r.width, b[i], s)
         i += 1
     if i < n and b[i] == 44:
         r.comma = True
@@ -319,7 +321,7 @@ def _spec(s: String) raises -> _Spec:
         var start = i
         r.prec = 0
         while i < n and b[i] >= 48 and b[i] <= 57:
-            r.prec = r.prec * 10 + Int(b[i]) - 48
+            r.prec = _digit(r.prec, b[i], s)
             i += 1
         if i == start:
             raise Error("pyformat: format specifier missing precision: '" + s + "'")
@@ -329,6 +331,12 @@ def _spec(s: String) raises -> _Spec:
     if i < n:
         raise Error("pyformat: invalid or unsupported format specifier: '" + s + "'")
     return r^
+
+
+def _digit(v: Int, d: UInt8, spec: String) raises -> Int:
+    if v > (Int.MAX - 9) // 10:
+        raise Error("pyformat: too many decimal digits in format string: '" + spec + "'")  # Python: ValueError
+    return v * 10 + Int(d) - 48
 
 
 def fmt(x: Float64, spec: String) raises -> String:
@@ -353,7 +361,7 @@ def fmt_int(x: Float64, spec: String) raises -> String:
     else:
         var dec = _Dec(bits)
         if dec.n > dec.pt:
-            raise Error("pyformat: fmt_int needs a whole number, got " + String(x))
+            raise Error("pyformat: fmt_int needs a whole number, got " + py_repr(x))
         body = List[UInt8](capacity=dec.pt + dec.pt // 3 + 2)
         if dec.n > 0 and (bits >> 63) != 0:
             body.append(45)
@@ -372,7 +380,59 @@ def py_sum(xs: List[Float64]) -> Float64:
         var t = total + x
         c += (total - t) + x if abs(total) >= abs(x) else (x - t) + total
         total = t
-    return total + c if c != 0 else total
+    return total + c if c != 0 and isfinite(c) else total  # CPython: c is dropped once the sum overflowed
+
+def _nb(s: String, up: Bool) -> String:
+    """The `d.ddde+XX` text one unit in the last digit up or down, renormalised ("" when it reaches 0)."""
+    var b = s.as_bytes()
+    var neg = b[0] == 45
+    var epos = s.find("e")
+    var digs = List[UInt8]()
+    for i in range(1 if neg else 0, epos):
+        if b[i] != 46:
+            digs.append(b[i])
+    var e = 0
+    for i in range(epos + 2, len(b)):
+        e = e * 10 + Int(b[i] - 48)
+    if b[epos + 1] == 45:
+        e = -e
+    var n = len(digs)
+    var k = n - 1
+    if up:
+        while k >= 0 and digs[k] == 57:
+            digs[k] = 48
+            k -= 1
+        if k < 0:  # 9.99 -> 10.0: keep n digits, one more power of ten
+            digs.insert(0, 49)
+            _ = digs.pop()
+            e += 1
+        else:
+            digs[k] += 1
+    else:
+        while k >= 0 and digs[k] == 48:
+            digs[k] = 57
+            k -= 1
+        if k < 0:
+            return ""
+        digs[k] -= 1
+        if digs[0] == 48:  # 1.00 -> 0.99: drop the leading zero, add a 9, one less power of ten
+            if n == 1:
+                return ""
+            _ = digs.pop(0)
+            digs.append(57)
+            e -= 1
+    var out = String("-") if neg else String()
+    out += chr(Int(digs[0]))
+    if n > 1:
+        out += "."
+        for i in range(1, n):
+            out += chr(Int(digs[i]))
+    out += "e-" if e < 0 else "e+"
+    var ae = -e if e < 0 else e
+    if ae < 10:
+        out += "0"
+    out += String(ae)
+    return out^
 
 
 def py_repr(x: Float64) -> String:
@@ -393,6 +453,16 @@ def py_repr(x: Float64) -> String:
         s = fmt_e(x, p)
         try:
             if atof(s) == x:
+                break
+            # the correctly rounded digits may not read back while a neighbour does (2**-24: ...062 vs ...063)
+            var hit = False
+            for up in [True, False]:
+                var t = _nb(s, up)
+                if t and atof(t) == x:
+                    s = t^
+                    hit = True
+                    break
+            if hit:
                 break
         except:
             pass
