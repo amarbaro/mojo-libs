@@ -5,7 +5,7 @@ src/base64/codec.mojo|if v < 0:|if v < -1:
 src/base64/codec.mojo|if strict and pads != 0:|if False:
 src/base64/codec.mojo|leftchar = v & 15|leftchar = v & 7
 src/base64/codec.mojo|if rem == 1:|if False:
-src/base64/codec.mojo|if r[j] == UInt8(ord('+')):|if False:
+src/base64/codec.mojo|if out[j] == UInt8(ord('+')):|if False:
 src/base64/codec.mojo|if casefold and c >= 97 and c <= 122:|if False:
 src/base64/codec.mojo|c = map01[0]|c = UInt8(ord('A'))
 src/base64/codec.mojo|if leftover == 1:|if False:

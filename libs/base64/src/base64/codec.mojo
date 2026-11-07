@@ -160,13 +160,17 @@ def _bytes_repr(data: List[Byte]) -> String:
 def b64decode(s: Span[UInt8, _], altchars: List[Byte] = List[Byte](), validate: Bool = False) raises -> List[Byte]:
     var out = List[Byte]()
     out.reserve((len(s) * 3) // 4 + 3)
-    _b64decode_into_kernel(s, out, Span(altchars), validate)
+    b64decode_into(s, out, altchars, validate)
     return out^
 
 def b64decode_into(s: Span[UInt8, _], mut out: List[Byte], altchars: List[Byte] = List[Byte](), validate: Bool = False) raises:
-    var r = b64decode(s, altchars, validate)
-    for j in range(len(r)):
-        out.append(r[j])
+    var orig_len = len(out)
+    try:
+        _b64decode_into_kernel(s, out, Span(altchars), validate)
+    except e:
+        while len(out) > orig_len:
+            _ = out.pop()
+        raise e
 
 # standard
 def standard_b64encode(s: Span[UInt8, _]) -> List[Byte]:
@@ -183,32 +187,37 @@ def standard_b64decode_into(s: Span[UInt8, _], mut out: List[Byte], validate: Bo
 
 # urlsafe
 def urlsafe_b64encode(s: Span[UInt8, _]) -> List[Byte]:
-    var r = b64encode(s)
-    for j in range(len(r)):
-        if r[j] == UInt8(ord('+')):
-            r[j] = UInt8(ord('-'))
-        elif r[j] == UInt8(ord('/')):
-            r[j] = UInt8(ord('_'))
-    return r^
+    var out = List[Byte]()
+    out.reserve(((len(s) + 2) // 3) * 4)
+    urlsafe_b64encode_into(s, out)
+    return out^
 
 def urlsafe_b64encode_into(s: Span[UInt8, _], mut out: List[Byte]):
-    var r = urlsafe_b64encode(s)
-    for j in range(len(r)):
-        out.append(r[j])
+    var orig_len = len(out)
+    b64encode_into(s, out)
+    for j in range(orig_len, len(out)):
+        if out[j] == UInt8(ord('+')):
+            out[j] = UInt8(ord('-'))
+        elif out[j] == UInt8(ord('/')):
+            out[j] = UInt8(ord('_'))
 
 def urlsafe_b64decode(s: Span[UInt8, _], validate: Bool = False) raises -> List[Byte]:
     var out = List[Byte]()
     out.reserve((len(s) * 3) // 4 + 3)
-    var alt = Array[UInt8, 2](fill=0)
-    alt[0] = UInt8(ord('-'))
-    alt[1] = UInt8(ord('_'))
-    _b64decode_into_kernel(s, out, Span(alt), validate)
+    urlsafe_b64decode_into(s, out, validate)
     return out^
 
 def urlsafe_b64decode_into(s: Span[UInt8, _], mut out: List[Byte], validate: Bool = False) raises:
-    var r = urlsafe_b64decode(s, validate)
-    for j in range(len(r)):
-        out.append(r[j])
+    var alt = Array[UInt8, 2](fill=0)
+    alt[0] = UInt8(ord('-'))
+    alt[1] = UInt8(ord('_'))
+    var orig_len = len(out)
+    try:
+        _b64decode_into_kernel(s, out, Span(alt), validate)
+    except e:
+        while len(out) > orig_len:
+            _ = out.pop()
+        raise e
 
 # b32
 comptime _B32ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
@@ -221,9 +230,7 @@ def _make_b32_table(alphabet: String) -> Array[Int8, 256]:
         t[Int(ord(alphabet[byte=k]))] = Int8(k)
     return t^
 
-def _b32encode_with(alphabet: String, s: Span[UInt8, _]) -> List[Byte]:
-    var out = List[Byte]()
-    out.reserve(((len(s) + 4) // 5) * 8)
+def _b32encode_into_with(alphabet: String, s: Span[UInt8, _], mut out: List[Byte]):
     var n = len(s)
     var leftover = n % 5
     var i = 0
@@ -263,17 +270,17 @@ def _b32encode_with(alphabet: String, s: Span[UInt8, _]) -> List[Byte]:
                 out[j] = UInt8(ord('='))
         elif leftover == 4:
             out[L-1] = UInt8(ord('='))
-    return out^
 
 def b32encode(s: Span[UInt8, _]) -> List[Byte]:
-    return _b32encode_with(_B32ALPHA, s)
+    var out = List[Byte]()
+    out.reserve(((len(s) + 4) // 5) * 8)
+    b32encode_into(s, out)
+    return out^
 
 def b32encode_into(s: Span[UInt8, _], mut out: List[Byte]):
-    var r = b32encode(s)
-    for j in range(len(r)):
-        out.append(r[j])
+    _b32encode_into_with(_B32ALPHA, s, out)
 
-def _b32decode_with(alphabet: String, s: Span[UInt8, _], casefold: Bool, map01: Span[UInt8, _]) raises -> List[Byte]:
+def _b32decode_into_with(alphabet: String, s: Span[UInt8, _], mut out: List[Byte], casefold: Bool, map01: Span[UInt8, _]) raises:
     var l = len(s)
     if l % 8 != 0:
         raise Error("Incorrect padding")
@@ -288,8 +295,6 @@ def _b32decode_with(alphabet: String, s: Span[UInt8, _], casefold: Bool, map01: 
     var padchars = l - end
 
     var t = _make_b32_table(alphabet)
-    var out = List[Byte]()
-    out.reserve((l * 5) // 8 + 5)
     var idx = 0
     var acc_last: Int = 0
     while idx + 8 <= end:
@@ -366,38 +371,53 @@ def _b32decode_with(alphabet: String, s: Span[UInt8, _], casefold: Bool, map01: 
                 out[base2 + k] = lastbytes[k]
             else:
                 out.append(lastbytes[k])
-    return out^
 
 def b32decode(s: Span[UInt8, _], casefold: Bool = False, map01: List[Byte] = List[Byte]()) raises -> List[Byte]:
-    return _b32decode_with(_B32ALPHA, s, casefold, Span(map01))
+    var out = List[Byte]()
+    out.reserve((len(s) * 5) // 8 + 5)
+    b32decode_into(s, out, casefold, map01)
+    return out^
 
 def b32decode_into(s: Span[UInt8, _], mut out: List[Byte], casefold: Bool = False, map01: List[Byte] = List[Byte]()) raises:
-    var r = b32decode(s, casefold, map01)
-    for j in range(len(r)):
-        out.append(r[j])
+    var orig_len = len(out)
+    try:
+        _b32decode_into_with(_B32ALPHA, s, out, casefold, Span(map01))
+    except e:
+        while len(out) > orig_len:
+            _ = out.pop()
+        raise e
 
 def b32hexdecode(s: Span[UInt8, _], casefold: Bool = False) raises -> List[Byte]:
-    var empty = List[Byte]()
-    return _b32decode_with(_B32HEX, s, casefold, Span(empty))
+    var out = List[Byte]()
+    out.reserve((len(s) * 5) // 8 + 5)
+    b32hexdecode_into(s, out, casefold)
+    return out^
 
 def b32hexdecode_into(s: Span[UInt8, _], mut out: List[Byte], casefold: Bool = False) raises:
-    var r = b32hexdecode(s, casefold)
-    for j in range(len(r)):
-        out.append(r[j])
+    var empty = List[Byte]()
+    var orig_len = len(out)
+    try:
+        _b32decode_into_with(_B32HEX, s, out, casefold, Span(empty))
+    except e:
+        while len(out) > orig_len:
+            _ = out.pop()
+        raise e
 
 def b32hexencode(s: Span[UInt8, _]) -> List[Byte]:
-    return _b32encode_with(_B32HEX, s)
+    var out = List[Byte]()
+    out.reserve(((len(s) + 4) // 5) * 8)
+    b32hexencode_into(s, out)
+    return out^
 
 def b32hexencode_into(s: Span[UInt8, _], mut out: List[Byte]):
-    var r = b32hexencode(s)
-    for j in range(len(r)):
-        out.append(r[j])
+    _b32encode_into_with(_B32HEX, s, out)
 
 # b16
 comptime _HEX = "0123456789ABCDEF"
 
 def b16encode(s: Span[UInt8, _]) -> List[Byte]:
     var out = List[Byte]()
+    out.reserve(len(s) * 2)
     b16encode_into(s, out)
     return out^
 
@@ -417,7 +437,7 @@ def _hexval(c: UInt8) -> Int:
         return Int(c) - 87
     return 0
 
-def b16decode(s: Span[UInt8, _], casefold: Bool = False) raises -> List[Byte]:
+def _b16decode_into_kernel(s: Span[UInt8, _], mut out: List[Byte], casefold: Bool) raises:
     for j in range(len(s)):
         var c = s[j]
         if casefold and c >= 97 and c <= 122:
@@ -427,8 +447,6 @@ def b16decode(s: Span[UInt8, _], casefold: Bool = False) raises -> List[Byte]:
             raise Error("Non-base16 digit found")
     if len(s) % 2 != 0:
         raise Error("Odd-length string")
-    var out = List[Byte]()
-    out.reserve(len(s) // 2)
     var j = 0
     while j + 1 < len(s):
         var c_hi = s[j]
@@ -441,9 +459,18 @@ def b16decode(s: Span[UInt8, _], casefold: Bool = False) raises -> List[Byte]:
         var lo = _hexval(c_lo)
         out.append(UInt8((hi << 4) | lo))
         j += 2
+
+def b16decode(s: Span[UInt8, _], casefold: Bool = False) raises -> List[Byte]:
+    var out = List[Byte]()
+    out.reserve(len(s) // 2)
+    b16decode_into(s, out, casefold)
     return out^
 
 def b16decode_into(s: Span[UInt8, _], mut out: List[Byte], casefold: Bool = False) raises:
-    var r = b16decode(s, casefold)
-    for j in range(len(r)):
-        out.append(r[j])
+    var orig_len = len(out)
+    try:
+        _b16decode_into_kernel(s, out, casefold)
+    except e:
+        while len(out) > orig_len:
+            _ = out.pop()
+        raise e
