@@ -1,68 +1,87 @@
 from std.collections import List, Array
+from std.builtin.globals import global_constant
 
-comptime _ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+# 64 B alphabet tables, one cache line each, in static memory (no per-call build or copy).
+def _enc_table(plus: UInt8, slash: UInt8) -> SIMD[DType.uint8, 64]:
+    var t = SIMD[DType.uint8, 64](0)
+    for i in range(26):
+        t[i] = UInt8(65 + i)
+        t[26 + i] = UInt8(97 + i)
+    for i in range(10):
+        t[52 + i] = UInt8(48 + i)
+    t[62] = plus
+    t[63] = slash
+    return t
+
+# 256 B decode table: value 0..63, 254 for '=', 255 for any other byte.
+def _dec_table() -> SIMD[DType.uint8, 256]:
+    var t = SIMD[DType.uint8, 256](255)
+    var enc = _enc_table(43, 47)
+    for i in range(64):
+        t[Int(enc[i])] = UInt8(i)
+    t[61] = 254
+    return t
+
+comptime _ENC_STD = _enc_table(43, 47)
+comptime _ENC_URL = _enc_table(45, 95)
+comptime _DEC_STD = _dec_table()
 
 @always_inline
-def _make_b64_table() -> Array[Int8, 256]:
-    var t = Array[Int8, 256](fill=-1)
-    for i in range(26):
-        t[65 + i] = Int8(i)
-        t[97 + i] = Int8(26 + i)
-    for i in range(10):
-        t[48 + i] = Int8(52 + i)
-    t[Int(ord('+'))] = 62
-    t[Int(ord('/'))] = 63
-    t[Int(ord('='))] = -2
-    return t^
+def _enc_ptr[url: Bool]() -> Pointer[UInt8, ImmStaticOrigin]:
+    comptime if url:
+        return Pointer(to=global_constant[_ENC_URL]()).unsafe_bitcast[UInt8]()
+    else:
+        return Pointer(to=global_constant[_ENC_STD]()).unsafe_bitcast[UInt8]()
+
+@always_inline
+def _dec_ptr() -> Pointer[UInt8, ImmStaticOrigin]:
+    return Pointer(to=global_constant[_DEC_STD]()).unsafe_bitcast[UInt8]()
 
 def _b64decode_into_kernel(s: Span[UInt8, _], mut out: List[Byte], altchars: Span[UInt8, _], strict: Bool) raises:
     var n = len(s)
     if strict and n > 0 and s[0] == UInt8(ord('=')):
         raise Error("Leading padding not allowed")
     var has_alt = len(altchars) != 0
-    var alt0: UInt8 = 0
-    var alt1: UInt8 = 0
-    if has_alt:
-        if len(altchars) != 2:
-            raise Error(_bytes_repr(List[Byte](altchars)))
-        alt0 = altchars[0]
-        alt1 = altchars[1]
+    if has_alt and len(altchars) != 2:
+        raise Error(_bytes_repr(List[Byte](altchars)))
 
-    var t = _make_b64_table()
+    # Alt chars patch a stack copy of the table (last mapping wins, as bytes.maketrans).
+    var local = _DEC_STD
+    if has_alt:
+        local[Int(altchars[0])] = 62
+        local[Int(altchars[1])] = 63
+    var t = Pointer(to=local).unsafe_bitcast[UInt8]()
+    var p = s.unsafe_ptr()
+
+    # The output is written through a raw pointer; `out` only grows on success, so an error
+    # leaves the caller's list untouched.
+    var orig_len = len(out)
+    out.reserve(orig_len + ((n + 3) // 4) * 3)
+    var o = out.unsafe_ptr().unsafe_offset(orig_len)
+    var w = 0
     var quad_pos = 0
     var leftchar: Int = 0
     var pads = 0
     var i = 0
-    var orig_len = len(out)
 
-    # Fast 4-byte chunk loop for clean ASCII base64
-    if not has_alt:
-        while i + 4 <= n:
-            var c0 = Int(s[i])
-            var c1 = Int(s[i+1])
-            var c2 = Int(s[i+2])
-            var c3 = Int(s[i+3])
-            var v0 = Int(t[c0])
-            var v1 = Int(t[c1])
-            var v2 = Int(t[c2])
-            var v3 = Int(t[c3])
-            if (v0 | v1 | v2 | v3) >= 0:
-                var trip = (v0 << 18) | (v1 << 12) | (v2 << 6) | v3
-                out.append(UInt8(trip >> 16))
-                out.append(UInt8((trip >> 8) & 255))
-                out.append(UInt8(trip & 255))
-                i += 4
-            else:
-                break
+    # Fast path: clean 4-character groups
+    while i + 4 <= n:
+        var v0 = t.unsafe_offset(Int(p.unsafe_offset(i)[]))[]
+        var v1 = t.unsafe_offset(Int(p.unsafe_offset(i + 1)[]))[]
+        var v2 = t.unsafe_offset(Int(p.unsafe_offset(i + 2)[]))[]
+        var v3 = t.unsafe_offset(Int(p.unsafe_offset(i + 3)[]))[]
+        if ((v0 | v1 | v2 | v3) & 0xC0) != 0:
+            break
+        var trip = (Int(v0) << 18) | (Int(v1) << 12) | (Int(v2) << 6) | Int(v3)
+        o.unsafe_offset(w)[] = UInt8(trip >> 16)
+        o.unsafe_offset(w + 1)[] = UInt8((trip >> 8) & 255)
+        o.unsafe_offset(w + 2)[] = UInt8(trip & 255)
+        w += 3
+        i += 4
 
     while i < n:
-        var this_ch = s[i]
-        if has_alt:
-            if this_ch == alt1:
-                this_ch = UInt8(ord('/'))
-            elif this_ch == alt0:
-                this_ch = UInt8(ord('+'))
-        if this_ch == UInt8(ord('=')):
+        var tv = t.unsafe_offset(Int(p.unsafe_offset(i)[]))[]
+        if tv == 254:
             pads += 1
             if quad_pos >= 2 and quad_pos + pads <= 4:
                 i += 1
@@ -73,12 +92,12 @@ def _b64decode_into_kernel(s: Span[UInt8, _], mut out: List[Byte], altchars: Spa
                 raise Error("Excess padding not allowed")
             i += 1
             continue
-        var v = Int(t[Int(this_ch)])
-        if v < 0:
+        if tv == 255:
             if strict:
                 raise Error("Only base64 data is allowed")
             i += 1
             continue
+        var v = Int(tv)
         if strict and pads != 0:
             if quad_pos + pads == 4:
                 raise Error("Excess data after padding")
@@ -89,52 +108,70 @@ def _b64decode_into_kernel(s: Span[UInt8, _], mut out: List[Byte], altchars: Spa
             leftchar = v
         elif quad_pos == 1:
             quad_pos = 2
-            out.append(UInt8((leftchar << 2) | (v >> 4)))
+            o.unsafe_offset(w)[] = UInt8((leftchar << 2) | (v >> 4))
+            w += 1
             leftchar = v & 15
         elif quad_pos == 2:
             quad_pos = 3
-            out.append(UInt8((leftchar << 4) | (v >> 2)))
+            o.unsafe_offset(w)[] = UInt8((leftchar << 4) | (v >> 2))
+            w += 1
             leftchar = v & 3
         else:
             quad_pos = 0
-            out.append(UInt8((leftchar << 6) | v))
+            o.unsafe_offset(w)[] = UInt8((leftchar << 6) | v)
+            w += 1
             leftchar = 0
         i += 1
 
     if quad_pos == 1:
-        raise Error("Invalid base64-encoded string: number of data characters (" + String(((len(out) - orig_len) // 3) * 4 + 1) + ") cannot be 1 more than a multiple of 4")
+        raise Error("Invalid base64-encoded string: number of data characters (" + String((w // 3) * 4 + 1) + ") cannot be 1 more than a multiple of 4")
     if quad_pos != 0 and quad_pos + pads < 4:
         raise Error("Incorrect padding")
+    out.resize(unsafe_uninit_length=orig_len + w)
 
 def b64encode(s: Span[UInt8, _]) -> List[Byte]:
     var out = List[Byte]()
-    out.reserve(((len(s) + 2) // 3) * 4)
     b64encode_into(s, out)
     return out^
 
-def b64encode_into(s: Span[UInt8, _], mut out: List[Byte]):
+def _b64encode_kernel[url: Bool](s: Span[UInt8, _], mut out: List[Byte]):
     var n = len(s)
+    var base = len(out)
+    out.reserve(base + ((n + 2) // 3) * 4)
+    out.resize(unsafe_uninit_length=base + ((n + 2) // 3) * 4)
+    var o = out.unsafe_ptr().unsafe_offset(base)
+    var p = s.unsafe_ptr()
+    var t = _enc_ptr[url]()
+    var full = n // 3
     var i = 0
-    while i + 3 <= n:
-        var b0 = Int(s[i]); var b1 = Int(s[i+1]); var b2 = Int(s[i+2])
-        out.append(UInt8(ord(_ALPHA[byte=(b0 >> 2) & 63])))
-        out.append(UInt8(ord(_ALPHA[byte=((b0 & 3) << 4) | (b1 >> 4)])))
-        out.append(UInt8(ord(_ALPHA[byte=((b1 & 15) << 2) | (b2 >> 6)])))
-        out.append(UInt8(ord(_ALPHA[byte=b2 & 63])))
+    var j = 0
+    for _ in range(full):
+        var b0 = Int(p.unsafe_offset(i)[])
+        var b1 = Int(p.unsafe_offset(i + 1)[])
+        var b2 = Int(p.unsafe_offset(i + 2)[])
+        o.unsafe_offset(j)[] = t.unsafe_offset(b0 >> 2)[]
+        o.unsafe_offset(j + 1)[] = t.unsafe_offset(((b0 & 3) << 4) | (b1 >> 4))[]
+        o.unsafe_offset(j + 2)[] = t.unsafe_offset(((b1 & 15) << 2) | (b2 >> 6))[]
+        o.unsafe_offset(j + 3)[] = t.unsafe_offset(b2 & 63)[]
         i += 3
+        j += 4
     var rem = n - i
     if rem == 1:
-        var b0 = Int(s[i])
-        out.append(UInt8(ord(_ALPHA[byte=(b0 >> 2) & 63])))
-        out.append(UInt8(ord(_ALPHA[byte=((b0 & 3) << 4)])))
-        out.append(UInt8(ord('=')))
-        out.append(UInt8(ord('=')))
+        var b0 = Int(p.unsafe_offset(i)[])
+        o.unsafe_offset(j)[] = t.unsafe_offset(b0 >> 2)[]
+        o.unsafe_offset(j + 1)[] = t.unsafe_offset((b0 & 3) << 4)[]
+        o.unsafe_offset(j + 2)[] = UInt8(ord('='))
+        o.unsafe_offset(j + 3)[] = UInt8(ord('='))
     elif rem == 2:
-        var b0 = Int(s[i]); var b1 = Int(s[i+1])
-        out.append(UInt8(ord(_ALPHA[byte=(b0 >> 2) & 63])))
-        out.append(UInt8(ord(_ALPHA[byte=((b0 & 3) << 4) | (b1 >> 4)])))
-        out.append(UInt8(ord(_ALPHA[byte=((b1 & 15) << 2)])))
-        out.append(UInt8(ord('=')))
+        var b0 = Int(p.unsafe_offset(i)[])
+        var b1 = Int(p.unsafe_offset(i + 1)[])
+        o.unsafe_offset(j)[] = t.unsafe_offset(b0 >> 2)[]
+        o.unsafe_offset(j + 1)[] = t.unsafe_offset(((b0 & 3) << 4) | (b1 >> 4))[]
+        o.unsafe_offset(j + 2)[] = t.unsafe_offset((b1 & 15) << 2)[]
+        o.unsafe_offset(j + 3)[] = UInt8(ord('='))
+
+def b64encode_into(s: Span[UInt8, _], mut out: List[Byte]):
+    _b64encode_kernel[False](s, out)
 
 def _bytes_repr(data: List[Byte]) -> String:
     var single = False
@@ -160,18 +197,11 @@ def _bytes_repr(data: List[Byte]) -> String:
 
 def b64decode(s: Span[UInt8, _], altchars: List[Byte] = List[Byte](), validate: Bool = False) raises -> List[Byte]:
     var out = List[Byte]()
-    out.reserve((len(s) * 3) // 4 + 3)
-    b64decode_into(s, out, altchars, validate)
+    _b64decode_into_kernel(s, out, Span(altchars), validate)
     return out^
 
 def b64decode_into(s: Span[UInt8, _], mut out: List[Byte], altchars: List[Byte] = List[Byte](), validate: Bool = False) raises:
-    var orig_len = len(out)
-    try:
-        _b64decode_into_kernel(s, out, Span(altchars), validate)
-    except e:
-        while len(out) > orig_len:
-            _ = out.pop()
-        raise e
+    _b64decode_into_kernel(s, out, Span(altchars), validate)
 
 # standard
 def standard_b64encode(s: Span[UInt8, _]) -> List[Byte]:
@@ -189,22 +219,14 @@ def standard_b64decode_into(s: Span[UInt8, _], mut out: List[Byte], validate: Bo
 # urlsafe
 def urlsafe_b64encode(s: Span[UInt8, _]) -> List[Byte]:
     var out = List[Byte]()
-    out.reserve(((len(s) + 2) // 3) * 4)
     urlsafe_b64encode_into(s, out)
     return out^
 
 def urlsafe_b64encode_into(s: Span[UInt8, _], mut out: List[Byte]):
-    var orig_len = len(out)
-    b64encode_into(s, out)
-    for j in range(orig_len, len(out)):
-        if out[j] == UInt8(ord('+')):
-            out[j] = UInt8(ord('-'))
-        elif out[j] == UInt8(ord('/')):
-            out[j] = UInt8(ord('_'))
+    _b64encode_kernel[True](s, out)
 
 def urlsafe_b64decode(s: Span[UInt8, _], validate: Bool = False) raises -> List[Byte]:
     var out = List[Byte]()
-    out.reserve((len(s) * 3) // 4 + 3)
     urlsafe_b64decode_into(s, out, validate)
     return out^
 
@@ -212,13 +234,7 @@ def urlsafe_b64decode_into(s: Span[UInt8, _], mut out: List[Byte], validate: Boo
     var alt = Array[UInt8, 2](fill=0)
     alt[0] = UInt8(ord('-'))
     alt[1] = UInt8(ord('_'))
-    var orig_len = len(out)
-    try:
-        _b64decode_into_kernel(s, out, Span(alt), validate)
-    except e:
-        while len(out) > orig_len:
-            _ = out.pop()
-        raise e
+    _b64decode_into_kernel(s, out, Span(alt), validate)
 
 # b32
 comptime _B32ALPHA = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"

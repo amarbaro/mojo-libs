@@ -8,13 +8,13 @@ def main() raises:
         var iterations = 10000 if n == 1024 else 3
         var checksum = 0
         var start = perf_counter_ns()
-        for i in range(iterations):
+        for _ in range(iterations):
             var result = b64encode(data)
             checksum += len(result)
         var elapsed = Float64(perf_counter_ns() - start)
         print("encode bytes", n, "iterations", iterations, "GB/s", Float64(n * iterations) / elapsed)
         start = perf_counter_ns()
-        for i in range(iterations):
+        for _ in range(iterations):
             var result = b64decode(encoded)
             checksum += len(result)
         elapsed = Float64(perf_counter_ns() - start)
