@@ -108,6 +108,7 @@ def _b64decode_into_kernel(s: Span[UInt8, _], mut out: List[Byte], altchars: Spa
 
 def b64encode(s: Span[UInt8, _]) -> List[Byte]:
     var out = List[Byte]()
+    out.reserve(((len(s) + 2) // 3) * 4)
     b64encode_into(s, out)
     return out^
 
