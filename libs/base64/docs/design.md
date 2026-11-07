@@ -34,6 +34,8 @@ rounds, medians, GB/s. before = 269509f (b16: 875f25f), CPython 3.14.8:
 | b16decode | 64 MiB | 0.239 | 1.300 | 0.469 |
 | b16decode | 1 KiB | 0.238 | 1.432 | 0.491 |
 
+Summary: b64encode 64 MiB 1.227 GB/s (was 0.550, CPython 0.774 GB/s).
+
 Peak RSS, b64 only: 270152 KB before and 270144 KB after, CPython 250828 KB
 (+7.7%). The result owns exactly its bytes; the gap is allocator retention
 of freed 64-87 MiB blocks, the same with a bare `List` fill/drop. The bench
