@@ -223,19 +223,12 @@ def _make_b32_table(alphabet: String) -> Array[Int8, 256]:
 
 def _b32encode_with(alphabet: String, s: Span[UInt8, _]) -> List[Byte]:
     var out = List[Byte]()
+    out.reserve(((len(s) + 4) // 5) * 8)
     var n = len(s)
     var leftover = n % 5
-    var padded = n
-    if leftover != 0:
-        padded = n + (5 - leftover)
-    var buf = List[Byte]()
-    for j in range(n):
-        buf.append(s[j])
-    for j in range(n, padded):
-        buf.append(UInt8(0))
     var i = 0
-    while i < padded:
-        var c = (Int(buf[i]) << 32) | (Int(buf[i+1]) << 24) | (Int(buf[i+2]) << 16) | (Int(buf[i+3]) << 8) | Int(buf[i+4])
+    while i + 5 <= n:
+        var c = (Int(s[i]) << 32) | (Int(s[i+1]) << 24) | (Int(s[i+2]) << 16) | (Int(s[i+3]) << 8) | Int(s[i+4])
         out.append(UInt8(ord(alphabet[byte=(c >> 35) & 31])))
         out.append(UInt8(ord(alphabet[byte=(c >> 30) & 31])))
         out.append(UInt8(ord(alphabet[byte=(c >> 25) & 31])))
@@ -245,21 +238,31 @@ def _b32encode_with(alphabet: String, s: Span[UInt8, _]) -> List[Byte]:
         out.append(UInt8(ord(alphabet[byte=(c >> 5) & 31])))
         out.append(UInt8(ord(alphabet[byte=c & 31])))
         i += 5
-    if leftover == 1:
+    if leftover != 0:
+        var tail = Array[UInt8, 5](fill=0)
+        for k in range(leftover):
+            tail[k] = s[i + k]
+        var c = (Int(tail[0]) << 32) | (Int(tail[1]) << 24) | (Int(tail[2]) << 16) | (Int(tail[3]) << 8) | Int(tail[4])
+        out.append(UInt8(ord(alphabet[byte=(c >> 35) & 31])))
+        out.append(UInt8(ord(alphabet[byte=(c >> 30) & 31])))
+        out.append(UInt8(ord(alphabet[byte=(c >> 25) & 31])))
+        out.append(UInt8(ord(alphabet[byte=(c >> 20) & 31])))
+        out.append(UInt8(ord(alphabet[byte=(c >> 15) & 31])))
+        out.append(UInt8(ord(alphabet[byte=(c >> 10) & 31])))
+        out.append(UInt8(ord(alphabet[byte=(c >> 5) & 31])))
+        out.append(UInt8(ord(alphabet[byte=c & 31])))
         var L = len(out)
-        for j in range(L-6, L):
-            out[j] = UInt8(ord('='))
-    elif leftover == 2:
-        var L = len(out)
-        for j in range(L-4, L):
-            out[j] = UInt8(ord('='))
-    elif leftover == 3:
-        var L = len(out)
-        for j in range(L-3, L):
-            out[j] = UInt8(ord('='))
-    elif leftover == 4:
-        var L = len(out)
-        out[L-1] = UInt8(ord('='))
+        if leftover == 1:
+            for j in range(L-6, L):
+                out[j] = UInt8(ord('='))
+        elif leftover == 2:
+            for j in range(L-4, L):
+                out[j] = UInt8(ord('='))
+        elif leftover == 3:
+            for j in range(L-3, L):
+                out[j] = UInt8(ord('='))
+        elif leftover == 4:
+            out[L-1] = UInt8(ord('='))
     return out^
 
 def b32encode(s: Span[UInt8, _]) -> List[Byte]:
