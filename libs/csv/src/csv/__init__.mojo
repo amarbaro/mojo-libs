@@ -6,15 +6,15 @@ comptime QUOTE_NONNUMERIC = 2
 comptime QUOTE_NONE = 3
 comptime QUOTE_STRINGS = 4
 comptime QUOTE_NOTNULL = 5
-comptime START_RECORD = 0
-comptime START_FIELD = 1
-comptime ESCAPED_CHAR = 2
-comptime IN_FIELD = 3
-comptime IN_QUOTED_FIELD = 4
-comptime ESCAPE_IN_QUOTED_FIELD = 5
-comptime QUOTE_IN_QUOTED_FIELD = 6
-comptime EAT_CRNL = 7
-comptime AFTER_ESCAPED_CRNL = 8
+comptime _START_RECORD = 0
+comptime _START_FIELD = 1
+comptime _ESCAPED_CHAR = 2
+comptime _IN_FIELD = 3
+comptime _IN_QUOTED_FIELD = 4
+comptime _ESCAPE_IN_QUOTED_FIELD = 5
+comptime _QUOTE_IN_QUOTED_FIELD = 6
+comptime _EAT_CRNL = 7
+comptime _AFTER_ESCAPED_CRNL = 8
 comptime FIELD_LIMIT = 131072
 
 
@@ -154,7 +154,7 @@ struct Reader[origin: Origin]:
     def __init__(out self, var dialect: Dialect, input: Span[UInt8, Self.origin]):
         self.dialect = dialect^
         self.input = input
-        self.state = START_RECORD
+        self.state = _START_RECORD
         self.unquoted = True
         self.scratch = List[UInt8]()
         self.fields = List[_Field]()
@@ -194,85 +194,85 @@ struct Reader[origin: Origin]:
         self.unquoted = True
 
     def _process(mut self, c: Int) raises -> Bool:
-        if self.state == START_RECORD:
+        if self.state == _START_RECORD:
             if c == -1:
                 return True
             if c == 10 or c == 13:
-                self.state = EAT_CRNL
+                self.state = _EAT_CRNL
                 return False
-            self.state = START_FIELD
-        if self.state == START_FIELD:
+            self.state = _START_FIELD
+        if self.state == _START_FIELD:
             self.unquoted = True
             if c == -1 or c == 10 or c == 13:
                 self._save_field()
-                self.state = START_RECORD if c == -1 else EAT_CRNL
+                self.state = _START_RECORD if c == -1 else _EAT_CRNL
                 return c == -1
             if c == Int(self.dialect.quotechar) and self.dialect.quoting != QUOTE_NONE:
                 self.unquoted = False
                 self.field_owned = True
-                self.state = IN_QUOTED_FIELD
+                self.state = _IN_QUOTED_FIELD
             elif self.dialect.has_escape and c == Int(self.dialect.escapechar):
-                self.state = ESCAPED_CHAR
+                self.state = _ESCAPED_CHAR
             elif c == 32 and self.dialect.skipinitialspace:
                 pass
             elif c == Int(self.dialect.delimiter):
                 self._save_field()
             else:
                 self._add_char(c)
-                self.state = IN_FIELD
+                self.state = _IN_FIELD
             return False
-        if self.state == ESCAPED_CHAR:
+        if self.state == _ESCAPED_CHAR:
             self._add_char(10 if c == -1 else c)
-            self.state = AFTER_ESCAPED_CRNL if c == 10 or c == 13 else IN_FIELD
+            self.state = _AFTER_ESCAPED_CRNL if c == 10 or c == 13 else _IN_FIELD
             return False
-        if self.state == AFTER_ESCAPED_CRNL and c == -1:
+        if self.state == _AFTER_ESCAPED_CRNL and c == -1:
             return False
-        if self.state == IN_FIELD or self.state == AFTER_ESCAPED_CRNL:
+        if self.state == _IN_FIELD or self.state == _AFTER_ESCAPED_CRNL:
             if c == -1 or c == 10 or c == 13:
                 self._save_field()
-                self.state = START_RECORD if c == -1 else EAT_CRNL
+                self.state = _START_RECORD if c == -1 else _EAT_CRNL
                 return c == -1
             if self.dialect.has_escape and c == Int(self.dialect.escapechar):
-                self.state = ESCAPED_CHAR
+                self.state = _ESCAPED_CHAR
             elif c == Int(self.dialect.delimiter):
                 self._save_field()
-                self.state = START_FIELD
+                self.state = _START_FIELD
             else:
                 self._add_char(c)
             return False
-        if self.state == IN_QUOTED_FIELD:
+        if self.state == _IN_QUOTED_FIELD:
             if c == -1:
                 return False
             if self.dialect.has_escape and c == Int(self.dialect.escapechar):
-                self.state = ESCAPE_IN_QUOTED_FIELD
+                self.state = _ESCAPE_IN_QUOTED_FIELD
             elif c == Int(self.dialect.quotechar):
-                self.state = QUOTE_IN_QUOTED_FIELD if self.dialect.doublequote else IN_FIELD
+                self.state = _QUOTE_IN_QUOTED_FIELD if self.dialect.doublequote else _IN_FIELD
             else:
                 self._add_char(c)
             return False
-        if self.state == ESCAPE_IN_QUOTED_FIELD:
+        if self.state == _ESCAPE_IN_QUOTED_FIELD:
             self._add_char(10 if c == -1 else c)
-            self.state = IN_QUOTED_FIELD
+            self.state = _IN_QUOTED_FIELD
             return False
-        if self.state == QUOTE_IN_QUOTED_FIELD:
+        if self.state == _QUOTE_IN_QUOTED_FIELD:
             if c == Int(self.dialect.quotechar):
                 self._add_char(c)
-                self.state = IN_QUOTED_FIELD
+                self.state = _IN_QUOTED_FIELD
             elif c == Int(self.dialect.delimiter):
                 self._save_field()
-                self.state = START_FIELD
+                self.state = _START_FIELD
             elif c == -1 or c == 10 or c == 13:
                 self._save_field()
-                self.state = START_RECORD if c == -1 else EAT_CRNL
+                self.state = _START_RECORD if c == -1 else _EAT_CRNL
                 return c == -1
             elif not self.dialect.strict:
                 self._add_char(c)
-                self.state = IN_FIELD
+                self.state = _IN_FIELD
             else:
                 raise Error("delimiter expected after quote")
             return False
         if c == -1:
-            self.state = START_RECORD
+            self.state = _START_RECORD
             return True
         if c != 10 and c != 13:
             raise Error("new-line character seen in unquoted field")
@@ -281,7 +281,7 @@ struct Reader[origin: Origin]:
     def reset(mut self):
         self.position = 0
         self.line_num = 0
-        self.state = START_RECORD
+        self.state = _START_RECORD
         self.fields.clear()
         self.scratch.clear()
         self._validated = False
@@ -292,7 +292,7 @@ struct Reader[origin: Origin]:
             self._validated = True
         self.fields.clear()
         self.scratch.clear()
-        self.state = START_RECORD
+        self.state = _START_RECORD
         self.unquoted = True
         self.field_start = self.position
         self.field_offset = 0
@@ -301,7 +301,7 @@ struct Reader[origin: Origin]:
         while self.position < len(self.input):
             self.line_num += 1
             while self.position < len(self.input):
-                if self.state == IN_FIELD or self.state == IN_QUOTED_FIELD:
+                if self.state == _IN_FIELD or self.state == _IN_QUOTED_FIELD:
                     var end = _ordinary_end(self.input, self.position, self.dialect)
                     if end > self.position:
                         if self.field_len + end - self.position > FIELD_LIMIT:
@@ -322,7 +322,7 @@ struct Reader[origin: Origin]:
                     break
             if self._process(-1):
                 return True
-        if self.field_len != 0 or self.state == IN_QUOTED_FIELD:
+        if self.field_len != 0 or self.state == _IN_QUOTED_FIELD:
             if self.dialect.strict:
                 raise Error("unexpected end of data")
             self._save_field()

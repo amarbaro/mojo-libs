@@ -1,5 +1,6 @@
 """Replay CPython byte/null/error vectors. No Python runs inside these tests."""
 from csv import *
+from csv import _IN_QUOTED_FIELD
 from std.os import getenv
 
 
@@ -91,7 +92,7 @@ def parse_lines(text: StringSlice, var dialect: Dialect) raises -> String:
             records += 1
             reader.fields.clear()
             reader.scratch.clear()
-    if reader.field_len != 0 or reader.state == IN_QUOTED_FIELD:
+    if reader.field_len != 0 or reader.state == _IN_QUOTED_FIELD:
         if reader.dialect.strict:
             raise Error("unexpected end of data")
         reader._save_field()

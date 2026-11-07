@@ -2,7 +2,7 @@ src/csv/__init__.mojo|if c == 10 or c == 13:|if c == 10 and c == 13:
 src/csv/__init__.mojo|self.unquoted = False|self.unquoted = True
 src/csv/__init__.mojo|comptime FIELD_LIMIT = 131072|comptime FIELD_LIMIT = 131071
 src/csv/__init__.mojo|q == QUOTE_NOTNULL or q == QUOTE_STRINGS|q == QUOTE_NOTNULL and q == QUOTE_STRINGS
-src/csv/__init__.mojo|self.state = QUOTE_IN_QUOTED_FIELD if self.dialect.doublequote else IN_FIELD|self.state = IN_FIELD
+src/csv/__init__.mojo|self.state = _QUOTE_IN_QUOTED_FIELD if self.dialect.doublequote else _IN_FIELD|self.state = _IN_FIELD
 src/csv/__init__.mojo|if c == 13:|if c == 12:
 src/csv/__init__.mojo|output.append(dialect.delimiter)|output.append(dialect.quotechar)
 src/csv/__init__.mojo|output.append(c)|output.append(c ^ 1)
