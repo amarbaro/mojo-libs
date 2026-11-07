@@ -5,11 +5,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 if [ -z "${MOJO:-}" ]; then
   command -v uv >/dev/null || { echo "FAIL setup: uv not installed"; exit 1; }
-  uv sync -q || { echo "FAIL setup: uv sync"; exit 1; }
+  uv python install 3.14 || { echo "FAIL setup: python 3.14"; exit 1; }
+  uv sync -q --python 3.14 || { echo "FAIL setup: uv sync"; exit 1; }
   MOJO=.venv/bin/mojo
 fi
 "$MOJO" --version
-[ -x .venv/bin/python ] && export ORACLE_PY=${ORACLE_PY:-.venv/bin/python}
+if command -v uv >/dev/null 2>&1; then
+  p314=$(uv python find 3.14 2>/dev/null || true)
+  [ -n "$p314" ] && export ORACLE_PY="$p314"
+fi
+[ -z "${ORACLE_PY:-}" ] && [ -x .venv/bin/python ] && export ORACLE_PY=.venv/bin/python
 mkdir -p .work/t
 for t in tests/cases:.work/cases tests/api:.work/t/api tests/test_golden:.work/t/golden tests/test_brute:.work/t/brute examples/quickstart:.work/t/quickstart; do
   scripts/capped.sh "$MOJO" build -O3 -I src ${MOJO_FLAGS:-} "${t%%:*}.mojo" -o "${t##*:}" 2>.work/build.err || { echo "FAIL build: ${t%%:*}.mojo"; cat .work/build.err; echo "FAIL 6/6"; exit 1; }
