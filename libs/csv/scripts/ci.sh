@@ -6,6 +6,11 @@ if [ -z "${MOJO:-}" ]; then
   uv sync -q || { echo 'FAIL setup: uv sync'; exit 1; }
   MOJO=.venv/bin/mojo
 fi
+if [ -x .venv/bin/python ]; then
+  PYTHON=.venv/bin/python
+else
+  PYTHON=python3
+fi
 "$MOJO" --version
 mkdir -p .work/t
 for t in tests/cases:.work/cases tests/api:.work/t/api examples/quickstart:.work/t/quickstart tests/fuzz_probe:.work/t/fuzz_probe; do
@@ -15,7 +20,7 @@ CASES=.work/cases scripts/check.sh | tee .work/gate.txt
 MOJO="$MOJO" scripts/mutants.sh | tee .work/mutants.txt
 scripts/cap.sh .work/t/api
 scripts/cap.sh .work/t/quickstart
-python3 -I tools/oracle_fuzz.py .work/t/fuzz 7 5000
+scripts/cap.sh "$PYTHON" -I tools/oracle_fuzz.py .work/t/fuzz 7 5000
 scripts/cap.sh .work/t/fuzz_probe .work/t/fuzz.bin > .work/t/fuzz.got
 diff -u .work/t/fuzz.exp .work/t/fuzz.got || { echo 'FAIL fuzz differential'; exit 1; }
 echo 'PASS 5/5'
