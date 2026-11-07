@@ -59,6 +59,25 @@ def golden_tests() raises:
         check(UUID(String(row[1])).int() == value.int(), "RFC parse " + section)
         count += 1
     check(count == 13, "missing RFC fixture")
+    var dns_ns = materialize[NAMESPACE_DNS]()
+    var url_ns = materialize[NAMESPACE_URL]()
+    # Pinned CPython Lib/uuid.py v3.14.0 uuid3 / uuid5 rows for empty and multibyte UTF-8 names.
+    check(uuid3(dns_ns, "").__str__() == "c87ee674-4ddc-3efe-a74e-dfe25da5d7b3", "uuid3 DNS empty")
+    check(uuid5(dns_ns, "").__str__() == "4ebd0208-8328-5d69-8c44-ec50939c0967", "uuid5 DNS empty")
+    check(uuid3(dns_ns, "café").__str__() == "f658bdc1-094e-346d-8373-1cd586a2bccd", "uuid3 DNS cafe")
+    check(uuid5(dns_ns, "café").__str__() == "5e2e2331-a683-5e18-b56d-666e31574b41", "uuid5 DNS cafe")
+    check(uuid3(dns_ns, "こんにちは").__str__() == "d87bee46-169c-319b-9a06-c1248dfbc362", "uuid3 DNS ja")
+    check(uuid5(dns_ns, "こんにちは").__str__() == "9b351131-5ce4-5f98-9285-2cb6252a8c36", "uuid5 DNS ja")
+    check(uuid3(dns_ns, "🌍").__str__() == "9c71c1e3-fcf2-3600-9958-1b53ae0ee497", "uuid3 DNS emoji")
+    check(uuid5(dns_ns, "🌍").__str__() == "c8f67c2c-b677-5d88-8ac4-ce4065247739", "uuid5 DNS emoji")
+    check(uuid3(url_ns, "").__str__() == "14cdb9b4-de01-3faa-aff5-65bc2f771745", "uuid3 URL empty")
+    check(uuid5(url_ns, "").__str__() == "1b4db7eb-4057-5ddf-91e0-36dec72071f5", "uuid5 URL empty")
+    check(uuid3(url_ns, "café").__str__() == "e3c5138d-fa47-372c-a143-e9a287f8075f", "uuid3 URL cafe")
+    check(uuid5(url_ns, "café").__str__() == "79d4db4c-73a9-5cec-bd37-4fc862e2120d", "uuid5 URL cafe")
+    check(uuid3(url_ns, "こんにちは").__str__() == "9d4338bc-6bc0-367f-b091-3b6fb0595442", "uuid3 URL ja")
+    check(uuid5(url_ns, "こんにちは").__str__() == "6c99f3de-d04d-5568-b140-f84c60c2f8c0", "uuid5 URL ja")
+    check(uuid3(url_ns, "🌍").__str__() == "8f0179c0-f4ba-3d05-976a-0d3628873319", "uuid3 URL emoji")
+    check(uuid5(url_ns, "🌍").__str__() == "7a7787db-1861-58d8-95ca-438577b4bc30", "uuid5 URL emoji")
     print("PASS RFC 9562: 13 complete vectors")
 
 def main() raises:
