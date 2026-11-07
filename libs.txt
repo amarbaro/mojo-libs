@@ -32,3 +32,6 @@ mojo-glob-public
 mojo-prometheus-public
 mojo-subprocess-public
 mojo-xxhash-public
+mojo-csv-public
+mojo-uuid-public
+mojo-base64-public

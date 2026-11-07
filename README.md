@@ -39,6 +39,9 @@ a CI badge, `docs/api.md`, `docs/design.md` and an agent skill in `skills/`.
 | [mojo-prometheus](https://github.com/amarbaro/mojo-prometheus) | Prometheus metrics for Mojo: counters, gauges, histograms, summaries with labels, text exposition byte-identical with prometheus_client | 0.1.0 | `mojo>=1.2.0,<1.3` | mojo-pyformat >=0.2.0,<0.3 | ![ci](https://github.com/amarbaro/mojo-prometheus/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-subprocess](https://github.com/amarbaro/mojo-subprocess) | subprocess.run for Mojo: capture stdout/stderr, input, timeout, cwd/env, same results as Python | 0.1.0 | `mojo>=1.2.0,<1.3` | mojo-posix >=0.1.0,<0.2 | ![ci](https://github.com/amarbaro/mojo-subprocess/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-xxhash](https://github.com/amarbaro/mojo-xxhash) | xxHash for Mojo: XXH32, XXH64, XXH3-64 and XXH3-128 with seeds and streaming, pure Mojo, identical to the reference | 0.1.0 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-xxhash/actions/workflows/ci.yml/badge.svg?branch=main) |
+| [mojo-csv](https://github.com/amarbaro/mojo-csv) | CSV reader/writer with CPython csv parity | 0.1.1 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-csv/actions/workflows/ci.yml/badge.svg?branch=main) |
+| [mojo-uuid](https://github.com/amarbaro/mojo-uuid) | RFC UUID values, parsing, formatting and generation for Mojo | 0.1.1 | `mojo>=1.2.0,<1.3` | mojo-hashlib >=0.1.2,<0.2 | ![ci](https://github.com/amarbaro/mojo-uuid/actions/workflows/ci.yml/badge.svg?branch=main) |
+| [mojo-base64](https://github.com/amarbaro/mojo-base64) | Base16/32/64 encode/decode matching CPython base64 | 0.1.1 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-base64/actions/workflows/ci.yml/badge.svg?branch=main) |
 <!-- /libs -->
 
 The table is generated from each library's `pyproject.toml` by `tools/gen.mojo`; `scripts/check.sh`
