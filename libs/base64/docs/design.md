@@ -23,7 +23,7 @@ Three paired rounds on CPU 15, medians: before/after 64 MiB encode
 decode 0.213/0.701 GB/s. CPython: 0.787/0.710 GB/s large encode/decode,
 1.106/0.807 GB/s small. Full benchmark before/after: 1.71/0.82 s;
 peak RSS median 448492/270144 KB. Load average 12.3 on 16 CPUs.
-Mojo decode reaches 0.707 GB/s, matching CPython 3.14 (0.710 GB/s).
+Large-input decode within 0.5% of CPython (0.707 vs 0.710 GB/s); encode (-26% at 64 MiB, -37% at 1 KiB), small decode (-13%) and peak RSS (+8%, 270 vs 251 MB) remain worse; release blocked on perf.
 The old literal 1 GB/s benchmark was removed because it measured nothing.
 
 Build: scripts/capped.sh .venv/bin/mojo build -O3 -I src tests/bench.mojo -o .work/bench.

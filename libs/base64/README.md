@@ -33,10 +33,16 @@ Run the checked example: `scripts/capped.sh .venv/bin/mojo run -I src examples/q
 | b32hexencode / b32hexdecode | Base32hex; decode supports casefold |
 | b16encode / b16decode | Uppercase hex; decode supports casefold |
 
-Each call has an `_into` variant. All inputs are byte spans. Empty altchars/map01
-lists mean None; nonempty lists require lengths 2/1. Encode altchars, String
-inputs, Base85 and wrapped-line APIs are outside this API. Error uses Mojo Error,
-not Python exception classes. Decoders and some append calls allocate scratch.
+Each call has an `_into` variant. All inputs are byte spans.
+
+## Limits
+
+Performance: large-input decode within 0.5% of CPython (0.707 vs 0.710 GB/s);
+encode (-26% at 64 MiB, -37% at 1 KiB), small decode (-13%) and peak RSS
+(+8%, 270 vs 251 MB) remain worse; release blocked on perf.
+Encode altchars, String inputs, Base85 and wrapped-line APIs are outside this API.
+Empty altchars/map01 lists mean None; nonempty lists require lengths 2/1.
+Error uses Mojo Error, not Python exception classes.
 Strict padding follows the tested CPython maintenance versions.
 
 Tested toolchains: Mojo 1.2.0 and the nightly version recorded by scripts/nightly.sh.
