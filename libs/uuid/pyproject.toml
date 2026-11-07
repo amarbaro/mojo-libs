@@ -11,5 +11,4 @@ Homepage = "https://github.com/amarbaro/mojo-uuid"
 Repository = "https://github.com/amarbaro/mojo-uuid"
 
 [tool.mojo]
-packages = ["src/uuid"]
 deps = ["mojo-hashlib >=0.1.2,<0.2"]
