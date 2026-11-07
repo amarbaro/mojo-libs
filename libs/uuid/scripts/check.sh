@@ -13,8 +13,9 @@ cat "$D/results.txt"
 if [ "${CHECK_DIR:-}" != ".work/mcheck" ]; then
   python3 -c 'import re; m = re.search(r"```mojo\n(.*?)```", open("README.md").read(), re.S); open("'"$D"'/readme_doctest.mojo", "w").write(m.group(1))'
   MOJO=${MOJO:-.venv/bin/mojo}
+  HASHLIB_SRC=${HASHLIB_SRC:-../mojo-hashlib-public/src}
   if [ -x "$MOJO" ]; then
-    scripts/run-capped.sh "$MOJO" build -I src -I ../mojo-hashlib-public/src "$D/readme_doctest.mojo" -o "$D/readme_doctest" > "$D/doctest_build.txt" 2>&1 || { cat "$D/doctest_build.txt"; echo 'FAIL check: README doc-test build'; exit 1; }
+    scripts/run-capped.sh "$MOJO" build -I src -I "$HASHLIB_SRC" "$D/readme_doctest.mojo" -o "$D/readme_doctest" > "$D/doctest_build.txt" 2>&1 || { cat "$D/doctest_build.txt"; echo 'FAIL check: README doc-test build'; exit 1; }
     scripts/run-capped.sh "$D/readme_doctest" > "$D/doctest.txt" 2>&1 || { cat "$D/doctest.txt"; echo 'FAIL check: README doc-test run'; exit 1; }
   fi
 fi
