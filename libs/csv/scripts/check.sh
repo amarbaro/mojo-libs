@@ -4,7 +4,7 @@ cd "$(dirname "$0")/.."
 : "${CASES:?FAIL setup: set CASES to the built case runner}"
 CHECK_DIR=${CHECK_DIR:-.work/check}
 mkdir -p "$CHECK_DIR"
-if ! systemd-run --user --scope -q -p MemoryMax=4G -p MemorySwapMax=0 -- timeout 120 "$CASES" > "$CHECK_DIR/cases.out" 2>&1; then
+if ! scripts/cap.sh "$CASES" > "$CHECK_DIR/cases.out" 2>&1; then
   head -20 "$CHECK_DIR/cases.out" | cut -c1-400
   echo "FAIL check: case runner"
   exit 1
