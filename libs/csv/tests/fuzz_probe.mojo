@@ -12,6 +12,7 @@ def run_case(d: Dialect, data: Span[UInt8, _]) -> String:
             if not first:
                 out += "|"
             first = False
+            out += String(reader.line_num) + ":"
             var row = reader.row()
             for i in range(len(row)):
                 if i > 0:

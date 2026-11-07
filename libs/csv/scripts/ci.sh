@@ -13,15 +13,23 @@ else
 fi
 "$MOJO" --version
 mkdir -p .work/t
-for t in tests/cases:.work/cases tests/api:.work/t/api examples/quickstart:.work/t/quickstart tests/fuzz_probe:.work/t/fuzz_probe; do
+for t in tests/cases:.work/cases tests/api:.work/t/api examples/quickstart:.work/t/quickstart tests/fuzz_probe:.work/t/fuzz_probe tests/write_probe:.work/t/write_probe; do
   scripts/cap.sh "$MOJO" build -O3 -I src ${MOJO_FLAGS:-} "${t%%:*}.mojo" -o "${t##*:}" > .work/build.err 2>&1 || { echo "FAIL build: ${t%%:*}.mojo"; head -50 .work/build.err; exit 1; }
 done
 CASES=.work/cases scripts/check.sh | tee .work/gate.txt
 MOJO="$MOJO" scripts/mutants.sh | tee .work/mutants.txt
 scripts/cap.sh .work/t/api
 scripts/cap.sh .work/t/quickstart
-scripts/cap.sh "$PYTHON" -I tools/oracle_fuzz.py .work/t/fuzz 7 5000
-scripts/cap.sh .work/t/fuzz_probe .work/t/fuzz.bin > .work/t/fuzz.got
-diff -u .work/t/fuzz.exp .work/t/fuzz.got || { echo 'FAIL fuzz differential'; exit 1; }
-echo 'PASS 5/5'
+# Differential vs CPython: reader (wide dialects, numeric modes, line_num) and writer.
+differential() {  # NAME GENERATOR PROBE SEED COUNT
+  scripts/cap.sh "$PYTHON" -I "tools/$2" ".work/t/$1" "$4" "$5"
+  scripts/cap.sh ".work/t/$3" ".work/t/$1.bin" > ".work/t/$1.got"
+  diff -u ".work/t/$1.exp" ".work/t/$1.got" > ".work/t/$1.diff" || { head -20 ".work/t/$1.diff"; echo "FAIL differential $1"; exit 1; }
+  # checker self-test: a corrupted expectation must be rejected
+  sed '1s/^/x/' ".work/t/$1.exp" | diff -q - ".work/t/$1.got" > /dev/null && { echo "FAIL differential $1: checker accepted a corrupted expectation"; exit 1; }
+  echo "PASS differential $1 $5"
+}
+differential fuzz oracle_fuzz.py fuzz_probe 7 20000
+differential wfuzz oracle_write_fuzz.py write_probe 7 20000
+echo 'PASS 6/6'
 echo 'PASS ci'
