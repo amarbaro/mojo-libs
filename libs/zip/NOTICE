@@ -2,3 +2,5 @@ mojo-zip
 Copyright 2026 AMARBARO · amarbaro.org labs <dev@amarbaro.org>
 
 Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Behaviour, field layout and error texts are ported from CPython Lib/zipfile (Python Software Foundation License 2.0, see LICENSE-python).
