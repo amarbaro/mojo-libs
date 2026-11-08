@@ -1,6 +1,30 @@
 # mojo-gguf-core
 
-[![CI](https://github.com/amarbaro/mojo-gguf-core/actions/workflows/ci.yml/badge.svg)](https://github.com/amarbaro/mojo-gguf-core/actions/workflows/ci.yml)
+<!-- badges -->
+[![ci](https://github.com/amarbaro/mojo-gguf-core/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-gguf-core/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-gguf-core)](https://github.com/amarbaro/mojo-gguf-core/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-gguf-core)](https://github.com/amarbaro/mojo-gguf-core/blob/main/LICENSE)
+<!-- /badges -->
+
+<!-- install -->
+Install: `pixi add mojo-gguf-core` once published. For now: `git clone https://github.com/amarbaro/mojo-gguf-core`, then `mojo run -I mojo-gguf-core/src app.mojo`.
+
+```mojo
+from gguf import Gguf, Writer, T_UINT32, T_FLOAT32
+
+
+def main() raises:
+    var w = Writer()
+    w.add_str("general.name", "demo")
+    w.add_int("demo.context_length", T_UINT32, 4096)
+    var data = List[UInt8](length=4 * 8, fill=0)
+    w.add_tensor("weight", [4, 2], 0, data)  # F32, ne0 = 4, ne1 = 2
+    w.save(".work/quick.gguf")
+
+    var g = Gguf(".work/quick.gguf")  # mmapped; data() is a view, no copy
+    print(g.str(g.find("general.name")), g.int(g.find("demo.context_length")))
+    for i in range(len(g.tensors)):
+        print(g.tensors[i].name, g.tensors[i].ttype, g.tensors[i].numel(), len(g.data(i)))
+```
+<!-- /install -->
 
 Read and write [GGUF](https://github.com/ggml-org/ggml/blob/master/docs/gguf.md) files (the
 llama.cpp model format) from Mojo. The reader mmaps the file and parses the header,
@@ -8,30 +32,7 @@ key-values and tensor table in place. Tensor data is a `Span` into the mapping, 
 model opens in 36 ms at 29 MB RSS. The writer produces the bytes gguf-py's `GGUFWriter`
 produces. The gate checks everything against gguf-py 0.19.0. 360 lines, no dependencies.
 
-```mojo
-from gguf import Gguf, Writer, T_UINT32
-
-def main() raises:
-    var g = Gguf("model.gguf")                          # mmapped, nothing copied
-    print(g.str(g.find("general.architecture")), len(g.tensors))
-    var vocab = g.strs(g.find("tokenizer.ggml.tokens"))
-    var w = g.data(g.tensor("token_embd.weight"))      # Span[UInt8] into the file
-
-    var out = Writer()
-    out.add_str("general.name", "demo")
-    out.add_int("demo.context_length", T_UINT32, 4096)
-    out.save("demo.gguf")
-```
-
-## Install
-
 Requires Mojo 1.2 on Linux.
-
-| Way | Command |
-|---|---|
-| Source path | `mojo run -I path/to/mojo-gguf-core/src app.mojo` |
-| Precompiled | `mojo precompile src/gguf -o gguf.mojoc` |
-| Vendor | copy `src/gguf/` into your project |
 
 ## What you get
 
