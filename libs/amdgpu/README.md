@@ -1,32 +1,34 @@
 # mojo-amdgpu
 
-[![CI](https://github.com/amarbaro/mojo-amdgpu/actions/workflows/ci.yml/badge.svg)](https://github.com/amarbaro/mojo-amdgpu/actions/workflows/ci.yml)
+<!-- badges -->
+[![ci](https://github.com/amarbaro/mojo-amdgpu/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-amdgpu/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-amdgpu)](https://github.com/amarbaro/mojo-amdgpu/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-amdgpu)](https://github.com/amarbaro/mojo-amdgpu/blob/main/LICENSE)
+<!-- /badges -->
+
+<!-- install -->
+Install: `pixi add mojo-amdgpu` once published. For now: `git clone https://github.com/amarbaro/mojo-amdgpu`, then `mojo run -I mojo-amdgpu/src app.mojo`.
+
+```mojo
+from amdgpu import Gpu, VRAM_USED, GPU_BUSY, TEMP_JUNCTION, POWER_UW
+
+
+def main() raises:
+    # Gpu("/sys") is the default; the example reads the fixture so it runs anywhere.
+    var g = Gpu("tests/fixtures/sys")  # opens the card with the most VRAM, files once
+    for _ in range(3):  # a daemon would sleep 1 s between samples
+        g.refresh()  # pread into one buffer, no allocation
+        print(
+            g.card, "vram used MiB", g.get(VRAM_USED) // 1048576, "free MiB", g.vram_free() // 1048576,
+            "busy %", g.get(GPU_BUSY), "junction mC", g.get(TEMP_JUNCTION), "power uW", g.get(POWER_UW),
+        )
+```
+<!-- /install -->
 
 AMD GPU telemetry for Mojo from sysfs, hwmon and KFD, no ROCm and no `rocm-smi` needed. Every
 value is checked against a Python oracle on a copy of a real 7900 XTX + iGPU sysfs tree, and a
 sample (17 metrics) costs 8 µs, about 2.2× faster than Python with `pread` and about 7× faster than Python
 that re-opens each file, with no allocation per sample.
 
-```mojo
-from amdgpu import Gpu, VRAM_USED, TEMP_JUNCTION
-
-def main() raises:
-    var g = Gpu()  # the card with the most VRAM under /sys; files opened once
-    while True:
-        g.refresh()  # pread into one buffer, parse in place
-        print(g.get(VRAM_USED), g.vram_free(), g.get(TEMP_JUNCTION))
-        # sleep 1 s
-```
-
-## Install
-
 Requires Mojo 1.2 on Linux with the `amdgpu` driver. Nothing to link.
-
-| Way | Command |
-|---|---|
-| Source path | `mojo run -I path/to/mojo-amdgpu/src app.mojo` |
-| Precompiled | `mojo precompile src/amdgpu -o amdgpu.mojoc`, put it next to your code |
-| Vendor | copy `src/amdgpu/` into your project |
 
 ## What you get
 
