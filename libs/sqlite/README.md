@@ -1,31 +1,31 @@
 # mojo-sqlite
 
-[![CI](https://github.com/amarbaro/mojo-sqlite/actions/workflows/ci.yml/badge.svg)](https://github.com/amarbaro/mojo-sqlite/actions/workflows/ci.yml)
+<!-- badges -->
+[![ci](https://github.com/amarbaro/mojo-sqlite/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-sqlite/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-sqlite)](https://github.com/amarbaro/mojo-sqlite/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-sqlite)](https://github.com/amarbaro/mojo-sqlite/blob/main/LICENSE)
+<!-- /badges -->
 
-SQLite for Mojo that returns the same rows as Python's `sqlite3`, byte for byte, and
-runs 2.7× faster on inserts and 4× to 5.5× faster on scans.
+<!-- install -->
+Install: `pixi add mojo-sqlite` once published. For now: `git clone https://github.com/amarbaro/mojo-sqlite`, then `mojo run -I mojo-sqlite/src app.mojo`.
 
 ```mojo
 from sqlite import Database
 
-def main() raises:
-    var db = Database("jobs.db")
-    var q = db.prepare("SELECT id, cmd FROM jobs WHERE prio >= ?")
-    q.bind(1, 10)
-    while q.step():
-        print(q.int(0), q.text(1))
-```
 
-## Install
+def main() raises:
+    var db = Database(":memory:")
+    db.exec("CREATE TABLE jobs(cmd TEXT, prio INTEGER); INSERT INTO jobs VALUES ('train', 10), ('eval', 20)")
+    var q = db.prepare("SELECT cmd, prio FROM jobs WHERE prio >= ?")  # prepare once, bind and run many times
+    q.bind(1, 15)
+    while q.step():
+        print(q.text(0), q.int(1))
+```
+<!-- /install -->
+
+SQLite for Mojo that returns the same rows as Python's `sqlite3`, byte for byte, and
+runs 2.7× faster on inserts and 4× to 5.5× faster on scans.
 
 Requires Mojo 1.2 and the system `libsqlite3.so.0` (any Linux distribution has it).
 The library is loaded at run time, so no linker flags are needed.
-
-| Way | Command |
-|---|---|
-| Source path | `mojo run -I path/to/mojo-sqlite/src app.mojo` |
-| Precompiled | `mojo precompile src/sqlite -o sqlite.mojoc`, then put it next to your code |
-| Vendor | copy `src/sqlite/` into your project |
 
 ## What you get
 
