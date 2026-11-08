@@ -1,4 +1,4 @@
-"""Immediate-mode UI drawn by the GPU (docs/DESIGN.md). Every frame the host calls widgets with this frame's Input;
+"""Immediate-mode UI drawn by the GPU (docs/design.md). Every frame the host calls widgets with this frame's Input;
 each widget returns its interaction (clicked, toggled, dragged) and appends draw commands to one flat list. The list is
 binned into 16 x 16 tiles on the host (one compact list, an offset per tile); `compose` gives every UI pixel one thread that walks only its tile's commands in
 order: anti-aliased rounded rects and soft shadows by SDF, glyphs from font.mojo's atlas, capsule lines, triangles,
@@ -359,14 +359,3 @@ struct Ui(Movable):
                     self.bins[Int(self.cur[t])] = UInt16(k)
                     self.cur[t] += 1
         self.binned = self.n
-
-
-def fmt(v: Float64, d: Int = 2) -> String:
-    """v with d decimals (labels)."""
-    var p = 10 ** d
-    var n = Int(abs(v) * Float64(p) + 0.5)
-    var s = (String("-") if v < 0 and n else String()) + String(n // p)
-    if d:
-        var f = String(n % p)
-        s += "." + String("0") * (d - f.byte_length()) + f
-    return s
