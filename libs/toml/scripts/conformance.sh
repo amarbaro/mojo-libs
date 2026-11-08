@@ -14,4 +14,8 @@ grep -q '"k29":{"type":"integer","value":"29"}' <<<"$out" || { echo "FAIL wide: 
 echo "wide tables: ok"
 .venv/bin/mojo run -I src tests/api.mojo || { echo "FAIL api: tests/api.mojo"; exit 1; }
 .venv/bin/mojo run -I src examples/quickstart.mojo >/dev/null || { echo "FAIL example: examples/quickstart.mojo"; exit 1; }
+# property smoke step: mojo-proptest from $PROPTEST, the sibling checkout, or a pinned fetch
+PT=$(scripts/proptest.sh)
+.venv/bin/mojo build -I src -I "$PT" tests/prop.mojo -o .work/prop 2>.work/build.err || { echo "FAIL build: tests/prop.mojo"; cat .work/build.err; exit 1; }
+./.work/prop || { echo "FAIL prop: tests/prop.mojo"; exit 1; }
 echo "PASS all"

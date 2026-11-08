@@ -1,30 +1,32 @@
 # mojo-toml
 
-[![CI](https://github.com/amarbaro/mojo-toml/actions/workflows/ci.yml/badge.svg)](https://github.com/amarbaro/mojo-toml/actions/workflows/ci.yml)
+<!-- badges -->
+[![ci](https://github.com/amarbaro/mojo-toml/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-toml/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-toml)](https://github.com/amarbaro/mojo-toml/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-toml)](https://github.com/amarbaro/mojo-toml/blob/main/LICENSE)
+<!-- /badges -->
 
-A TOML 1.1 parser written in pure Mojo. It passes the complete official
-conformance suite, [toml-test](https://github.com/toml-lang/toml-test) v2.2.0:
-**214/214 valid and 467/467 invalid** documents, on Mojo 1.1.0 and on the 1.2 nightly.
+<!-- install -->
+Install: `pixi add mojo-toml` once published. For now: `git clone https://github.com/amarbaro/mojo-toml`, then `mojo run -I mojo-toml/src app.mojo`.
 
 ```mojo
 from toml import parse
 
+
 def main() raises:
-    var doc = parse(open("config.toml", "r").read())
+    var doc = parse("""
+[server]
+host = "localhost"
+port = 8080
+""")
     var server = doc["server"]
     print(server["host"].as_string(), server["port"].as_int())
 ```
+<!-- /install -->
 
-## Install
+A TOML 1.1 parser written in pure Mojo. It passes the complete official
+conformance suite, [toml-test](https://github.com/toml-lang/toml-test) v2.2.0:
+**214/214 valid and 467/467 invalid** documents, on Mojo 1.2.0.
 
-Requires Mojo 1.2 (`pip install "mojo>=1.1.0,<1.2"` or `uv sync` in this repo).
-There is no package registry for Mojo yet, so pick one:
-
-| Way | Command |
-|---|---|
-| Source path | `mojo run -I path/to/mojo-toml/src app.mojo` |
-| Precompiled | `mojo precompile src/toml -o toml.mojoc`, then put `toml.mojoc` next to your code or in a `-I` dir |
-| Vendor | copy `src/toml/` into your project |
+Requires Mojo 1.2 (`pip install "mojo==1.2.0"` or `uv sync` in this repo).
 
 ## What you get
 

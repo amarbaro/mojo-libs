@@ -24,6 +24,7 @@ comptime LBRACE: UInt8 = 123
 comptime RBRACE: UInt8 = 125
 comptime COMMA: UInt8 = 44
 comptime DOT: UInt8 = 46
+comptime MAX_DEPTH = 128  # arrays and inline tables nest at most this deep
 comptime EQUALS: UInt8 = 61
 comptime HASH: UInt8 = 35
 comptime BACKSLASH: UInt8 = 92
@@ -71,7 +72,7 @@ def add_seconds(mut b: List[UInt8], off: Int):
     """TOML 1.1 makes seconds optional: insert ":00" after a bare HH:MM at off."""
     if len(b) < off + 5 or b[off + 2] != COLON:
         return
-    if len(b) > off + 5 and b[off + 5] == COLON:
+    if len(b) > off + 5 and (b[off + 5] == COLON or b[off + 5] == DOT):
         return
     var out: List[UInt8] = []
     for i in range(off + 5):
@@ -172,6 +173,7 @@ struct Parser:
     var doc: TomlDoc
     var root: Int
     var current_table: Int
+    var depth: Int
 
     def __init__(out self, var data: List[UInt8]) raises:
         validate_utf8(data)
@@ -182,6 +184,7 @@ struct Parser:
         rn.kind = KIND_TABLE
         self.root = self.doc.push(rn^)
         self.current_table = self.root
+        self.depth = 0
 
     # ---- low level helpers ----
 
@@ -431,10 +434,13 @@ struct Parser:
             n.kind = KIND_STRING
             n.s = s
             return self.doc.push(n^)
-        if c == LBRACKET:
-            return self.parse_array()
-        if c == LBRACE:
-            return self.parse_inline_table()
+        if c == LBRACKET or c == LBRACE:
+            if self.depth >= MAX_DEPTH:
+                self.fail("too deeply nested")
+            self.depth += 1
+            var idx = self.parse_array() if c == LBRACKET else self.parse_inline_table()
+            self.depth -= 1
+            return idx
         if c == UInt8(116):  # t
             self.expect_literal("true")
             var n = TomlNode()
@@ -865,7 +871,7 @@ struct Parser:
             self.fail_at(start, "invalid offset")
 
     def finish_number(mut self, tok: String, start: Int) raises -> Int:
-        var b = bytes_list(tok)
+        var b = tok.as_bytes()  # a view: a number token is not copied
         var n = len(b)
         if n == 0:
             self.fail_at(start, "expected a value")
@@ -904,26 +910,22 @@ struct Parser:
                 radix = 8
             elif radix_char == UInt8(98):
                 radix = 2
-            var digits = self.collect_underscored_digits(b, i + 2, n, radix, start)
-            if len(digits) == 0:
+            if self.collect_underscored_digits(b, i + 2, n, radix, start) == 0:
                 self.fail_at(start, "empty based integer")
             var consumed = i + 2
             while consumed < n and (self.digit_value(b[consumed], radix) >= 0 or b[consumed] == UNDERSCORE):
                 consumed += 1
             if consumed != n:
                 self.fail_at(start, "invalid digit for base " + String(radix))
-            var value: Int64 = 0
-            for d in digits:
-                value = value * Int64(radix) + Int64(d)
             var node = TomlNode()
             node.kind = KIND_INTEGER
-            node.i = value
+            node.i = self.to_int(b, i + 2, n, radix, False, start)
             node.s = tok
             return self.doc.push(node^)
 
         # decimal integer or float
-        var digits1 = self.collect_underscored_digits(b, i, n, 10, start)
-        if len(digits1) > 1 and digits1[0] == 0:
+        var ndig = self.collect_underscored_digits(b, i, n, 10, start)
+        if ndig > 1 and b[i] == UInt8(48):
             self.fail_at(start, "leading zero in number")
         var j = i
         while j < n and (is_digit(b[j]) or b[j] == UNDERSCORE):
@@ -958,14 +960,9 @@ struct Parser:
             self.fail_at(start, "malformed number")
 
         if not is_float:
-            var value: Int64 = 0
-            for d in digits1:
-                value = value * 10 + Int64(d)
-            if neg:
-                value = -value
             var node = TomlNode()
             node.kind = KIND_INTEGER
-            node.i = value
+            node.i = self.to_int(b, i, n, 10, neg, start)
             node.s = tok
             return self.doc.push(node^)
 
@@ -982,7 +979,21 @@ struct Parser:
         node.s = tok
         return self.doc.push(node^)
 
-    def match_lit(self, b: List[UInt8], i: Int, n: Int, lit: String) -> Bool:
+    def to_int(self, b: Span[UInt8, _], at: Int, n: Int, radix: Int, neg: Bool, start: Int) raises -> Int64:
+        """The digit run at `at` as a signed 64-bit integer; a magnitude past the range is an error, never a wrap."""
+        var m = UInt64(0)
+        for k in range(at, n):
+            var d = self.digit_value(b[k], radix)
+            if d < 0:
+                continue  # an underscore, already validated
+            if m > (UInt64.MAX - UInt64(d)) // UInt64(radix):
+                self.fail_at(start, "integer out of range")
+            m = m * UInt64(radix) + UInt64(d)
+        if m > (UInt64(1) << 63) - UInt64(0 if neg else 1):
+            self.fail_at(start, "integer out of range")
+        return Int64(0) - Int64(m) if neg else Int64(m)
+
+    def match_lit(self, b: Span[UInt8, _], i: Int, n: Int, lit: String) -> Bool:
         var lb = lit.as_bytes()
         if n - i != len(lb):
             return False
@@ -991,8 +1002,9 @@ struct Parser:
                 return False
         return True
 
-    def collect_underscored_digits(self, b: List[UInt8], start: Int, n: Int, radix: Int, tokstart: Int) raises -> List[Int]:
-        var out: List[Int] = []
+    def collect_underscored_digits(self, b: Span[UInt8, _], start: Int, n: Int, radix: Int, tokstart: Int) raises -> Int:
+        """Validates the digit run at start (underscores between digits only); returns how many digits it has."""
+        var count = 0
         var i = start
         var prev_underscore = False
         var any_digit = False
@@ -1000,7 +1012,7 @@ struct Parser:
             var c = b[i]
             var v = self.digit_value(c, radix)
             if v >= 0:
-                out.append(v)
+                count += 1
                 any_digit = True
                 prev_underscore = False
                 i += 1
@@ -1013,7 +1025,7 @@ struct Parser:
                 break
         if prev_underscore:
             self.fail_at(tokstart, "trailing underscore")
-        return out^
+        return count
 
     def digit_value(self, c: UInt8, radix: Int) -> Int:
         if radix == 16:
