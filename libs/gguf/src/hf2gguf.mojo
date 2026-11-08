@@ -16,7 +16,7 @@ from std.sys import argv, exit
 from std.ffi import external_call, c_ssize_t
 from std.os.path import exists, isdir
 from std.memory import bitcast
-from gguf.model import Out, pad_to, CHUNK
+from ggufx.model import Out, pad_to, CHUNK
 from st.json import Json
 from st.safetensors import Checkpoint, ST_F32
 from hfconv.qwen2_names import qwen2_name
@@ -211,8 +211,8 @@ def tokenizer_kvs(dir: String, hp: Json, mut w: Gw) raises:
         if v < 0:
             break
         var id = tj.integer(v)
-        if id >= n_vocab:
-            raise Error("token id " + String(id) + " is not below vocab_size " + String(n_vocab))
+        if id < 0 or id >= n_vocab:
+            raise Error("token id " + String(id) + " is not in 0 .. vocab_size " + String(n_vocab))
         tokens[id] = key.copy()
         types[id] = TOK_NORMAL
     # added tokens: tokenizer.json first, tokenizer_config.json added_tokens_decoder overrides the flags
@@ -248,8 +248,8 @@ def tokenizer_kvs(dir: String, hp: Json, mut w: Gw) raises:
                 a_special[found] = tc.boolean(tc.get(e, "special"))
     for k in range(len(a_id)):
         var id = a_id[k]
-        if id >= n_vocab:
-            raise Error("added token id " + String(id) + " is not below vocab_size " + String(n_vocab))
+        if id < 0 or id >= n_vocab:
+            raise Error("added token id " + String(id) + " is not in 0 .. vocab_size " + String(n_vocab))
         var t = a_content[k].copy()
         if a_special[k] or looks_special(t):
             types[id] = TOK_CONTROL

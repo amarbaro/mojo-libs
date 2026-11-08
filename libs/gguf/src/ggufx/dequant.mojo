@@ -7,8 +7,8 @@ IEEE f32 op. `deq_rows` splits the rows over threads; codebooks are materialized
 """
 from std.collections import Array
 from std.memory import bitcast
-from gguf.par import parallelize
-from gguf.grids import IQ2XXS_GRID, IQ1S_GRID, KVALUES_IQ4NL
+from ggufx.par import parallelize
+from ggufx.grids import IQ2XXS_GRID, IQ1S_GRID, KVALUES_IQ4NL
 
 comptime Src = Pointer[UInt8, MutUntrackedOrigin]
 comptime Dst = Pointer[Float32, MutUntrackedOrigin]
@@ -443,7 +443,7 @@ def deq_span(t: Int, s: Src, y: Dst, n: Int, nb: Int, rb: Int, ne0: Int):
                 deq_tq1_0(sr, yr, nb)
 
 @fieldwise_init
-struct _Span(Copyable):
+struct _Span:
     var src: Src
     var dst: Dst
     var t: Int
@@ -471,6 +471,6 @@ def deq_rows(t: Int, src: Src, ne0: Int, nrows: Int, dst: Dst) raises:
     var items = min(nrows, 256)
     if items <= 0:
         return
-    var c: List[_Span] = [_Span(src, dst, t, nb, rb, ne0, nrows, items)]  # heap ctx: a stack slot can die before the threads read it
-    parallelize(_deq_task, Int(c.unsafe_ptr()), items)
-    _ = len(c)
+    var c = _Span(src, dst, t, nb, rb, ne0, nrows, items)
+    parallelize(_deq_task, Int(Pointer(to=c)), items)
+    _ = c.items

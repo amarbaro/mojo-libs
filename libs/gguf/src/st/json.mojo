@@ -2,7 +2,7 @@
 decode only what the caller asks for. `member` / `element` walk a container and skip each value
 they hand back, so a 6 MB tokenizer.json costs its bytes plus the strings actually decoded."""
 from std.ffi import external_call
-from gguf.model import open_fd, pread_into
+from ggufx.model import open_fd, pread_into
 
 comptime QUOTE = 34
 comptime BACKSLASH = 92
@@ -34,12 +34,15 @@ struct Json(Movable):
 
     def __init__(out self, path: String) raises:
         var fd = open_fd(path, 0)
-        var size = Int(external_call["lseek", Int](fd, Int64(0), Int32(2)))
+        var size = Int(external_call["lseek64", Int](fd, Int64(0), Int32(2)))
         self.b = List[UInt8](length=size, fill=0)
         pread_into(fd, self.b, 0, size, 0)
         _ = external_call["close", Int32](fd)
 
     def ws(self, p: Int) -> Int:
+        """First non-space at or after p; past the end for the -1 of an absent key (a negative index would wrap)."""
+        if p < 0:
+            return len(self.b)
         var i = p
         while i < len(self.b) and is_space(self.b[i]):
             i += 1
@@ -88,6 +91,8 @@ struct Json(Movable):
         return i
 
     def _hex4(self, at: Int) raises -> Int:
+        if at + 4 > len(self.b):
+            raise Error("bad \\u escape at byte " + String(at))
         var v = 0
         for k in range(4):
             var c = Int(self.b[at + k])
@@ -138,9 +143,14 @@ struct Json(Movable):
             elif d == 117:
                 var cp = self._hex4(k)
                 k += 4
-                if cp >= 0xD800 and cp < 0xDC00 and self.b[k] == BACKSLASH and self.b[k + 1] == 117:
-                    cp = 0x10000 + ((cp - 0xD800) << 10) + (self._hex4(k + 2) - 0xDC00)
+                if cp >= 0xD800 and cp < 0xDC00:  # a high surrogate needs a \uDC00..\uDFFF right after it
+                    var lo = self._hex4(k + 2) if (self.b[k] == BACKSLASH and self.b[k + 1] == 117) else 0
+                    if lo < 0xDC00 or lo > 0xDFFF:
+                        raise Error("lone surrogate in a JSON string at byte " + String(k))
+                    cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00)
                     k += 6
+                elif cp >= 0xDC00 and cp <= 0xDFFF:
+                    raise Error("lone surrogate in a JSON string at byte " + String(k))
                 push_utf8(out, cp)
             else:
                 raise Error("bad escape \\" + chr(d) + " at byte " + String(k))

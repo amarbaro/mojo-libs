@@ -12,9 +12,9 @@ Not ported: a tensor whose data runs past the end of the input (the script write
 from std.sys import argv, exit
 from std.ffi import external_call
 from std.memory import bitcast
-from gguf.model import Out, open_fd, pread_into, pad_to
-from gguf.quant import row, tensor_bytes
-from gguf.tensor_lookup import map_tensor_name
+from ggufx.model import Out, open_fd, pread_into, pad_to, refuse_same_file
+from ggufx.quant import row, tensor_bytes
+from ggufx.tensor_lookup import map_tensor_name
 
 comptime MAGIC = 0x46554747
 comptime ALIGN = 32
@@ -119,7 +119,7 @@ struct Src(Movable):
 
     def __init__(out self, path: String) raises:
         self.fd = open_fd(path, 0)
-        self.size = Int(external_call["lseek", Int](self.fd, Int64(0), Int32(2)))
+        self.size = Int(external_call["lseek64", Int](self.fd, Int64(0), Int32(2)))
         self.pos = 0
 
     def __deinit__(deinit self):
@@ -227,7 +227,7 @@ def read_legacy(mut src: Src) raises -> Legacy:
             dims.append(d)
             n_elems *= d
         var name_bytes = src.take(name_len)
-        var name = String(unsafe_from_utf8=Span(name_bytes))
+        var name = String(from_utf8_lossy=Span(name_bytes))
         if fmt == GGJT:
             src.skip(pad_to(src.pos, ALIGN) - src.pos)
         var nbytes = tensor_bytes(dtype, n_elems)
@@ -309,6 +309,7 @@ def emit(src: Src, cfg: Cfg, L: Legacy) raises:
     # gguf-py add_string skips an empty value: an empty name or description is not written
     var n_kv = N_KV - Int(name.byte_length() == 0) - Int(desc.byte_length() == 0)
     var ar = "llama."
+    refuse_same_file(cfg.input, cfg.output)
     var out = Out(cfg.output)
     out.put(MAGIC, 4)
     out.put(3, 4)

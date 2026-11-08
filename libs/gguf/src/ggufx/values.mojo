@@ -7,8 +7,8 @@ Three dialects, one walker:
 """
 from std.math import isinf, isnan
 from std.memory import bitcast
-from gguf.model import Gguf, T_ARRAY, T_STRING, fixed_size, pread_into
-from gguf.fmt import json_str, np_float32, py_repr
+from ggufx.model import Gguf, T_ARRAY, T_STRING, fixed_size, pread_into
+from ggufx.fmt import json_str, np_float32, py_repr
 
 comptime T_INT8 = 1
 comptime T_INT16 = 3
@@ -50,7 +50,7 @@ def uint_at(g: Gguf, at: Int, n: Int) raises -> UInt64:
 def read_str(g: Gguf, at: Int) raises -> String:
     var n = Int(uint_at(g, at, 8))
     var b = peek(g, at + 8, n)
-    return String(unsafe_from_utf8=Span(b))
+    return String(from_utf8_lossy=Span(b))
 
 
 def end_at(g: Gguf, at: Int, t: Int) raises -> Int:

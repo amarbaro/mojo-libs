@@ -7,10 +7,10 @@ quantized on all cores; norm and bias tensors are copied.
 from std.ffi import external_call, c_ssize_t
 from std.memory import bitcast
 from std.sys import argv, exit, num_logical_cores
-from gguf.par import parallelize
-from gguf import Gguf
-from gguf.model import Out, T_STRING, pad_to, pread_into
-from gguf.quants import (FP, BP, T_F32, T_F16, T_BF16, T_Q4_0, T_Q5_0, T_Q8_0, T_Q2_K, T_Q4_K, T_Q6_K,
+from ggufx.par import parallelize
+from ggufx import Gguf
+from ggufx.model import Out, T_STRING, pad_to, pread_into, refuse_same_file
+from ggufx.quants import (FP, BP, T_F32, T_F16, T_BF16, T_Q4_0, T_Q5_0, T_Q8_0, T_Q2_K, T_Q4_K, T_Q6_K,
                          T_TQ1_0, T_TQ2_0, T_Q2_0, QK_K, blck, row_size, quantize_row)
 
 comptime SLAB = 16 << 20
@@ -128,7 +128,7 @@ def load_row(t: Int, src: BP, at: Int, ne0: Int, dst: FP):
             dst[unsafe_offset=i] = Float32(bitcast[DType.float16](UInt16(v)))
 
 @fieldwise_init
-struct _Rows(Copyable):
+struct _Rows:
     var src: Int
     var dst: Int
     var st: Int
@@ -167,9 +167,9 @@ def quantize_tensor(fd: Int32, ofd: Int32, p: Plan, out_at: Int, nthreads: Int) 
         var nr = min(step, p.nrows - r0)
         pread_into(fd, sbuf, 0, nr * src_row, p.src_off + r0 * src_row)
         var items = min(nr, nthreads * 8)
-        var c: List[_Rows] = [_Rows(Int(sp), Int(dp), st, dt, ne0, nr, items, src_row, dst_row)]  # heap ctx, see dequant.deq_rows
-        parallelize(_quant_task, Int(c.unsafe_ptr()), items, nthreads)
-        _ = len(c)
+        var c = _Rows(Int(sp), Int(dp), st, dt, ne0, nr, items, src_row, dst_row)
+        parallelize(_quant_task, Int(Pointer(to=c)), items, nthreads)
+        _ = c.items
         pwrite_all(ofd, dbuf, nr * dst_row, out_at + r0 * dst_row)
 
 def copy_tensor(fd: Int32, ofd: Int32, src_off: Int, n: Int, out_at: Int) raises:
@@ -192,13 +192,18 @@ def run() raises:
             pos.append(String(a[i]))
     if not pure or len(pos) < 3:
         raise Error("usage: quantize --pure IN OUT TYPE [NTHREADS] (only --pure is implemented)")
-    var nthreads = Int(pos[3]) if len(pos) > 3 else num_logical_cores()
+    var nthreads = Int(pos[3]) if len(pos) > 3 else 0
+    if nthreads < 1:  # llama-quantize: 0 or less means all cores
+        nthreads = num_logical_cores()
+    refuse_same_file(pos[0], pos[1])
     var ft = parse_type(pos[2])
     var g = Gguf(pos[0])
     var n = len(g.tensors)
     var plans = List[Plan]()
     for t in range(n):
         ref info = g.tensors[t]
+        if len(info.dims) == 0 or info.dims[0] <= 0:
+            raise Error("tensor " + info.name + " has no dimensions or a first dimension of 0")
         var n_dims = len(info.dims)
         while n_dims > 1 and info.dims[n_dims - 1] == 1:
             n_dims -= 1

@@ -5,7 +5,7 @@ shard), so a streaming consumer reproduces its tensor order. Nothing is copied: 
 from std.ffi import external_call
 from std.os import listdir
 from std.os.path import exists
-from gguf.model import open_fd, pread_into
+from ggufx.model import open_fd, pread_into
 from .json import Json
 
 comptime ST_F32 = 0
@@ -35,7 +35,7 @@ struct Shard(Copyable, Movable):
     def __init__(out self, path: String) raises:
         var fd = open_fd(path, 0)
         self.path = path.copy()
-        self.size = Int(external_call["lseek", Int](fd, Int64(0), Int32(2)))
+        self.size = Int(external_call["lseek64", Int](fd, Int64(0), Int32(2)))
         # PROT_READ, MAP_PRIVATE
         self.base = external_call["mmap", Int](Int(0), self.size, Int32(1), Int32(2), fd, Int64(0))
         _ = external_call["close", Int32](fd)
@@ -50,6 +50,19 @@ def dtype_code(s: String) raises -> Int:
     if s == "F32":
         return ST_F32
     raise Error("unsupported safetensors dtype " + s + " (BF16, F16, F32 only)")
+
+def check_tensor(path: String, name: String, dtype: Int, shape: List[Int], lo: Int, hi: Int, data_start: Int, size: Int) raises:
+    """Offsets inside the data, in order, and exactly shape * element size bytes (no wrap): what the converters read unchecked."""
+    var esz = 4 if dtype == ST_F32 else 2
+    var n = 1
+    for d in shape:
+        if d < 0 or (d != 0 and n > Int.MAX // d // esz):
+            raise Error(path + ": tensor " + name + " has a shape out of range")
+        n *= d
+    if lo < 0 or hi < lo or hi > size - data_start:
+        raise Error(path + ": tensor " + name + " has data_offsets outside the file")
+    if n * esz != hi - lo:
+        raise Error(path + ": tensor " + name + " shape does not match its data_offsets")
 
 def _sort_in(mut names: List[String], s: String):
     var at = len(names)
@@ -126,9 +139,9 @@ struct Checkpoint(Movable):
                 var off = j.open(j.get(v, "data_offsets"))
                 var lo = j.integer(j.element(off))
                 var hi = j.integer(j.element(off))
-                var t = StTensor(name.copy(), dtype_code(j.get_string(v, "dtype")), shape^, pi, 8 + n + lo, hi - lo)
-                if 8 + n + hi > shard.size:
-                    raise Error(shard.path + ": tensor " + name + " runs past the end of the file")
+                var dt = dtype_code(j.get_string(v, "dtype"))
+                check_tensor(shard.path, name, dt, shape, lo, hi, 8 + n, shard.size)
+                var t = StTensor(name.copy(), dt, shape^, pi, 8 + n + lo, hi - lo)
                 var at = len(mine)
                 for k in range(len(mine)):
                     if t.name < mine[k].name:
