@@ -1,6 +1,7 @@
 # Edge cases the oracle grid does not name. Every expected string is Python's format() output.
 from std.testing import assert_equal, assert_raises
-from pyformat import fmt, fmt_int, fmt_fixed, fmt_e, fmt_g, fmt_pct, fmt_commas, py_sum
+from std.math import inf
+from pyformat import py_repr, fmt, fmt_int, fmt_fixed, fmt_e, fmt_g, fmt_pct, fmt_commas, py_sum
 
 
 def main() raises:
@@ -93,4 +94,11 @@ def main() raises:
     for _ in range(10):
         xs.append(0.1)
     assert_equal(py_sum(xs), 1.0)
+    assert_equal(py_sum([1e308, 1e308]), inf[DType.float64]())  # Python: inf, not nan
+    assert_equal(py_sum([-1e308, -1e308]), -inf[DType.float64]())
+    assert_equal(py_sum([1e308, 1e308, -1e308]), inf[DType.float64]())
+    var tenth: Float64 = 0.1  # runtime doubles: Mojo folds 0.1 + 0.2 exactly at compile time (gives 0.3)
+    var fifth: Float64 = 0.2
+    if py_repr(tenth + fifth) != "0.30000000000000004" or py_repr(1e16) != "1e+16" or py_repr(-0.0) != "-0.0" or py_repr(5e-324) != "5e-324":
+        raise Error("FAIL api: py_repr")
     print("api ok")
