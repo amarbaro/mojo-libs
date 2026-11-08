@@ -30,5 +30,16 @@ for (x1, y1, x2, y2, th) in [(0, 41, 18, 50, 7), (0, 0, 39, 31, 3), (41, 12, 56,
     subprocess.run([".bin/mojo-cv", "line", ".work/c4o.mcv", ".work/c4.mcv", "x1=%d" % x1, "y1=%d" % y1, "x2=%d" % x2, "y2=%d" % y2, "color=255,128,0", "thick=%d" % th], check=True, capture_output=True)
     d = np.abs(mcv.load(".work/c4o.mcv").astype(int) - ref.astype(int)).max()
     print("cv_circle_outline", (x1, y1, x2, y2), th, "maxdiff", d); bad += d > 0
+# cvtColor 8-bit SIMD blocks at every width 1..40 (a block must never touch bytes past its row), 3 and 64 rows
+for name, cv in [("bgr2rgb", cv2.COLOR_BGR2RGB), ("bgr2gray", cv2.COLOR_BGR2GRAY), ("rgb2gray", cv2.COLOR_RGB2GRAY)]:
+    nbad = 0
+    for w in range(1, 41):
+        for h in (3, 64):
+            a = rng.integers(0, 256, (h, w, 3), dtype=np.uint8)
+            mcv.save(a, ".work/c4.mcv")
+            subprocess.run([".bin/mojo-cv", "cvtColor", ".work/c4o.mcv", ".work/c4.mcv", "code=" + name], check=True, capture_output=True)
+            o = mcv.load(".work/c4o.mcv")
+            nbad += int(np.abs(o.reshape(h, w, -1).astype(int) - cv2.cvtColor(a, cv).reshape(h, w, -1).astype(int)).max() > 0)
+    print("cvtColor", name, "widths 1..40: bad", nbad); bad += nbad
 print("BAD", bad)
 sys.exit(1 if bad else 0)

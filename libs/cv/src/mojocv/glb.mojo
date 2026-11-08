@@ -187,14 +187,6 @@ struct Js(Movable):
             k += 1
         return c
 
-    def count(self, node: Int) -> Int:
-        var n = 0
-        var c = self.first[node] if node >= 0 else -1
-        while c >= 0:
-            n += 1
-            c = self.next[c]
-        return n
-
 
 def _skip(b: List[UInt8], mut p: Int):
     while p < len(b) and (b[p] == 32 or b[p] == 9 or b[p] == 10 or b[p] == 13):
@@ -340,7 +332,8 @@ def _accessor(
     off += Int(js.num[js.get(a, "byteOffset")]) if js.get(a, "byteOffset") >= 0 else 0
     var blen = Int(js.num[_need(js, js.get(bv, "byteLength"), "bufferView byteLength")])
     var stride = Int(js.num[js.get(bv, "byteStride")]) if js.get(bv, "byteStride") >= 0 else ncomp * csize
-    if count < 1 or stride < ncomp * csize or off < 0 or off + (count - 1) * stride + ncomp * csize > off - (
+    # count and off are bounded by the BIN size first, so the products below cannot wrap
+    if count < 1 or stride < ncomp * csize or off < 0 or off > len(bin) or count > len(bin) // stride + 1 or off + (count - 1) * stride + ncomp * csize > off - (
         Int(js.num[js.get(a, "byteOffset")]) if js.get(a, "byteOffset") >= 0 else 0
     ) + blen or off + (count - 1) * stride + ncomp * csize > len(bin):
         raise Error(String("mojocv: glb: accessor ", acc, " reads outside its bufferView or the BIN chunk"))

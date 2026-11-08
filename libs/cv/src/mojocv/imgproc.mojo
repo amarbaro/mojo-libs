@@ -5,6 +5,7 @@ from std.sys.info import simd_width_of
 from std.utils import IndexList
 from std.sys.intrinsics import gather
 from std.math import sqrt, exp, floor, ceil, cos, sin, atan2, cbrt
+from std.utils.numerics import max_finite, min_finite
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args, DTS, peek_code, par, par_dyn
 from std.math import log as log_
@@ -507,7 +508,11 @@ def threshold[dt: DType](src: Mat[dt], thresh: Float64, maxval: Float64, kind: I
         th = Scalar[dt](floor(thresh))
     else:
         th = Scalar[dt](thresh)
-    var mx = Scalar[dt](maxval)
+    var mx: Scalar[dt]
+    comptime if dt.is_integral():  # saturate like cv2: 300 -> 255 for uint8, not an undefined float-to-int cast
+        mx = Scalar[dt](min(max(maxval, Float64(min_finite[dt]())), Float64(max_finite[dt]())))
+    else:
+        mx = Scalar[dt](maxval)
     var n = src.cols * src.ch
     var pa = src.ptr()
     var po = o.ptr()
@@ -957,7 +962,8 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
                 var qa = pa.unsafe_bitcast[UInt8]()
                 var qo = po.unsafe_bitcast[UInt8]()
                 var c = 0
-                while c + 8 < npx:
+                # each 32-byte load/store covers 10.67 pixels: stay inside the row, the scalar tail does the rest
+                while c + 11 <= npx:
                     var v = (qa + base + c * 3).unsafe_load[width=32]()
                     var s = v.shuffle[2,1,0,5,4,3,8,7,6,11,10,9,14,13,12,17,16,15,20,19,18,23,22,21,24,25,26,27,28,29,30,31]()
                     (qo + base + c * 3).unsafe_store[width=32](s)
@@ -975,7 +981,7 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
                 var qo = po.unsafe_bitcast[UInt8]()
                 var c = 0
                 if code == 0:
-                    while c + 16 <= npx:
+                    while c + 19 <= npx:
                         var v0 = (qa + base + c * 3).unsafe_load[width=32]()
                         var blue0 = SIMD[DType.uint8, 8](v0[0], v0[3], v0[6], v0[9], v0[12], v0[15], v0[18], v0[21])
                         var green0 = SIMD[DType.uint8, 8](v0[1], v0[4], v0[7], v0[10], v0[13], v0[16], v0[19], v0[22])
@@ -989,7 +995,7 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
                         var y1 = (blue1.cast[DType.int32]() * 3735 + green1.cast[DType.int32]() * 19235 + red1.cast[DType.int32]() * 9798 + 16384) >> 15
                         qo.unsafe_store(r * npx + c + 8, y1.cast[DType.uint8]())
                         c += 16
-                    while c + 8 <= npx:
+                    while c + 11 <= npx:
                         var v = (qa + base + c * 3).unsafe_load[width=32]()
                         var blue = SIMD[DType.uint8, 8](v[0], v[3], v[6], v[9], v[12], v[15], v[18], v[21])
                         var green = SIMD[DType.uint8, 8](v[1], v[4], v[7], v[10], v[13], v[16], v[19], v[22])
@@ -998,7 +1004,7 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
                         qo.unsafe_store(r * npx + c, y.cast[DType.uint8]())
                         c += 8
                 else:
-                    while c + 16 <= npx:
+                    while c + 19 <= npx:
                         var v0 = (qa + base + c * 3).unsafe_load[width=32]()
                         var blue0 = SIMD[DType.uint8, 8](v0[2], v0[5], v0[8], v0[11], v0[14], v0[17], v0[20], v0[23])
                         var green0 = SIMD[DType.uint8, 8](v0[1], v0[4], v0[7], v0[10], v0[13], v0[16], v0[19], v0[22])
@@ -1012,7 +1018,7 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
                         var y1 = (blue1.cast[DType.int32]() * 3735 + green1.cast[DType.int32]() * 19235 + red1.cast[DType.int32]() * 9798 + 16384) >> 15
                         qo.unsafe_store(r * npx + c + 8, y1.cast[DType.uint8]())
                         c += 16
-                    while c + 8 <= npx:
+                    while c + 11 <= npx:
                         var v = (qa + base + c * 3).unsafe_load[width=32]()
                         var blue = SIMD[DType.uint8, 8](v[2], v[5], v[8], v[11], v[14], v[17], v[20], v[23])
                         var green = SIMD[DType.uint8, 8](v[1], v[4], v[7], v[10], v[13], v[16], v[19], v[22])
@@ -1052,7 +1058,7 @@ def cvt_color[dt: DType](src: Mat[dt], code: Int) raises -> Mat[dt]:
                     (qo + base + c * 3 + 1).unsafe_strided_store[width=16](cri, 3)
                     (qo + base + c * 3 + 2).unsafe_strided_store[width=16](cbi, 3)
                     c += 16
-                while c + 8 <= npx:
+                while c + 11 <= npx:
                     var v = (qa + base + c * 3).unsafe_load[width=32]()
                     var b8 = SIMD[DType.uint8, 8](v[0], v[3], v[6], v[9], v[12], v[15], v[18], v[21]).cast[DType.int32]()
                     var g8 = SIMD[DType.uint8, 8](v[1], v[4], v[7], v[10], v[13], v[16], v[19], v[22]).cast[DType.int32]()
@@ -1814,7 +1820,9 @@ def warp_affine[dt: DType](src: Mat[dt], m: List[Float64], dw: Int, dh: Int, kin
     return o^
 
 
-def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: Int, bval: Float64) -> Mat[dt]:
+def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: Int, bval: Float64) raises -> Mat[dt]:
+    if not mx.same_shape(my):
+        raise Error("mojocv: remap: mapy shape differs from mapx")
     var o = Mat[dt](mx.rows, mx.cols, src.ch, False)
     var po = o.ptr()
     var ps = src.ptr()
@@ -1842,8 +1850,10 @@ def remap[dt: DType](src: Mat[dt], mx: Mat[F32], my: Mat[F32], kind: Int, mode: 
     return o^
 
 
-def blob[dt: DType](src: Mat[dt], dw: Int, dh: Int, scale: Float32, mean: List[Float32], swap: Bool) -> Mat[F32]:
+def blob[dt: DType](src: Mat[dt], dw: Int, dh: Int, scale: Float32, mean: List[Float32], swap: Bool) raises -> Mat[F32]:
     """cv2.dnn.blobFromImage with a plain resize: planes laid out as (channel * h, w), float32."""
+    if len(mean) < src.ch:
+        raise Error("mojocv: blobFromImage: mean has " + String(len(mean)) + " values for " + String(src.ch) + " channels")
     var r = resize(src, dw, dh, 1) if (dw != src.cols or dh != src.rows) else Mat[dt](copy=src)
     var o = Mat[F32](r.ch * dh, dw, 1, False)
     var ch = r.ch
@@ -2883,9 +2893,11 @@ def hog_blocks(src: Mat[DType.uint8]) -> Mat[F32]:
     return o^
 
 
-def hog_scores(blocks: Mat[F32], svm: Mat[F32]) -> Mat[F32]:
+def hog_scores(blocks: Mat[F32], svm: Mat[F32]) raises -> Mat[F32]:
     """SVM score of every 64 x 128 window on the 8-pixel grid: (window rows, window cols). The 7 blocks of one window
     row are contiguous in `blocks`, so each of the 15 rows is one 252-float dot product against a re-laid-out SVM."""
+    if svm.size() != 3781:  # 3780 weights and the bias
+        raise Error("mojocv: HOGScores: svm must hold 3781 floats, got " + String(svm.size()))
     var ny = blocks.rows - 14
     var nx = blocks.cols - 6
     var o = Mat[F32](max(ny, 0), max(nx, 0), 1, False)
@@ -2990,7 +3002,7 @@ def group_rects(r: List[Int], thresh: Int) -> List[Int]:
     return out^
 
 
-def hog_detect(src: Mat[DType.uint8], svm: Mat[F32], hit: Float32, scale0: Float64, group: Int) -> Mat[DType.int32]:
+def hog_detect(src: Mat[DType.uint8], svm: Mat[F32], hit: Float32, scale0: Float64, group: Int) raises -> Mat[DType.int32]:
     """HOGDescriptor.detectMultiScale with winStride 8 and no padding: (n, 4) boxes x, y, w, h."""
     var scales = List[Float64]()
     var sc = Float64(1)
