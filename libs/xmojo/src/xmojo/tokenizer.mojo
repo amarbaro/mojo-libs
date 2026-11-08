@@ -132,6 +132,8 @@ def _parse_uint(digits: Span[UInt8, _], base: Int) raises -> UInt32:
         if d >= base:
             raise Error("bad digit in numeric entity")
         v = v * UInt32(base) + UInt32(d)
+        if v > 0x10FFFF:  # also stops the UInt32 wrap: &#4294967361; would read as 'A'
+            raise Error("numeric entity out of range")
     return v
 
 
@@ -263,12 +265,14 @@ struct Tokenizer[origin: ImmOrigin](Movable):
     var src: Span[UInt8, Self.origin]
     var pos: Int
     var attrs: List[Attr]       # current start tag's attributes, reused across tags
+    var seen: Dict[String, Bool]  # their names, kept only for tags past 16 attributes
     var keep_space: Bool        # emit whitespace-only text (set by the parser under xml:space="preserve")
 
     def __init__(out self, s: StringSlice[Self.origin]):
         self.src = s.as_bytes()
         self.pos = 0
         self.attrs = List[Attr]()
+        self.seen = Dict[String, Bool]()
         self.keep_space = False
 
     def _peek(self, off: Int = 0) -> UInt8:
@@ -297,6 +301,30 @@ struct Tokenizer[origin: ImmOrigin](Movable):
                 return
             self.pos += 1
         raise make_error(self.src, start, "", "unterminated construct, expected " + String(lit))
+
+    def _skip_doctype(mut self, start: Int) raises XmlError:
+        """Past the `>` that ends the DOCTYPE: one inside [...], quotes or a comment does not."""
+        var depth = 0
+        var q: UInt8 = 0
+        while self.pos < len(self.src):
+            var c = self.src[self.pos]
+            if q != 0:
+                if c == q:
+                    q = 0
+            elif c == DQ or c == SQ:
+                q = c
+            elif depth > 0 and self._starts_with("<!--"):
+                self._skip_past("-->", start)
+                continue
+            elif c == 91:  # [
+                depth += 1
+            elif c == 93:  # ]
+                depth -= 1
+            elif c == GT and depth <= 0:
+                self.pos += 1
+                return
+            self.pos += 1
+        raise make_error(self.src, start, "", "unterminated construct, expected >")
 
     def _skip_name(mut self):
         while self.pos < len(self.src) and _is_name_byte(self.src[self.pos]):
@@ -345,7 +373,7 @@ struct Tokenizer[origin: ImmOrigin](Movable):
                 self._skip_past("?>", start)
                 continue
             if self._starts_with("<!DOCTYPE"):
-                self._skip_past(">", start)
+                self._skip_doctype(start)
                 continue
             if self._starts_with("<!"):
                 raise make_error(self.src, start, "", "unknown markup declaration")
@@ -369,6 +397,7 @@ struct Tokenizer[origin: ImmOrigin](Movable):
             if not _is_name_start(self.src[ns]):
                 raise make_error(self.src, start, "", "tag name cannot start with its first byte: <" + self._str(ns, ne) + ">")
             self.attrs.clear()
+            self.seen.clear()
             var self_closing = False
             while True:
                 self._skip_space()
@@ -391,12 +420,21 @@ struct Tokenizer[origin: ImmOrigin](Movable):
                 var an_e = self.pos
                 if an_e == an_s or not _is_name_start(self.src[an_s]):
                     raise make_error(self.src, start, "", "bad attribute in <" + self._str(ns, ne) + ">")
-                for a in self.attrs:
-                    if bytes_eq(self.src, a.name_s, a.name_e, an_s, an_e):
-                        raise make_error(
-                            self.src, start, "",
-                            "duplicate attribute '" + self._str(an_s, an_e) + "' in <" + self._str(ns, ne) + ">",
-                        )
+                var dup = False
+                if len(self.attrs) < 16:
+                    for a in self.attrs:
+                        dup = dup or bytes_eq(self.src, a.name_s, a.name_e, an_s, an_e)
+                else:   # a hash set keeps a tag with many attributes linear
+                    if len(self.seen) == 0:
+                        for a in self.attrs:
+                            self.seen[self._str(a.name_s, a.name_e)] = True
+                    dup = self._str(an_s, an_e) in self.seen
+                    self.seen[self._str(an_s, an_e)] = True
+                if dup:
+                    raise make_error(
+                        self.src, start, "",
+                        "duplicate attribute '" + self._str(an_s, an_e) + "' in <" + self._str(ns, ne) + ">",
+                    )
                 self._skip_space()
                 if self._peek() != EQ:
                     raise make_error(self.src, start, "", "attribute without '=' in <" + self._str(ns, ne) + ">")

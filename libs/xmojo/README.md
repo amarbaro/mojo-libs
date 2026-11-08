@@ -1,5 +1,9 @@
 # xmojo
 
+<!-- badges -->
+[![ci](https://github.com/amarbaro/xmojo/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/xmojo/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/xmojo)](https://github.com/amarbaro/xmojo/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/xmojo)](https://github.com/amarbaro/xmojo/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/xmojo/badges/checks.json)](https://github.com/amarbaro/xmojo/actions/workflows/ci.yml)
+<!-- /badges -->
+
 XML for Mojo: parse into your own structs, write them back, stream big documents record by
 record. Every gate run checks the parser against CPython's expat on 4,030 generated, mutated and
 real documents with zero disagreements, and it parses 1.5 to 1.7 times faster than CPython's
@@ -147,7 +151,7 @@ allocates nothing per tag. Nesting depth is bounded by memory, not the call stac
 - Encoding: UTF-8 input. A UTF-8 byte order mark is skipped; a declared encoding other than UTF-8
   or US-ASCII raises (transcode first).
 - Errors: malformed input raises `XmlError` with a message, 1-based line and column (bytes) and
-  the nearest open element; `from_xml` reports it as a `DeserializationError` with the same text.
+  the nearest open element; `from_xml` raises an `Error` with the same text.
   The parser does not recover.
 
 ## Verification
