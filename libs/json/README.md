@@ -1,15 +1,15 @@
 # mojo-json
 
-[![CI](https://github.com/amarbaro/mojo-json/actions/workflows/ci.yml/badge.svg)](https://github.com/amarbaro/mojo-json/actions/workflows/ci.yml)
+<!-- badges -->
+[![ci](https://github.com/amarbaro/mojo-json/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-json/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-json)](https://github.com/amarbaro/mojo-json/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-json)](https://github.com/amarbaro/mojo-json/blob/main/LICENSE)
+<!-- /badges -->
 
-JSON for Mojo that behaves like Python's `json`: the int/float distinction, key order, and
-`json.dumps` output byte for byte. The parser is strict RFC 8259 (JSONTestSuite: 95 of 95
-`y_` accepted with values identical to Python's, 188 of 188 `n_` rejected), the writer is
-checked against `json.dumps` on generated files in four layouts, and a parsed document is two
-buffers with no allocation per value.
+<!-- install -->
+Install: `pixi add mojo-json` once published. For now: `git clone https://github.com/amarbaro/mojo-json`, then `mojo run -I mojo-json/src app.mojo`.
 
 ```mojo
 from json import Json, parse
+
 
 def main() raises:
     var doc = parse('{"name": "gpu", "pids": [1, 2], "load": 0.5}')
@@ -18,19 +18,21 @@ def main() raises:
     var out = Json.object()
     out.set("ok", Json.of(True))
     out.set("n", Json.of(3))
-    print(out.dumps())             # {"ok":true,"n":3}
-    print(out.dumps(False))        # {"ok": true, "n": 3}   Python's default layout
+    var list = Json.array()
+    list.push(Json.of("a"))
+    out.set("items", list)
+    print(out.dumps())  # {"ok":true,"n":3,"items":["a"]}
+    print(out.dumps(False))  # {"ok": true, "n": 3, "items": ["a"]}, Python's default layout
 ```
+<!-- /install -->
 
-## Install
+JSON for Mojo that behaves like Python's `json`: the int/float distinction, key order, and
+`json.dumps` output byte for byte. The parser is strict RFC 8259 (JSONTestSuite: 95 of 95
+`y_` accepted with values identical to Python's, 188 of 188 `n_` rejected), the writer is
+checked against `json.dumps` on generated files in four layouts, and a parsed document is two
+buffers with no allocation per value.
 
 Requires Mojo 1.2. The only libc calls are `strtod` and `snprintf`, so no linker flags.
-
-| Way | Command |
-|---|---|
-| Source path | `mojo build -I path/to/mojo-json/src app.mojo` |
-| Precompiled | `mojo precompile src/json -o json.mojoc`, then put it next to your code |
-| Vendor | copy `src/json/` into your project |
 
 ## What you get
 
