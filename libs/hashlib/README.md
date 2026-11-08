@@ -1,32 +1,32 @@
 # mojo-hashlib
 
-[![CI](https://github.com/amarbaro/mojo-hashlib/actions/workflows/ci.yml/badge.svg)](https://github.com/amarbaro/mojo-hashlib/actions/workflows/ci.yml)
+<!-- badges -->
+[![ci](https://github.com/amarbaro/mojo-hashlib/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-hashlib/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-hashlib)](https://github.com/amarbaro/mojo-hashlib/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-hashlib)](https://github.com/amarbaro/mojo-hashlib/blob/main/LICENSE)
+<!-- /badges -->
 
-sha256, sha1 and md5 plus shlex quote, join and split for Mojo, byte for byte the same
-as Python's `hashlib` and `shlex`. `shlex` runs about 28 times faster than Python and
-small hashes 2 times faster; bulk hashing of large inputs is slower than Python's
-OpenSSL (see Performance).
+<!-- install -->
+Install: `pixi add mojo-hashlib` once published. For now: `git clone https://github.com/amarbaro/mojo-hashlib`, then `mojo run -I mojo-hashlib/src app.mojo`.
 
 ```mojo
-from hashlib import Sha256, quote
+from hashlib import Sha256, quote, join, split
+
 
 def main() raises:
     var h = Sha256()
     h.update("python train.py ")
     h.update("--seed 1")
     print(h.hexdigest())
-    print(quote("it's"))   # 'it'"'"'s'
+    var line = join(["sh", "-c", "echo $X; exit 3"])
+    print(line, split(line).__len__(), quote("it's"))
 ```
+<!-- /install -->
 
-## Install
+sha256, sha1 and md5 plus shlex quote, join and split for Mojo, byte for byte the same
+as Python's `hashlib` and `shlex`. `shlex` runs about 28 times faster than Python and
+small hashes 2 times faster; bulk hashing of large inputs is slower than Python's
+OpenSSL (see Performance).
 
 Requires Mojo 1.2. No system library: it is plain Mojo.
-
-| Way | Command |
-|---|---|
-| Source path | `mojo run -I path/to/mojo-hashlib/src app.mojo` |
-| Precompiled | `mojo precompile src/hashlib -o hashlib.mojoc`, then put it next to your code |
-| Vendor | copy `src/hashlib/` into your project |
 
 ## What you get
 
