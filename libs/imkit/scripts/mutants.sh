@@ -18,4 +18,5 @@ mutant() {  # name file sed-expression test
 }
 mutant "field ignores max" ui.mojo 's/ and buf.byte_length() < max//' ui_cpu_test
 mutant "merge drops text" window.mojo '/self.text += o.text/d' window_test
+mutant "push text dies before poll" window.mojo 's/            self.keep.append(buf^)/            self.keep.clear()\n            self.keep.append(buf^)/' window_test
 echo "PASS mutants"
