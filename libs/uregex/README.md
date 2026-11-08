@@ -1,5 +1,23 @@
 # mojo-uregex
 
+<!-- badges -->
+[![ci](https://github.com/amarbaro/mojo-uregex/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-uregex/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-uregex)](https://github.com/amarbaro/mojo-uregex/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-uregex)](https://github.com/amarbaro/mojo-uregex/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-uregex/badges/checks.json)](https://github.com/amarbaro/mojo-uregex/actions/workflows/ci.yml)
+<!-- /badges -->
+
+<!-- install -->
+Install: `pixi add mojo-uregex` once published. For now: `git clone https://github.com/amarbaro/mojo-uregex`, then `mojo run -I mojo-uregex/src app.mojo`.
+
+```mojo
+from uregex import findall
+
+
+def main() raises:
+    # a GPT-2 style pre-tokenizer: contractions, letters of any script, digit groups
+    for tok in findall(r"(?i:'s|'t|'re)|\p{L}+|\p{N}{1,3}", "It's héllo 一二 12345"):
+        print(tok)
+```
+<!-- /install -->
+
 Unicode-aware regular expressions for Mojo, built for the pre-tokenizers of LLM
 tokenizers (GPT-2, Llama 3, Qwen, DeepSeek, gpt-oss, Spark-X2.5) and verified
 against Python's `regex` module by differential testing.
@@ -60,20 +78,6 @@ python3 -m venv .venv && ./.venv/bin/pip install 'mojo==1.2.0' 'regex==2026.9.29
 
 ## Usage
 
-```mojo
-from uregex import Pattern, FullPattern, findall, split_keep
-
-var p = Pattern(r"\p{N}{1,3}|[\p{L}\p{M}]+|\s+(?!\S)|\s+")
-for piece in p.findall("héllo 12345"):
-    print(piece)                       # héllo, ' ', 123, 45
-
-var chunks = split_keep(r"\p{N}+", "ab12cd")   # ["ab", "12", "cd"]
-
-var g = FullPattern(r"(?P<word>\p{L}+)(\d)?")
-for row in g.findall_groups("é1 b"):   # byte spans: [0] match, [i] group i, (-1, -1) unset
-    print(row[0].start, row[0].end, row[g.group_index("word")].end)
-```
-
 Two engines from one source. `Pattern` is the tokenizer engine: `(...)` does
 not capture, and named groups, lookbehind and `\b` raise. `FullPattern` adds
 them; that code is compiled only into `FullPattern`, so `Pattern` runs as fast
@@ -84,15 +88,13 @@ Offsets are UTF-8 byte offsets into the String (`search`, `findall_spans`,
 `findall_groups`); `findall_cps_offsets` gives codepoint offsets. `findall` and
 `split_keep` return slices of the input.
 
-Build with `-I src`. Requires Mojo 1.2 (`mojo==1.2.0` from PyPI).
-
 ## Supported syntax
 
 Literals and escapes (`\n \t \xHH \x{H..} \uHHHH \UHHHHHHHH`), `.` (no newline),
-`^` `$` (text start/end), classes `[...]` `[^...]` with ranges and `\p{}`/`\d\w\s`
-inside, `\p{Xx}` `\P{Xx}` for all general categories, `\d \w \s \D \W \S`,
+`^` `$` (text start; text end or just before a final `\n`, as Python's `$` without MULTILINE), `\Z` `\z` (the very end only), classes `[...]` `[^...]` with ranges and `\p{}`/`\d\w\s`
+inside, `\p{Xx}` `\P{Xx}` for the general categories (`Cs` and `LC` raise), `\d \w \s \D \W \S`,
 greedy and lazy `* + ? {m} {m,} {m,n}` (`*?` ...), `(?:...)`, `(?i:...)`,
-`(?=...)`, `(?!...)`, `|`.
+`(?=...)`, `(?!...)`, `|`. Counted repeats are unrolled at compile time, so a pattern that compiles to more than 1,048,576 instructions (`a{99999999999}`, `(?:a{2000}){1000}`) raises `pattern too large`.
 
 `FullPattern` only: capture groups `(...)`, named groups `(?P<name>...)` and
 `(?<name>...)`, word boundaries `\b` `\B`, fixed-length lookbehind `(?<=...)`
@@ -125,12 +127,6 @@ mkdir -p .work/ucd && for f in UnicodeData PropList DerivedCoreProperties CaseFo
 
 A negative control (oracle fed a different pattern) fails, so the gate is live.
 `tools/gate.sh` runs all of the above.
-
-Random strings from a fixed alphabet miss what real text holds. `tools/difftest-real.sh CORPUS` runs every
-tokenizer pattern against `regex` over a file of real lines (one text per line) through the
-`difftest` iTool (`~/iTools/dev/difftest`, not published), one process per side per pattern, and writes the first disagreement
-as a certificate that `difftest replay` re-runs. On 19,557 lines (2.76 MB: math-heavy Unicode, notes, Mojo
-source) all 14 patterns agree; the same run with gpt2 against llama3 differs on the first line with a number.
 
 ### Tokenizer patterns
 

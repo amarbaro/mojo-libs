@@ -204,6 +204,8 @@ struct Parser:
                 if not self.eat(125):
                     self.i = save
                     return a
+                if hi != -1 and hi < lo:
+                    raise Error("uregex: bad repeat, {" + String(lo) + "," + String(hi) + "} has max below min")
                 self.i -= 1
             else:
                 return a
@@ -329,6 +331,8 @@ struct Parser:
                 self.i += 1
             self.expect(125)
         else:
+            if self.peek() == -1:
+                raise Error("uregex: \\p needs a property name")
             name = String(Codepoint.from_u32(UInt32(self.peek())).value())
             self.i += 1
         return name
@@ -409,6 +413,12 @@ struct Parser:
             n.cls = len(self.ast.classes) - 1
             n.neg = c == 66
             return self.ast.add(n^)
+        if c == 90 or c == 122:   # \Z and \z: the very end, not before a final newline
+            var n = Node(N_EOL)
+            n.neg = True
+            return self.ast.add(n^)
+        if (c >= 49 and c <= 57) or (c == 107 and self.peek() == 60):
+            raise Error("uregex: backreferences are not supported")
         return self.lit(self.simple_escape(c))
 
     def char_class(mut self) raises -> Int:
