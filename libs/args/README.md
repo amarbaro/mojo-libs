@@ -1,37 +1,37 @@
 # mojo-args
 
-[![CI](https://github.com/amarbaro/mojo-args/actions/workflows/ci.yml/badge.svg)](https://github.com/amarbaro/mojo-args/actions/workflows/ci.yml)
+<!-- badges -->
+[![ci](https://github.com/amarbaro/mojo-args/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-args/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-args)](https://github.com/amarbaro/mojo-args/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-args)](https://github.com/amarbaro/mojo-args/blob/main/LICENSE)
+<!-- /badges -->
 
-Command-line parsing for Mojo that behaves like Python's `argparse`: prefix abbreviation,
-`--opt=value`, `-n5`, bundled flags, `--` handling, sub-commands, a remainder command, and
-argparse's exact usage-error text. It parses 13× faster than argparse.
+<!-- install -->
+Install: `pixi add mojo-args` once published. For now: `git clone https://github.com/amarbaro/mojo-args`, then `mojo run -I mojo-args/src app.mojo`.
 
 ```mojo
 from args import ArgumentParser
+
 
 def main() raises:
     var p = ArgumentParser("gpu-wait")
     p.add_subparsers("command")
     var run = p.add_parser("run")
     run[].add_argument("--priority", type="int", default="0")
-    run[].add_argument("--room", choices=["gpu", "cpu"], default="gpu")
+    run[].add_argument("-q", "--quiet", action="store_true")
     run[].add_argument("cmd", nargs="...")
-    var ns = p.parse_args()          # the process arguments; usage error -> stderr, exit 2
-    print(ns.get_str("command"), ns.get_int("priority"), ns.get_str("room"))
+
+    var ns = p.parse_args(["run", "--prio", "90", "-q", "--", "python", "train.py"])
+    print(ns.get_str("command"), ns.get_int("priority"), ns.get_bool("quiet"), " ".join(ns.get_list("cmd")))
 ```
+<!-- /install -->
+
+Command-line parsing for Mojo that behaves like Python's `argparse`: prefix abbreviation,
+`--opt=value`, `-n5`, bundled flags, `--` handling, sub-commands, a remainder command, and
+argparse's exact usage-error text. It parses 13× faster than argparse.
 
 `gpu-wait run --prio 90 -- python train.py` gives `run 90 gpu`, and `cmd` is
 `["--", "python", "train.py"]`, as in argparse.
 
-## Install
-
 Requires Mojo 1.2. No other dependency.
-
-| Way | Command |
-|---|---|
-| Source path | `mojo run -I path/to/mojo-args/src app.mojo` |
-| Precompiled | `mojo precompile src/args -o args.mojoc`, then put it next to your code |
-| Vendor | copy `src/args/` into your project |
 
 ## What you get
 
