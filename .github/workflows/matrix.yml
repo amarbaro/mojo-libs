@@ -1,0 +1,80 @@
+# Weekly matrix: every library in libs.txt x {stable, nightly}, then status.md, per-library shields and one issue per
+# failure group. Cell logic is scripts/matrix-cell.sh (run locally by scripts/matrix-local.sh); docs/ci.md.
+name: matrix
+on:
+  schedule:
+    - cron: "17 4 * * 1"   # Mondays, 04:17 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      libs: ${{ steps.l.outputs.libs }}
+    steps:
+      - uses: actions/checkout@v7
+      - id: l
+        run: echo "libs=$(grep -v '^#' libs.txt | grep . | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+
+  cell:
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45   # matrix-cell.sh stops itself at 2400 s and says why; this is the backstop
+    strategy:
+      fail-fast: false
+      matrix:
+        lib: ${{ fromJSON(needs.plan.outputs.libs) }}
+        channel: [stable, nightly]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.3.0
+      - uses: prefix-dev/setup-pixi@v0.10.2   # xmojo-public builds with pixi
+        with:
+          pixi-version: v0.84.1
+          run-install: false
+      - run: scripts/matrix-cell.sh "$LIB" "$CHANNEL" cells
+        env:
+          CI: "true"
+          LIB: ${{ matrix.lib }}
+          CHANNEL: ${{ matrix.channel }}
+      - if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: cell-${{ matrix.lib }}-${{ matrix.channel }}
+          path: |
+            cells/*.json
+            cells/*.log
+          if-no-files-found: ignore
+
+  report:
+    needs: cell
+    if: always()
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write   # the orphan `status` branch
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8.0.2
+        with:
+          pattern: cell-*
+          merge-multiple: true
+          path: results
+      - name: status.md and shields
+        run: |
+          mkdir -p results out
+          scripts/matrix-report.sh results out libs.txt
+          cat out/status.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Publish the orphan status branch
+        continue-on-error: true   # a failed status write must not hide the issues step
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/publish-status.sh out
+      - name: One issue per failure group
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: scripts/matrix-issues.sh results

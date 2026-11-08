@@ -1,0 +1,5 @@
+# Per-library setup the shared CI cannot guess. Tab separated: library (libs.txt name), apt packages, pre command.
+# Read by scripts/ci-adopt.sh (caller files) and scripts/matrix-cell.sh (weekly matrix); one place, two users.
+mojo-imkit-public	fonts-dejavu-core libfreetype6	
+mojo-uregex-public		uv sync || { echo "FAIL setup: uv sync"; exit 1; }
+xmojo-public		pixi update
