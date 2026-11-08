@@ -1,5 +1,9 @@
 # mojo-vattn
 
+<!-- badges -->
+[![ci](https://github.com/amarbaro/mojo-vattn/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-vattn/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-vattn)](https://github.com/amarbaro/mojo-vattn/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-vattn)](https://github.com/amarbaro/mojo-vattn/blob/main/LICENSE)
+<!-- /badges -->
+
 A flash-attention forward kernel in Mojo for the self-attention of video diffusion transformers
 (Wan 2.2), written for the AMD RX 7900 XTX (gfx1100, RDNA3 WMMA). Non-causal, no mask, f16 in and
 out, f32 accumulate, head dimension 128, layout `[L, H, D]`. It is a kernel and a parity harness,
@@ -19,12 +23,12 @@ ctx.enqueue_function[vattn_fwd](
 
 ## Install
 
-Requires Mojo through the `max` 26.6.0 wheel (`uv sync`). Building needs no GPU; running does.
+Requires Mojo through the `max` 26.7.0 wheel (`uv sync`). Building needs no GPU; running does.
 
 | Way | Command |
 |---|---|
 | Source path | `mojo build -I path/to/mojo-vattn/src app.mojo` |
-| Vendor | copy `src/vattn.mojo` into your project |
+| Vendor | copy `src/vattn/` into your project |
 
 `scripts/ci.sh` builds the harness (default tiles and a BM 128 / BN 64 variant) and the example.
 It is the CPU check and runs on GitHub: without a GPU it builds everything and does not run the example.
@@ -40,7 +44,7 @@ It is the CPU check and runs on GitHub: without a GPU it builds everything and d
   `o_mojo.bin`, and times `ITERS` launches.
 - `tools/vattn-ref.py`: fp64 reference over the same f16 bytes (`gen`, `check`).
 
-The API is in [docs/api.md](docs/api.md). The design and the stage plan are in
+The API is in [docs/api.md](docs/api.md). The design is in [docs/design.md](docs/design.md); the stage plan is in
 [docs/plan.md](docs/plan.md).
 
 ## Performance
