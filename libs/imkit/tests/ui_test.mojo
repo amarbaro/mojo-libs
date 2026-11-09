@@ -187,6 +187,17 @@ def main() raises:
     print("srect: worst channel difference GPU vs CPU", sworst, "shadow alpha", layer.pixels[595 * UW + 660] >> 24)
     if sworst > 2 or layer.pixels[595 * UW + 660] >> 24 < 40:
         fails += 1
+    # CLIP: a rect far larger than the clip draws only inside it (the pixel edge at the clip's half-open bounds), then draws freely
+    ui.begin(idle)
+    ui.clip(100, 620, 140, 650)
+    ui.rect(0, 600, 400, 700, 0, ACCENT)
+    ui.unclip()
+    ui.rect(300, 660, 340, 690, 0, ACCENT)
+    ui.finish()
+    layer.render(ui)
+    print("clip: inside", layer.pixels[635 * UW + 120] >> 24, "left edge", layer.pixels[635 * UW + 99] >> 24, hex(layer.pixels[635 * UW + 100]), "right", layer.pixels[635 * UW + 140] >> 24, "below", layer.pixels[650 * UW + 120] >> 24, "later rect", layer.pixels[675 * UW + 320] >> 24)
+    if layer.pixels[635 * UW + 120] >> 24 != 255 or layer.pixels[635 * UW + 99] != 0 or layer.pixels[635 * UW + 100] >> 24 != 255 or layer.pixels[635 * UW + 140] != 0 or layer.pixels[650 * UW + 120] != 0 or layer.pixels[675 * UW + 320] >> 24 != 255 or layer.pixels[615 * UW + 120] != 0:
+        fails += 1
     # past NBIN tile entries: whole commands drop (counted), the ones kept still draw
     ui.d.dropped = 0
     ui.begin(idle)

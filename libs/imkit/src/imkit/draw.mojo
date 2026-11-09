@@ -29,6 +29,8 @@ comptime GLYPH = 1
 comptime LINE = 2
 comptime TRI = 3
 comptime IMAGE = 4
+comptime CLIP = 7  # state: from here the rect (x0, y0)-(x1, y1) clips later commands (aux 0), or the clip ends (aux 1, same rect)
+comptime FULL = SIMD[DType.float32, 4](-1e9, -1e9, 1e9, 1e9)
 comptime SRECT = 6  # kind word: kind | border px * 4 << 8 | style id << 16; c = fill (gradient start), aux = border rgba
 comptime NSTY = 256  # styles per frame (id 0 is none)
 comptime RRECT = 5  # kind word: kind | border px * 4 << 8 | glow px << 16 | gradient i8 << 24; aux = border and glow rgba
@@ -66,6 +68,12 @@ def over(acc: SIMD[DType.float32, 4], col: SIMD[DType.float32, 4], cov: Float32)
     """`col` (0..255 per lane) with coverage cov over the premultiplied accumulation acc (rgb, a)."""
     var sa = cov * col[3] / 255
     return SIMD[DType.float32, 4](col[0], col[1], col[2], 255) / 255 * sa + acc * (1 - sa)
+
+
+@always_inline
+def clipped(px: Float32, py: Float32, c: SIMD[DType.float32, 4]) -> Bool:
+    """Is (px, py) outside the clip rect c = x0, y0, x1, y1 (half open)?"""
+    return px < c[0] or px >= c[2] or py < c[1] or py >= c[3]
 
 
 @always_inline
@@ -134,6 +142,7 @@ def compose(img: TUI, cmd: TCMD, bin: TBIN, off: TOFF, atlas: TATL, src: TSRC, s
     var py = Float32(i // UW) + 0.5
     var t = (i // UW // TILE) * TX + (i % UW) // TILE
     var acc = SIMD[DType.float32, 4](0)  # premultiplied accumulation
+    var clip = FULL
     for j in range(Int(off[t]), Int(off[t + 1])):  # this tile's commands, in draw order
         var o = Int(bin[j]) * CW
         var kind = Int(cmd[o] & 255)
@@ -144,6 +153,11 @@ def compose(img: TUI, cmd: TCMD, bin: TBIN, off: TOFF, atlas: TATL, src: TSRC, s
         var rr = flt(cmd[o + 5])
         var c = cmd[o + 6]
         var cov = Float32(0)
+        if kind == CLIP:
+            clip = FULL if cmd[o + 7] != 0 else SIMD[DType.float32, 4](x0, y0, x1, y1)
+            continue
+        if clipped(px, py, clip):
+            continue
         if kind == RRECT:
             acc = rrect(acc, px, py, x0, y0, x1, y1, rr, c, cmd[o], cmd[o + 7])
             continue
@@ -206,6 +220,7 @@ struct Draw(Movable):
     var dropped: Int
     var sty: List[UInt32]  # this frame's styles, 8 words each (srect); id 0 is none
     var ns: Int
+    var cur_clip: SIMD[DType.float32, 4]  # the clip rect in force while drawing (FULL: none)
 
     def __init__(out self, var font: Font):
         self.font = font^
@@ -215,9 +230,11 @@ struct Draw(Movable):
         self.cur = List[UInt32](length=TX * TY, fill=0)
         self.sty = List[UInt32](length=NSTY * 8, fill=0)
         self.binned, self.n, self.dropped, self.ns = 0, 0, 0, 1
+        self.cur_clip = FULL
 
     def begin(mut self):
         self.n, self.ns = 0, 1
+        self.cur_clip = FULL
         self.binned = -1
 
     def push(mut self, kind: Int, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, aux: UInt32 = 0):
@@ -257,6 +274,16 @@ struct Draw(Movable):
         """Rounded rect filled and shadowed by a style() id, with an optional border."""
         self.push(SRECT | min(max(Int(border * 4 + 0.5), 0), 255) << 8 | min(max(style, 0), NSTY - 1) << 16, x0, y0, x1, y1, r, c, bcol)
 
+    def clip(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32):
+        """Clip everything drawn from here to unclip() to the rect (hard edge at pixel centers; a new clip replaces the old)."""
+        self.cur_clip = SIMD[DType.float32, 4](x0, y0, x1, y1)
+        self.push(CLIP, x0, y0, x1, y1, 0, 0, 0)
+
+    def unclip(mut self):
+        if self.cur_clip[0] > -1e8:
+            self.push(CLIP, self.cur_clip[0], self.cur_clip[1], self.cur_clip[2], self.cur_clip[3], 0, 0, 1)
+            self.cur_clip = FULL
+
     def line(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, w: Float32, c: UInt32):
         self.push(LINE, x0, y0, x1, y1, w * 0.5, c)
 
@@ -290,8 +317,9 @@ struct Draw(Movable):
         var o = id * 8
         return 2 * flt(self.sty[o + 6]) + max(abs(flt(self.sty[o + 4])), abs(flt(self.sty[o + 5]))) if self.sty[o + 7] >> 24 > 0 else Float32(0)
 
-    def span(self, k: Int) -> SIMD[DType.int32, 4]:
-        """Tiles command k may touch: tx0, tx1, ty0, ty1 (half open), from its box, blur, line width or third corner."""
+    def span(self, k: Int, clip: SIMD[DType.float32, 4] = FULL) -> SIMD[DType.int32, 4]:
+        """Tiles command k may touch: tx0, tx1, ty0, ty1 (half open), from its box, blur, line width or third corner, cut to
+        the tiles of the clip rect in force (not for a CLIP command itself)."""
         var o = k * CW
         var kind = Int(self.cmd[o] & 255)
         var x0 = flt(self.cmd[o + 1])
@@ -303,8 +331,19 @@ struct Draw(Movable):
         if kind == TRI:
             lx, hx = min(lx, flt(self.cmd[o + 5])), max(hx, flt(self.cmd[o + 5]))
             ly, hy = min(ly, flt(self.cmd[o + 7])), max(hy, flt(self.cmd[o + 7]))
-        return SIMD[DType.int32, 4](Int32(max(Int(lx - pad) // TILE, 0)), Int32(min(Int(hx + pad) // TILE + 1, TX)),
-                                    Int32(max(Int(ly - pad) // TILE, 0)), Int32(min(Int(hy + pad) // TILE + 1, TY)))
+        var r = SIMD[DType.int32, 4](Int32(max(Int(lx - pad) // TILE, 0)), Int32(min(Int(hx + pad) // TILE + 1, TX)),
+                                     Int32(max(Int(ly - pad) // TILE, 0)), Int32(min(Int(hy + pad) // TILE + 1, TY)))
+        if kind != CLIP and clip[0] > -1e8:
+            r = SIMD[DType.int32, 4](max(r[0], Int32(max(Int(clip[0]) // TILE, 0))), min(r[1], Int32(min(Int(clip[2]) // TILE + 1, TX))),
+                                     max(r[2], Int32(max(Int(clip[1]) // TILE, 0))), min(r[3], Int32(min(Int(clip[3]) // TILE + 1, TY))))
+        return r
+
+    def clip_after(self, k: Int, clip: SIMD[DType.float32, 4]) -> SIMD[DType.float32, 4]:
+        """The clip rect in force after command k."""
+        var o = k * CW
+        if self.cmd[o] & 255 != CLIP:
+            return clip
+        return FULL if self.cmd[o + 7] != 0 else SIMD[DType.float32, 4](flt(self.cmd[o + 1]), flt(self.cmd[o + 2]), flt(self.cmd[o + 3]), flt(self.cmd[o + 4]))
 
     def finish(mut self):
         """Bin the commands into tiles, counted, offsets by prefix sum, then filled in draw order. Past NBIN entries the
@@ -312,8 +351,10 @@ struct Draw(Movable):
         for t in range(TX * TY + 1):
             self.off[t] = 0
         var total = 0
+        var clip = FULL
         for k in range(self.n):
-            var s = self.span(k)
+            var s = self.span(k, clip)
+            clip = self.clip_after(k, clip)
             var e = max(Int(s[1] - s[0]), 0) * max(Int(s[3] - s[2]), 0)
             if total + e > NBIN:
                 self.dropped += self.n - k
@@ -326,8 +367,10 @@ struct Draw(Movable):
         for t in range(TX * TY):
             self.off[t + 1] += self.off[t]
             self.cur[t] = self.off[t]
+        clip = FULL
         for k in range(self.n):
-            var s = self.span(k)
+            var s = self.span(k, clip)
+            clip = self.clip_after(k, clip)
             for ty in range(Int(s[2]), Int(s[3])):
                 for tx in range(Int(s[0]), Int(s[1])):
                     var t = ty * TX + tx

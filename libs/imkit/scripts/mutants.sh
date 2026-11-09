@@ -27,4 +27,7 @@ mutant "srect linear ignored" draw.mojo 's/if st\[0\] & 3 == 1:/if st[0] \& 3 ==
 mutant "srect radial ignored" draw.mojo 's/elif st\[0\] & 3 == 2:/elif st[0] \& 3 == 9:/' ui_cpu_test
 mutant "srect shadow offset ignored" draw.mojo 's/rsd(px - flt(st\[4\]), py - flt(st\[5\])/rsd(px, py/' ui_cpu_test
 mutant "srect span ignores shadow" draw.mojo 's/if kind == SRECT else 0/if kind == 99 else 0/' ui_cpu_test
+mutant "clip edge not half open" draw.mojo 's/return px < c\[0\] or px >= c\[2\]/return px < c[0] or px > c[2]/' ui_cpu_test
+mutant "clip never ends in the bins" draw.mojo 's/return FULL if self.cmd\[o + 7\] != 0 else/return FULL if self.cmd[o + 7] == 99 else/' ui_cpu_test
+mutant "span ignores the clip" draw.mojo 's/if kind != CLIP and clip\[0\] > -1e8:/if kind != CLIP and clip[0] > 1e8:/' ui_cpu_test
 echo "PASS mutants"

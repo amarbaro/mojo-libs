@@ -10,7 +10,7 @@ usage: IMKIT_FONT=/path/font.ttf mojo run -I src tests/ui_cpu_test.mojo  (defaul
 from std.os import getenv
 from imkit.font import Font
 from imkit.layer import image_fits
-from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, bits, rgba, rrect, srect
+from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, FULL, bits, clipped, rgba, rrect, srect
 from imkit.theme import ACCENT
 from imkit.ui import SC_BACKSPACE, Ui
 from imkit.window import Input
@@ -169,6 +169,18 @@ def main() raises:
     for _ in range(NSTY + 4):
         _ = rui.style()
     check(rui.d.ns == NSTY and rui.d.dropped >= 5, "style table full: counted, id 0", fails)
+    # CLIP: pixels at the edge, and the bins: a clipped command is only in the clip's tiles, an unclipped one in all it covers
+    var cr = SIMD[DType.float32, 4](10, 10, 20, 20)
+    check(not clipped(10, 10, cr) and not clipped(19.5, 19.5, cr) and clipped(20, 15, cr) and clipped(15, 20, cr) and clipped(9.9, 15, cr) and clipped(15, 9.9, cr) and not clipped(-5, 1e6, FULL), "clip: half-open rect, FULL clips nothing", fails)
+    rui.begin(idle)
+    rui.clip(32, 32, 64, 64)
+    rui.rect(0, 0, 1000, 700, 0, fc)
+    rui.unclip()
+    rui.rect(0, 0, 1000, 700, 0, fc)
+    rui.unclip()  # none in force: no command
+    rui.finish()
+    check(rui.d.n == 4 and in_bin(rui, 2 * TX + 2, 1) and in_bin(rui, 4 * TX + 4, 1) and not in_bin(rui, 0, 1) and not in_bin(rui, 5 * TX + 5, 1) and not in_bin(rui, 2 * TX + 5, 1), "clip: a clipped command is binned only into the clip's tiles", fails)
+    check(in_bin(rui, 0, 3) and in_bin(rui, 5 * TX + 5, 3) and in_bin(rui, 2 * TX + 2, 2) and in_bin(rui, 0, 0) == False, "clip: after unclip the next command covers all its tiles; the end marker sits in the clip's tiles", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")

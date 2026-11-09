@@ -46,6 +46,12 @@ struct Ui(Movable):
     def srect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, style: Int, border: Float32 = 0, bcol: UInt32 = 0):
         self.d.srect(x0, y0, x1, y1, r, c, style, border, bcol)
 
+    def clip(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32):
+        self.d.clip(x0, y0, x1, y1)
+
+    def unclip(mut self):
+        self.d.unclip()
+
     def line(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, w: Float32, c: UInt32):
         self.d.line(x0, y0, x1, y1, w, c)
 
