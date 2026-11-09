@@ -3,11 +3,23 @@
 Index of the amarbaro Mojo libraries. Each one is its own repository with tests against an oracle,
 a CI badge, `docs/api.md`, `docs/design.md` and an agent skill in `skills/`.
 
+## Install
+
+Every library is a conda package on [prefix.dev/amarbaro/amarbaro](https://prefix.dev/channels/amarbaro/amarbaro), named `mojo-<name>`; the import name is in each README.
+
+```
+pixi init app && cd app
+pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro
+pixi add mojo-json
+```
+
+Toolchains: Mojo 1.2 stable for all 36; the weekly matrix also builds 35 of them on the nightly 1.3.0.dev2026110805 (xmojo pins 1.2.0).
+
 <!-- libs -->
 | library | what | version | toolchain | our deps | ci |
 |---|---|---|---|---|---|
 | [mojo-aio](https://github.com/amarbaro/mojo-aio) | epoll event loop for Mojo: readiness events, timers, non-blocking TCP | 0.1.1 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-aio/actions/workflows/ci.yml/badge.svg?branch=main) |
-| [mojo-amdgpu](https://github.com/amarbaro/mojo-amdgpu) | AMD GPU telemetry for Mojo from sysfs and hwmon, no ROCm needed: VRAM, busy, power, temperature, clocks, KFD holders | 0.1.4 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-amdgpu/actions/workflows/ci.yml/badge.svg?branch=main) |
+| [mojo-amdgpu](https://github.com/amarbaro/mojo-amdgpu) | AMD GPU telemetry for Mojo from sysfs and hwmon, no ROCm needed: VRAM, busy, power, temperature, clocks, KFD holders | 0.1.5 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-amdgpu/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-args](https://github.com/amarbaro/mojo-args) | Command-line parsing for Mojo with Python argparse behaviour: subcommands, typed flags, --help | 0.1.4 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-args/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-bench](https://github.com/amarbaro/mojo-bench) | Benchmark harness for Mojo with statistics: warmup, auto iteration count, median, MAD, p95, seeded bootstrap CI, compare | 0.1.1 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-bench/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-bento](https://github.com/amarbaro/mojo-bento) | BentoML's serving core as a Mojo library: an HTTP/1.1 server and typed JSON endpoints that answer like BentoML 1.4 | 0.1.3 | `mojo>=1.2.0,<1.3` | mojo-aio, mojo-gguf-core, mojo-json, mojo-posix, mojo-safetensors, mojo-systemd | ![ci](https://github.com/amarbaro/mojo-bento/actions/workflows/ci.yml/badge.svg?branch=main) |
