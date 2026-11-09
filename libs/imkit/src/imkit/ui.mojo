@@ -256,10 +256,13 @@ struct Ui(Movable):
         var changed = False
         if on:
             self.field_focused = True
+            var add = List[UInt8]()  # collect, then one append: `buf += chr(b)` aborted with a 96 GiB request
             for b in self.inp.text.as_bytes():
-                if 32 <= Int(b) <= 126 and buf.byte_length() < max:
-                    buf += chr(Int(b))
-                    changed = True
+                if 32 <= Int(b) <= 126 and buf.byte_length() + len(add) < max:
+                    add.append(b)
+            if len(add) > 0:
+                buf = buf + String(unsafe_from_utf8=Span(add))
+                changed = True
             if self.inp.key(SC_BACKSPACE) and buf.byte_length() > 0:
                 var keep = buf.byte_length() - 1
                 var cut = String(unsafe_from_utf8=buf.as_bytes()[:keep])
