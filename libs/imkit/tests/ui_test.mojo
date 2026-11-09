@@ -314,22 +314,40 @@ def main() raises:
     pack(["tests/fixtures/rgba.png"], ".work/ui_assets")
     var assets = Assets(".work/ui_assets")
     var apx = assets.px.copy()
-    layer.set_assets(assets)
+    # the pool is shared: set_assets over the picture set_image put at offset 0 raises, so does set_image into the atlas;
+    # an offset past the atlas keeps both
+    var clash1 = False
+    try:
+        layer.set_assets(assets)
+    except:
+        clash1 = True
+    var al = Layer(ctx, ui)
+    al.set_assets(assets)
+    var clash2 = False
+    try:
+        al.set_image(Span(srcpx), 4, 4)
+    except:
+        clash2 = True
+    al.set_image(Span(srcpx), 4, 4, len(assets.px))
+    print("pool clash: set_assets over a picture raised", clash1, "set_image into the atlas raised", clash2)
+    if not clash1 or not clash2:
+        fails += 1
     ui.assets = assets^
     ui.begin(idle)
     var drew = ui.icon_img("rgba", 800, 600)
+    ui.image(0, 0, 4, 4, 480, 4, 4)  # the picture past the atlas
     ui.finish()
-    layer.render(ui)
+    al.render(ui)
     var adiff = 0
     for y in range(20):
         for x in range(24):
             var want = apx[y * 24 + x]
-            var got = layer.pixels[(600 + y) * UW + 800 + x]
+            var got = al.pixels[(600 + y) * UW + 800 + x]
             var wa = Int(want >> 24)
             if abs(Int(got >> 24) - wa) > 1 or (wa >= 40 and (abs(Int(got & 255) - Int(want & 255)) > 2 or abs(Int((got >> 8) & 255) - Int((want >> 8) & 255)) > 2 or abs(Int((got >> 16) & 255) - Int((want >> 16) & 255)) > 2)):
                 adiff += 1
     print("assets: icon_img drew", drew, "pixels differing from the PNG", adiff, "of 480")
-    if not drew or adiff:
+    if not drew or adiff or not near(al.pixels[0], srcpx[0]):
         fails += 1
     # past NBIN tile entries: whole commands drop (counted), the ones kept still draw
     ui.d.dropped = 0

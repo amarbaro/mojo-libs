@@ -261,6 +261,7 @@ def main() raises:
     # set_image's fit rule: ISRC pixels at most, sides up to 0xFFFF, the slice must hold w * h
     check(image_fits(16, 4, 4) and image_fits(ISRC, 256, ISRC // 256) and not image_fits(ISRC + 256, 256, ISRC // 256 + 1) and not image_fits(15, 4, 4)
           and not image_fits(16, 0, 4) and not image_fits(16, 4, -4) and not image_fits(16, 0x10000, 1), "image_fits: fits, raises on over ISRC, short slice, bad sides", fails)
+    check(image_fits(16, 4, 4, 480) and image_fits(16, 4, 4, ISRC - 16) and not image_fits(16, 4, 4, ISRC - 15) and not image_fits(16, 4, 4, -1), "image_fits: an offset keeps the picture inside ISRC", fails)
     # a 4 x 4 image on a rect much larger than the layer (and one starting off-screen) is clipped to the tiles, not dropped
     fui.d.dropped = 0
     fui.begin(idle)

@@ -53,4 +53,6 @@ mutant "png size cap off" assets.mojo 's/if w > MAXPX or h > MAXPX or w \* h > M
 mutant "clip replace keeps the old clip" draw.mojo 's/^        self.unclip()$/        pass/' ui_cpu_test
 mutant "push keeps NaN commands" draw.mojo 's/ or x0 != x0 or y0 != y0 or x1 != x1 or y1 != y1 or r != r//' ui_cpu_test
 mutant "push does not clamp infinities" draw.mojo 's/bits(sane(x0)), bits(sane(y0)), bits(sane(x1))/bits(x0), bits(y0), bits(x1)/; s/= bits(sane(y1)), bits(r)/= bits(y1), bits(r)/' ui_cpu_test
+mutant "set_image may overwrite the atlas" layer.mojo 's/if off < self.asset_px:/if off < 0:/' ui_test gpu
+mutant "set_assets may overwrite a picture" layer.mojo 's/if len(a.px) > self.img_lo:/if len(a.px) > ISRC + 1:/' ui_test gpu
 echo "PASS mutants"

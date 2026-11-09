@@ -30,7 +30,7 @@
 | `table_begin(id, heads, widths, h, rows, rh, off) -> (first, end)`, `table_row`, `table_cell(k, c, text)`, `table_end()` | header plus scroll list; cells cut to their column; data stays yours |
 | `plot(vals, lo, hi, w, h, c)` | axes, gridlines, labels; more samples than pixel columns are decimated to one point per column keeping spikes |
 | `Layer(ctx, ui)`; `render(ui)`, `pixels` | GPU compose on your DeviceContext; refuses an unfinished frame |
-| `layer.set_image(px, w, h)` | copy a packed `r \| g << 8 \| b << 16 \| a << 24` picture to pool offset 0 (draw with `ui.image(.., 0, w, h)`); raises over `UI_IMG` pixels |
+| `layer.set_image(px, w, h, off=0)` | copy a packed `r \| g << 8 \| b << 16 \| a << 24` picture to pool pixel offset `off` (draw with `ui.image(.., off, w, h)`); raises past `UI_IMG` pixels or when it would overwrite the `set_assets` atlas (use `off >= len(assets.px)`) |
 | `Audio(rate)`; `put`, `queued` | SDL3 mono float32 playback stream |
 
 Capacities: 4096 commands, `UI_BINS` tile entries (32,768), `UI_IMG` image pixels (65,536). Past a capacity whole commands
@@ -38,4 +38,4 @@ drop and `ui.d.dropped` counts them.
 
 ## Asset atlas
 
-`python3 tools/png_fixture.py` writes the test fixtures. `mojo run -I src tools/pack_atlas.mojo assets/atlas assets/src/*.png` packs 8-bit RGB/RGBA PNGs (Blender icons, ComfyUI textures) into `assets/atlas.bin` (RGBA bytes) and `assets/atlas.txt` (`name offset width height`, name = file stem). At run time: `ui.assets = Assets("assets/atlas")`, `layer.set_assets(ui.assets)` once (copies to the image pool from offset 0, so do not also use `set_image`), then `ui.icon_img("play", x, y)` each frame (own size, or `w, h` to scale; `alpha`); an unknown name returns False and counts in `ui.d.dropped`.
+`python3 tools/png_fixture.py` writes the test fixtures. `mojo run -I src tools/pack_atlas.mojo assets/atlas assets/src/*.png` packs 8-bit RGB/RGBA PNGs (Blender icons, ComfyUI textures) into `assets/atlas.bin` (RGBA bytes) and `assets/atlas.txt` (`name offset width height`, name = file stem). At run time: `ui.assets = Assets("assets/atlas")`, `layer.set_assets(ui.assets)` once (copies to the image pool from offset 0; a `set_image` picture below `len(assets.px)` makes it raise, so give `set_image` an offset past the atlas), then `ui.icon_img("play", x, y)` each frame (own size, or `w, h` to scale; `alpha`); an unknown name returns False and counts in `ui.d.dropped`.

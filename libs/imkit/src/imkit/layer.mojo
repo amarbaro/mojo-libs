@@ -15,9 +15,9 @@ from .draw import CW, ISRC, NBIN, NCMD, NSTY, QH, QW, TX, TY, UH, UW, blur_axis,
 from .ui import Ui
 
 
-def image_fits(n: Int, w: Int, h: Int) -> Bool:
-    """Can a w x h picture held in n pixels go to the ISRC pool (Ui.image takes sides up to 0xFFFF)?"""
-    return 0 < w <= 0xFFFF and 0 < h <= 0xFFFF and w * h <= ISRC and n >= w * h
+def image_fits(n: Int, w: Int, h: Int, off: Int = 0) -> Bool:
+    """Can a w x h picture held in n pixels go to the ISRC pool at pixel offset `off` (Ui.image takes sides up to 0xFFFF)?"""
+    return 0 < w <= 0xFFFF and 0 < h <= 0xFFFF and w * h <= ISRC and n >= w * h and 0 <= off <= ISRC - w * h
 
 
 struct Layer(Movable):
@@ -32,6 +32,8 @@ struct Layer(Movable):
     var q: List[DeviceBuffer[DType.uint32]]  # the 1 / BQ scene: down, after the horizontal pass, blurred (q[2], sampled by GLASS)
     var src: DeviceBuffer[DType.uint32]  # image sources (Ui.image): the app writes its RGBA here
     var pixels: HostBuffer[DType.uint32]  # the composed layer, valid after render() returns
+    var asset_px: Int  # pool pixels [0, asset_px) hold set_assets' atlas
+    var img_lo: Int  # the lowest pool offset a set_image picture was put at (ISRC: none)
 
     def __init__(out self, ctx: DeviceContext[], mut ui: Ui) raises:
         comptime assert UW > 0 and UH > 0 and UW % 16 == 0 and UH % 16 == 0, "UI_W, UI_H: positive multiples of 16"
@@ -50,17 +52,22 @@ struct Layer(Movable):
         self.src = ctx.enqueue_create_buffer[DType.uint32](ISRC)
         self.pixels = ctx.enqueue_create_host_buffer[DType.uint32](UW * UH)
         self.src.enqueue_fill(0)
+        self.asset_px, self.img_lo = 0, ISRC
         ctx.enqueue_copy(self.atlas.create_sub_buffer[DType.uint8](0, len(ui.d.font.atlas)), ui.d.font.atlas.unsafe_ptr())
         ctx.synchronize()  # the atlas is the caller's
         ui.d.font.clean()
 
-    def set_image(mut self, px: Span[UInt32, _], w: Int, h: Int) raises:
-        """Copy a w x h picture (packed r | g << 8 | b << 16 | a << 24, row-major) to pool offset 0 and wait; draw it with
-        Ui.image(.., 0, w, h). ISRC is the pool size in pixels, set by -DUI_IMG=; a picture over it raises, the pool is untouched."""
-        if not image_fits(len(px), w, h):
-            raise Error("Layer.set_image: " + String(w) + " x " + String(h) + " (" + String(len(px)) + " px given) does not fit ISRC " + String(ISRC))
-        self.ctx.enqueue_copy(self.src.create_sub_buffer[DType.uint32](0, w * h), px.unsafe_ptr())
+    def set_image(mut self, px: Span[UInt32, _], w: Int, h: Int, off: Int = 0) raises:
+        """Copy a w x h picture (packed r | g << 8 | b << 16 | a << 24, row-major) to pool pixel offset `off` and wait; draw it
+        with Ui.image(.., off, w, h). ISRC is the pool size in pixels, set by -DUI_IMG=; a picture past it raises, so does one
+        that would overwrite the atlas set_assets loaded (use off >= len(assets.px)); the pool is untouched."""
+        if not image_fits(len(px), w, h, off):
+            raise Error("Layer.set_image: " + String(w) + " x " + String(h) + " at " + String(off) + " (" + String(len(px)) + " px given) does not fit ISRC " + String(ISRC))
+        if off < self.asset_px:
+            raise Error("Layer.set_image: offset " + String(off) + " is inside the asset atlas (" + String(self.asset_px) + " px from set_assets); pass off >= " + String(self.asset_px))
+        self.ctx.enqueue_copy(self.src.create_sub_buffer[DType.uint32](off, w * h), px.unsafe_ptr())
         self.ctx.synchronize()  # px is the caller's
+        self.img_lo = min(self.img_lo, off)
 
     def blur_from(self, scene: DeviceBuffer[DType.uint32]) raises:
         """Blur a UW * UH device scene (opaque RGBA) for GLASS commands: 1 / 4 size, two triangle passes (enqueue only)."""
@@ -77,14 +84,17 @@ struct Layer(Movable):
         self.blur_from(self.scene)
         self.ctx.synchronize()
 
-    def set_assets(self, a: Assets) raises:
-        """Copy an asset atlas's pixels to the image pool from offset 0 and wait; Ui.icon_img draws them. set_image also
-        writes at 0, so use one of the two, or draw the other's pictures from offsets past len(a.px)."""
+    def set_assets(mut self, a: Assets) raises:
+        """Copy an asset atlas's pixels to the image pool from offset 0 and wait; Ui.icon_img draws them. A picture set_image
+        put below len(a.px) would be overwritten, so that raises: give set_image an offset past the atlas."""
         if len(a.px) > ISRC:
             raise Error("Layer.set_assets: " + String(len(a.px)) + " px over ISRC " + String(ISRC) + " (-DUI_IMG=)")
+        if len(a.px) > self.img_lo:
+            raise Error("Layer.set_assets: " + String(len(a.px)) + " px would overwrite a set_image picture at offset " + String(self.img_lo) + "; load the atlas first or put the picture past it")
         if len(a.px) > 0:
             self.ctx.enqueue_copy(self.src.create_sub_buffer[DType.uint32](0, len(a.px)), a.px.unsafe_ptr())
         self.ctx.synchronize()
+        self.asset_px = len(a.px)
 
     def launch(self) raises:
         """Compose what was last uploaded into the layer's own buffer (enqueue only)."""
