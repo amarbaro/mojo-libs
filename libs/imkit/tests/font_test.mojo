@@ -3,7 +3,7 @@ to OUT (.pgm) for a look (OCR reads it back). usage: IMKIT_FONT=/path/font.ttf m
 from std.os import getenv
 from std.sys import argv
 from imkit.atlas import Skyline
-from imkit.font import AW, Font, GM, NCH, decode
+from imkit.font import AH, AW, Font, GM, NCH, decode
 
 
 def main() raises:
@@ -17,6 +17,11 @@ def main() raises:
     var ok = fails == 0 and len(f.g) == 3 * NCH * GM and f.ascent[0] < f.ascent[1] < f.ascent[2] and f.width("Pause", 1) > f.width("Pause", 0)
     print("atlas", AW, "x", f.height, "(", len(f.atlas), "B ), glyphs", len(f.g) // GM, ", ascent", f.ascent[0], f.ascent[1], f.ascent[2], ", empty", fails)
     var bad = 0
+    # the host atlas holds the rows in use (to the next 64), not AW x AH: the 512 KB of zeros are not allocated
+    print("host atlas", len(f.atlas), "B for", f.height, "rows of", AH)
+    if len(f.atlas) >= AW * AH // 2 or len(f.atlas) < AW * f.height or len(f.atlas) % (64 * AW) != 0:
+        print("FAIL host atlas is not sized by the rows in use")
+        fails += 1
     # skyline: 300 boxes of mixed sizes on 64 x 64 stay inside, never overlap; a box bigger than the sheet is refused
     var sky = Skyline(64, 64)
     var rx = List[Int]()
@@ -84,6 +89,9 @@ def main() raises:
     fb.clean()
     var cleaned = fb.dirty1 <= fb.dirty0
     if ri < 3 * NCH * GM or gw < 8 or gh < 8 or ink < 30 or ri2 == ri or again != ri or len(fb.g) - n0 != 4 * GM or fb.dirty0 < 0 or not cleaned or pua != qi or qn != nofb.glyph(0, ord("?")) or fb.g[e_acute + 6] <= 0 or fb.width("日本", 0) < 20 or fb.g[ri2 + 2] <= fb.g[ri + 2]:
+        fails += 1
+    if len(fb.atlas) < AW * fb.height or len(fb.atlas) > AW * AH:
+        print("FAIL host atlas does not cover the rows a late glyph used")
         fails += 1
     var nb = fb.glyph(2, 0x672C)  # 本 at size 22 after clean()
     var ny, nh = Int(fb.g[nb + 1]), Int(fb.g[nb + 3])

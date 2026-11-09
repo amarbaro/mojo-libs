@@ -52,6 +52,7 @@ struct Layer(Movable):
         self.src = ctx.enqueue_create_buffer[DType.uint32](ISRC)
         self.pixels = ctx.enqueue_create_host_buffer[DType.uint32](UW * UH)
         self.src.enqueue_fill(0)
+        self.atlas.enqueue_fill(0)  # the host copy holds only the rows in use; the rest of the card's atlas stays zero
         self.asset_px, self.img_lo = 0, ISRC
         ctx.enqueue_copy(self.atlas.create_sub_buffer[DType.uint8](0, len(ui.d.font.atlas)), ui.d.font.atlas.unsafe_ptr())
         ctx.synchronize()  # the atlas is the caller's

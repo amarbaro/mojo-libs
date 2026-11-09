@@ -43,7 +43,7 @@ def decode(b: Span[UInt8, _], i: Int) -> Tuple[Int, Int]:
 
 
 struct Font(Movable):
-    var atlas: List[UInt8]  # AW x AH, alpha
+    var atlas: List[UInt8]  # alpha, AW wide, the rows in use rounded up to 64 (at most AH)
     var height: Int  # rows in use
     var sizes: List[Int]
     var ascent: List[Int]
@@ -71,7 +71,7 @@ struct Font(Movable):
         if fallback.byte_length() > 0 and self.ft.get_function[Int32]("FT_New_Face")(lib, q.as_c_string_span().ptr(), Int(0), Pointer(to=fb)) != 0:
             raise Error("FreeType could not open " + fallback)
         self.lib, self.face, self.fb = lib, face, fb
-        self.atlas = List[UInt8](length=AW * AH, fill=0)
+        self.atlas = List[UInt8]()  # grows by 64 rows as glyphs land (load); the card's copy is AW x AH
         self.height = 0
         self.ascent = List[Int]()
         self.g = List[Int16]()
@@ -111,6 +111,9 @@ struct Font(Movable):
                 self.full += 1
                 return -1
             x, y = at[0], at[1]
+            var rows = min((y + h + 1 + 63) // 64 * 64, AH)  # rows to hold this glyph and its gutter, in steps of 64
+            if len(self.atlas) < rows * AW:
+                self.atlas.resize(rows * AW, 0)
             for r in range(h):
                 for k in range(w):
                     self.atlas[(y + r) * AW + x + k] = peek[UInt8](buf + r * pitch + k)[]
