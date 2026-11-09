@@ -11,6 +11,14 @@ from .window import Input
 comptime SC_BACKSPACE = 42  # SDL scancode
 
 
+def num(x: Float32) -> String:
+    """x for an axis label: whole above 100, else one decimal."""
+    if abs(x) >= 100:
+        return String(Int(round(x)))
+    var t = Int(round(abs(x) * 10))
+    return ("-" if x < 0 and t > 0 else "") + String(t // 10) + "." + String(t % 10)
+
+
 struct Ui(Movable):
     var d: Draw
     var anim: Anim  # widget id -> spring (anim.mojo)
@@ -30,6 +38,7 @@ struct Ui(Movable):
     var soff: Float32  # its scroll offset
     var srows: Int  # its row count
     var mk: Int  # items drawn so far in the open menu
+    var cols: List[Float32]  # the table's column edges this frame, from its left (ncols + 1)
     var field_focused: Bool  # a field drawn this frame has focus: the app sends keys to typing, not to shortcuts
 
     def __init__(out self, var font: Font):
@@ -41,6 +50,7 @@ struct Ui(Movable):
         self.focus, self.field_focused = 0, False
         self.menu, self.in_menu, self.rh, self.soff, self.srows, self.mk = 0, False, 24, 0, 0, 0
         self.pop = SIMD[DType.float32, 4](0)
+        self.cols = List[Float32]()
         self.vp = SIMD[DType.float32, 4](0)
         self.inp = Input(0, 0, 0, 0, 0, 0, 0, 0, SIMD[DType.uint64, 2](0), False)
 
@@ -300,14 +310,95 @@ struct Ui(Movable):
         """Top of row k of the current scroll list, in logical units."""
         return self.vp[1] - self.soff + Float32(k) * self.rh
 
-    def scroll_row(mut self, id: Int, k: Int, label: StringSlice, on: Bool = False) -> Bool:
-        """Selectable text row k of the current scroll list (call for the rows scroll_begin returned); returns clicked."""
+    def table_row(mut self, id: Int, k: Int, on: Bool = False) -> Bool:
+        """Row k's hover or selection background (click target) of the current scroll list or table; returns clicked."""
         var x0, y0, w = self.vp[0], self.scroll_y(k), self.vp[2] - 10
         var hc = self.clickable(id, x0, y0, x0 + w, y0 + self.rh)
         if on or hc[0]:
             self.rect(x0 + 2, y0, x0 + w, y0 + self.rh, self.theme.radius * 0.4, self.theme.accent if on else self.theme.hover)
-        _ = self.text(x0 + 10, y0 + (self.rh - self.asc(0)) * 0.5 - 1, label, 0, self.theme.on_accent if on else self.theme.text)
         return hc[1]
+
+    def scroll_row(mut self, id: Int, k: Int, label: StringSlice, on: Bool = False) -> Bool:
+        """Selectable text row k of the current scroll list (call for the rows scroll_begin returned); returns clicked."""
+        var hc = self.table_row(id, k, on)
+        _ = self.text(self.vp[0] + 10, self.scroll_y(k) + (self.rh - self.asc(0)) * 0.5 - 1, label, 0, self.theme.on_accent if on else self.theme.text)
+        return hc
+
+    def fit(self, s: StringSlice, w: Float32) -> Int:
+        """Bytes of s (cut on a code point) whose width at size 0 is at most w."""
+        var n = s.byte_length()
+        while n > 0 and self.tw(StringSlice(unsafe_from_utf8=s.as_bytes()[:n]), 0) > w:
+            n -= 1
+            while 0 < n < s.byte_length() and s.as_bytes()[n] & 0xC0 == 0x80:
+                n -= 1
+        return n
+
+    def table_begin(mut self, id: Int, heads: List[String], widths: List[Float32], h: Float32, rows: Int, rh: Float32, mut off: Float32) -> Tuple[Int, Int]:
+        """Table at the cursor: a header (26 high) of `heads` over columns of `widths`, then a scroll list of `rows` rows
+        of rh, h high, with its own offset `off`. Returns (first, end) like scroll_begin. Per visible row call table_row, then
+        table_cell for each column; the data stays yours. Call table_end after the rows."""
+        var x0, y0 = self.x, self.y
+        var t = self.theme.copy()
+        self.cols.clear()
+        self.cols.append(0)
+        for w in widths:
+            self.cols.append(self.cols[len(self.cols) - 1] + w)
+        var tw = self.cols[len(self.cols) - 1]
+        self.rect(x0, y0, x0 + tw, y0 + 26, t.radius * 0.5, t.hover)
+        for c in range(min(len(heads), len(widths))):
+            var n = self.fit(heads[c], widths[c] - 14)
+            _ = self.text(x0 + self.cols[c] + 10, y0 + (26 - self.asc(0)) * 0.5 - 1, StringSlice(unsafe_from_utf8=heads[c].as_bytes()[:n]), 0, t.muted)
+        self.y = y0 + 28
+        return self.scroll_begin(id, tw, h, rows, rh, off)
+
+    def table_cell(mut self, k: Int, c: Int, s: StringSlice, color: UInt32 = 0):
+        """Text of row k, column c, cut to the column width (color 0: the theme text)."""
+        if c >= len(self.cols) - 1:
+            return
+        var n = self.fit(s, self.cols[c + 1] - self.cols[c] - 14)
+        _ = self.text(self.vp[0] + self.cols[c] + 10, self.scroll_y(k) + (self.rh - self.asc(0)) * 0.5 - 1,
+                      StringSlice(unsafe_from_utf8=s.as_bytes()[:n]), 0, color if color != 0 else self.theme.text)
+
+    def table_end(mut self):
+        self.scroll_end()
+
+    def plot(mut self, vals: List[Float32], lo: Float32, hi: Float32, w: Float32, h: Float32, c: UInt32):
+        """Line plot of vals (oldest first) with axes in a w x h box at the cursor; next row. Y labels at lo, middle, hi,
+        X labels at sample 0 and the last. More samples than plot pixels are decimated to one point per pixel column: the
+        sample of the bucket farthest from the previous point, so spikes survive. Values outside lo..hi stick to the edge."""
+        var x0, y0 = self.x, self.y
+        var t = self.theme.copy()
+        var px0, px1, py0, py1 = x0 + 36, x0 + w - 8, y0 + 8, y0 + h - 20
+        self.rect(x0, y0, x0 + w, y0 + h, t.radius * 0.5, t.surface)
+        for g in range(3):
+            var gy = py1 - (py1 - py0) * Float32(g) / 2
+            self.line(px0, gy, px1, gy, 1, t.hover)
+            var lab = num(lo + (hi - lo) * Float32(g) / 2)
+            _ = self.text(px0 - 6 - self.tw(lab, 0), gy - self.asc(0) * 0.5 - 1, lab, 0, t.muted)
+        var n = len(vals)
+        _ = self.text(px0, py1 + 4, "0", 0, t.muted)
+        var last = String(max(n - 1, 0))
+        _ = self.text(px1 - self.tw(last, 0), py1 + 4, last, 0, t.muted)
+        var cols = min(n, Int(px1 - px0))
+        var span = max(hi - lo, 1e-6)
+        var pv = Float32(0)
+        var pxp = px0
+        var pyp = Float32(0)
+        for k in range(cols):
+            var a = k * n // cols  # this column's samples: [a, b)
+            var b = max((k + 1) * n // cols, a + 1)
+            var v = vals[a]
+            if k > 0:
+                for j in range(a, b):
+                    if abs(vals[j] - pv) > abs(v - pv):
+                        v = vals[j]
+            pv = v
+            var xx = px0 + (px1 - px0) * Float32(k) / Float32(max(cols - 1, 1))
+            var yy = py1 - (py1 - py0) * min(max((v - lo) / span, Float32(0)), Float32(1))
+            if k > 0:
+                self.line(pxp, pyp, xx, yy, 1.6, c)
+            pxp, pyp = xx, yy
+        self.y += h + 8
 
     def scroll_end(mut self):
         """Scrollbar thumb for the list just drawn; moves the cursor to the row under it."""

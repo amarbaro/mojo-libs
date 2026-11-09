@@ -8,7 +8,7 @@ the focused flag; image_fits (set_image's check) and an image rect larger than t
 usage: IMKIT_FONT=/path/font.ttf mojo run -I src tests/ui_cpu_test.mojo  (default font: Roboto Medium)
 """
 from std.os import getenv
-from imkit.draw import flt
+from imkit.draw import GLYPH, LINE, flt
 from imkit.font import Font
 from imkit.layer import image_fits
 from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, FULL, bits, clipped, rgba, rrect, srect
@@ -112,6 +112,37 @@ def lframe(mut ui: Ui, inp: Input, rows: Int, mut off: Float32, mut sel: Int) ->
     ui.scroll_end()
     ui.finish()
     return fe
+
+
+def tframe(mut ui: Ui, inp: Input, rows: Int, last_w: Float32, mut off: Float32, mut sel: Int):
+    """A table at (20, 20): header 20..46, rows of 24 from y 48, three columns (100, 80, last_w) of 100 high."""
+    ui.begin(inp)
+    ui.x, ui.y = 20, 20
+    var heads: List[String] = ["Name", "Value", "A very long header text"]
+    var widths: List[Float32] = [100, 80, last_w]
+    var fe = ui.table_begin(1, heads, widths, 100, rows, 24, off)
+    for k in range(fe[0], fe[1]):
+        if ui.table_row(10 + k, k, sel == k):
+            sel = k
+        ui.table_cell(k, 0, "row " + String(k))
+        ui.table_cell(k, 1, "v")
+        ui.table_cell(k, 2, "a very long cell text that cannot fit")
+    ui.table_end()
+    ui.finish()
+
+
+def count(ui: Ui, kind: Int) -> Int:
+    var n = 0
+    for k in range(ui.d.n):
+        n += 1 if Int(ui.d.cmd[k * 8]) == kind else 0
+    return n
+
+
+def pframe(mut ui: Ui, vals: List[Float32]):
+    ui.begin(Input(400, 400, 0, 0, 0, 0, 0, 0, SIMD[DType.uint64, 2](0), False))
+    ui.x, ui.y = 20, 20  # plot 300 x 120: area x 56..312, y 28..120
+    ui.plot(vals, 0, 10, 300, 120, ui.theme.accent)
+    ui.finish()
 
 
 def main() raises:
@@ -363,6 +394,46 @@ def main() raises:
     off = 0
     _ = lframe(lui, Input(400, 300, 0, 0, 0, 0, 0, 0, mouse, False), 100000, off, sel)
     check(lui.d.n == n50, "scroll list: 100000 rows emit the same commands as 50", fails)
+    # table: header, columns, cells cut to their column, whole visible rows only, row click, bounded commands
+    var xui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var toff = Float32(0)
+    var tsel = -1
+    tframe(xui, Input(400, 400, 0, 0, 0, 0, 0, 0, mouse, False), 1000, 60, toff, tsel)
+    var glyphs = count(xui, GLYPH)
+    var right = Float32(0)
+    for k in range(xui.d.n):
+        if Int(xui.d.cmd[k * 8]) == GLYPH:
+            right = max(right, flt(xui.d.cmd[k * 8 + 3]))
+    var tn = xui.d.n
+    check(right <= 20 + 240 and glyphs > 20, "table: every glyph ends inside the table width (cells and header cut to their column)", fails)
+    tframe(xui, Input(400, 400, 0, 0, 0, 0, 0, 0, mouse, False), 1000, 600, toff, tsel)
+    check(count(xui, GLYPH) > glyphs, "table: a wider column shows more of the long text", fails)
+    tframe(xui, Input(60, 84, 0, 0, 0, 1, 1, 0, mouse, False), 1000, 60, toff, tsel)  # row 1: y 72 to 96
+    tframe(xui, Input(60, 84, 0, 0, 0, 0, 0, 1, mouse, False), 1000, 60, toff, tsel)
+    check(tsel == 1, "table: a click on a row selects it", fails)
+    tframe(xui, Input(60, 30, 0, 0, 0, 1, 1, 0, mouse, False), 1000, 60, toff, tsel)  # header
+    tframe(xui, Input(60, 30, 0, 0, 0, 0, 0, 1, mouse, False), 1000, 60, toff, tsel)
+    check(tsel == 1, "table: a click on the header selects no row", fails)
+    tframe(xui, Input(400, 400, 0, 0, 0, 0, 0, 0, mouse, False), 1000000, 60, toff, tsel)
+    check(abs(xui.d.n - tn) <= 1, "table: a million rows emit the commands of a thousand (the selected row's background aside)", fails)
+    # plot: one point per pixel column, the spike survives, tiny inputs do not crash
+    var pui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var big = List[Float32](length=100000, fill=0)
+    big[54321] = 10
+    pframe(pui, big)
+    var ptop = Float32(1e9)
+    var nl = 0
+    for k in range(pui.d.n):
+        if Int(pui.d.cmd[k * 8]) == LINE:
+            nl += 1
+            if pui.d.cmd[k * 8 + 6] == pui.theme.accent:
+                ptop = min(ptop, min(flt(pui.d.cmd[k * 8 + 2]), flt(pui.d.cmd[k * 8 + 4])))
+    check(nl == 3 + 255 and ptop == 28, "plot: 100000 samples draw 255 segments (one point per pixel column) and the one spike reaches the top", fails)
+    pframe(pui, List[Float32](length=100, fill=5))
+    check(count(pui, LINE) == 3 + 99, "plot: fewer samples than pixels are drawn as they are", fails)
+    pframe(pui, List[Float32](length=1, fill=5))
+    pframe(pui, List[Float32]())
+    check(count(pui, LINE) == 3 and pui.d.dropped == 0, "plot: one sample and none draw only the axes", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")
