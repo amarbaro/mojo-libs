@@ -20,6 +20,7 @@ FreeType are called through Mojo's FFI.
 | `imkit.font` | glyph atlas from a TrueType font (ASCII 32-126, a few pixel sizes, alpha8), built once at start |
 | `imkit.draw` | `Draw` (`ui.d`): the command list, tile binning, the `compose` kernel; counters `ui.d.n`, `ui.d.dropped` |
 | `imkit.ui` | `Ui`: `begin(input)`, `panel`, `button`, `icon`, `bar`, `spark`, `text`, `field` (single-line text box), `rect`, `line`, `tri`, `image`, `finish()` |
+| `imkit.atlas`, `imkit.assets` | skyline packer for the glyph atlas; PNG asset atlas (`pack`, `Assets`, `png_decode`) |
 | `imkit.theme` | `Theme` roles and the presets `glass()`, `neon()`, `flat()`; the module constants are the glass values |
 
 ## Use
@@ -70,7 +71,7 @@ card. An earlier run measured compose at 17.7 us; the number moves with GPU cloc
 
 ## Limits
 
-- ASCII text only, no shaping; no docking, axes plots, sliders, menus or DPI scaling. `Ui.field` is one ASCII line (append, Backspace; no cursor movement, selection, paste or key repeat).
+- UTF-8 text draws one glyph per codepoint (no shaping, bidi or emoji color); the atlas does not evict; no docking, axes plots, sliders, menus or DPI scaling. `Ui.field` is one ASCII line (append, Backspace; no cursor movement, selection, paste or key repeat).
 - Needs a GPU MAX supports for `Layer`; only gfx1100 was tested. Struct offsets are those of SDL 3.4 and FreeType 2.14.
 - Key scancodes below 128 only. `Audio` (mono float playback) has no automated check.
 - CI covers the CPU side only; the compose kernel and the window are checked locally.
