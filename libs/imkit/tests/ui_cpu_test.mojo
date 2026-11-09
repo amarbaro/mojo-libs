@@ -12,7 +12,7 @@ from imkit.draw import flt
 from imkit.font import Font
 from imkit.layer import image_fits
 from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, FULL, bits, clipped, rgba, rrect, srect
-from imkit.theme import ACCENT
+from imkit.theme import ACCENT, Theme, flat, glass, neon
 from imkit.ui import SC_BACKSPACE, Ui
 from imkit.window import Input
 
@@ -48,6 +48,37 @@ def typed(mut ui: Ui, mut a: String, mut b: String, inp: Input) -> Bool:
     _ = ui.field(2, b, 4)
     ui.finish()
     return c
+
+
+def colors(mut ui: Ui, t: Theme) -> List[UInt32]:
+    """The color word of every command of one frame with every widget, drawn under theme t."""
+    ui.set_theme(t)
+    ui.begin(Input(300, 300, 0, 0, 0, 0, 0, 0, SIMD[DType.uint64, 2](0), False))
+    ui.panel(24, 20, 520, 300, "Gallery")
+    _ = ui.button(1, "On", 60, 30, True)
+    _ = ui.button(2, "Off", 60)
+    _ = ui.icon(3, 0, True)
+    _ = ui.icon(4, 2)
+    var s = String("hi")
+    _ = ui.field(5, s, 8)
+    ui.bar("energy", 0.5, ui.theme.good, 200)
+    ui.spark([Float32(0), Float32(1), Float32(0.5)], 0, 1, 120, 40, ui.theme.bad)
+    ui.finish()
+    var out = List[UInt32]()
+    for k in range(ui.d.n):
+        out.append(ui.d.cmd[k * 8 + 6])
+    return out^
+
+
+def only_roles(c: List[UInt32], t: Theme) -> Bool:
+    var roles = [t.panel, t.surface, t.hover, t.accent, t.good, t.warn, t.bad, t.text, t.muted, t.shadow, t.border_c]
+    for v in c:
+        var ok = False
+        for r in roles:
+            ok = ok or v == r
+        if not ok:
+            return False
+    return True
 
 
 def main() raises:
@@ -212,6 +243,15 @@ def main() raises:
         var x1 = flt(dui.d.cmd[3])
         check(hits[0] and not hits[1] and not hits[2] and hits[3] and abs(x0 - 10 * sc) < 1e-4 and abs(x1 - 46 * sc) < 1e-4
               and abs(dui.w() * sc - Float32(UW)) < 1e-3, "DPI " + String(sc) + ": hit test in logical units, rect drawn at logical x scale", fails)
+    # theme: every widget colour is a role of the active preset; the presets differ; a runtime switch round-trips
+    var tui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var cg = colors(tui, glass())
+    var cn = colors(tui, neon())
+    var cf = colors(tui, flat())
+    var cg2 = colors(tui, glass())
+    check(only_roles(cg, glass()) and only_roles(cn, neon()) and only_roles(cf, flat()), "theme: every drawn colour is a role of the active preset", fails)
+    check(cg != cn and cn != cf and cg != cf and len(cg) > 20, "theme: glass, neon and flat draw different frames", fails)
+    check(cg == cg2 and tui.d.dropped == 0, "theme: switching presets at runtime and back gives the first frame again", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")

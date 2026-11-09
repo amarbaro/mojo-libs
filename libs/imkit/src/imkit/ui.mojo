@@ -5,7 +5,7 @@ for the compose kernel. Colors come from theme.mojo.
 from .anim import Anim
 from .draw import Draw, TX, TY, NBIN, NCMD, CW, UW, UH, ISRC, AH, rgba
 from .font import Font
-from .theme import ACCENT, BAD, GOOD, HOVER, MUTED, PANEL, SHADOW, SURFACE, TEXT, WARN
+from .theme import Theme, glass
 from .window import Input
 
 comptime SC_BACKSPACE = 42  # SDL scancode
@@ -14,6 +14,7 @@ comptime SC_BACKSPACE = 42  # SDL scancode
 struct Ui(Movable):
     var d: Draw
     var anim: Anim  # widget id -> spring (anim.mojo)
+    var theme: Theme  # colors and shape by role (theme.mojo); every widget reads it, set_theme switches it at runtime
     var scale: Float32  # layer pixels per logical unit (DPI 1.5: 1.5); widgets, cursor and input are logical
     var inp: Input
     var active: Int  # widget held by the mouse (0: none)
@@ -27,6 +28,7 @@ struct Ui(Movable):
         self.d = Draw(font^)
         self.anim = Anim()
         self.scale = 1
+        self.theme = glass()
         self.active, self.over, self.x, self.y = 0, False, 0, 0
         self.focus, self.field_focused = 0, False
         self.inp = Input(0, 0, 0, 0, 0, 0, 0, 0, SIMD[DType.uint64, 2](0), False)
@@ -43,6 +45,9 @@ struct Ui(Movable):
         """DPI: draw `scale` layer pixels per logical unit. Call before begin(); the font sizes stay in layer pixels, so
         build the Font with sizes times scale for a sharp result."""
         self.scale = scale
+
+    def set_theme(mut self, theme: Theme):
+        self.theme = theme.copy()
 
     def w(self) -> Float32:
         """Width of the layer in logical units."""
@@ -113,20 +118,24 @@ struct Ui(Movable):
 
     def panel(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, title: StringSlice):
         """Glass panel with a soft shadow and a title; the layout cursor starts under the title."""
-        self.rect(x0 + 2, y0 + 6, x1 + 2, y1 + 10, 14, SHADOW, 14)
-        self.rect(x0, y0, x1, y1, 12, PANEL)
-        _ = self.text(x0 + 16, y0 + 12, title, 1, TEXT)
+        var t = self.theme.copy()
+        self.rect(x0 + 2, y0 + 6, x1 + 2, y1 + 10, t.radius + 2, t.shadow, t.blur)
+        if t.border > 0:
+            self.rect(x0 - t.border, y0 - t.border, x1 + t.border, y1 + t.border, t.radius + t.border, t.border_c)
+        self.rect(x0, y0, x1, y1, t.radius, t.panel)
+        _ = self.text(x0 + 16, y0 + 12, title, 1, t.text)
         if self.hovered(x0, y0, x1, y1):
             self.over = True
         self.x, self.y = x0 + 16, y0 + 40
 
-    def button(mut self, id: Int, label: StringSlice, w: Float32, h: Float32 = 30, on: Bool = False, color: UInt32 = ACCENT) -> Bool:
-        """Pill button at the cursor (also a toggle: on = filled with `color`, the accent by default); returns clicked."""
+    def button(mut self, id: Int, label: StringSlice, w: Float32, h: Float32 = 30, on: Bool = False, color: UInt32 = 0) -> Bool:
+        """Pill button at the cursor (also a toggle: on = filled with `color`, the theme accent by default); returns clicked."""
         var x0, y0 = self.x, self.y
         var hc = self.clickable(id, x0, y0, x0 + w, y0 + h)
-        self.rect(x0, y0, x0 + w, y0 + h, h * 0.5, color if on else (HOVER if hc[0] else SURFACE))
+        var t = self.theme.copy()
+        self.rect(x0, y0, x0 + w, y0 + h, h * 0.5 * t.round, (color if color != 0 else t.accent) if on else (t.hover if hc[0] else t.surface))
         var tw = self.tw(label, 0)
-        _ = self.text(x0 + (w - tw) * 0.5, y0 + (h - self.asc(0)) * 0.5 - 1, label, 0, TEXT)
+        _ = self.text(x0 + (w - tw) * 0.5, y0 + (h - self.asc(0)) * 0.5 - 1, label, 0, self.theme.text)
         self.x += w + 8
         return hc[1]
 
@@ -154,14 +163,16 @@ struct Ui(Movable):
                 var cut = String(unsafe_from_utf8=buf.as_bytes()[:keep])
                 buf = cut^
                 changed = True
-        self.rect(x0 - 1.5, y0 - 1.5, x0 + w + 1.5, y0 + 31.5, 8, ACCENT if on else SURFACE)
-        self.rect(x0, y0, x0 + w, y0 + 30, 7, HOVER if hc[0] and not on else SURFACE)
+        var t = self.theme.copy()
+        var fr = t.radius * 0.6
+        self.rect(x0 - 1.5, y0 - 1.5, x0 + w + 1.5, y0 + 31.5, fr + 1, t.accent if on else (t.border_c if t.border > 0 else t.surface))
+        self.rect(x0, y0, x0 + w, y0 + 30, fr, t.hover if hc[0] and not on else t.surface)
         var s = 0
         while s < buf.byte_length() and self.tw(StringSlice(unsafe_from_utf8=buf.as_bytes()[s:]), 0) > w - 24:
             s += 1
-        var pen = self.text(x0 + 10, y0 + (30 - self.asc(0)) * 0.5 - 1, StringSlice(unsafe_from_utf8=buf.as_bytes()[s:]), 0, TEXT)
+        var pen = self.text(x0 + 10, y0 + (30 - self.asc(0)) * 0.5 - 1, StringSlice(unsafe_from_utf8=buf.as_bytes()[s:]), 0, t.text)
         if on:
-            self.rect(pen + 1, y0 + 7, pen + 2.5, y0 + 23, 0.5, TEXT)
+            self.rect(pen + 1, y0 + 7, pen + 2.5, y0 + 23, 0.5, t.text)
         self.y += 38
         return changed
 
@@ -169,32 +180,33 @@ struct Ui(Movable):
         """Round icon button at the cursor: 0 play, 1 pause, 2 step, 3 stop; returns clicked."""
         var x0, y0 = self.x, self.y
         var hc = self.clickable(id, x0, y0, x0 + 36, y0 + 36)
-        self.rect(x0, y0, x0 + 36, y0 + 36, 18, ACCENT if on else (HOVER if hc[0] else SURFACE))
+        var t = self.theme.copy()
+        self.rect(x0, y0, x0 + 36, y0 + 36, 18 * t.round, t.accent if on else (t.hover if hc[0] else t.surface))
         var cx, cy = x0 + 18, y0 + 18
         if kind == 0 or kind == 2:
-            self.tri(cx - 5, cy - 7, cx - 5, cy + 7, cx + 7, cy, TEXT)
+            self.tri(cx - 5, cy - 7, cx - 5, cy + 7, cx + 7, cy, t.text)
         if kind == 1:
-            self.rect(cx - 6, cy - 7, cx - 2, cy + 7, 1.5, TEXT)
-            self.rect(cx + 2, cy - 7, cx + 6, cy + 7, 1.5, TEXT)
+            self.rect(cx - 6, cy - 7, cx - 2, cy + 7, 1.5, t.text)
+            self.rect(cx + 2, cy - 7, cx + 6, cy + 7, 1.5, t.text)
         if kind == 2:
-            self.rect(cx + 7, cy - 7, cx + 10, cy + 7, 1, TEXT)
+            self.rect(cx + 7, cy - 7, cx + 10, cy + 7, 1, t.text)
         if kind == 3:
-            self.rect(cx - 6, cy - 6, cx + 6, cy + 6, 2, TEXT)
+            self.rect(cx - 6, cy - 6, cx + 6, cy + 6, 2, t.text)
         self.x += 44
         return hc[1]
 
     def bar(mut self, label: StringSlice, v: Float32, c: UInt32, w: Float32):
         """Label and a rounded progress bar of v in 0..1 at the cursor; next row."""
-        _ = self.text(self.x, self.y, label, 0, MUTED)
+        _ = self.text(self.x, self.y, label, 0, self.theme.muted)
         var x0 = self.x + 64
-        self.rect(x0, self.y + 4, x0 + w - 64, self.y + 12, 4, SURFACE)
+        self.rect(x0, self.y + 4, x0 + w - 64, self.y + 12, 4, self.theme.surface)
         self.rect(x0, self.y + 4, x0 + (w - 64) * min(max(v, 0), 1), self.y + 12, 4, c)
         self.y += 20
 
     def spark(mut self, vals: List[Float32], lo: Float32, hi: Float32, w: Float32, h: Float32, c: UInt32):
         """Line chart of vals (oldest first) in a w x h box at the cursor, with the last point marked; next row."""
         var x0, y0 = self.x, self.y
-        self.rect(x0, y0, x0 + w, y0 + h, 6, SURFACE)
+        self.rect(x0, y0, x0 + w, y0 + h, 6, self.theme.surface)
         var n = len(vals)
         for k in range(1, n):
             var ya = y0 + h - 3 - (h - 6) * (vals[k - 1] - lo) / max(hi - lo, 1e-6)
