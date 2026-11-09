@@ -13,7 +13,7 @@ from imkit.draw import CLIP, GLYPH, LINE, flt
 from imkit.font import Font
 from imkit.layer import image_fits
 from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, FULL, bits, clipped, glass, rgba, rrect, srect
-from imkit.theme import ACCENT, Theme, flat, neon, glass as tglass
+from imkit.theme import ACCENT, TEXT, Theme, flat, neon, glass as tglass
 from imkit.ui import SC_BACKSPACE, Ui, cp_ceil, cp_floor
 from imkit.window import Input
 
@@ -539,6 +539,14 @@ def main() raises:
     rs.rrect(20, 20, 40, 40, 4, ACCENT)
     rs.finish()
     check(flt(rs.d.cmd[3]) == 75 and flt(rs.d.cmd[8 + 1]) == 30 and flt(rs.d.cmd[8 + 5]) == 6, "DPI 1.5: clip and rrect are scaled to layer pixels", fails)
+    # a font size index the Font does not have: nothing is drawn or measured, the draw is counted, no out-of-range read
+    var zs = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    zs.begin(idle)
+    var zx = zs.text(10, 10, "abc", 3, TEXT)
+    var zy = zs.text(10, 10, "abc", -1, TEXT)
+    var zw = zs.tw("abc", 3) + zs.tw("abc", -1) + zs.asc(3) + zs.asc(-1)
+    var zok = zs.text(10, 10, "abc", 2, TEXT) > 10
+    check(zx == 10 and zy == 10 and zw == 0 and zs.d.n == 3 and zs.d.dropped == 2 and zok, "text, width and ascent at a size index past the font's sizes: nothing, counted", fails)
     # glass and icon_img take logical coordinates too: positions and given sizes scale, an asset's own size stays in layer pixels
     rs.begin(idle)
     rs.assets.names.append("a")

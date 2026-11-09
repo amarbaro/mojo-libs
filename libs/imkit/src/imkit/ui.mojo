@@ -102,7 +102,7 @@ struct Ui(Movable):
 
     def asc(self, size: Int) -> Float32:
         """Logical ascent of font size index `size`."""
-        return Float32(self.d.font.ascent[size]) / self.scale
+        return Float32(self.d.font.ascent[size] if self.d.font.has_size(size) else 0) / self.scale
 
     def rect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, blur: Float32 = 0):
         var k = self.scale

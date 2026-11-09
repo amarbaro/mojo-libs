@@ -378,7 +378,10 @@ struct Draw(Movable):
         self.push(IMAGE, x0, y0, x1, y1, Float32(off), UInt32(alpha) << 24, UInt32(sw) | UInt32(sh) << 16)
 
     def text(mut self, x: Float32, y: Float32, s: StringSlice, size: Int, c: UInt32) -> Float32:
-        """Draw UTF-8 s with its top at y; returns the x after it."""
+        """Draw UTF-8 s with its top at y; returns the x after it. A size index the font does not have draws nothing (counted)."""
+        if not self.font.has_size(size):
+            self.dropped += 1
+            return x
         var pen = x
         var base = y + Float32(self.font.ascent[size])
         var b = s.as_bytes()

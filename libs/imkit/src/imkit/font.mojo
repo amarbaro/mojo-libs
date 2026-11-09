@@ -150,7 +150,13 @@ struct Font(Movable):
         self.ext[key] = g
         return g
 
+    def has_size(self, s: Int) -> Bool:
+        """Is s a size slot of this font (an index into the sizes it was built with)?"""
+        return 0 <= s < len(self.sizes)
+
     def width(mut self, text: StringSlice, s: Int) -> Int:
+        if not self.has_size(s):
+            return 0
         var w, i = 0, 0
         var b = text.as_bytes()
         while i < len(b):
