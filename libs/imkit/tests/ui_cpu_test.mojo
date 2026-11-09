@@ -7,11 +7,13 @@ the focused flag; image_fits (set_image's check) and an image rect larger than t
 
 usage: IMKIT_FONT=/path/font.ttf mojo run -I src tests/ui_cpu_test.mojo  (default font: Roboto Medium)
 """
+from std.math import pow
 from std.os import getenv
+from imkit.draw import CLIP, GLYPH, LINE, flt
 from imkit.font import Font
 from imkit.layer import image_fits
 from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, FULL, bits, clipped, glass, rgba, rrect, srect
-from imkit.theme import ACCENT
+from imkit.theme import ACCENT, Theme, flat, neon, glass as tglass
 from imkit.ui import SC_BACKSPACE, Ui
 from imkit.window import Input
 
@@ -47,6 +49,123 @@ def typed(mut ui: Ui, mut a: String, mut b: String, inp: Input) -> Bool:
     _ = ui.field(2, b, 4)
     ui.finish()
     return c
+
+
+def colors(mut ui: Ui, t: Theme) -> List[UInt32]:
+    """The color word of every command of one frame with every widget, drawn under theme t."""
+    ui.set_theme(t)
+    ui.begin(Input(300, 300, 0, 0, 0, 0, 0, 0, SIMD[DType.uint64, 2](0), False))
+    ui.panel(24, 20, 520, 300, "Gallery")
+    _ = ui.button(1, "On", 60, 30, True)
+    _ = ui.button(2, "Off", 60)
+    _ = ui.icon(3, 0, True)
+    _ = ui.icon(4, 2)
+    var s = String("hi")
+    _ = ui.field(5, s, 8)
+    ui.bar("energy", 0.5, ui.theme.good, 200)
+    ui.spark([Float32(0), Float32(1), Float32(0.5)], 0, 1, 120, 40, ui.theme.bad)
+    ui.finish()
+    var out = List[UInt32]()
+    for k in range(ui.d.n):
+        out.append(ui.d.cmd[k * 8 + 6])
+    return out^
+
+
+def lum(c: UInt32) -> Float32:
+    """WCAG relative luminance of the rgb of a packed color."""
+    var out = Float32(0)
+    var w = [Float32(0.2126), Float32(0.7152), Float32(0.0722)]
+    for k in range(3):
+        var v = Float32((c >> UInt32(8 * k)) & 255) / 255
+        out += w[k] * (v / 12.92 if v <= 0.03928 else pow((v + 0.055) / 1.055, Float32(2.4)))
+    return out
+
+
+def contrast(a: UInt32, b: UInt32) -> Float32:
+    var la, lb = lum(a), lum(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+def legible(t: Theme) -> Bool:
+    """Text pairs reach WCAG 4.5, bars and the accent against the surface reach 3 (the panel's alpha is ignored)."""
+    var text = min(contrast(t.text, t.panel), contrast(t.text, t.surface), contrast(t.text, t.hover), contrast(t.muted, t.panel), contrast(t.on_accent, t.accent))
+    var graphic = min(contrast(t.good, t.surface), contrast(t.warn, t.surface), contrast(t.bad, t.surface), contrast(t.accent, t.surface))
+    return text >= 4.5 and graphic >= 3
+
+
+def only_roles(c: List[UInt32], t: Theme) -> Bool:
+    var roles = [t.panel, t.surface, t.hover, t.accent, t.good, t.warn, t.bad, t.text, t.on_accent, t.muted, t.shadow, t.border_c]
+    for v in c:
+        var ok = False
+        for r in roles:
+            ok = ok or v == r
+        if not ok:
+            return False
+    return True
+
+
+def sframe(mut ui: Ui, inp: Input, v: Float32) -> Float32:
+    ui.begin(inp)
+    ui.x, ui.y = 20, 20  # track x 20 to 220, y 20 to 44
+    var nv = ui.slider(1, v, 0, 100, 200)
+    ui.finish()
+    return nv
+
+
+def mframe(mut ui: Ui, inp: Input, mut picked: Int):
+    """A menu at (20, 20): header 20..120 x 20..50, popup items 58..86, 86..114, 114..142 (x 24..116)."""
+    ui.begin(inp)
+    ui.x, ui.y = 20, 20
+    if ui.menu_begin(1, "File", 100, 3):
+        for k in range(3):
+            if ui.menu_item("item"):
+                picked = k
+        ui.menu_end()
+    ui.finish()
+
+
+def lframe(mut ui: Ui, inp: Input, rows: Int, mut off: Float32, mut sel: Int) -> Tuple[Int, Int]:
+    """A scroll list of 200 x 100 at (20, 20), rows of 24; returns the rows drawn."""
+    ui.begin(inp)
+    ui.x, ui.y = 20, 20
+    var fe = ui.scroll_begin(1, 200, 100, rows, 24, off)
+    for k in range(fe[0], fe[1]):
+        if ui.scroll_row(10 + k, k, "row", sel == k):
+            sel = k
+    ui.scroll_end()
+    ui.finish()
+    return fe
+
+
+def tframe(mut ui: Ui, inp: Input, rows: Int, last_w: Float32, mut off: Float32, mut sel: Int):
+    """A table at (20, 20): header 20..46, rows of 24 from y 48, three columns (100, 80, last_w) of 100 high."""
+    ui.begin(inp)
+    ui.x, ui.y = 20, 20
+    var heads: List[String] = ["Name", "Value", "A very long header text"]
+    var widths: List[Float32] = [100, 80, last_w]
+    var fe = ui.table_begin(1, heads, widths, 100, rows, 24, off)
+    for k in range(fe[0], fe[1]):
+        if ui.table_row(10 + k, k, sel == k):
+            sel = k
+        ui.table_cell(k, 0, "row " + String(k))
+        ui.table_cell(k, 1, "v")
+        ui.table_cell(k, 2, "a very long cell text that cannot fit")
+    ui.table_end()
+    ui.finish()
+
+
+def count(ui: Ui, kind: Int) -> Int:
+    var n = 0
+    for k in range(ui.d.n):
+        n += 1 if Int(ui.d.cmd[k * 8]) == kind else 0
+    return n
+
+
+def pframe(mut ui: Ui, vals: List[Float32]):
+    ui.begin(Input(400, 400, 0, 0, 0, 0, 0, 0, SIMD[DType.uint64, 2](0), False))
+    ui.x, ui.y = 20, 20  # plot 300 x 120: area x 56..312, y 28..120
+    ui.plot(vals, 0, 10, 300, 120, ui.theme.accent)
+    ui.finish()
 
 
 def main() raises:
@@ -192,6 +311,184 @@ def main() raises:
     rui.glass(100, 100, 200, 160, 10, tint)
     rui.finish()
     check(rui.d.n == 1 and rui.d.cmd[0] == 8 and in_bin(rui, 7 * TX + 7, 0) and not in_bin(rui, 0, 0), "glass: one GLASS command in the tiles it covers", fails)
+    # animation: begin(input, dt) steps the id's spring, an id no widget asked for last frame is evicted
+    var aui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    aui.begin(idle, 0.02)
+    var first = aui.animate(9, 0)
+    aui.begin(idle, 0.02)
+    var stepped = aui.animate(9, 1)
+    aui.begin(idle, 0.02)  # id 9 was asked for last frame: kept; nobody asks now
+    aui.begin(idle, 0.02)
+    check(first == 0 and abs(stepped - 0.104) < 1e-5 and len(aui.anim.id) == 0, "Ui.begin(input, dt): spring steps by dt, an unasked id is evicted", fails)
+    # DPI: logical coordinates. The icon at logical (10, 10)-(46, 46) draws at that times the scale, and a click needs the
+    # mouse (layer pixels) inside it: its center clicks, 0.2 past the right edge and 0.2 before the left edge do not, 0.2 inside the left edge does.
+    for sc in [Float32(1), Float32(1.5), Float32(2)]:
+        var dui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+        dui.set_scale(sc)
+        var hits = List[Bool]()
+        for px in [Float32(28), Float32(46.2), Float32(9.8), Float32(10.2)]:  # logical x of the mouse; y is 28
+            var mx = px * sc
+            var ps = Input(mx, 28 * sc, 0, 0, 0, 1, 1, 0, keys, False)
+            var rl = Input(mx, 28 * sc, 0, 0, 0, 0, 0, 1, keys, False)
+            for inp in [ps.copy(), rl.copy()]:
+                dui.begin(inp)
+                dui.x, dui.y = 10, 10
+                var clicked = dui.icon(1, 0)
+                dui.finish()
+                if inp.released & 1:
+                    hits.append(clicked)
+        var x0 = flt(dui.d.cmd[1])
+        var x1 = flt(dui.d.cmd[3])
+        check(hits[0] and not hits[1] and not hits[2] and hits[3] and abs(x0 - 10 * sc) < 1e-4 and abs(x1 - 46 * sc) < 1e-4
+              and abs(dui.w() * sc - Float32(UW)) < 1e-3, "DPI " + String(sc) + ": hit test in logical units, rect drawn at logical x scale", fails)
+    # theme: every widget colour is a role of the active preset; the presets differ; a runtime switch round-trips
+    var tui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var cg = colors(tui, tglass())
+    var cn = colors(tui, neon())
+    var cf = colors(tui, flat())
+    var cg2 = colors(tui, tglass())
+    check(only_roles(cg, tglass()) and only_roles(cn, neon()) and only_roles(cf, flat()), "theme: every drawn colour is a role of the active preset", fails)
+    check(cg != cn and cn != cf and cg != cf and len(cg) > 20, "theme: glass, neon and flat draw different frames", fails)
+    check(legible(tglass()) and legible(neon()) and legible(flat()), "theme: text pairs reach contrast 4.5, bars and accent reach 3, in all three presets", fails)
+    check(cg == cg2 and tui.d.dropped == 0, "theme: switching presets at runtime and back gives the first frame again", fails)
+    # slider: a press captures the mouse, the value follows x (also outside the track), the release position counts, then it holds
+    var sui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var mouse = SIMD[DType.uint64, 2](0)
+    var v = sframe(sui, Input(120, 32, 0, 0, 0, 0, 0, 0, mouse, False), 10)
+    check(v == 10, "slider: hover alone keeps the value", fails)
+    v = sframe(sui, Input(120, 32, 0, 0, 0, 1, 1, 0, mouse, False), v)
+    check(v == 50, "slider: press at the middle of the track sets 50", fails)
+    v = sframe(sui, Input(170, 32, 0, 0, 0, 1, 0, 0, mouse, False), v)
+    check(v == 75, "slider: held motion follows the mouse", fails)
+    v = sframe(sui, Input(500, 300, 0, 0, 0, 1, 0, 0, mouse, False), v)
+    check(v == 100, "slider: the drag is captured outside the track, clamped", fails)
+    v = sframe(sui, Input(70, 300, 0, 0, 0, 0, 0, 1, mouse, False), v)
+    check(v == 25, "slider: the release position counts", fails)
+    v = sframe(sui, Input(180, 32, 0, 0, 0, 0, 0, 0, mouse, False), v)
+    check(v == 25 and sui.active == 0, "slider: after release the value holds and the capture is gone", fails)
+    v = sframe(sui, Input(400, 32, 0, 0, 0, 1, 1, 0, mouse, False), v)
+    v = sframe(sui, Input(180, 32, 0, 0, 0, 1, 0, 0, mouse, False), v)
+    check(v == 25, "slider: a press outside never captures", fails)
+    _ = sframe(sui, Input(180, 32, 0, 0, 0, 0, 0, 1, mouse, False), v)
+    # menu: header click opens, item click picks once and closes, outside press / Escape / header click close, closed items are dead
+    var mui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var pick = -1
+    var esc = SIMD[DType.uint64, 2](0)
+    esc[0] = UInt64(1) << 41
+    mframe(mui, Input(60, 35, 0, 0, 0, 0, 0, 0, mouse, False), pick)
+    var closed_n = mui.d.n
+    mframe(mui, Input(60, 35, 0, 0, 0, 1, 1, 0, mouse, False), pick)
+    check(mui.menu == 0, "menu: a press on the header does not open it yet", fails)
+    mframe(mui, Input(60, 35, 0, 0, 0, 0, 0, 1, mouse, False), pick)
+    check(mui.menu == 1 and mui.d.n > closed_n and mui.over, "menu: the header click opens the popup (more commands, mouse over UI)", fails)
+    mframe(mui, Input(300, 300, 0, 0, 0, 0, 0, 0, mouse, False), pick)
+    check(mui.menu == 1 and pick == -1, "menu: stays open while idle", fails)
+    mframe(mui, Input(60, 100, 0, 0, 0, 1, 1, 0, mouse, False), pick)
+    mframe(mui, Input(60, 100, 0, 0, 0, 0, 0, 1, mouse, False), pick)
+    var picked_once = pick == 1 and mui.menu == 0
+    mframe(mui, Input(300, 300, 0, 0, 0, 0, 0, 0, mouse, False), pick)
+    check(picked_once and pick == 1 and mui.d.n == closed_n, "menu: item 1 picked once, the popup gone next frame", fails)
+    pick = -1
+    mframe(mui, Input(60, 100, 0, 0, 0, 1, 1, 0, mouse, False), pick)
+    mframe(mui, Input(60, 100, 0, 0, 0, 0, 0, 1, mouse, False), pick)
+    check(pick == -1, "menu: a closed menu has no clickable items", fails)
+    mui.menu = 1
+    mframe(mui, Input(400, 300, 0, 0, 0, 1, 1, 0, mouse, False), pick)
+    check(mui.menu == 0, "menu: a press outside closes it", fails)
+    mui.menu = 1
+    mframe(mui, Input(300, 300, 0, 0, 0, 0, 0, 0, esc, False), pick)
+    check(mui.menu == 0, "menu: Escape closes it", fails)
+    mui.menu = 1
+    mframe(mui, Input(60, 35, 0, 0, 0, 1, 1, 0, mouse, False), pick)
+    mframe(mui, Input(60, 35, 0, 0, 0, 0, 0, 1, mouse, False), pick)
+    check(mui.menu == 0, "menu: the header click toggles it closed", fails)
+    # scroll list: only rows touching the viewport, clipped to it; the wheel over it scrolls, clamped; commands do not grow with the row count
+    var lui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var off = Float32(0)
+    var sel = -1
+    var fe = lframe(lui, Input(60, 60, 0, 0, 0, 0, 0, 0, mouse, False), 50, off, sel)
+    check(fe[0] == 0 and fe[1] == 5, "scroll list: rows 0..4 touch the 100 high viewport (the last is clipped)", fails)
+    var n50 = lui.d.n
+    fe = lframe(lui, Input(60, 60, 0, 0, -2, 0, 0, 0, mouse, False), 50, off, sel)
+    check(off == 48 and fe[0] == 2 and fe[1] == 7, "scroll list: wheel -2 scrolls two rows, rows 2..6", fails)
+    fe = lframe(lui, Input(400, 300, 0, 0, -2, 0, 0, 0, mouse, False), 50, off, sel)
+    check(off == 48, "scroll list: the wheel outside the viewport does nothing", fails)
+    off = 10
+    fe = lframe(lui, Input(400, 300, 0, 0, 0, 0, 0, 0, mouse, False), 50, off, sel)
+    check(fe[0] == 0 and fe[1] == 5, "scroll list: a part-row offset still draws the touched rows", fails)
+    off = 0
+    _ = lframe(lui, Input(60, 130, 0, 0, 0, 1, 1, 0, mouse, False), 50, off, sel)  # row 4: y 116 to 140, the viewport ends at 120
+    _ = lframe(lui, Input(60, 130, 0, 0, 0, 0, 0, 1, mouse, False), 50, off, sel)
+    check(sel == -1, "scroll list: the clipped part of an edge row is not clickable", fails)
+    _ = lframe(lui, Input(60, 118, 0, 0, 0, 1, 1, 0, mouse, False), 50, off, sel)
+    _ = lframe(lui, Input(60, 118, 0, 0, 0, 0, 0, 1, mouse, False), 50, off, sel)
+    check(sel == 4, "scroll list: the visible part of an edge row is", fails)
+    off = 48
+    _ = lframe(lui, Input(60, 56, 0, 0, 0, 1, 1, 0, mouse, False), 50, off, sel)  # row 3: y 44 to 68
+    _ = lframe(lui, Input(60, 56, 0, 0, 0, 0, 0, 1, mouse, False), 50, off, sel)
+    check(sel == 3, "scroll list: a click on a scrolled row selects it", fails)
+    _ = lframe(lui, Input(400, 300, 0, 0, -1000, 0, 0, 0, mouse, False), 50, off, sel)
+    var top = off
+    _ = lframe(lui, Input(60, 60, 0, 0, -1000, 0, 0, 0, mouse, False), 50, off, sel)
+    var bottom = off
+    _ = lframe(lui, Input(60, 60, 0, 0, 1000, 0, 0, 0, mouse, False), 50, off, sel)
+    check(bottom == 50 * 24 - 100 and off == 0 and top == 48, "scroll list: offset clamps to 0 and rows * rh - h", fails)
+    off = 0
+    _ = lframe(lui, Input(400, 300, 0, 0, 0, 0, 0, 0, mouse, False), 50, off, sel)
+    var clips = 0
+    for k in range(lui.d.n):
+        clips += 1 if Int(lui.d.cmd[k * 8] & 255) == CLIP else 0
+    check(clips == 2 and Int(lui.d.cmd[(lui.d.n - 1) * 8] & 255) != CLIP, "scroll list: one clip and one unclip around the rows", fails)
+    _ = lframe(lui, Input(400, 300, 0, 0, 0, 0, 0, 0, mouse, False), 100000, off, sel)
+    check(lui.d.n == n50, "scroll list: 100000 rows emit the same commands as 50", fails)
+    # table: header, columns, cells cut to their column, whole visible rows only, row click, bounded commands
+    var xui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var toff = Float32(0)
+    var tsel = -1
+    tframe(xui, Input(400, 400, 0, 0, 0, 0, 0, 0, mouse, False), 1000, 60, toff, tsel)
+    var glyphs = count(xui, GLYPH)
+    var right = Float32(0)
+    for k in range(xui.d.n):
+        if Int(xui.d.cmd[k * 8]) == GLYPH:
+            right = max(right, flt(xui.d.cmd[k * 8 + 3]))
+    var tn = xui.d.n
+    check(right <= 20 + 240 and glyphs > 20, "table: every glyph ends inside the table width (cells and header cut to their column)", fails)
+    tframe(xui, Input(400, 400, 0, 0, 0, 0, 0, 0, mouse, False), 1000, 600, toff, tsel)
+    check(count(xui, GLYPH) > glyphs, "table: a wider column shows more of the long text", fails)
+    tframe(xui, Input(60, 84, 0, 0, 0, 1, 1, 0, mouse, False), 1000, 60, toff, tsel)  # row 1: y 72 to 96
+    tframe(xui, Input(60, 84, 0, 0, 0, 0, 0, 1, mouse, False), 1000, 60, toff, tsel)
+    check(tsel == 1, "table: a click on a row selects it", fails)
+    tframe(xui, Input(60, 30, 0, 0, 0, 1, 1, 0, mouse, False), 1000, 60, toff, tsel)  # header
+    tframe(xui, Input(60, 30, 0, 0, 0, 0, 0, 1, mouse, False), 1000, 60, toff, tsel)
+    check(tsel == 1, "table: a click on the header selects no row", fails)
+    tframe(xui, Input(400, 400, 0, 0, 0, 0, 0, 0, mouse, False), 1000000, 60, toff, tsel)
+    check(abs(xui.d.n - tn) <= 1, "table: a million rows emit the commands of a thousand (the selected row's background aside)", fails)
+    # plot: one point per pixel column, the spike survives, tiny inputs do not crash
+    var pui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var big = List[Float32](length=100000, fill=0)
+    big[54321] = 10
+    pframe(pui, big)
+    var ptop = Float32(1e9)
+    var nl = 0
+    for k in range(pui.d.n):
+        if Int(pui.d.cmd[k * 8]) == LINE:
+            nl += 1
+            if pui.d.cmd[k * 8 + 6] == pui.theme.accent:
+                ptop = min(ptop, min(flt(pui.d.cmd[k * 8 + 2]), flt(pui.d.cmd[k * 8 + 4])))
+    check(nl == 3 + 255 and ptop == 28, "plot: 100000 samples draw 255 segments (one point per pixel column) and the one spike reaches the top", fails)
+    pframe(pui, List[Float32](length=100, fill=5))
+    check(count(pui, LINE) == 3 + 99, "plot: fewer samples than pixels are drawn as they are", fails)
+    pframe(pui, List[Float32](length=1, fill=5))
+    pframe(pui, List[Float32]())
+    check(count(pui, LINE) == 3 and pui.d.dropped == 0, "plot: one sample and none draw only the axes", fails)
+    # DPI also reaches rrect and clip (lane A's methods): logical in, layer pixels out
+    var rs = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    rs.set_scale(1.5)
+    rs.begin(idle)
+    rs.clip(10, 10, 50, 50)
+    rs.rrect(20, 20, 40, 40, 4, ACCENT)
+    rs.finish()
+    check(flt(rs.d.cmd[3]) == 75 and flt(rs.d.cmd[8 + 1]) == 30 and flt(rs.d.cmd[8 + 5]) == 6, "DPI 1.5: clip and rrect are scaled to layer pixels", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")

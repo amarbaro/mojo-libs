@@ -10,3 +10,8 @@
 - A scripted source edit (python `str.replace`) matched nothing and the CLIP branch of compose never landed; the CPU tests passed and only the GPU pixel test caught it -> every scripted edit asserts its anchor is found (`assert old in s`), and a compose branch is not done until a GPU pixel test drew it.
 - `fb.g[i]` formed in the same expression as a call that appends to `fb.g` was rejected (`use of invalidated interior reference`) -> call the mutating method on its own line, then read.
 - `render_into(mut self, ..., buf = self.img)` was rejected as aliasing -> a method that only reads `self` takes `self` immutably.
+- A failed `mojo build` leaves the old binary, and the test then "passed" -> `rm` the binary before building, or read the build's exit status; never trust a PASS from a binary newer than its source.
+- Lane A's new `Ui` forwarders ignored `Ui.scale` -> every `Ui` method that takes a position, size, radius, border, glow or offset multiplies by `self.scale`; a new one gets a DPI 1.5 check in `ui_cpu_test`.
+- A pixel-equality check between two spots of a translucent glass panel failed because the backdrop gradient differs -> compare neighbours with a tolerance, or against a colour that cannot be the backdrop, and prove the check fails with the feature removed.
+- Neon's cyan accent under light text was 1.2 : 1 -> a fill colour needs its own text role (`on_accent`), and every preset's pairs are contrast-tested (WCAG 4.5 text, 3 graphics).
+

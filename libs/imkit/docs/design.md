@@ -77,3 +77,18 @@ was a fixed 602 KB), one compose launch, a layer copy back only when asked (3.7 
 ## Not yet
 
 Docking (drag, resize, snap, collapse, saved layout), plots with axes, slider and text input, menus, DPI scaling (lane B), Unicode shaping, atlas eviction.
+Docking (drag, resize, snap, collapse, saved layout), plots with axes, slider and text input, menus, DPI scaling.
+
+## Widgets, theme, animation, DPI (lane B)
+
+- **Theme.** `Ui.theme` holds colours by role (panel, surface, hover, accent, on_accent, good, warn, bad, text, muted,
+  shadow, border) and shape knobs (panel radius, control roundness, border width, shadow softness). Widgets read roles
+  only; a preset is one `set_theme`. Contrast of the text pairs (4.5) and bars (3) is a test.
+- **Animation.** `anim.mojo` keeps `id -> (value, velocity)` in one flat table; `animate(id, target)` steps a damped
+  spring with the frame's `dt` (clamped to 1/20 s). An id nobody asked for in the last frame is evicted.
+- **DPI.** Everything a caller touches is logical. `Ui` multiplies by `scale` where it forwards to `Draw`, and
+  `begin` converts the mouse back with `Input.logical`; the compose kernel never sees the scale. Text origins snap to
+  whole layer pixels.
+- **Interaction state.** `active` (the pressed widget) doubles as the drag capture for `slider`; one open `menu` id;
+  scroll offsets belong to the caller. Lists emit only the rows that touch the viewport, between one clip pair.
+

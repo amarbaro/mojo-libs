@@ -11,6 +11,8 @@
 | `win.text_input(on)`; `Input.text` | SDL text events on or off; the text typed this frame (UTF-8), joined by `Input.merge` |
 | `Font(path, sizes, fallback="")` | glyph atlas from a TrueType font: ASCII 32-126 at start, any other codepoint (UTF-8 text) rasterized on first use, from `fallback` when `path` lacks it, else drawn as `?`; AW x AH atlas (`-DUI_ATLAS_H=`, default 1024), skyline-packed, no eviction (`font.full` counts glyphs that did not fit); `Layer` uploads only the rows rasterized since the last frame |
 | `Ui(font)`; `begin(input)`, `finish()` | one frame; `finish` bins commands into 16 x 16 tiles |
+| `Font(path, sizes)` | glyph atlas from a TrueType font, ASCII 32-126 |
+| `Ui(font)`; `begin(input, dt=0)`, `finish()` | one frame, `dt` seconds long (0: springs hold still); `finish` bins commands into 16 x 16 tiles |
 | `style(c1, mode, gx, gy, sx, sy, sr, sc) -> id`; `srect(x0, y0, x1, y1, r, c, id, border, bcol)` | per-frame style (256 max): fill gradient from `c` to `c1` (mode 1 linear along (gx, gy), 2 radial) and a shadow moved by (sx, sy), blurred sr, color sc; srect draws a rounded rect with it |
 | `clip(x0, y0, x1, y1)`, `unclip()` | everything drawn between is cut to the rect (hard edge at pixel centers, one level: a new clip replaces the old; binned only into the rect's tiles) |
 | `glass(x0, y0, x1, y1, r, tint)`; `layer.set_scene(px)`, `layer.blur_from(buf)` | rounded rect showing the blurred scene under `tint`: the scene (UW * UH RGBA, opaque) is averaged to 1/4 size and blurred by two triangle passes (18 us on the 7900 XTX); with no scene set the glass shows its tint alone |
@@ -19,6 +21,15 @@
 | `field(id, buf, max) -> Bool`; `field_focused` | 360 x 30 text box at the cursor: ASCII 32-126 from `Input.text`, Backspace, at most `max` bytes; True if `buf` changed. A click or the first field drawn takes focus; `field_focused` is True when a drawn field has it (send keys to typing then) |
 | `Layer(ctx, ui)`; `render(ui)`, `pixels` | GPU compose on your DeviceContext; refuses an unfinished frame; `render` = `render_into` + `readback` |
 | `layer.render_into(ui, buf)`; `layer.readback()` | compose into a caller DeviceBuffer (UW * UH u32) with no 3.7 MB readback: 62 us per frame against 204 us for `render` (7900 XTX, 1280 x 720, 150 commands); `readback()` copies `layer.img` to `pixels` when a host consumer needs it |
+| `animate(id, target) -> Float32` | spring value for widget `id` moving to `target`; first sight starts at the target; ids not asked for last frame are evicted (`anim.mojo`) |
+| `set_scale(s)`; `w()`, `h()`, `tw(s, size)`, `asc(size)` | DPI: widgets, cursor, hit tests and input are logical, drawn at `s` layer pixels per unit; sizes of the layer and of text in logical units. Build the `Font` with sizes times `s` for sharp text. `Window.scale()`, `drawable()`, `Input.logical(s)` |
+| `set_theme(theme)`; `glass()`, `neon()`, `flat()` | every widget colour and shape (radius, roundness, border, shadow) comes from `ui.theme` roles (`theme.mojo`); `button(color=0)` is the theme accent |
+| `slider(id, v, lo, hi, w) -> Float32` | a press captures the mouse; value follows x until release, also outside the track |
+| `menu_begin(id, label, w, n) -> Bool`, `menu_item(label) -> Bool`, `menu_end()` | one popup level of `n` items; closes on outside press, Escape, header click or a pick; draw menus last (draw order is z order) |
+| `scroll_begin(id, w, h, rows, rh, off) -> (first, end)`, `scroll_row(id, k, label, on)`, `scroll_y(k)`, `scroll_end()` | virtualized list, caller-owned `off` moved by the wheel; rows are clipped to the viewport; cost does not grow with `rows` |
+| `table_begin(id, heads, widths, h, rows, rh, off) -> (first, end)`, `table_row`, `table_cell(k, c, text)`, `table_end()` | header plus scroll list; cells cut to their column; data stays yours |
+| `plot(vals, lo, hi, w, h, c)` | axes, gridlines, labels; more samples than pixel columns are decimated to one point per column keeping spikes |
+| `Layer(ctx, ui)`; `render(ui)`, `pixels` | GPU compose on your DeviceContext; refuses an unfinished frame |
 | `layer.set_image(px, w, h)` | copy a packed `r \| g << 8 \| b << 16 \| a << 24` picture to pool offset 0 (draw with `ui.image(.., 0, w, h)`); raises over `UI_IMG` pixels |
 | `Audio(rate)`; `put`, `queued` | SDL3 mono float32 playback stream |
 

@@ -21,11 +21,12 @@ mkdir -p .work
 M=.venv/bin/mojo
 $M precompile src/imkit -o .work/imkit.mojoc 2>.work/build.err || { echo "FAIL precompile: src/imkit"; grep error .work/build.err | head -20; exit 1; }
 # every test and the example build, including the three that need a GPU, a display or libSDL3 to run
-for t in tests/font_test tests/assets_test tests/ui_cpu_test tests/ui_test tests/window_test tests/audio_test examples/quickstart; do
+for t in tests/font_test tests/assets_test tests/anim_test tests/ui_cpu_test tests/ui_test tests/window_test tests/audio_test examples/quickstart examples/gallery; do
   $M build --target-accelerator amdgpu:gfx1100 -I src "$t.mojo" -o ".work/$(basename "$t")" 2>.work/build.err || { echo "FAIL build: $t.mojo"; grep error .work/build.err | head -20; exit 1; }
 done
 .work/font_test || { echo "FAIL font: tests/font_test.mojo"; exit 1; }
 .work/assets_test || { echo "FAIL assets: tests/assets_test.mojo"; exit 1; }
+.work/anim_test || { echo "FAIL anim: tests/anim_test.mojo"; exit 1; }
 .work/ui_cpu_test || { echo "FAIL ui: tests/ui_cpu_test.mojo"; exit 1; }
 .work/quickstart > /dev/null || { echo "FAIL example: examples/quickstart.mojo"; exit 1; }
 echo "PASS ci"
