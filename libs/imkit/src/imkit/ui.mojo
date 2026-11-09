@@ -2,6 +2,7 @@
 returns its interaction (clicked, toggled, dragged) and appends draw commands to a `Draw` (draw.mojo) that finish() bins
 for the compose kernel. Colors come from theme.mojo.
 """
+from .anim import Anim
 from .draw import Draw, TX, TY, NBIN, NCMD, CW, UW, UH, ISRC, AH, rgba
 from .font import Font
 from .theme import ACCENT, BAD, GOOD, HOVER, MUTED, PANEL, SHADOW, SURFACE, TEXT, WARN
@@ -12,6 +13,7 @@ comptime SC_BACKSPACE = 42  # SDL scancode
 
 struct Ui(Movable):
     var d: Draw
+    var anim: Anim  # widget id -> spring (anim.mojo)
     var inp: Input
     var active: Int  # widget held by the mouse (0: none)
     var over: Bool  # the mouse is over UI this frame: the scene does not take it
@@ -22,12 +24,15 @@ struct Ui(Movable):
 
     def __init__(out self, var font: Font):
         self.d = Draw(font^)
+        self.anim = Anim()
         self.active, self.over, self.x, self.y = 0, False, 0, 0
         self.focus, self.field_focused = 0, False
         self.inp = Input(0, 0, 0, 0, 0, 0, 0, 0, SIMD[DType.uint64, 2](0), False)
 
-    def begin(mut self, inp: Input):
+    def begin(mut self, inp: Input, dt: Float32 = 0):
+        """Start a frame: this frame's input and its length in seconds (0: springs hold still)."""
         self.inp = inp.copy()
+        self.anim.begin(dt)
         self.d.begin()
         self.over = False
         self.field_focused = False
@@ -63,6 +68,10 @@ struct Ui(Movable):
 
     def text(mut self, x: Float32, y: Float32, s: StringSlice, size: Int, c: UInt32) -> Float32:
         return self.d.text(x, y, s, size, c)
+
+    def animate(mut self, id: Int, target: Float32) -> Float32:
+        """The spring value for widget id moving toward target (first sight: the target itself)."""
+        return self.anim.get(id, target)
 
     def hovered(self, x0: Float32, y0: Float32, x1: Float32, y1: Float32) -> Bool:
         return x0 <= self.inp.x < x1 and y0 <= self.inp.y < y1

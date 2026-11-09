@@ -181,6 +181,15 @@ def main() raises:
     rui.finish()
     check(rui.d.n == 4 and in_bin(rui, 2 * TX + 2, 1) and in_bin(rui, 4 * TX + 4, 1) and not in_bin(rui, 0, 1) and not in_bin(rui, 5 * TX + 5, 1) and not in_bin(rui, 2 * TX + 5, 1), "clip: a clipped command is binned only into the clip's tiles", fails)
     check(in_bin(rui, 0, 3) and in_bin(rui, 5 * TX + 5, 3) and in_bin(rui, 2 * TX + 2, 2) and in_bin(rui, 0, 0) == False, "clip: after unclip the next command covers all its tiles; the end marker sits in the clip's tiles", fails)
+    # animation: begin(input, dt) steps the id's spring, an id no widget asked for last frame is evicted
+    var aui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    aui.begin(idle, 0.02)
+    var first = aui.animate(9, 0)
+    aui.begin(idle, 0.02)
+    var stepped = aui.animate(9, 1)
+    aui.begin(idle, 0.02)  # id 9 was asked for last frame: kept; nobody asks now
+    aui.begin(idle, 0.02)
+    check(first == 0 and abs(stepped - 0.104) < 1e-5 and len(aui.anim.id) == 0, "Ui.begin(input, dt): spring steps by dt, an unasked id is evicted", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")
