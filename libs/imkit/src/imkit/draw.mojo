@@ -89,7 +89,7 @@ def rsd(px: Float32, py: Float32, x0: Float32, y0: Float32, x1: Float32, y1: Flo
     return sqrt(max(qx, 0) * max(qx, 0) + max(qy, 0) * max(qy, 0)) + min(max(qx, qy), 0) - rr
 
 
-@always_inline
+@no_inline
 def rrect(acc: SIMD[DType.float32, 4], px: Float32, py: Float32, x0: Float32, y0: Float32, x1: Float32, y1: Float32,
           rr: Float32, c: UInt32, k: UInt32, bc: UInt32) -> SIMD[DType.float32, 4]:
     """One RRECT pixel: glow (outside, bc), fill with a vertical gradient, border ring (bc), by the signed distance d."""
@@ -113,7 +113,7 @@ def rrect(acc: SIMD[DType.float32, 4], px: Float32, py: Float32, x0: Float32, y0
     return a
 
 
-@always_inline
+@no_inline
 def srect(acc: SIMD[DType.float32, 4], px: Float32, py: Float32, x0: Float32, y0: Float32, x1: Float32, y1: Float32,
           rr: Float32, c: UInt32, k: UInt32, bc: UInt32, st: SIMD[DType.uint32, 8]) -> SIMD[DType.float32, 4]:
     """One SRECT pixel with style words st = mode, c1, gx, gy, shadow dx, dy, radius, rgba: shadow (soft SDF of the rect moved
@@ -172,7 +172,7 @@ def blur_axis[dx: Int, dy: Int](dst: TQ, src: TQ):
     dst[i] = pack(s / w)
 
 
-@always_inline
+@no_inline
 def backdrop(blr: TQ, px: Float32, py: Float32) -> SIMD[DType.float32, 4]:
     """Bilinear sample of the blurred scene at layer pixel (px, py)."""
     var x = min(max(px / Float32(BQ) - 0.5, Float32(0)), Float32(QW - 1))
@@ -183,7 +183,7 @@ def backdrop(blr: TQ, px: Float32, py: Float32) -> SIMD[DType.float32, 4]:
     return (unpack(blr[iy * QW + ix]) * (1 - tx) + unpack(blr[iy * QW + jx]) * tx) * (1 - ty) + (unpack(blr[jy * QW + ix]) * (1 - tx) + unpack(blr[jy * QW + jx]) * tx) * ty
 
 
-@always_inline
+@no_inline
 def glass(acc: SIMD[DType.float32, 4], px: Float32, py: Float32, x0: Float32, y0: Float32, x1: Float32, y1: Float32,
           rr: Float32, c: UInt32, back: SIMD[DType.float32, 4]) -> SIMD[DType.float32, 4]:
     """One GLASS pixel: the backdrop sample `back` (its alpha 0 before any blur ran), then the tint c over it."""
