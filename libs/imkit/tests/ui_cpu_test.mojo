@@ -7,6 +7,7 @@ the focused flag; image_fits (set_image's check) and an image rect larger than t
 
 usage: IMKIT_FONT=/path/font.ttf mojo run -I src tests/ui_cpu_test.mojo  (default font: Roboto Medium)
 """
+from std.math import pow
 from std.os import getenv
 from imkit.draw import CLIP, GLYPH, LINE, flt
 from imkit.font import Font
@@ -68,6 +69,28 @@ def colors(mut ui: Ui, t: Theme) -> List[UInt32]:
     for k in range(ui.d.n):
         out.append(ui.d.cmd[k * 8 + 6])
     return out^
+
+
+def lum(c: UInt32) -> Float32:
+    """WCAG relative luminance of the rgb of a packed color."""
+    var out = Float32(0)
+    var w = [Float32(0.2126), Float32(0.7152), Float32(0.0722)]
+    for k in range(3):
+        var v = Float32((c >> UInt32(8 * k)) & 255) / 255
+        out += w[k] * (v / 12.92 if v <= 0.03928 else pow((v + 0.055) / 1.055, Float32(2.4)))
+    return out
+
+
+def contrast(a: UInt32, b: UInt32) -> Float32:
+    var la, lb = lum(a), lum(b)
+    return (max(la, lb) + 0.05) / (min(la, lb) + 0.05)
+
+
+def legible(t: Theme) -> Bool:
+    """Text pairs reach WCAG 4.5, bars and the accent against the surface reach 3 (the panel's alpha is ignored)."""
+    var text = min(contrast(t.text, t.panel), contrast(t.text, t.surface), contrast(t.text, t.hover), contrast(t.muted, t.panel), contrast(t.on_accent, t.accent))
+    var graphic = min(contrast(t.good, t.surface), contrast(t.warn, t.surface), contrast(t.bad, t.surface), contrast(t.accent, t.surface))
+    return text >= 4.5 and graphic >= 3
 
 
 def only_roles(c: List[UInt32], t: Theme) -> Bool:
@@ -315,6 +338,7 @@ def main() raises:
     var cg2 = colors(tui, glass())
     check(only_roles(cg, glass()) and only_roles(cn, neon()) and only_roles(cf, flat()), "theme: every drawn colour is a role of the active preset", fails)
     check(cg != cn and cn != cf and cg != cf and len(cg) > 20, "theme: glass, neon and flat draw different frames", fails)
+    check(legible(glass()) and legible(neon()) and legible(flat()), "theme: text pairs reach contrast 4.5, bars and accent reach 3, in all three presets", fails)
     check(cg == cg2 and tui.d.dropped == 0, "theme: switching presets at runtime and back gives the first frame again", fails)
     # slider: a press captures the mouse, the value follows x (also outside the track), the release position counts, then it holds
     var sui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
