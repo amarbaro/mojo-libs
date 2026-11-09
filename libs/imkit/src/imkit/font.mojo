@@ -43,12 +43,12 @@ def decode(b: Span[UInt8, _], i: Int) -> Tuple[Int, Int]:
 
 
 struct Font(Movable):
-    var atlas: List[UInt8]  # AW x AH, alpha
+    var atlas: List[UInt8]  # alpha, AW wide, the rows in use rounded up to 64 (at most AH)
     var height: Int  # rows in use
     var sizes: List[Int]
     var ascent: List[Int]
     var g: List[Int16]  # [size][ASCII char][GM], then one GM per cached other codepoint (ext)
-    var ext: Dict[Int, Int]  # codepoint << 4 | size slot -> offset into g
+    var ext: Dict[Int, Int]  # codepoint << 8 | size slot -> offset into g (256 size slots at most)
     var sky: Skyline
     var dirty0: Int  # atlas rows rasterized since the last clean(): dirty0 <= row < dirty1
     var dirty1: Int
@@ -59,6 +59,8 @@ struct Font(Movable):
     var fb: Int  # fallback face (0: none)
 
     def __init__(out self, path: String, var sizes: List[Int], fallback: String = "") raises:
+        if len(sizes) > 256:
+            raise Error("Font: " + String(len(sizes)) + " sizes, 256 at most")
         self.ft = OwnedDLHandle("libfreetype.so.6")
         var lib = 0
         var face = 0
@@ -71,7 +73,7 @@ struct Font(Movable):
         if fallback.byte_length() > 0 and self.ft.get_function[Int32]("FT_New_Face")(lib, q.as_c_string_span().ptr(), Int(0), Pointer(to=fb)) != 0:
             raise Error("FreeType could not open " + fallback)
         self.lib, self.face, self.fb = lib, face, fb
-        self.atlas = List[UInt8](length=AW * AH, fill=0)
+        self.atlas = List[UInt8]()  # grows by 64 rows as glyphs land (load); the card's copy is AW x AH
         self.height = 0
         self.ascent = List[Int]()
         self.g = List[Int16]()
@@ -111,6 +113,9 @@ struct Font(Movable):
                 self.full += 1
                 return -1
             x, y = at[0], at[1]
+            var rows = min((y + h + 1 + 63) // 64 * 64, AH)  # rows to hold this glyph and its gutter, in steps of 64
+            if len(self.atlas) < rows * AW:
+                self.atlas.resize(rows * AW, 0)
             for r in range(h):
                 for k in range(w):
                     self.atlas[(y + r) * AW + x + k] = peek[UInt8](buf + r * pitch + k)[]
@@ -130,7 +135,7 @@ struct Font(Movable):
         fallback) and cached; a glyph neither font has, or one that does not fit the atlas, is '?'."""
         if FIRST <= c < FIRST + NCH:
             return ((s * NCH) + (c - FIRST)) * GM
-        var key = c << 4 | s
+        var key = c << 8 | s
         var hit = self.ext.get(key)
         if hit:
             return hit.value()
@@ -147,7 +152,13 @@ struct Font(Movable):
         self.ext[key] = g
         return g
 
+    def has_size(self, s: Int) -> Bool:
+        """Is s a size slot of this font (an index into the sizes it was built with)?"""
+        return 0 <= s < len(self.sizes)
+
     def width(mut self, text: StringSlice, s: Int) -> Int:
+        if not self.has_size(s):
+            return 0
         var w, i = 0, 0
         var b = text.as_bytes()
         while i < len(b):

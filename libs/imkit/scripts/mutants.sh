@@ -10,6 +10,7 @@ mutant() {  # name file sed-expression test [gpu]: a GPU test runs under GPU_WRA
   rm -rf "$d"; mkdir -p "$d"; cp -r src "$d/src"
   sed -i "$expr" "$d/src/imkit/$file"
   cmp -s "src/imkit/$file" "$d/src/imkit/$file" && { echo "FAIL $name: sed changed nothing"; exit 1; }
+  [ -z "${MUTANT_DRY:-}" ] || { echo "OK $name"; return 0; }  # MUTANT_DRY=1: only check that every sed still matches (seconds)
   # shellcheck disable=SC2086
   if ${5:+${GPU_WRAP:-}} timeout 300 $M run -I "$d/src" "tests/$test.mojo" > "$d/out.txt" 2>&1; then
     echo "FAIL $name: $test still passes"; exit 1
@@ -38,7 +39,7 @@ mutant "blur taps unweighted" draw.mojo 's/var wk = Float32(BR + 1 - abs(k))/var
 mutant "utf8 three-byte lead" font.mojo 's/(3 if c >> 4 == 14/(3 if c >> 4 == 15/' font_test
 mutant "utf8 continuation unchecked" font.mojo 's/if Int(b\[i + k\]) >> 6 != 2:/if False:/' font_test
 mutant "skyline ignores taller steps" atlas.mojo 's/y = max(y, self.ys\[j\])/y = self.ys[i]/' font_test
-mutant "glyph cache ignores the size" font.mojo 's/var key = c << 4 | s/var key = c << 4/' font_test
+mutant "glyph cache ignores the size" font.mojo 's/var key = c << 8 | s/var key = c << 8/' font_test
 mutant "no fallback font" font.mojo 's/(self.fb if self.fb != 0 and/(0 if self.fb != 0 and/' font_test
 mutant "dirty rows not tracked" font.mojo 's/self.dirty0, self.dirty1 = min(self.dirty0, y), max(self.dirty1, y + h)/self.dirty0 = self.dirty0/' font_test
 mutant "dirty rows not uploaded" layer.mojo 's/if ui.d.font.dirty1 > ui.d.font.dirty0:/if ui.d.font.dirty1 > 99999:/' ui_test gpu
@@ -47,5 +48,13 @@ mutant "png average rounds up" assets.mojo 's/pred = (a + b) \/\/ 2/pred = (a + 
 mutant "png rgb alpha" assets.mojo 's/cur\[x \* bpp + 3\] if bpp == 4 else 255/cur[x * bpp + 3] if bpp == 4 else 0/' assets_test
 mutant "png row up filter ignored" assets.mojo 's/                pred = b$/                pred = 0/' assets_test
 mutant "atlas offsets restart" assets.mojo 's/String(len(bin) \/\/ 4) + " " + String(pic\[0\])/"0 " + String(pic[0])/' assets_test
-mutant "icon_img ignores its size" ui.mojo 's/(Float32(m\[3 \* i + 1\]) if w <= 0 else w)/w/' assets_test
+mutant "icon_img ignores its size" ui.mojo 's/(Float32(m\[3 \* i + 1\]) if w <= 0 else w \* k)/w * k/' assets_test
+mutant "png IHDR length unchecked" assets.mojo 's/if n != 13:/if n != 13 and n == 99:/' assets_test
+mutant "png size cap off" assets.mojo 's/if w > MAXPX or h > MAXPX or w \* h > MAXPX:/if w < 0:/' assets_test
+mutant "clip replace keeps the old clip" draw.mojo 's/^        self.unclip()$/        pass/' ui_cpu_test
+mutant "push keeps NaN commands" draw.mojo 's/ or isnan(v).reduce_or() or r != r//' ui_cpu_test
+mutant "push does not clamp infinities" draw.mojo 's/^        v = min(max(v, -BIG), BIG)$/        pass/' ui_cpu_test
+mutant "set_image may overwrite the atlas" layer.mojo 's/if off < self.asset_px:/if off < 0:/' ui_test gpu
+mutant "set_assets may overwrite a picture" layer.mojo 's/if len(a.px) > self.img_lo:/if len(a.px) > ISRC + 1:/' ui_test gpu
+[ -z "${MUTANT_DRY:-}" ] || { echo "PASS mutants (dry: every sed matches)"; exit 0; }
 echo "PASS mutants"

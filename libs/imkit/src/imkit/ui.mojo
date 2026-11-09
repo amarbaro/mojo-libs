@@ -13,11 +13,31 @@ comptime SC_BACKSPACE = 42  # SDL scancode
 
 
 def num(x: Float32) -> String:
-    """x for an axis label: whole above 100, else one decimal."""
+    """x for an axis label: whole above 100, else one decimal; NaN and magnitudes from 1e9 on (Int cannot hold them) as text."""
+    if x != x:
+        return "nan"
+    if abs(x) >= 1e9:
+        return ">1e9" if x > 0 else "<-1e9"
     if abs(x) >= 100:
         return String(Int(round(x)))
     var t = Int(round(abs(x) * 10))
     return ("-" if x < 0 and t > 0 else "") + String(t // 10) + "." + String(t % 10)
+
+
+def cp_floor(b: Span[UInt8, _], i: Int) -> Int:
+    """The start of the UTF-8 code point that byte i is in (i itself if it starts one or is past the end)."""
+    var k = i
+    while 0 < k < len(b) and b[k] & 0xC0 == 0x80:
+        k -= 1
+    return k
+
+
+def cp_ceil(b: Span[UInt8, _], i: Int) -> Int:
+    """The first code point start at or after byte i (len(b) if none)."""
+    var k = i
+    while k < len(b) and b[k] & 0xC0 == 0x80:
+        k += 1
+    return k
 
 
 struct Ui(Movable):
@@ -86,7 +106,7 @@ struct Ui(Movable):
 
     def asc(self, size: Int) -> Float32:
         """Logical ascent of font size index `size`."""
-        return Float32(self.d.font.ascent[size]) / self.scale
+        return Float32(self.d.font.ascent[size] if self.d.font.has_size(size) else 0) / self.scale
 
     def rect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, blur: Float32 = 0):
         var k = self.scale
@@ -114,17 +134,19 @@ struct Ui(Movable):
         self.d.unclip()
 
     def glass(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, tint: UInt32):
-        self.d.glass(x0, y0, x1, y1, r, tint)
+        var k = self.scale
+        self.d.glass(x0 * k, y0 * k, x1 * k, y1 * k, r * k, tint)
 
     def icon_img(mut self, name: StringSlice, x: Float32, y: Float32, w: Float32 = 0, h: Float32 = 0, alpha: Int = 255) -> Bool:
-        """Draw the asset `name` with its top left at (x, y), at its own size unless w and h are given; False (and the
-        drop is counted) if there is no such asset."""
+        """Draw the asset `name` with its top left at (x, y) and, if given, size w x h (logical), else its own size in layer
+        pixels; False (and the drop is counted) if there is no such asset."""
         var i = self.assets.find(name)
         if i < 0:
             self.d.dropped += 1
             return False
         ref m = self.assets.meta
-        self.d.image(x, y, x + (Float32(m[3 * i + 1]) if w <= 0 else w), y + (Float32(m[3 * i + 2]) if h <= 0 else h), m[3 * i], m[3 * i + 1], m[3 * i + 2], alpha)
+        var k = self.scale
+        self.d.image(x * k, y * k, x * k + (Float32(m[3 * i + 1]) if w <= 0 else w * k), y * k + (Float32(m[3 * i + 2]) if h <= 0 else h * k), m[3 * i], m[3 * i + 1], m[3 * i + 2], alpha)
         return True
 
     def line(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, w: Float32, c: UInt32):
@@ -184,7 +206,7 @@ struct Ui(Movable):
     def field(mut self, id: Int, mut buf: String, max: Int) -> Bool:
         """Single-line text box (360 x 30) at the cursor; next row. A click gives it focus, and so does the first field drawn
         while none has it. The focused field appends the ASCII 32-126 of this frame's Input.text up to `max` bytes, then
-        removes the last byte on Backspace; a long text shows its tail. Returns True if buf changed."""
+        removes the last code point on Backspace; a long text shows its tail. Returns True if buf changed."""
         var x0, y0, w = self.x, self.y, Float32(360)
         var hc = self.clickable(id, x0, y0, x0 + w, y0 + 30)
         if hc[1] or self.focus == 0:
@@ -201,7 +223,7 @@ struct Ui(Movable):
                 buf = buf + String(unsafe_from_utf8=Span(add))
                 changed = True
             if self.inp.key(SC_BACKSPACE) and buf.byte_length() > 0:
-                var keep = buf.byte_length() - 1
+                var keep = cp_floor(buf.as_bytes(), buf.byte_length() - 1)
                 var cut = String(unsafe_from_utf8=buf.as_bytes()[:keep])
                 buf = cut^
                 changed = True
@@ -211,7 +233,7 @@ struct Ui(Movable):
         self.rect(x0, y0, x0 + w, y0 + 30, fr, t.hover if hc[0] and not on else t.surface)
         var s = 0
         while s < buf.byte_length() and self.tw(StringSlice(unsafe_from_utf8=buf.as_bytes()[s:]), 0) > w - 24:
-            s += 1
+            s = cp_ceil(buf.as_bytes(), s + 1)
         var pen = self.text(x0 + 10, y0 + (30 - self.asc(0)) * 0.5 - 1, StringSlice(unsafe_from_utf8=buf.as_bytes()[s:]), 0, t.text)
         if on:
             self.rect(pen + 1, y0 + 7, pen + 2.5, y0 + 23, 0.5, t.text)
@@ -317,15 +339,17 @@ struct Ui(Movable):
         that touch the viewport (the rest are never emitted; the edge rows are clipped); row k sits at scroll_y(k). Call
         scroll_end after the rows."""
         var x0, y0 = self.x, self.y
+        var rl = rh if rh > 0 and rh < Float32(1e6) else Float32(1)  # a height of 0, below 0, NaN or inf reads as 1: Int() of off // 0 is undefined
+        var nr = max(rows, 0)
         var hot = self.hovered(x0, y0, x0 + w, y0 + h)
-        off = min(max(off - (self.inp.wheel * rh if hot else 0), Float32(0)), max(Float32(rows) * rh - h, Float32(0)))
+        off = min(max(off - (self.inp.wheel * rl if hot else 0), Float32(0)), max(Float32(nr) * rl - h, Float32(0)))
         self.vp = SIMD[DType.float32, 4](x0, y0, w, h)
-        self.rh, self.soff, self.srows = rh, off, rows
+        self.rh, self.soff, self.srows = rl, off, nr
         self.rect(x0, y0, x0 + w, y0 + h, self.theme.radius * 0.5, self.theme.surface)
         if hot:
             self.over = True
         self.clip(x0, y0, x0 + w, y0 + h)
-        return (Int(off // rh), min(Int(-((-(off + h)) // rh)), rows))  # floor(off / rh), ceil((off + h) / rh)
+        return (Int(off // rl), min(Int(-((-(off + h)) // rl)), nr))  # floor(off / rh), ceil((off + h) / rh)
 
     def scroll_y(self, k: Int) -> Float32:
         """Top of row k of the current scroll list, in logical units."""
@@ -349,9 +373,7 @@ struct Ui(Movable):
         """Bytes of s (cut on a code point) whose width at size 0 is at most w."""
         var n = s.byte_length()
         while n > 0 and self.tw(StringSlice(unsafe_from_utf8=s.as_bytes()[:n]), 0) > w:
-            n -= 1
-            while 0 < n < s.byte_length() and s.as_bytes()[n] & 0xC0 == 0x80:
-                n -= 1
+            n = cp_floor(s.as_bytes(), n - 1)
         return n
 
     def table_begin(mut self, id: Int, heads: List[String], widths: List[Float32], h: Float32, rows: Int, rh: Float32, mut off: Float32) -> Tuple[Int, Int]:

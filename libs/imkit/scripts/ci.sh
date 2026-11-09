@@ -29,4 +29,5 @@ done
 .work/anim_test || { echo "FAIL anim: tests/anim_test.mojo"; exit 1; }
 .work/ui_cpu_test || { echo "FAIL ui: tests/ui_cpu_test.mojo"; exit 1; }
 .work/quickstart > /dev/null || { echo "FAIL example: examples/quickstart.mojo"; exit 1; }
+MUTANT_DRY=1 scripts/mutants.sh > .work/mutants_dry.txt 2>&1 || { echo "FAIL mutants: a sed no longer matches its line, see .work/mutants_dry.txt"; grep FAIL .work/mutants_dry.txt | head -3; exit 1; }
 echo "PASS ci"

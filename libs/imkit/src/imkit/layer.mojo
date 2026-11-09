@@ -15,9 +15,9 @@ from .draw import CW, ISRC, NBIN, NCMD, NSTY, QH, QW, TX, TY, UH, UW, blur_axis,
 from .ui import Ui
 
 
-def image_fits(n: Int, w: Int, h: Int) -> Bool:
-    """Can a w x h picture held in n pixels go to the ISRC pool (Ui.image takes sides up to 0xFFFF)?"""
-    return 0 < w <= 0xFFFF and 0 < h <= 0xFFFF and w * h <= ISRC and n >= w * h
+def image_fits(n: Int, w: Int, h: Int, off: Int = 0) -> Bool:
+    """Can a w x h picture held in n pixels go to the ISRC pool at pixel offset `off` (Ui.image takes sides up to 0xFFFF)?"""
+    return 0 < w <= 0xFFFF and 0 < h <= 0xFFFF and w * h <= ISRC and n >= w * h and 0 <= off <= ISRC - w * h
 
 
 struct Layer(Movable):
@@ -28,10 +28,12 @@ struct Layer(Movable):
     var off: DeviceBuffer[DType.uint32]
     var atlas: DeviceBuffer[DType.uint8]
     var sty: DeviceBuffer[DType.uint32]
-    var scene: DeviceBuffer[DType.uint32]  # the app's frame for set_scene
-    var q: List[DeviceBuffer[DType.uint32]]  # the 1 / BQ scene: down, after the horizontal pass, blurred (q[2], sampled by GLASS)
+    var scene: DeviceBuffer[DType.uint32]  # the app's frame for set_scene (empty until the first set_scene)
+    var q: List[DeviceBuffer[DType.uint32]]  # the 1 / BQ scene: down, after the horizontal pass blurred (q[2], sampled by GLASS)
     var src: DeviceBuffer[DType.uint32]  # image sources (Ui.image): the app writes its RGBA here
-    var pixels: HostBuffer[DType.uint32]  # the composed layer, valid after render() returns
+    var pixels: HostBuffer[DType.uint32]  # the composed layer, valid after render() or readback() returns (empty before the first)
+    var asset_px: Int  # pool pixels [0, asset_px) hold set_assets' atlas
+    var img_lo: Int  # the lowest pool offset a set_image picture was put at (ISRC: none)
 
     def __init__(out self, ctx: DeviceContext[], mut ui: Ui) raises:
         comptime assert UW > 0 and UH > 0 and UW % 16 == 0 and UH % 16 == 0, "UI_W, UI_H: positive multiples of 16"
@@ -44,23 +46,29 @@ struct Layer(Movable):
         self.off = ctx.enqueue_create_buffer[DType.uint32](TX * TY + 1)
         self.atlas = ctx.enqueue_create_buffer[DType.uint8](AW * AH)
         self.sty = ctx.enqueue_create_buffer[DType.uint32](NSTY * 8)
-        self.scene = ctx.enqueue_create_buffer[DType.uint32](UW * UH)
+        self.scene = ctx.enqueue_create_buffer[DType.uint32](0)  # allocated by the first set_scene
         self.q = [ctx.enqueue_create_buffer[DType.uint32](QW * QH) for _ in range(3)]
         self.q[2].enqueue_fill(0)  # no backdrop until a scene is blurred
         self.src = ctx.enqueue_create_buffer[DType.uint32](ISRC)
-        self.pixels = ctx.enqueue_create_host_buffer[DType.uint32](UW * UH)
+        self.pixels = ctx.enqueue_create_host_buffer[DType.uint32](0)  # pinned UW * UH, allocated by the first readback()
         self.src.enqueue_fill(0)
+        self.atlas.enqueue_fill(0)  # the host copy holds only the rows in use; the rest of the card's atlas stays zero
+        self.asset_px, self.img_lo = 0, ISRC
         ctx.enqueue_copy(self.atlas.create_sub_buffer[DType.uint8](0, len(ui.d.font.atlas)), ui.d.font.atlas.unsafe_ptr())
         ctx.synchronize()  # the atlas is the caller's
         ui.d.font.clean()
 
-    def set_image(mut self, px: Span[UInt32, _], w: Int, h: Int) raises:
-        """Copy a w x h picture (packed r | g << 8 | b << 16 | a << 24, row-major) to pool offset 0 and wait; draw it with
-        Ui.image(.., 0, w, h). ISRC is the pool size in pixels, set by -DUI_IMG=; a picture over it raises, the pool is untouched."""
-        if not image_fits(len(px), w, h):
-            raise Error("Layer.set_image: " + String(w) + " x " + String(h) + " (" + String(len(px)) + " px given) does not fit ISRC " + String(ISRC))
-        self.ctx.enqueue_copy(self.src.create_sub_buffer[DType.uint32](0, w * h), px.unsafe_ptr())
+    def set_image(mut self, px: Span[UInt32, _], w: Int, h: Int, off: Int = 0) raises:
+        """Copy a w x h picture (packed r | g << 8 | b << 16 | a << 24, row-major) to pool pixel offset `off` and wait; draw it
+        with Ui.image(.., off, w, h). ISRC is the pool size in pixels, set by -DUI_IMG=; a picture past it raises, so does one
+        that would overwrite the atlas set_assets loaded (use off >= len(assets.px)); the pool is untouched."""
+        if not image_fits(len(px), w, h, off):
+            raise Error("Layer.set_image: " + String(w) + " x " + String(h) + " at " + String(off) + " (" + String(len(px)) + " px given) does not fit ISRC " + String(ISRC))
+        if off < self.asset_px:
+            raise Error("Layer.set_image: offset " + String(off) + " is inside the asset atlas (" + String(self.asset_px) + " px from set_assets); pass off >= " + String(self.asset_px))
+        self.ctx.enqueue_copy(self.src.create_sub_buffer[DType.uint32](off, w * h), px.unsafe_ptr())
         self.ctx.synchronize()  # px is the caller's
+        self.img_lo = min(self.img_lo, off)
 
     def blur_from(self, scene: DeviceBuffer[DType.uint32]) raises:
         """Blur a UW * UH device scene (opaque RGBA) for GLASS commands: 1 / 4 size, two triangle passes (enqueue only)."""
@@ -69,22 +77,27 @@ struct Layer(Movable):
         self.ctx.enqueue_function(self.ctx.compile_function[blur_axis[1, 0]](), TileTensor(self.q[1], row_major[QW * QH]()), TileTensor(self.q[0], row_major[QW * QH]()), grid_dim=n, block_dim=256)
         self.ctx.enqueue_function(self.ctx.compile_function[blur_axis[0, 1]](), TileTensor(self.q[2], row_major[QW * QH]()), TileTensor(self.q[1], row_major[QW * QH]()), grid_dim=n, block_dim=256)
 
-    def set_scene(self, px: Span[UInt32, _]) raises:
+    def set_scene(mut self, px: Span[UInt32, _]) raises:
         """Copy the app's UW * UH frame (host RGBA) and blur it for GLASS; waits (px is the caller's)."""
         if len(px) != UW * UH:
             raise Error("Layer.set_scene: " + String(len(px)) + " px given, the layer is " + String(UW * UH))
+        if len(self.scene) == 0:
+            self.scene = self.ctx.enqueue_create_buffer[DType.uint32](UW * UH)
         self.ctx.enqueue_copy(self.scene, px.unsafe_ptr())
         self.blur_from(self.scene)
         self.ctx.synchronize()
 
-    def set_assets(self, a: Assets) raises:
-        """Copy an asset atlas's pixels to the image pool from offset 0 and wait; Ui.icon_img draws them. set_image also
-        writes at 0, so use one of the two, or draw the other's pictures from offsets past len(a.px)."""
+    def set_assets(mut self, a: Assets) raises:
+        """Copy an asset atlas's pixels to the image pool from offset 0 and wait; Ui.icon_img draws them. A picture set_image
+        put below len(a.px) would be overwritten, so that raises: give set_image an offset past the atlas."""
         if len(a.px) > ISRC:
             raise Error("Layer.set_assets: " + String(len(a.px)) + " px over ISRC " + String(ISRC) + " (-DUI_IMG=)")
+        if len(a.px) > self.img_lo:
+            raise Error("Layer.set_assets: " + String(len(a.px)) + " px would overwrite a set_image picture at offset " + String(self.img_lo) + "; load the atlas first or put the picture past it")
         if len(a.px) > 0:
             self.ctx.enqueue_copy(self.src.create_sub_buffer[DType.uint32](0, len(a.px)), a.px.unsafe_ptr())
         self.ctx.synchronize()
+        self.asset_px = len(a.px)
 
     def launch(self) raises:
         """Compose what was last uploaded into the layer's own buffer (enqueue only)."""
@@ -119,12 +132,14 @@ struct Layer(Movable):
         self.launch_to(buf)
         self.ctx.synchronize()  # ui's lists are read by the copies above
 
-    def readback(self) raises:
-        """Copy the layer's own buffer to `pixels` and wait (after render_into(ui, layer.img))."""
+    def readback(mut self) raises:
+        """Copy the layer's own buffer to `pixels` (pinned, allocated on the first call) and wait (after render_into(ui, layer.img))."""
+        if len(self.pixels) == 0:
+            self.pixels = self.ctx.enqueue_create_host_buffer[DType.uint32](UW * UH)
         self.ctx.enqueue_copy(self.pixels, self.img)
         self.ctx.synchronize()
 
-    def render(self, mut ui: Ui) raises:
+    def render(mut self, mut ui: Ui) raises:
         """Upload the finished frame, compose, copy to pixels; returns when pixels is ready (render_into + readback)."""
         self.render_into(ui, self.img)
         self.readback()

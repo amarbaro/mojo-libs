@@ -7,6 +7,9 @@ not checked); anything else raises. Build with tools/pack_atlas.mojo; tools/png_
 from std.ffi import OwnedDLHandle
 
 
+comptime MAXPX = 1 << 26  # the largest picture png_decode allocates for: 64 M pixels, 256 MB as RGBA
+
+
 def be32(d: Span[UInt8, _], i: Int) -> Int:
     return Int(d[i]) << 24 | Int(d[i + 1]) << 16 | Int(d[i + 2]) << 8 | Int(d[i + 3])
 
@@ -23,6 +26,8 @@ def png_decode(d: Span[UInt8, _]) raises -> Tuple[Int, Int, List[UInt32]]:
             raise Error("png: truncated chunk")
         var t = be32(d, pos + 4)
         if t == 0x49484452:  # IHDR
+            if n != 13:
+                raise Error("png: IHDR chunk is " + String(n) + " bytes, not 13")
             w, h, kind = be32(d, pos + 8), be32(d, pos + 12), Int(d[pos + 17])
             if d[pos + 16] != 8 or (kind != 2 and kind != 6) or d[pos + 18] != 0 or d[pos + 19] != 0 or d[pos + 20] != 0:
                 raise Error("png: only 8-bit RGB / RGBA, no interlace (depth " + String(d[pos + 16]) + ", color type " + String(kind) + ")")
@@ -34,6 +39,8 @@ def png_decode(d: Span[UInt8, _]) raises -> Tuple[Int, Int, List[UInt32]]:
     var bpp = 3 if kind == 2 else 4
     if w < 1 or h < 1 or len(z) == 0:
         raise Error("png: no image data")
+    if w > MAXPX or h > MAXPX or w * h > MAXPX:  # before any allocation that grows with w * h (a 32-bit side overflows w * h)
+        raise Error("png: " + String(w) + " x " + String(h) + " is too large (" + String(MAXPX) + " pixels at most)")
     var stride = w * bpp
     var raw = List[UInt8](length=(stride + 1) * h, fill=0)
     var rlen = UInt(len(raw))

@@ -13,8 +13,8 @@ from imkit.draw import CLIP, GLYPH, LINE, flt
 from imkit.font import Font
 from imkit.layer import image_fits
 from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, FULL, bits, clipped, glass, rgba, rrect, srect
-from imkit.theme import ACCENT, Theme, flat, neon, glass as tglass
-from imkit.ui import SC_BACKSPACE, Ui
+from imkit.theme import ACCENT, TEXT, Theme, flat, neon, glass as tglass
+from imkit.ui import SC_BACKSPACE, Ui, cp_ceil, cp_floor, num
 from imkit.window import Input
 
 
@@ -29,6 +29,18 @@ def in_bin(ui: Ui, tile: Int, k: Int) -> Bool:
         if Int(ui.d.bins[j]) == k:
             return True
     return False
+
+
+def clip_at(ui: Ui, tile: Int, k: Int) -> SIMD[DType.float32, 4]:
+    """The clip rect compose would hold in `tile` when it reaches command k (walks the tile's bin as the kernel does);
+    (7, 7, 7, 7) if k is not in the tile."""
+    var c = FULL
+    for j in range(Int(ui.d.off[tile]), Int(ui.d.off[tile + 1])):
+        var q = Int(ui.d.bins[j])
+        if q == k:
+            return c
+        c = ui.d.clip_after(q, c)
+    return SIMD[DType.float32, 4](7)
 
 
 def frame(mut ui: Ui, inp: Input) -> Bool:
@@ -228,6 +240,16 @@ def main() raises:
     var e = String()
     _ = typed(fui, e, b, Input(300, 300, 0, 0, 0, 0, 0, 0, back, False))
     check(e == "", "Backspace on an empty field does nothing", fails)
+    var u = String("a") + chr(233) + chr(0x4E2D)  # 1 + 2 + 3 bytes
+    for want in ["a" + chr(233), "a", ""]:
+        _ = typed(fui, u, b, Input(300, 300, 0, 0, 0, 0, 0, 0, back, False))
+        check(u == want, "Backspace removes the last code point, not a byte of it (" + String(want.byte_length()) + " bytes left)", fails)
+    # the tail of a long text starts on a code point (Roboto's U+FFFD is as wide as its letters, so the stray start cannot
+    # win the width scan here; the boundary helpers are checked directly)
+    var cs = String("a") + chr(233) + chr(0x4E2D) + chr(0x1F600)  # 1 + 2 + 3 + 4 bytes
+    var cu = cs.as_bytes()
+    check(cp_floor(cu, 2) == 1 and cp_floor(cu, 5) == 3 and cp_floor(cu, 8) == 6 and cp_floor(cu, 0) == 0 and cp_floor(cu, 1) == 1 and cp_floor(cu, 10) == 10, "cp_floor: back to the start of the code point", fails)
+    check(cp_ceil(cu, 2) == 3 and cp_ceil(cu, 4) == 6 and cp_ceil(cu, 7) == 10 and cp_ceil(cu, 1) == 1 and cp_ceil(cu, 10) == 10, "cp_ceil: forward to the next code point start", fails)
     _ = typed(fui, a, b, Input(50, 60, 0, 0, 0, 1, 1, 0, keys, False))  # press on field 2
     _ = typed(fui, a, b, Input(50, 60, 0, 0, 0, 0, 0, 1, keys, False))  # release: click
     check(fui.focus == 2, "a click gives the field focus", fails)
@@ -239,6 +261,7 @@ def main() raises:
     # set_image's fit rule: ISRC pixels at most, sides up to 0xFFFF, the slice must hold w * h
     check(image_fits(16, 4, 4) and image_fits(ISRC, 256, ISRC // 256) and not image_fits(ISRC + 256, 256, ISRC // 256 + 1) and not image_fits(15, 4, 4)
           and not image_fits(16, 0, 4) and not image_fits(16, 4, -4) and not image_fits(16, 0x10000, 1), "image_fits: fits, raises on over ISRC, short slice, bad sides", fails)
+    check(image_fits(16, 4, 4, 480) and image_fits(16, 4, 4, ISRC - 16) and not image_fits(16, 4, 4, ISRC - 15) and not image_fits(16, 4, 4, -1), "image_fits: an offset keeps the picture inside ISRC", fails)
     # a 4 x 4 image on a rect much larger than the layer (and one starting off-screen) is clipped to the tiles, not dropped
     fui.d.dropped = 0
     fui.begin(idle)
@@ -300,6 +323,33 @@ def main() raises:
     rui.finish()
     check(rui.d.n == 4 and in_bin(rui, 2 * TX + 2, 1) and in_bin(rui, 4 * TX + 4, 1) and not in_bin(rui, 0, 1) and not in_bin(rui, 5 * TX + 5, 1) and not in_bin(rui, 2 * TX + 5, 1), "clip: a clipped command is binned only into the clip's tiles", fails)
     check(in_bin(rui, 0, 3) and in_bin(rui, 5 * TX + 5, 3) and in_bin(rui, 2 * TX + 2, 2) and in_bin(rui, 0, 0) == False, "clip: after unclip the next command covers all its tiles; the end marker sits in the clip's tiles", fails)
+    # a clip replaced by another, then unclip: a tile only the first covered must not keep it for the commands after unclip
+    rui.begin(idle)
+    rui.clip(32, 32, 64, 64)
+    rui.clip(200, 200, 232, 232)
+    rui.unclip()
+    rui.rect(0, 0, 1000, 700, 0, fc)
+    var last = rui.d.n - 1
+    rui.finish()
+    check(clip_at(rui, 2 * TX + 2, last) == FULL and clip_at(rui, 13 * TX + 13, last) == FULL, "clip: replaced then unclip leaves no stale clip in the tiles of either rect", fails)
+    # non-finite and huge coordinates: NaN commands drop (counted), infinite and 1e30 ones clamp, so a full-layer rect covers every tile
+    var nan = Float32(0) / Float32(0)
+    var inf = Float32(1) / Float32(0)
+    var dropped0 = rui.d.dropped
+    rui.begin(idle)
+    rui.rect(nan, 10, 50, 50, 0, fc)
+    rui.rect(-inf, -inf, inf, inf, 0, fc)
+    rui.line(0, 0, nan, 5, 1, fc)
+    rui.rect(0, 0, 50, 50, 0, fc, nan)
+    rui.tri(1, 1, 5, 5, 1, nan, fc)
+    rui.rect(10, 10, 1e30, 50, 0, fc)
+    rui.rect(1e30, 1e30, 2e30, 2e30, 0, fc)
+    rui.finish()
+    check(rui.d.dropped - dropped0 == 4 and rui.d.n == 3 and in_bin(rui, 0, 0) and in_bin(rui, 5 * TX + 5, 0) and in_bin(rui, (TY - 1) * TX + TX - 1, 0), "NaN commands drop, a -inf..inf rect is binned into every tile", fails)
+    var off_layer = False
+    for t in range(TX * TY):
+        off_layer = off_layer or in_bin(rui, t, 2)
+    check(in_bin(rui, TX - 1, 1) and in_bin(rui, 3 * TX + TX - 1, 1) and not in_bin(rui, 4 * TX, 1) and not off_layer, "1e30 edge reaches the last column only in its rows; a rect wholly past the layer is in no tile", fails)
     # GLASS: the tint over the backdrop sample inside, the sample under a clear tint, nothing outside
     var bkd = SIMD[DType.float32, 4](10, 20, 30, 255)
     var tint = rgba(100, 0, 0, 128)
@@ -489,6 +539,40 @@ def main() raises:
     rs.rrect(20, 20, 40, 40, 4, ACCENT)
     rs.finish()
     check(flt(rs.d.cmd[3]) == 75 and flt(rs.d.cmd[8 + 1]) == 30 and flt(rs.d.cmd[8 + 5]) == 6, "DPI 1.5: clip and rrect are scaled to layer pixels", fails)
+    # a row height of 0, negative or NaN: the visible rows stay inside 0..rows (the height reads as 1), and axis labels print
+    # something readable for NaN and for values Int cannot hold
+    var qn = Float32(0) / Float32(0)
+    var qi = Float32(1) / Float32(0)
+    var sx = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var rows_ok = True
+    for rh in [Float32(0), Float32(-4), qn, qi]:
+        sx.begin(idle)
+        var soff = Float32(0)
+        var vr = sx.scroll_begin(2, 100, 100, 10, rh, soff)
+        sx.scroll_end()
+        rows_ok = rows_ok and 0 <= vr[0] <= vr[1] <= 10 and soff == soff
+    check(rows_ok, "scroll_begin: a row height of 0, negative, NaN or inf keeps first <= end within the rows", fails)
+    check(num(qn) == "nan" and num(qi) == ">1e9" and num(-qi) == "<-1e9" and num(1e30) == ">1e9" and num(12.34) == "12.3" and num(-0.04) == "0.0" and num(250.4) == "250", "num: NaN and huge values print as text, ordinary ones as before", fails)
+    # a font size index the Font does not have: nothing is drawn or measured, the draw is counted, no out-of-range read
+    var zs = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    zs.begin(idle)
+    var zx = zs.text(10, 10, "abc", 3, TEXT)
+    var zy = zs.text(10, 10, "abc", -1, TEXT)
+    var zw = zs.tw("abc", 3) + zs.tw("abc", -1) + zs.asc(3) + zs.asc(-1)
+    var zok = zs.text(10, 10, "abc", 2, TEXT) > 10
+    check(zx == 10 and zy == 10 and zw == 0 and zs.d.n == 3 and zs.d.dropped == 2 and zok, "text, width and ascent at a size index past the font's sizes: nothing, counted", fails)
+    # glass and icon_img take logical coordinates too: positions and given sizes scale, an asset's own size stays in layer pixels
+    rs.begin(idle)
+    rs.assets.names.append("a")
+    rs.assets.meta.extend([0, 8, 6])
+    rs.assets.px = List[UInt32](length=48, fill=0)
+    rs.glass(10, 20, 50, 60, 4, ACCENT)
+    _ = rs.icon_img("a", 10, 20)
+    _ = rs.icon_img("a", 10, 20, 16, 12)
+    rs.finish()
+    check(rs.d.n == 3 and flt(rs.d.cmd[1]) == 15 and flt(rs.d.cmd[4]) == 90 and flt(rs.d.cmd[5]) == 6, "DPI 1.5: glass is scaled to layer pixels", fails)
+    check(flt(rs.d.cmd[8 + 1]) == 15 and flt(rs.d.cmd[8 + 2]) == 30 and flt(rs.d.cmd[8 + 3]) == 23 and flt(rs.d.cmd[8 + 4]) == 36, "DPI 1.5: icon_img origin scales, its own size stays in layer pixels", fails)
+    check(flt(rs.d.cmd[16 + 3]) == 15 + 24 and flt(rs.d.cmd[16 + 4]) == 30 + 18, "DPI 1.5: icon_img with a given size scales it", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")
