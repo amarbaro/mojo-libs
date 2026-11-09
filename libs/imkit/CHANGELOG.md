@@ -2,6 +2,7 @@
 
 Full notes in `docs/releases/`. Newest first. Format: the release-note template.
 
+- [v0.8.0](docs/releases/v0.8.0.md) (2026-11-09): three themes, UTF-8 text, slider/menu/scroll/table/plot, animation, DPI, backdrop blur, render_into (-70% frame)
 - [v0.7.3](docs/releases/v0.7.3.md) (2026-11-09): text field no longer aborts on long input (String capacity bug); bounded SDL text read
 - [v0.7.2](docs/releases/v0.7.2.md) (2026-11-08): typed text, `Ui.field`, `Layer.set_image`, button colour, pushed-text lifetime fix
 - [v0.6.4](docs/releases/v0.6.4.md) (2026-11-08): packaging: compiler pin to build minor
