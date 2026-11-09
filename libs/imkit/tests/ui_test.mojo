@@ -99,6 +99,19 @@ def main() raises:
     print("render_into another buffer: pixels differing from render", odiff, "short buffer raised", short_raised)
     if odiff or not short_raised or into_us >= render_us:
         fails += 1
+    # pixels (3.7 MB pinned) exist once something reads the layer back: a layer used with render_into alone never holds them
+    var lazy = Layer(ctx, ui)
+    var lazy0 = len(lazy.pixels)
+    lazy.render_into(ui, lazy.img)
+    var lazy1 = len(lazy.pixels)
+    lazy.readback()
+    var lazy_diff = 0
+    for i in range(UW * UH):
+        if lazy.pixels[i] != host[i]:
+            lazy_diff += 1
+    print("pixels: before render_into", lazy0, "after render_into", lazy1, "after readback", len(lazy.pixels), "differing from render", lazy_diff)
+    if lazy0 != 0 or lazy1 != 0 or len(lazy.pixels) != UW * UH or lazy_diff:
+        fails += 1
     # an empty frame clears, the scene again matches the reference at the same address
     ui.begin(idle)
     ui.finish()

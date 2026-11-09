@@ -73,6 +73,7 @@ def main() raises:
     print("per UI frame (build + finish, 1000 frames): malloc calls", (calls() - t0) // 1000, "bytes", (mbytes() - b0) // 1000, "time", ns, "ns")
     var ctx = DeviceContext()
     var layer = Layer(ctx, ui)
+    var pinned0 = len(layer.pixels) * 4
     layer.render(ui)
     print("Layer device and pinned bytes")
     row("img", len(layer.img) * 4)
@@ -84,7 +85,8 @@ def main() raises:
     row("scene", len(layer.scene) * 4)
     row("q x3", (len(layer.q[0]) + len(layer.q[1]) + len(layer.q[2])) * 4)
     row("src", len(layer.src) * 4)
-    row("pixels (pinned host)", len(layer.pixels) * 4)
+    row("pixels (pinned host) at Layer creation", pinned0)
+    row("pixels (pinned host) after the first render", len(layer.pixels) * 4)
     t0 = calls()
     b0 = mbytes()
     s0 = perf_counter_ns()

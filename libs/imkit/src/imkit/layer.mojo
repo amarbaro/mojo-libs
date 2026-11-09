@@ -31,7 +31,7 @@ struct Layer(Movable):
     var scene: DeviceBuffer[DType.uint32]  # the app's frame for set_scene (empty until the first set_scene)
     var q: List[DeviceBuffer[DType.uint32]]  # the 1 / BQ scene: down, after the horizontal pass blurred (q[2], sampled by GLASS)
     var src: DeviceBuffer[DType.uint32]  # image sources (Ui.image): the app writes its RGBA here
-    var pixels: HostBuffer[DType.uint32]  # the composed layer, valid after render() returns
+    var pixels: HostBuffer[DType.uint32]  # the composed layer, valid after render() or readback() returns (empty before the first)
     var asset_px: Int  # pool pixels [0, asset_px) hold set_assets' atlas
     var img_lo: Int  # the lowest pool offset a set_image picture was put at (ISRC: none)
 
@@ -50,7 +50,7 @@ struct Layer(Movable):
         self.q = [ctx.enqueue_create_buffer[DType.uint32](QW * QH) for _ in range(3)]
         self.q[2].enqueue_fill(0)  # no backdrop until a scene is blurred
         self.src = ctx.enqueue_create_buffer[DType.uint32](ISRC)
-        self.pixels = ctx.enqueue_create_host_buffer[DType.uint32](UW * UH)
+        self.pixels = ctx.enqueue_create_host_buffer[DType.uint32](0)  # pinned UW * UH, allocated by the first readback()
         self.src.enqueue_fill(0)
         self.atlas.enqueue_fill(0)  # the host copy holds only the rows in use; the rest of the card's atlas stays zero
         self.asset_px, self.img_lo = 0, ISRC
@@ -132,12 +132,14 @@ struct Layer(Movable):
         self.launch_to(buf)
         self.ctx.synchronize()  # ui's lists are read by the copies above
 
-    def readback(self) raises:
-        """Copy the layer's own buffer to `pixels` and wait (after render_into(ui, layer.img))."""
+    def readback(mut self) raises:
+        """Copy the layer's own buffer to `pixels` (pinned, allocated on the first call) and wait (after render_into(ui, layer.img))."""
+        if len(self.pixels) == 0:
+            self.pixels = self.ctx.enqueue_create_host_buffer[DType.uint32](UW * UH)
         self.ctx.enqueue_copy(self.pixels, self.img)
         self.ctx.synchronize()
 
-    def render(self, mut ui: Ui) raises:
+    def render(mut self, mut ui: Ui) raises:
         """Upload the finished frame, compose, copy to pixels; returns when pixels is ready (render_into + readback)."""
         self.render_into(ui, self.img)
         self.readback()
