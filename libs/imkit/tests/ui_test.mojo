@@ -73,7 +73,30 @@ def main() raises:
     for _ in range(200):
         layer.render(ui)
     var render_us = Float64(perf_counter_ns() - t0) / 200 / 1000
+    t0 = perf_counter_ns()
+    for _ in range(200):
+        layer.render_into(ui, layer.img)
+    var into_us = Float64(perf_counter_ns() - t0) / 200 / 1000
     print("compose", us, "us per launch,", "render", render_us, "us per frame including transfers, at", UW, "x", UH)
+    print("render_into (device buffer, no readback)", into_us, "us per frame; render (with readback)", render_us)
+    var other = ctx.enqueue_create_buffer[DType.uint32](UW * UH)
+    layer.render_into(ui, other)
+    layer.render(ui)
+    var ohost = ctx.enqueue_create_host_buffer[DType.uint32](UW * UH)
+    ctx.enqueue_copy(ohost, other)
+    ctx.synchronize()
+    var odiff = 0
+    for i in range(UW * UH):
+        if ohost[i] != layer.pixels[i]:
+            odiff += 1
+    var short_raised = False
+    try:
+        layer.render_into(ui, ctx.enqueue_create_buffer[DType.uint32](16))
+    except:
+        short_raised = True
+    print("render_into another buffer: pixels differing from render", odiff, "short buffer raised", short_raised)
+    if odiff or not short_raised or into_us >= render_us:
+        fails += 1
     # an empty frame clears, the scene again matches the reference at the same address
     ui.begin(idle)
     ui.finish()

@@ -1,6 +1,7 @@
 """GPU side of a Ui (docs/design.md, Layer): device buffers, the compose launch and the pinned RGBA the window presents,
-all allocated once on the app's own DeviceContext. render(ui) after ui.finish() uploads only what the frame used
-(n commands, its tile entries, the tile offsets), composes, and copies the layer to `pixels`.
+all allocated once on the app's own DeviceContext. render_into(ui, buf) after ui.finish() uploads only what the frame used
+(n commands, its tile entries, the tile offsets, styles) and composes into a device buffer; render(ui) is that into the layer's
+own buffer plus the 3.7 MB copy to `pixels` (readback()), which only a host consumer such as SDL's texture upload needs.
 
     var layer = Layer(ctx, ui)                 # once: buffers, the font atlas from ui
     layer.render(ui)                           # every frame, after ui.finish()
@@ -55,16 +56,23 @@ struct Layer(Movable):
         self.ctx.synchronize()  # px is the caller's
 
     def launch(self) raises:
-        """Compose what was last uploaded (enqueue only; render() does the whole frame)."""
-        self.ctx.enqueue_function(self.ctx.compile_function[compose](), TileTensor(self.img, row_major[UW * UH]()),
+        """Compose what was last uploaded into the layer's own buffer (enqueue only)."""
+        self.launch_to(self.img)
+
+    def launch_to(self, buf: DeviceBuffer[DType.uint32]) raises:
+        """Compose what was last uploaded into `buf` (UW * UH u32, enqueue only)."""
+        self.ctx.enqueue_function(self.ctx.compile_function[compose](), TileTensor(buf, row_major[UW * UH]()),
             TileTensor(self.cmd, row_major[NCMD * CW]()), TileTensor(self.bins, row_major[NBIN]()),
             TileTensor(self.off, row_major[TX * TY + 1]()), TileTensor(self.atlas, row_major[AW * AH]()),
             TileTensor(self.src, row_major[ISRC]()), TileTensor(self.sty, row_major[NSTY * 8]()), grid_dim=(UW * UH + 255) // 256, block_dim=256)
 
-    def render(mut self, ui: Ui) raises:
-        """Upload the finished frame, compose, copy to pixels; returns when pixels is ready."""
+    def render_into(self, ui: Ui, buf: DeviceBuffer[DType.uint32]) raises:
+        """Upload the finished frame and compose into the caller's device buffer: no layer readback, so a GPU consumer
+        (a texture, a blend kernel on the same DeviceContext) reads it in stream order. Returns when ui's lists are free to reuse."""
         if ui.d.binned != ui.d.n:
             raise Error("Layer.render: call Ui.finish() first")
+        if len(buf) != UW * UH:
+            raise Error("Layer.render_into: buf holds " + String(len(buf)) + " u32, the layer is " + String(UW * UH))
         if ui.d.n:
             self.ctx.enqueue_copy(self.cmd.create_sub_buffer[DType.uint32](0, ui.d.n * CW), ui.d.cmd.unsafe_ptr())
         var used = Int(ui.d.off[TX * TY])
@@ -73,6 +81,15 @@ struct Layer(Movable):
         self.ctx.enqueue_copy(self.off, ui.d.off.unsafe_ptr())
         if ui.d.ns > 1:
             self.ctx.enqueue_copy(self.sty.create_sub_buffer[DType.uint32](0, ui.d.ns * 8), ui.d.sty.unsafe_ptr())
-        self.launch()
-        self.ctx.enqueue_copy(self.pixels, self.img)
+        self.launch_to(buf)
         self.ctx.synchronize()  # ui's lists are read by the copies above
+
+    def readback(self) raises:
+        """Copy the layer's own buffer to `pixels` and wait (after render_into(ui, layer.img))."""
+        self.ctx.enqueue_copy(self.pixels, self.img)
+        self.ctx.synchronize()
+
+    def render(self, ui: Ui) raises:
+        """Upload the finished frame, compose, copy to pixels; returns when pixels is ready (render_into + readback)."""
+        self.render_into(ui, self.img)
+        self.readback()
