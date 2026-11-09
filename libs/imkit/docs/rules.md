@@ -47,3 +47,4 @@
 - A stale mutant sed failed a 25-minute gate three times (reworded line each time), and the written rule did not stop it -> it is a gate now: `scripts/ci.sh` runs `MUTANT_DRY=1 scripts/mutants.sh`, which checks in under a second that every sed still changes its file; a commit that rewords a mutated line fails in the first minute.
 
 - A merge commit written with `git merge -m` carried a model attribution line; the selftag gate checks `git commit` only. -> Merge messages follow the commit rules: no attribution, check `git log -1 --format=%B` after every merge.
+- v0.8.0 shipped with pyproject.toml still at 0.7.3; v0.8.1 had to fix it. -> Every release bumps `version` in pyproject.toml and the uv.lock entry in the same commit as the note.
