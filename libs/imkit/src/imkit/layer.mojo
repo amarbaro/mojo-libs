@@ -10,7 +10,7 @@ own buffer plus the 3.7 MB copy to `pixels` (readback()), which only a host cons
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from layout import TileTensor, row_major
 from .font import AW
-from .draw import AH, CW, ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, compose
+from .draw import AH, CW, ISRC, NBIN, NCMD, NSTY, QH, QW, TX, TY, UH, UW, blur_axis, blur_down, compose
 from .ui import Ui
 
 
@@ -27,6 +27,8 @@ struct Layer(Movable):
     var off: DeviceBuffer[DType.uint32]
     var atlas: DeviceBuffer[DType.uint8]
     var sty: DeviceBuffer[DType.uint32]
+    var scene: DeviceBuffer[DType.uint32]  # the app's frame for set_scene
+    var q: List[DeviceBuffer[DType.uint32]]  # the 1 / BQ scene: down, after the horizontal pass, blurred (q[2], sampled by GLASS)
     var src: DeviceBuffer[DType.uint32]  # image sources (Ui.image): the app writes its RGBA here
     var pixels: HostBuffer[DType.uint32]  # the composed layer, valid after render() returns
 
@@ -41,6 +43,9 @@ struct Layer(Movable):
         self.off = ctx.enqueue_create_buffer[DType.uint32](TX * TY + 1)
         self.atlas = ctx.enqueue_create_buffer[DType.uint8](AW * AH)
         self.sty = ctx.enqueue_create_buffer[DType.uint32](NSTY * 8)
+        self.scene = ctx.enqueue_create_buffer[DType.uint32](UW * UH)
+        self.q = [ctx.enqueue_create_buffer[DType.uint32](QW * QH) for _ in range(3)]
+        self.q[2].enqueue_fill(0)  # no backdrop until a scene is blurred
         self.src = ctx.enqueue_create_buffer[DType.uint32](ISRC)
         self.pixels = ctx.enqueue_create_host_buffer[DType.uint32](UW * UH)
         self.src.enqueue_fill(0)
@@ -55,6 +60,21 @@ struct Layer(Movable):
         self.ctx.enqueue_copy(self.src.create_sub_buffer[DType.uint32](0, w * h), px.unsafe_ptr())
         self.ctx.synchronize()  # px is the caller's
 
+    def blur_from(self, scene: DeviceBuffer[DType.uint32]) raises:
+        """Blur a UW * UH device scene (opaque RGBA) for GLASS commands: 1 / 4 size, two triangle passes (enqueue only)."""
+        var n = (QW * QH + 255) // 256
+        self.ctx.enqueue_function(self.ctx.compile_function[blur_down](), TileTensor(self.q[0], row_major[QW * QH]()), TileTensor(scene, row_major[UW * UH]()), grid_dim=n, block_dim=256)
+        self.ctx.enqueue_function(self.ctx.compile_function[blur_axis[1, 0]](), TileTensor(self.q[1], row_major[QW * QH]()), TileTensor(self.q[0], row_major[QW * QH]()), grid_dim=n, block_dim=256)
+        self.ctx.enqueue_function(self.ctx.compile_function[blur_axis[0, 1]](), TileTensor(self.q[2], row_major[QW * QH]()), TileTensor(self.q[1], row_major[QW * QH]()), grid_dim=n, block_dim=256)
+
+    def set_scene(self, px: Span[UInt32, _]) raises:
+        """Copy the app's UW * UH frame (host RGBA) and blur it for GLASS; waits (px is the caller's)."""
+        if len(px) != UW * UH:
+            raise Error("Layer.set_scene: " + String(len(px)) + " px given, the layer is " + String(UW * UH))
+        self.ctx.enqueue_copy(self.scene, px.unsafe_ptr())
+        self.blur_from(self.scene)
+        self.ctx.synchronize()
+
     def launch(self) raises:
         """Compose what was last uploaded into the layer's own buffer (enqueue only)."""
         self.launch_to(self.img)
@@ -64,7 +84,7 @@ struct Layer(Movable):
         self.ctx.enqueue_function(self.ctx.compile_function[compose](), TileTensor(buf, row_major[UW * UH]()),
             TileTensor(self.cmd, row_major[NCMD * CW]()), TileTensor(self.bins, row_major[NBIN]()),
             TileTensor(self.off, row_major[TX * TY + 1]()), TileTensor(self.atlas, row_major[AW * AH]()),
-            TileTensor(self.src, row_major[ISRC]()), TileTensor(self.sty, row_major[NSTY * 8]()), grid_dim=(UW * UH + 255) // 256, block_dim=256)
+            TileTensor(self.src, row_major[ISRC]()), TileTensor(self.sty, row_major[NSTY * 8]()), TileTensor(self.q[2], row_major[QW * QH]()), grid_dim=(UW * UH + 255) // 256, block_dim=256)
 
     def render_into(self, ui: Ui, buf: DeviceBuffer[DType.uint32]) raises:
         """Upload the finished frame and compose into the caller's device buffer: no layer readback, so a GPU consumer

@@ -10,7 +10,7 @@ usage: IMKIT_FONT=/path/font.ttf mojo run -I src tests/ui_cpu_test.mojo  (defaul
 from std.os import getenv
 from imkit.font import Font
 from imkit.layer import image_fits
-from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, FULL, bits, clipped, rgba, rrect, srect
+from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, FULL, bits, clipped, glass, rgba, rrect, srect
 from imkit.theme import ACCENT
 from imkit.ui import SC_BACKSPACE, Ui
 from imkit.window import Input
@@ -181,6 +181,17 @@ def main() raises:
     rui.finish()
     check(rui.d.n == 4 and in_bin(rui, 2 * TX + 2, 1) and in_bin(rui, 4 * TX + 4, 1) and not in_bin(rui, 0, 1) and not in_bin(rui, 5 * TX + 5, 1) and not in_bin(rui, 2 * TX + 5, 1), "clip: a clipped command is binned only into the clip's tiles", fails)
     check(in_bin(rui, 0, 3) and in_bin(rui, 5 * TX + 5, 3) and in_bin(rui, 2 * TX + 2, 2) and in_bin(rui, 0, 0) == False, "clip: after unclip the next command covers all its tiles; the end marker sits in the clip's tiles", fails)
+    # GLASS: the tint over the backdrop sample inside, the sample under a clear tint, nothing outside
+    var bkd = SIMD[DType.float32, 4](10, 20, 30, 255)
+    var tint = rgba(100, 0, 0, 128)
+    check(near4(glass(z, 150.5, 130.5, 100, 100, 200, 160, 10, tint, bkd), 0.2164, 0.03906, 0.0586, 1), "glass: tint over the backdrop", fails)
+    check(near4(glass(z, 150.5, 130.5, 100, 100, 200, 160, 10, rgba(0, 0, 0, 0), bkd), 10 / 255, 20 / 255, 30 / 255, 1), "glass: a clear tint shows the backdrop", fails)
+    check(near4(glass(z, 150.5, 130.5, 100, 100, 200, 160, 10, tint, SIMD[DType.float32, 4](0)), 0.19686, 0, 0, 0.50196), "glass: no backdrop yet leaves the tint alone", fails)
+    check(near4(glass(z, 50.5, 130.5, 100, 100, 200, 160, 10, tint, bkd), 0, 0, 0, 0), "glass: nothing outside the rect", fails)
+    rui.begin(idle)
+    rui.glass(100, 100, 200, 160, 10, tint)
+    rui.finish()
+    check(rui.d.n == 1 and rui.d.cmd[0] == 8 and in_bin(rui, 7 * TX + 7, 0) and not in_bin(rui, 0, 0), "glass: one GLASS command in the tiles it covers", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")

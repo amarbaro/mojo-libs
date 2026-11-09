@@ -52,6 +52,9 @@ struct Ui(Movable):
     def unclip(mut self):
         self.d.unclip()
 
+    def glass(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, tint: UInt32):
+        self.d.glass(x0, y0, x1, y1, r, tint)
+
     def line(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, w: Float32, c: UInt32):
         self.d.line(x0, y0, x1, y1, w, c)
 

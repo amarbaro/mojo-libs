@@ -12,7 +12,7 @@ from std.sys import argv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 from imkit.font import AW, Font
-from imkit.draw import AH, ISRC, NBIN, TX, TY, UH, UW, bits, rgba, rrect, srect
+from imkit.draw import AH, BR, ISRC, NBIN, QH, QW, TX, TY, UH, UW, bits, glass, rgba, rrect, srect
 from imkit.theme import ACCENT, BAD, GOOD, TEXT, WARN
 from imkit.ui import Ui
 from imkit.window import Input
@@ -221,6 +221,62 @@ def main() raises:
     print("clip: inside", layer.pixels[635 * UW + 120] >> 24, "left edge", layer.pixels[635 * UW + 99] >> 24, hex(layer.pixels[635 * UW + 100]), "right", layer.pixels[635 * UW + 140] >> 24, "below", layer.pixels[650 * UW + 120] >> 24, "later rect", layer.pixels[675 * UW + 320] >> 24)
     if layer.pixels[635 * UW + 120] >> 24 != 255 or layer.pixels[635 * UW + 99] != 0 or layer.pixels[635 * UW + 100] >> 24 != 255 or layer.pixels[635 * UW + 140] != 0 or layer.pixels[650 * UW + 120] != 0 or layer.pixels[675 * UW + 320] >> 24 != 255 or layer.pixels[615 * UW + 120] != 0:
         fails += 1
+    # GLASS: scene red | blue at x = 640; the backdrop is its 1 / 4 size, two triangle-weight passes, bilinear; GPU against a host blur
+    var scene = List[UInt32](length=UW * UH, fill=0)
+    for i in range(UW * UH):
+        scene[i] = rgba(255, 0, 0, 255) if i % UW < 640 else rgba(0, 0, 255, 255)
+    layer.set_scene(Span(scene))
+    ui.begin(idle)
+    ui.glass(560, 300, 720, 380, 12, rgba(0, 0, 0, 0))
+    ui.finish()
+    layer.render(ui)
+    var q0 = List[SIMD[DType.float32, 4]](length=QW * QH, fill=0)  # host reference, quantized to u8 between passes like the buffers
+    var q1 = q0.copy()
+    var q2 = q0.copy()
+    var rnd = lambda (v: SIMD[DType.float32, 4]) -> SIMD[DType.float32, 4]: SIMD[DType.float32, 4](Float32(Int(v[0] + 0.5)), Float32(Int(v[1] + 0.5)), Float32(Int(v[2] + 0.5)), 255)
+    for i in range(QW * QH):
+        var sum = SIMD[DType.float32, 4](0)
+        for k in range(16):
+            var p = scene[((i // QW) * 4 + k // 4) * UW + (i % QW) * 4 + k % 4]
+            sum += SIMD[DType.float32, 4](Float32(p & 255), Float32((p >> 8) & 255), Float32((p >> 16) & 255), 255)
+        q0[i] = rnd(sum / 16)
+    for pass_ in range(2):
+        for i in range(QW * QH):
+            var sum = SIMD[DType.float32, 4](0)
+            var wsum = Float32(0)
+            for k in range(-BR, BR + 1):
+                var wk = Float32(BR + 1 - abs(k))
+                var xx = min(max(i % QW + (k if pass_ == 0 else 0), 0), QW - 1)
+                var yy = min(max(i // QW + (k if pass_ == 1 else 0), 0), QH - 1)
+                sum += (q0[yy * QW + xx] if pass_ == 0 else q1[yy * QW + xx]) * wk
+                wsum += wk
+            if pass_ == 0:
+                q1[i] = rnd(sum / wsum)
+            else:
+                q2[i] = rnd(sum / wsum)
+    var gworst = 0
+    for y in range(290, 390):
+        for x in range(540, 740):
+            var fx = min(max((Float32(x) + 0.5) / 4 - 0.5, Float32(0)), Float32(QW - 1))
+            var fy = min(max((Float32(y) + 0.5) / 4 - 0.5, Float32(0)), Float32(QH - 1))
+            var ix, iy = Int(fx), Int(fy)
+            var tx, ty = fx - Float32(ix), fy - Float32(iy)
+            var bk = (q2[iy * QW + ix] * (1 - tx) + q2[iy * QW + min(ix + 1, QW - 1)] * tx) * (1 - ty) + (q2[min(iy + 1, QH - 1) * QW + ix] * (1 - tx) + q2[min(iy + 1, QH - 1) * QW + min(ix + 1, QW - 1)] * tx) * ty
+            var v = glass(SIMD[DType.float32, 4](0), Float32(x) + 0.5, Float32(y) + 0.5, 560, 300, 720, 380, 12, rgba(0, 0, 0, 0), bk)
+            var inv = 1 / max(v[3], Float32(1e-6))
+            var p = layer.pixels[y * UW + x]
+            gworst = max(gworst, abs(Int(p & 255) - Int(min(v[0] * inv, 1) * 255)), abs(Int((p >> 16) & 255) - Int(min(v[2] * inv, 1) * 255)), abs(Int(p >> 24) - Int(v[3] * 255)))
+    var gl = layer.pixels[340 * UW + 570]
+    var gm = layer.pixels[340 * UW + 640]
+    var gr = layer.pixels[340 * UW + 710]
+    t0 = perf_counter_ns()
+    for _ in range(200):
+        layer.blur_from(layer.scene)
+    ctx.synchronize()
+    var blur_us = Float64(perf_counter_ns() - t0) / 200 / 1000
+    print("glass: worst difference GPU vs host blur", gworst, "left", hex(gl), "edge", hex(gm), "right", hex(gr), "; blur_from", blur_us, "us")
+    if gworst > 2 or (gl & 255) < 250 or (gr >> 16) & 255 < 250 or (gm & 255) < 100 or (gm & 255) > 160 or layer.pixels[340 * UW + 540] != 0:
+        fails += 1
     # past NBIN tile entries: whole commands drop (counted), the ones kept still draw
     ui.d.dropped = 0
     ui.begin(idle)
@@ -256,5 +312,6 @@ def main() raises:
     if not rejected:
         fails += 1
     if fails:
+        print("FAIL", fails, "ui checks")
         raise Error("FAIL " + String(fails) + " ui checks")
     print("PASS ui_test")

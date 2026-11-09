@@ -29,6 +29,11 @@ comptime GLYPH = 1
 comptime LINE = 2
 comptime TRI = 3
 comptime IMAGE = 4
+comptime GLASS = 8  # rounded rect: the blurred scene behind it (Layer.blur_from), then the tint c over it
+comptime BQ = 4  # the blurred backdrop is 1 / BQ of the layer in each direction
+comptime QW = UW // BQ
+comptime QH = UH // BQ
+comptime BR = 6  # blur taps each side at 1 / BQ resolution (triangle weights, two passes)
 comptime CLIP = 7  # state: from here the rect (x0, y0)-(x1, y1) clips later commands (aux 0), or the clip ends (aux 1, same rect)
 comptime FULL = SIMD[DType.float32, 4](-1e9, -1e9, 1e9, 1e9)
 comptime SRECT = 6  # kind word: kind | border px * 4 << 8 | style id << 16; c = fill (gradient start), aux = border rgba
@@ -41,6 +46,7 @@ comptime TCMD = TileTensor[DType.uint32, type_of(row_major[NCMD * CW]()), MutAny
 comptime TBIN = TileTensor[DType.uint16, type_of(row_major[NBIN]()), MutAnyOrigin]
 comptime TOFF = TileTensor[DType.uint32, type_of(row_major[TX * TY + 1]()), MutAnyOrigin]
 comptime TATL = TileTensor[DType.uint8, type_of(row_major[AW * AH]()), MutAnyOrigin]
+comptime TQ = TileTensor[DType.uint32, type_of(row_major[QW * QH]()), MutAnyOrigin]
 comptime TSTY = TileTensor[DType.uint32, type_of(row_major[NSTY * 8]()), MutAnyOrigin]
 comptime TSRC = TileTensor[DType.uint32, type_of(row_major[ISRC]()), MutAnyOrigin]
 
@@ -134,7 +140,59 @@ def srect(acc: SIMD[DType.float32, 4], px: Float32, py: Float32, x0: Float32, y0
     return a
 
 
-def compose(img: TUI, cmd: TCMD, bin: TBIN, off: TOFF, atlas: TATL, src: TSRC, sty: TSTY):
+@always_inline
+def pack(v: SIMD[DType.float32, 4]) -> UInt32:
+    """0..255 per lane to rgba, rounded, alpha forced opaque."""
+    var c = min(max(v + 0.5, SIMD[DType.float32, 4](0)), SIMD[DType.float32, 4](255))
+    return UInt32(c[0]) | UInt32(c[1]) << 8 | UInt32(c[2]) << 16 | UInt32(255) << 24
+
+
+def blur_down(dst: TQ, src: TUI):
+    """Box average of each BQ x BQ block of the scene."""
+    var i = Int(block_idx.x * block_dim.x + thread_idx.x)
+    if i >= QW * QH:
+        return
+    var s = SIMD[DType.float32, 4](0)
+    for dy in range(BQ):
+        for dx in range(BQ):
+            s += unpack(src[((i // QW) * BQ + dy) * UW + (i % QW) * BQ + dx])
+    dst[i] = pack(s / Float32(BQ * BQ))
+
+
+def blur_axis[dx: Int, dy: Int](dst: TQ, src: TQ):
+    """One separable pass over the small image, triangle weights BR + 1 - |k|, edges clamped."""
+    var i = Int(block_idx.x * block_dim.x + thread_idx.x)
+    if i >= QW * QH:
+        return
+    var s = SIMD[DType.float32, 4](0)
+    var w = Float32(0)
+    for k in range(-BR, BR + 1):
+        var wk = Float32(BR + 1 - abs(k))
+        s += unpack(src[min(max(i // QW + k * dy, 0), QH - 1) * QW + min(max(i % QW + k * dx, 0), QW - 1)]) * wk
+        w += wk
+    dst[i] = pack(s / w)
+
+
+@always_inline
+def backdrop(blr: TQ, px: Float32, py: Float32) -> SIMD[DType.float32, 4]:
+    """Bilinear sample of the blurred scene at layer pixel (px, py)."""
+    var x = min(max(px / Float32(BQ) - 0.5, Float32(0)), Float32(QW - 1))
+    var y = min(max(py / Float32(BQ) - 0.5, Float32(0)), Float32(QH - 1))
+    var ix, iy = Int(x), Int(y)
+    var jx, jy = min(ix + 1, QW - 1), min(iy + 1, QH - 1)
+    var tx, ty = x - Float32(ix), y - Float32(iy)
+    return (unpack(blr[iy * QW + ix]) * (1 - tx) + unpack(blr[iy * QW + jx]) * tx) * (1 - ty) + (unpack(blr[jy * QW + ix]) * (1 - tx) + unpack(blr[jy * QW + jx]) * tx) * ty
+
+
+@always_inline
+def glass(acc: SIMD[DType.float32, 4], px: Float32, py: Float32, x0: Float32, y0: Float32, x1: Float32, y1: Float32,
+          rr: Float32, c: UInt32, back: SIMD[DType.float32, 4]) -> SIMD[DType.float32, 4]:
+    """One GLASS pixel: the backdrop sample `back` (its alpha 0 before any blur ran), then the tint c over it."""
+    var fill = min(max(0.5 - rsd(px, py, x0, y0, x1, y1, rr), Float32(0)), Float32(1))
+    return over(over(acc, back, fill), unpack(c), fill)
+
+
+def compose(img: TUI, cmd: TCMD, bin: TBIN, off: TOFF, atlas: TATL, src: TSRC, sty: TSTY, blr: TQ):
     var i = Int(block_idx.x * block_dim.x + thread_idx.x)
     if i >= UW * UH:
         return
@@ -157,6 +215,9 @@ def compose(img: TUI, cmd: TCMD, bin: TBIN, off: TOFF, atlas: TATL, src: TSRC, s
             clip = FULL if cmd[o + 7] != 0 else SIMD[DType.float32, 4](x0, y0, x1, y1)
             continue
         if clipped(px, py, clip):
+            continue
+        if kind == GLASS:
+            acc = glass(acc, px, py, x0, y0, x1, y1, rr, c, backdrop(blr, px, py))
             continue
         if kind == RRECT:
             acc = rrect(acc, px, py, x0, y0, x1, y1, rr, c, cmd[o], cmd[o + 7])
@@ -283,6 +344,10 @@ struct Draw(Movable):
         if self.cur_clip[0] > -1e8:
             self.push(CLIP, self.cur_clip[0], self.cur_clip[1], self.cur_clip[2], self.cur_clip[3], 0, 0, 1)
             self.cur_clip = FULL
+
+    def glass(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, tint: UInt32):
+        """Rounded rect showing the blurred scene (Layer.set_scene / blur_from) under the tint."""
+        self.push(GLASS, x0, y0, x1, y1, r, tint)
 
     def line(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, w: Float32, c: UInt32):
         self.push(LINE, x0, y0, x1, y1, w * 0.5, c)

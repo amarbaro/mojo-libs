@@ -5,12 +5,13 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 M=.venv/bin/mojo
 export IMKIT_FONT="${IMKIT_FONT:-/usr/share/fonts/TTF/Roboto-Medium.ttf}"
-mutant() {  # name file sed-expression test
+mutant() {  # name file sed-expression test [gpu]: a GPU test runs under GPU_WRAP
   local name=$1 file=$2 expr=$3 test=$4 d=.work/mutant
   rm -rf "$d"; mkdir -p "$d"; cp -r src "$d/src"
   sed -i "$expr" "$d/src/imkit/$file"
   cmp -s "src/imkit/$file" "$d/src/imkit/$file" && { echo "FAIL $name: sed changed nothing"; exit 1; }
-  if timeout 300 $M run -I "$d/src" "tests/$test.mojo" > "$d/out.txt" 2>&1; then
+  # shellcheck disable=SC2086
+  if ${5:+${GPU_WRAP:-}} timeout 300 $M run -I "$d/src" "tests/$test.mojo" > "$d/out.txt" 2>&1; then
     echo "FAIL $name: $test still passes"; exit 1
   fi
   grep -m1 '^FAIL' "$d/out.txt" || { echo "FAIL $name: $test failed without a FAIL line, see $d/out.txt"; exit 1; }
@@ -30,4 +31,8 @@ mutant "srect span ignores shadow" draw.mojo 's/if kind == SRECT else 0/if kind 
 mutant "clip edge not half open" draw.mojo 's/return px < c\[0\] or px >= c\[2\]/return px < c[0] or px > c[2]/' ui_cpu_test
 mutant "clip never ends in the bins" draw.mojo 's/return FULL if self.cmd\[o + 7\] != 0 else/return FULL if self.cmd[o + 7] == 99 else/' ui_cpu_test
 mutant "span ignores the clip" draw.mojo 's/if kind != CLIP and clip\[0\] > -1e8:/if kind != CLIP and clip[0] > 1e8:/' ui_cpu_test
+mutant "glass tint ignored" draw.mojo 's/return over(over(acc, back, fill), unpack(c), fill)/return over(acc, back, fill)/' ui_cpu_test
+mutant "glass backdrop ignored" draw.mojo 's/return over(over(acc, back, fill), unpack(c), fill)/return over(acc, unpack(c), fill)/' ui_cpu_test
+mutant "blur skips the vertical pass" layer.mojo 's/blur_axis\[0, 1\]/blur_axis[1, 0]/' ui_test gpu
+mutant "blur taps unweighted" draw.mojo 's/var wk = Float32(BR + 1 - abs(k))/var wk = Float32(1)/' ui_test gpu
 echo "PASS mutants"
