@@ -16,7 +16,7 @@ mutant() {  # name file sed-expression test
   grep -m1 '^FAIL' "$d/out.txt" || { echo "FAIL $name: $test failed without a FAIL line, see $d/out.txt"; exit 1; }
   echo "KILLED $name"
 }
-mutant "field ignores max" ui.mojo 's/ and buf.byte_length() < max//' ui_cpu_test
+mutant "field ignores max" ui.mojo 's/ and buf.byte_length() + len(add) < max//' ui_cpu_test
 mutant "merge drops text" window.mojo '/self.text += o.text/d' window_test
 mutant "push text dies before poll" window.mojo 's/            self.keep.append(buf^)/            self.keep.clear()\n            self.keep.append(buf^)/' window_test
 echo "PASS mutants"
