@@ -10,7 +10,7 @@ usage: IMKIT_FONT=/path/font.ttf mojo run -I src tests/ui_cpu_test.mojo  (defaul
 from std.os import getenv
 from imkit.font import Font
 from imkit.layer import image_fits
-from imkit.draw import ISRC, NBIN, NCMD, TX, TY, UH, UW
+from imkit.draw import ISRC, NBIN, NCMD, TX, TY, UH, UW, rgba, rrect
 from imkit.theme import ACCENT
 from imkit.ui import SC_BACKSPACE, Ui
 from imkit.window import Input
@@ -126,6 +126,27 @@ def main() raises:
     fui.image(-300, -200, Float32(UW + 300), Float32(UH + 200), 0, 4, 4)
     fui.finish()
     check(fui.d.dropped == 0 and fui.d.n == 1 and Int(fui.d.off[TX * TY]) == TX * TY, "oversize image rect clipped to the layer's tiles", fails)
+    # RRECT (100, 100)-(200, 160), r 10, fill (200, 100, 50), border 4 px green, glow 8 px: closed-form pixels of the shader
+    var z = SIMD[DType.float32, 4](0)
+    var fc, bcn = rgba(200, 100, 50, 255), rgba(0, 255, 0, 255)
+    var k = UInt32(5) | UInt32(16) << 8 | UInt32(8) << 16
+    var near4 = lambda (v: SIMD[DType.float32, 4], r: Float32, g: Float32, b: Float32, a: Float32) -> Bool: abs(v[0] - r) < 0.01 and abs(v[1] - g) < 0.01 and abs(v[2] - b) < 0.01 and abs(v[3] - a) < 0.01
+    check(near4(rrect(z, 150.5, 130.5, 100, 100, 200, 160, 10, fc, k, bcn), 200 / 255, 100 / 255, 50 / 255, 1), "rrect: fill inside", fails)
+    check(near4(rrect(z, 102.5, 130.5, 100, 100, 200, 160, 10, fc, k, bcn), 0, 1, 0, 1), "rrect: border ring in bcol", fails)
+    check(near4(rrect(z, 96.5, 130.5, 100, 100, 200, 160, 10, fc, k, bcn), 0, 0.31640625, 0, 0.31640625), "rrect: glow 3.5 px out of 8 is (1 - 3.5 / 8) squared", fails)
+    check(near4(rrect(z, 50.5, 130.5, 100, 100, 200, 160, 10, fc, k, bcn), 0, 0, 0, 0), "rrect: nothing past the glow", fails)
+    var gtop = rrect(z, 150.5, 100.5, 100, 100, 200, 160, 10, fc, UInt32(5) | UInt32(127) << 24, 0)
+    var gbot = rrect(z, 150.5, 159.5, 100, 100, 200, 160, 10, fc, UInt32(5) | UInt32(127) << 24, 0)
+    check(abs(gtop[0] * 255 - 254.08) < 0.1 and abs(gbot[0] * 255 - 3.3) < 0.1, "rrect: gradient + lightens the top and darkens the bottom", fails)
+    var gneg = rrect(z, 150.5, 100.5, 100, 100, 200, 160, 10, fc, UInt32(5) | UInt32(129) << 24, 0)
+    check(gneg[0] * 255 < 4, "rrect: gradient byte 129 is -127 (top darker)", fails)
+    var rui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    rui.begin(idle)
+    rui.rrect(100, 100, 116, 116, 0, fc, 4, bcn, 40, -127)
+    rui.rrect(100, 100, 116, 116, 0, fc)
+    rui.finish()
+    check(rui.d.cmd[0] == (UInt32(5) | UInt32(16) << 8 | UInt32(40) << 16 | UInt32(129) << 24) and rui.d.cmd[8] == 5 and rui.d.cmd[7] == bcn, "rrect: kind word packs border px * 4, glow px, gradient i8; aux is bcol", fails)
+    check(rui.d.span(0)[0] == 3 and rui.d.span(1)[0] == 6, "rrect: span grows by the glow radius", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")

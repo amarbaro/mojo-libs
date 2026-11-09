@@ -12,7 +12,7 @@ from std.sys import argv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 from imkit.font import AW, Font
-from imkit.draw import AH, ISRC, NBIN, TX, TY, UH, UW
+from imkit.draw import AH, ISRC, NBIN, TX, TY, UH, UW, rgba, rrect
 from imkit.theme import ACCENT, BAD, GOOD, TEXT, WARN
 from imkit.ui import Ui
 from imkit.window import Input
@@ -150,6 +150,23 @@ def main() raises:
         si_raised = True
     print("set_image: pixel (0, 0)", hex(si), "raised over ISRC", si_raised)
     if not near(si, srcpx[10]) or not si_raised or layer.pixels[1] >> 24 != 255:
+        fails += 1
+    # RRECT: the GPU pixels match the shader's CPU form over the command's span (glow 10 px, border 3 px, gradient 60)
+    var rc, rb = rgba(200, 100, 50, 230), rgba(0, 200, 255, 200)
+    ui.begin(idle)
+    ui.rrect(300, 500, 420, 560, 12, rc, 3, rb, 10, 60)
+    ui.finish()
+    layer.render(ui)
+    var worst = 0
+    for y in range(486, 574):
+        for x in range(286, 434):
+            var v = rrect(SIMD[DType.float32, 4](0), Float32(x) + 0.5, Float32(y) + 0.5, 300, 500, 420, 560, 12, rc, UInt32(5) | UInt32(12) << 8 | UInt32(10) << 16 | UInt32(60) << 24, rb)
+            var inv = 1 / max(v[3], Float32(1e-6))
+            var p = layer.pixels[y * UW + x]
+            worst = max(worst, abs(Int(p & 255) - Int(min(v[0] * inv, 1) * 255)), abs(Int((p >> 8) & 255) - Int(min(v[1] * inv, 1) * 255)),
+                        abs(Int((p >> 16) & 255) - Int(min(v[2] * inv, 1) * 255)), abs(Int(p >> 24) - Int(v[3] * 255)))
+    print("rrect: worst channel difference GPU vs CPU", worst)
+    if worst > 2 or layer.pixels[530 * UW + 360] >> 24 < 200:
         fails += 1
     # past NBIN tile entries: whole commands drop (counted), the ones kept still draw
     ui.d.dropped = 0

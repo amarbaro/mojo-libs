@@ -19,4 +19,8 @@ mutant() {  # name file sed-expression test
 mutant "field ignores max" ui.mojo 's/ and buf.byte_length() + len(add) < max//' ui_cpu_test
 mutant "merge drops text" window.mojo '/self.text += o.text/d' window_test
 mutant "push text dies before poll" window.mojo 's/            self.keep.append(buf^)/            self.keep.clear()\n            self.keep.append(buf^)/' window_test
+mutant "rrect glow ignored" draw.mojo 's/if gl > 0 and d > 0:/if gl > 1000 and d > 0:/' ui_cpu_test
+mutant "rrect border ignored" draw.mojo 's/    if bw > 0:/    if bw > 1000:/' ui_cpu_test
+mutant "rrect gradient reversed" draw.mojo 's/\* 2 \* gr/* 2 * (-gr)/' ui_cpu_test
+mutant "rrect span ignores glow" draw.mojo 's/ if kind == RRECT else 0/ if kind == 99 else 0/' ui_cpu_test
 echo "PASS mutants"

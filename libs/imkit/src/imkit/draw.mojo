@@ -29,6 +29,7 @@ comptime GLYPH = 1
 comptime LINE = 2
 comptime TRI = 3
 comptime IMAGE = 4
+comptime RRECT = 5  # kind word: kind | border px * 4 << 8 | glow px << 16 | gradient i8 << 24; aux = border and glow rgba
 comptime ISRC = get_defined_int["UI_IMG", 65536]()  # source pixels for images (RGBA u32, the app fills them; -DUI_IMG= for more)
 
 comptime TUI = TileTensor[DType.uint32, type_of(row_major[UW * UH]()), MutAnyOrigin]
@@ -52,6 +53,44 @@ def bits(x: Float32) -> UInt32:
 def flt(u: UInt32) -> Float32:
     return bitcast[DType.float32](u)
 
+@always_inline
+def unpack(c: UInt32) -> SIMD[DType.float32, 4]:
+    return SIMD[DType.float32, 4](Float32(c & 255), Float32((c >> 8) & 255), Float32((c >> 16) & 255), Float32(c >> 24))
+
+
+@always_inline
+def over(acc: SIMD[DType.float32, 4], col: SIMD[DType.float32, 4], cov: Float32) -> SIMD[DType.float32, 4]:
+    """`col` (0..255 per lane) with coverage cov over the premultiplied accumulation acc (rgb, a)."""
+    var sa = cov * col[3] / 255
+    return SIMD[DType.float32, 4](col[0], col[1], col[2], 255) / 255 * sa + acc * (1 - sa)
+
+
+@always_inline
+def rrect(acc: SIMD[DType.float32, 4], px: Float32, py: Float32, x0: Float32, y0: Float32, x1: Float32, y1: Float32,
+          rr: Float32, c: UInt32, k: UInt32, bc: UInt32) -> SIMD[DType.float32, 4]:
+    """One RRECT pixel: glow (outside, bc), fill with a vertical gradient, border ring (bc), by the signed distance d."""
+    var bw = Float32((k >> 8) & 255) * 0.25
+    var gl = Float32((k >> 16) & 255)
+    var gi = Int(k >> 24)
+    var gr = Float32(gi - 256 if gi > 127 else gi) / 127
+    var qx = abs(px - (x0 + x1) * 0.5) - (x1 - x0) * 0.5 + rr
+    var qy = abs(py - (y0 + y1) * 0.5) - (y1 - y0) * 0.5 + rr
+    var d = sqrt(max(qx, 0) * max(qx, 0) + max(qy, 0) * max(qy, 0)) + min(max(qx, qy), 0) - rr
+    var fill = min(max(0.5 - d, Float32(0)), Float32(1))
+    var col = unpack(c)
+    var s = (0.5 - min(max((py - y0) / max(y1 - y0, 1e-6), Float32(0)), Float32(1))) * 2 * gr  # + lightens toward white, - darkens
+    var tg = Float32(255) if s > 0 else Float32(0)
+    col += (SIMD[DType.float32, 4](tg, tg, tg, col[3]) - col) * abs(s)
+    var a = acc
+    if gl > 0 and d > 0:
+        var t = min(max(1 - d / gl, Float32(0)), Float32(1))
+        a = over(a, unpack(bc), t * t)
+    a = over(a, col, fill)
+    if bw > 0:
+        a = over(a, unpack(bc), fill * min(max(0.5 + d + bw, Float32(0)), Float32(1)))
+    return a
+
+
 def compose(img: TUI, cmd: TCMD, bin: TBIN, off: TOFF, atlas: TATL, src: TSRC):
     var i = Int(block_idx.x * block_dim.x + thread_idx.x)
     if i >= UW * UH:
@@ -59,13 +98,10 @@ def compose(img: TUI, cmd: TCMD, bin: TBIN, off: TOFF, atlas: TATL, src: TSRC):
     var px = Float32(i % UW) + 0.5
     var py = Float32(i // UW) + 0.5
     var t = (i // UW // TILE) * TX + (i % UW) // TILE
-    var r = Float32(0)
-    var g = Float32(0)
-    var b = Float32(0)
-    var a = Float32(0)  # premultiplied accumulation
+    var acc = SIMD[DType.float32, 4](0)  # premultiplied accumulation
     for j in range(Int(off[t]), Int(off[t + 1])):  # this tile's commands, in draw order
         var o = Int(bin[j]) * CW
-        var kind = Int(cmd[o])
+        var kind = Int(cmd[o] & 255)
         var x0 = flt(cmd[o + 1])
         var y0 = flt(cmd[o + 2])
         var x1 = flt(cmd[o + 3])
@@ -73,6 +109,9 @@ def compose(img: TUI, cmd: TCMD, bin: TBIN, off: TOFF, atlas: TATL, src: TSRC):
         var rr = flt(cmd[o + 5])
         var c = cmd[o + 6]
         var cov = Float32(0)
+        if kind == RRECT:
+            acc = rrect(acc, px, py, x0, y0, x1, y1, rr, c, cmd[o], cmd[o + 7])
+            continue
         if kind == RECT:
             var soft = flt(cmd[o + 7])
             var qx = abs(px - (x0 + x1) * 0.5) - (x1 - x0) * 0.5 + rr
@@ -114,13 +153,9 @@ def compose(img: TUI, cmd: TCMD, bin: TBIN, off: TOFF, atlas: TATL, src: TSRC):
                 var ey = cy - ay
                 d = max(d, wind * ((px - ax) * ey - (py - ay) * ex) / max(sqrt(ex * ex + ey * ey), 1e-6))
             cov = min(max(0.5 - d, Float32(0)), Float32(1))
-        var sa = cov * Float32(c >> 24) / 255
-        r = Float32(c & 255) / 255 * sa + r * (1 - sa)
-        g = Float32((c >> 8) & 255) / 255 * sa + g * (1 - sa)
-        b = Float32((c >> 16) & 255) / 255 * sa + b * (1 - sa)
-        a = sa + a * (1 - sa)
-    var inv = 1 / max(a, Float32(1e-6))  # straight alpha out (SDL blends straight alpha)
-    img[i] = UInt32(min(r * inv, 1) * 255) | UInt32(min(g * inv, 1) * 255) << 8 | UInt32(min(b * inv, 1) * 255) << 16 | UInt32(a * 255) << 24
+        acc = over(acc, unpack(c), cov)
+    var inv = 1 / max(acc[3], Float32(1e-6))  # straight alpha out (SDL blends straight alpha)
+    img[i] = UInt32(min(acc[0] * inv, 1) * 255) | UInt32(min(acc[1] * inv, 1) * 255) << 8 | UInt32(min(acc[2] * inv, 1) * 255) << 16 | UInt32(acc[3] * 255) << 24
 
 
 struct Draw(Movable):
@@ -157,6 +192,13 @@ struct Draw(Movable):
     def rect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, blur: Float32 = 0):
         self.push(RECT, x0, y0, x1, y1, r, c, bits(blur))
 
+    def rrect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, border: Float32 = 0,
+              bcol: UInt32 = 0, glow: Float32 = 0, grad: Int = 0):
+        """Rounded rect with a border of `border` px (0.25 px steps, up to 63.75) in bcol, an outside glow of `glow` px (up
+        to 255) in bcol, and a vertical gradient grad in -127..127 (+: top lighter, bottom darker)."""
+        var k = RRECT | min(max(Int(border * 4 + 0.5), 0), 255) << 8 | min(max(Int(glow), 0), 255) << 16 | (min(max(grad, -127), 127) & 255) << 24
+        self.push(k, x0, y0, x1, y1, r, c, bcol)
+
     def line(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, w: Float32, c: UInt32):
         self.push(LINE, x0, y0, x1, y1, w * 0.5, c)
 
@@ -189,12 +231,12 @@ struct Draw(Movable):
     def span(self, k: Int) -> SIMD[DType.int32, 4]:
         """Tiles command k may touch: tx0, tx1, ty0, ty1 (half open), from its box, blur, line width or third corner."""
         var o = k * CW
-        var kind = Int(self.cmd[o])
+        var kind = Int(self.cmd[o] & 255)
         var x0 = flt(self.cmd[o + 1])
         var y0 = flt(self.cmd[o + 2])
         var x1 = flt(self.cmd[o + 3])
         var y1 = flt(self.cmd[o + 4])
-        var pad = Float32(2) + (2 * flt(self.cmd[o + 7]) if kind == RECT else (flt(self.cmd[o + 5]) if kind == LINE else 0))
+        var pad = Float32(2) + (2 * flt(self.cmd[o + 7]) if kind == RECT else (flt(self.cmd[o + 5]) if kind == LINE else (Float32((self.cmd[o] >> 16) & 255) if kind == RRECT else 0)))
         var lx, hx, ly, hy = min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1)
         if kind == TRI:
             lx, hx = min(lx, flt(self.cmd[o + 5])), max(hx, flt(self.cmd[o + 5]))
