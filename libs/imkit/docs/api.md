@@ -11,6 +11,7 @@
 | `win.text_input(on)`; `Input.text` | SDL text events on or off; the text typed this frame (UTF-8), joined by `Input.merge` |
 | `Font(path, sizes)` | glyph atlas from a TrueType font, ASCII 32-126 |
 | `Ui(font)`; `begin(input)`, `finish()` | one frame; `finish` bins commands into 16 x 16 tiles |
+| `style(c1, mode, gx, gy, sx, sy, sr, sc) -> id`; `srect(x0, y0, x1, y1, r, c, id, border, bcol)` | per-frame style (256 max): fill gradient from `c` to `c1` (mode 1 linear along (gx, gy), 2 radial) and a shadow moved by (sx, sy), blurred sr, color sc; srect draws a rounded rect with it |
 | `rrect(x0, y0, x1, y1, r, c, border, bcol, glow, grad)` | rounded rect: border px (0.25 steps, to 63.75) and outside glow px (to 255) in `bcol`, vertical gradient -127..127 (+: top lighter) |
 | `panel`, `button`, `icon`, `bar`, `spark`, `text`, `rect`, `line`, `tri`, `image` | widgets and primitives; interaction widgets return clicked; `button(..., on, color)` fills a toggle with `color` (default accent) |
 | `field(id, buf, max) -> Bool`; `field_focused` | 360 x 30 text box at the cursor: ASCII 32-126 from `Input.text`, Backspace, at most `max` bytes; True if `buf` changed. A click or the first field drawn takes focus; `field_focused` is True when a drawn field has it (send keys to typing then) |

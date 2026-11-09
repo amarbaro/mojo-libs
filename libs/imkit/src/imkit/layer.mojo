@@ -9,7 +9,7 @@ all allocated once on the app's own DeviceContext. render(ui) after ui.finish() 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from layout import TileTensor, row_major
 from .font import AW
-from .draw import AH, CW, ISRC, NBIN, NCMD, TX, TY, UH, UW, compose
+from .draw import AH, CW, ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, compose
 from .ui import Ui
 
 
@@ -25,6 +25,7 @@ struct Layer(Movable):
     var bins: DeviceBuffer[DType.uint16]
     var off: DeviceBuffer[DType.uint32]
     var atlas: DeviceBuffer[DType.uint8]
+    var sty: DeviceBuffer[DType.uint32]
     var src: DeviceBuffer[DType.uint32]  # image sources (Ui.image): the app writes its RGBA here
     var pixels: HostBuffer[DType.uint32]  # the composed layer, valid after render() returns
 
@@ -38,6 +39,7 @@ struct Layer(Movable):
         self.bins = ctx.enqueue_create_buffer[DType.uint16](NBIN)
         self.off = ctx.enqueue_create_buffer[DType.uint32](TX * TY + 1)
         self.atlas = ctx.enqueue_create_buffer[DType.uint8](AW * AH)
+        self.sty = ctx.enqueue_create_buffer[DType.uint32](NSTY * 8)
         self.src = ctx.enqueue_create_buffer[DType.uint32](ISRC)
         self.pixels = ctx.enqueue_create_host_buffer[DType.uint32](UW * UH)
         self.src.enqueue_fill(0)
@@ -57,7 +59,7 @@ struct Layer(Movable):
         self.ctx.enqueue_function(self.ctx.compile_function[compose](), TileTensor(self.img, row_major[UW * UH]()),
             TileTensor(self.cmd, row_major[NCMD * CW]()), TileTensor(self.bins, row_major[NBIN]()),
             TileTensor(self.off, row_major[TX * TY + 1]()), TileTensor(self.atlas, row_major[AW * AH]()),
-            TileTensor(self.src, row_major[ISRC]()), grid_dim=(UW * UH + 255) // 256, block_dim=256)
+            TileTensor(self.src, row_major[ISRC]()), TileTensor(self.sty, row_major[NSTY * 8]()), grid_dim=(UW * UH + 255) // 256, block_dim=256)
 
     def render(mut self, ui: Ui) raises:
         """Upload the finished frame, compose, copy to pixels; returns when pixels is ready."""
@@ -69,6 +71,8 @@ struct Layer(Movable):
         if used:
             self.ctx.enqueue_copy(self.bins.create_sub_buffer[DType.uint16](0, used), ui.d.bins.unsafe_ptr())
         self.ctx.enqueue_copy(self.off, ui.d.off.unsafe_ptr())
+        if ui.d.ns > 1:
+            self.ctx.enqueue_copy(self.sty.create_sub_buffer[DType.uint32](0, ui.d.ns * 8), ui.d.sty.unsafe_ptr())
         self.launch()
         self.ctx.enqueue_copy(self.pixels, self.img)
         self.ctx.synchronize()  # ui's lists are read by the copies above

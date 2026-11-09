@@ -22,5 +22,9 @@ mutant "push text dies before poll" window.mojo 's/            self.keep.append(
 mutant "rrect glow ignored" draw.mojo 's/if gl > 0 and d > 0:/if gl > 1000 and d > 0:/' ui_cpu_test
 mutant "rrect border ignored" draw.mojo 's/    if bw > 0:/    if bw > 1000:/' ui_cpu_test
 mutant "rrect gradient reversed" draw.mojo 's/\* 2 \* gr/* 2 * (-gr)/' ui_cpu_test
-mutant "rrect span ignores glow" draw.mojo 's/ if kind == RRECT else 0/ if kind == 99 else 0/' ui_cpu_test
+mutant "rrect span ignores glow" draw.mojo 's/ if kind == RRECT else (self/ if kind == 99 else (self/' ui_cpu_test
+mutant "srect linear ignored" draw.mojo 's/if st\[0\] & 3 == 1:/if st[0] \& 3 == 9:/' ui_cpu_test
+mutant "srect radial ignored" draw.mojo 's/elif st\[0\] & 3 == 2:/elif st[0] \& 3 == 9:/' ui_cpu_test
+mutant "srect shadow offset ignored" draw.mojo 's/rsd(px - flt(st\[4\]), py - flt(st\[5\])/rsd(px, py/' ui_cpu_test
+mutant "srect span ignores shadow" draw.mojo 's/if kind == SRECT else 0/if kind == 99 else 0/' ui_cpu_test
 echo "PASS mutants"

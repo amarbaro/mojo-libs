@@ -39,6 +39,13 @@ struct Ui(Movable):
               bcol: UInt32 = 0, glow: Float32 = 0, grad: Int = 0):
         self.d.rrect(x0, y0, x1, y1, r, c, border, bcol, glow, grad)
 
+    def style(mut self, c1: UInt32 = 0, mode: Int = 0, gx: Float32 = 0, gy: Float32 = 1, sx: Float32 = 0, sy: Float32 = 0,
+              sr: Float32 = 0, sc: UInt32 = 0) -> Int:
+        return self.d.style(c1, mode, gx, gy, sx, sy, sr, sc)
+
+    def srect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, style: Int, border: Float32 = 0, bcol: UInt32 = 0):
+        self.d.srect(x0, y0, x1, y1, r, c, style, border, bcol)
+
     def line(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, w: Float32, c: UInt32):
         self.d.line(x0, y0, x1, y1, w, c)
 

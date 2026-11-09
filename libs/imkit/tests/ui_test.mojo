@@ -12,7 +12,7 @@ from std.sys import argv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 from imkit.font import AW, Font
-from imkit.draw import AH, ISRC, NBIN, TX, TY, UH, UW, rgba, rrect
+from imkit.draw import AH, ISRC, NBIN, TX, TY, UH, UW, bits, rgba, rrect, srect
 from imkit.theme import ACCENT, BAD, GOOD, TEXT, WARN
 from imkit.ui import Ui
 from imkit.window import Input
@@ -167,6 +167,25 @@ def main() raises:
                         abs(Int((p >> 16) & 255) - Int(min(v[2] * inv, 1) * 255)), abs(Int(p >> 24) - Int(v[3] * 255)))
     print("rrect: worst channel difference GPU vs CPU", worst)
     if worst > 2 or layer.pixels[530 * UW + 360] >> 24 < 200:
+        fails += 1
+    # SRECT: radial gradient, shadow down-right and a border, GPU against the CPU form over the span
+    var sc1 = rgba(250, 40, 120, 255)
+    ui.begin(idle)
+    var sid = ui.style(sc1, 2, 0, 0, 14, 18, 8, rgba(0, 0, 0, 160))
+    ui.srect(600, 500, 720, 580, 16, rc, sid, 2, rb)
+    ui.finish()
+    layer.render(ui)
+    var st = SIMD[DType.uint32, 8](2, sc1, 0, 0, bits(14), bits(18), bits(8), rgba(0, 0, 0, 160))
+    var sworst = 0
+    for y in range(480, 610):
+        for x in range(580, 760):
+            var v = srect(SIMD[DType.float32, 4](0), Float32(x) + 0.5, Float32(y) + 0.5, 600, 500, 720, 580, 16, rc, UInt32(6) | UInt32(8) << 8 | UInt32(1) << 16, rb, st)
+            var inv = 1 / max(v[3], Float32(1e-6))
+            var p = layer.pixels[y * UW + x]
+            sworst = max(sworst, abs(Int(p & 255) - Int(min(v[0] * inv, 1) * 255)), abs(Int((p >> 8) & 255) - Int(min(v[1] * inv, 1) * 255)),
+                         abs(Int((p >> 16) & 255) - Int(min(v[2] * inv, 1) * 255)), abs(Int(p >> 24) - Int(v[3] * 255)))
+    print("srect: worst channel difference GPU vs CPU", sworst, "shadow alpha", layer.pixels[595 * UW + 660] >> 24)
+    if sworst > 2 or layer.pixels[595 * UW + 660] >> 24 < 40:
         fails += 1
     # past NBIN tile entries: whole commands drop (counted), the ones kept still draw
     ui.d.dropped = 0

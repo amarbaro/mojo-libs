@@ -10,7 +10,7 @@ usage: IMKIT_FONT=/path/font.ttf mojo run -I src tests/ui_cpu_test.mojo  (defaul
 from std.os import getenv
 from imkit.font import Font
 from imkit.layer import image_fits
-from imkit.draw import ISRC, NBIN, NCMD, TX, TY, UH, UW, rgba, rrect
+from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, bits, rgba, rrect, srect
 from imkit.theme import ACCENT
 from imkit.ui import SC_BACKSPACE, Ui
 from imkit.window import Input
@@ -147,6 +147,28 @@ def main() raises:
     rui.finish()
     check(rui.d.cmd[0] == (UInt32(5) | UInt32(16) << 8 | UInt32(40) << 16 | UInt32(129) << 24) and rui.d.cmd[8] == 5 and rui.d.cmd[7] == bcn, "rrect: kind word packs border px * 4, glow px, gradient i8; aux is bcol", fails)
     check(rui.d.span(0)[0] == 3 and rui.d.span(1)[0] == 6, "rrect: span grows by the glow radius", fails)
+    # SRECT, same rect, fill (200, 100, 50) to (0, 100, 250): linear down the rect, radial from its centre, a shadow moved 10 px down
+    var lin = SIMD[DType.uint32, 8](1, rgba(0, 100, 250, 255), bits(0), bits(1), 0, 0, 0, 0)
+    var rad = SIMD[DType.uint32, 8](2, rgba(0, 100, 250, 255), 0, 0, 0, 0, 0, 0)
+    var shd = SIMD[DType.uint32, 8](0, 0, 0, 0, bits(0), bits(10), bits(4), rgba(0, 0, 0, 255))
+    var sk = UInt32(6)
+    check(abs(srect(z, 150.5, 130.5, 100, 100, 200, 160, 10, fc, sk, 0, lin)[0] * 255 - 98.3) < 0.2, "srect: linear gradient is the mix at v = 0.508", fails)
+    check(abs(srect(z, 180.5, 130.5, 100, 100, 200, 160, 10, fc, sk, 0, rad)[0] * 255 - 77.96) < 0.2, "srect: radial gradient is the mix at 2 * distance from the centre", fails)
+    check(near4(srect(z, 150.5, 163.5, 100, 100, 200, 160, 10, fc, sk, 0, shd), 0, 0, 0, 1), "srect: shadow moved 10 px down covers 3.5 px under the rect", fails)
+    check(near4(srect(z, 150.5, 171.5, 100, 100, 200, 160, 10, fc, sk, 0, shd), 0, 0, 0, 0.2), "srect: shadow edge 1.5 px past its box is 0.2", fails)
+    check(near4(srect(z, 150.5, 130.5, 100, 100, 200, 160, 10, fc, sk, 0, shd), 200 / 255, 100 / 255, 50 / 255, 1), "srect: fill covers its shadow", fails)
+    rui.begin(idle)
+    var sid = rui.style(0, 0, 0, 1, 0, 30, 20, rgba(0, 0, 0, 200))
+    var nid = rui.style(rgba(1, 2, 3, 255), 1)
+    rui.srect(100, 100, 116, 116, 0, fc, sid)
+    rui.srect(100, 100, 116, 116, 0, fc, nid)
+    rui.finish()
+    check(sid == 1 and nid == 2 and rui.d.cmd[0] == (UInt32(6) | UInt32(1) << 16) and rui.d.cmd[8] == (UInt32(6) | UInt32(2) << 16), "srect: style ids count from 1 and sit in the kind word's high 16 bits", fails)
+    check(rui.d.span(0)[2] == 1 and rui.d.span(1)[2] == 6 and rui.d.span(0)[3] == 12, "srect: span grows by the larger shadow offset plus twice its radius (72 px here), not for a style without one", fails)
+    rui.begin(idle)
+    for _ in range(NSTY + 4):
+        _ = rui.style()
+    check(rui.d.ns == NSTY and rui.d.dropped >= 5, "style table full: counted, id 0", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")

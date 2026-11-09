@@ -29,6 +29,8 @@ comptime GLYPH = 1
 comptime LINE = 2
 comptime TRI = 3
 comptime IMAGE = 4
+comptime SRECT = 6  # kind word: kind | border px * 4 << 8 | style id << 16; c = fill (gradient start), aux = border rgba
+comptime NSTY = 256  # styles per frame (id 0 is none)
 comptime RRECT = 5  # kind word: kind | border px * 4 << 8 | glow px << 16 | gradient i8 << 24; aux = border and glow rgba
 comptime ISRC = get_defined_int["UI_IMG", 65536]()  # source pixels for images (RGBA u32, the app fills them; -DUI_IMG= for more)
 
@@ -37,6 +39,7 @@ comptime TCMD = TileTensor[DType.uint32, type_of(row_major[NCMD * CW]()), MutAny
 comptime TBIN = TileTensor[DType.uint16, type_of(row_major[NBIN]()), MutAnyOrigin]
 comptime TOFF = TileTensor[DType.uint32, type_of(row_major[TX * TY + 1]()), MutAnyOrigin]
 comptime TATL = TileTensor[DType.uint8, type_of(row_major[AW * AH]()), MutAnyOrigin]
+comptime TSTY = TileTensor[DType.uint32, type_of(row_major[NSTY * 8]()), MutAnyOrigin]
 comptime TSRC = TileTensor[DType.uint32, type_of(row_major[ISRC]()), MutAnyOrigin]
 
 
@@ -66,6 +69,14 @@ def over(acc: SIMD[DType.float32, 4], col: SIMD[DType.float32, 4], cov: Float32)
 
 
 @always_inline
+def rsd(px: Float32, py: Float32, x0: Float32, y0: Float32, x1: Float32, y1: Float32, rr: Float32) -> Float32:
+    """Signed distance from (px, py) to the rounded box (negative inside)."""
+    var qx = abs(px - (x0 + x1) * 0.5) - (x1 - x0) * 0.5 + rr
+    var qy = abs(py - (y0 + y1) * 0.5) - (y1 - y0) * 0.5 + rr
+    return sqrt(max(qx, 0) * max(qx, 0) + max(qy, 0) * max(qy, 0)) + min(max(qx, qy), 0) - rr
+
+
+@always_inline
 def rrect(acc: SIMD[DType.float32, 4], px: Float32, py: Float32, x0: Float32, y0: Float32, x1: Float32, y1: Float32,
           rr: Float32, c: UInt32, k: UInt32, bc: UInt32) -> SIMD[DType.float32, 4]:
     """One RRECT pixel: glow (outside, bc), fill with a vertical gradient, border ring (bc), by the signed distance d."""
@@ -73,9 +84,7 @@ def rrect(acc: SIMD[DType.float32, 4], px: Float32, py: Float32, x0: Float32, y0
     var gl = Float32((k >> 16) & 255)
     var gi = Int(k >> 24)
     var gr = Float32(gi - 256 if gi > 127 else gi) / 127
-    var qx = abs(px - (x0 + x1) * 0.5) - (x1 - x0) * 0.5 + rr
-    var qy = abs(py - (y0 + y1) * 0.5) - (y1 - y0) * 0.5 + rr
-    var d = sqrt(max(qx, 0) * max(qx, 0) + max(qy, 0) * max(qy, 0)) + min(max(qx, qy), 0) - rr
+    var d = rsd(px, py, x0, y0, x1, y1, rr)
     var fill = min(max(0.5 - d, Float32(0)), Float32(1))
     var col = unpack(c)
     var s = (0.5 - min(max((py - y0) / max(y1 - y0, 1e-6), Float32(0)), Float32(1))) * 2 * gr  # + lightens toward white, - darkens
@@ -91,7 +100,33 @@ def rrect(acc: SIMD[DType.float32, 4], px: Float32, py: Float32, x0: Float32, y0
     return a
 
 
-def compose(img: TUI, cmd: TCMD, bin: TBIN, off: TOFF, atlas: TATL, src: TSRC):
+@always_inline
+def srect(acc: SIMD[DType.float32, 4], px: Float32, py: Float32, x0: Float32, y0: Float32, x1: Float32, y1: Float32,
+          rr: Float32, c: UInt32, k: UInt32, bc: UInt32, st: SIMD[DType.uint32, 8]) -> SIMD[DType.float32, 4]:
+    """One SRECT pixel with style words st = mode, c1, gx, gy, shadow dx, dy, radius, rgba: shadow (soft SDF of the rect moved
+    by dx, dy), fill (mode 1: linear t = (u - .5) gx + (v - .5) gy + .5, 2: radial t = 2 |(u, v) - .5|; u, v in the rect), border."""
+    var d = rsd(px, py, x0, y0, x1, y1, rr)
+    var u = (px - x0) / max(x1 - x0, 1e-6)
+    var v = (py - y0) / max(y1 - y0, 1e-6)
+    var t = Float32(0)
+    if st[0] & 3 == 1:
+        t = (u - 0.5) * flt(st[2]) + (v - 0.5) * flt(st[3]) + 0.5
+    elif st[0] & 3 == 2:
+        t = 2 * sqrt((u - 0.5) * (u - 0.5) + (v - 0.5) * (v - 0.5))
+    var col = unpack(c)
+    col += (unpack(st[1]) - col) * min(max(t, Float32(0)), Float32(1))
+    var a = acc
+    if st[7] >> 24 > 0:
+        a = over(a, unpack(st[7]), min(max(0.5 - rsd(px - flt(st[4]), py - flt(st[5]), x0, y0, x1, y1, rr) / (1 + flt(st[6])), Float32(0)), Float32(1)))
+    var fill = min(max(0.5 - d, Float32(0)), Float32(1))
+    a = over(a, col, fill)
+    var bw = Float32((k >> 8) & 255) * 0.25
+    if bw > 0:
+        a = over(a, unpack(bc), fill * min(max(0.5 + d + bw, Float32(0)), Float32(1)))
+    return a
+
+
+def compose(img: TUI, cmd: TCMD, bin: TBIN, off: TOFF, atlas: TATL, src: TSRC, sty: TSTY):
     var i = Int(block_idx.x * block_dim.x + thread_idx.x)
     if i >= UW * UH:
         return
@@ -112,11 +147,13 @@ def compose(img: TUI, cmd: TCMD, bin: TBIN, off: TOFF, atlas: TATL, src: TSRC):
         if kind == RRECT:
             acc = rrect(acc, px, py, x0, y0, x1, y1, rr, c, cmd[o], cmd[o + 7])
             continue
+        if kind == SRECT:
+            var q = Int(cmd[o] >> 16) * 8
+            acc = srect(acc, px, py, x0, y0, x1, y1, rr, c, cmd[o], cmd[o + 7], SIMD[DType.uint32, 8](sty[q], sty[q + 1], sty[q + 2], sty[q + 3], sty[q + 4], sty[q + 5], sty[q + 6], sty[q + 7]))
+            continue
         if kind == RECT:
             var soft = flt(cmd[o + 7])
-            var qx = abs(px - (x0 + x1) * 0.5) - (x1 - x0) * 0.5 + rr
-            var qy = abs(py - (y0 + y1) * 0.5) - (y1 - y0) * 0.5 + rr
-            var d = sqrt(max(qx, 0) * max(qx, 0) + max(qy, 0) * max(qy, 0)) + min(max(qx, qy), 0) - rr
+            var d = rsd(px, py, x0, y0, x1, y1, rr)
             cov = min(max(0.5 - d / (1 + soft), Float32(0)), Float32(1))
         elif kind == GLYPH:
             if px >= x0 and px < x1 and py >= y0 and py < y1:
@@ -167,6 +204,8 @@ struct Draw(Movable):
     var cur: List[UInt32]  # fill cursor per tile (finish)
     var binned: Int  # n at the last finish(); -1 after begin(): Layer.render refuses an unfinished frame
     var dropped: Int
+    var sty: List[UInt32]  # this frame's styles, 8 words each (srect); id 0 is none
+    var ns: Int
 
     def __init__(out self, var font: Font):
         self.font = font^
@@ -174,10 +213,11 @@ struct Draw(Movable):
         self.bins = List[UInt16](length=NBIN, fill=0)
         self.off = List[UInt32](length=TX * TY + 1, fill=0)
         self.cur = List[UInt32](length=TX * TY, fill=0)
-        self.binned, self.n, self.dropped = 0, 0, 0
+        self.sty = List[UInt32](length=NSTY * 8, fill=0)
+        self.binned, self.n, self.dropped, self.ns = 0, 0, 0, 1
 
     def begin(mut self):
-        self.n = 0
+        self.n, self.ns = 0, 1
         self.binned = -1
 
     def push(mut self, kind: Int, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, aux: UInt32 = 0):
@@ -198,6 +238,24 @@ struct Draw(Movable):
         to 255) in bcol, and a vertical gradient grad in -127..127 (+: top lighter, bottom darker)."""
         var k = RRECT | min(max(Int(border * 4 + 0.5), 0), 255) << 8 | min(max(Int(glow), 0), 255) << 16 | (min(max(grad, -127), 127) & 255) << 24
         self.push(k, x0, y0, x1, y1, r, c, bcol)
+
+    def style(mut self, c1: UInt32 = 0, mode: Int = 0, gx: Float32 = 0, gy: Float32 = 1, sx: Float32 = 0, sy: Float32 = 0,
+              sr: Float32 = 0, sc: UInt32 = 0) -> Int:
+        """Add a style for this frame and return its id (0, none, when the table is full): fill gradient from the command's
+        color to c1 (mode 1 linear along (gx, gy) in rect units, 2 radial) and a shadow of the shape moved by (sx, sy),
+        blurred by sr, in sc."""
+        if self.ns == NSTY:
+            self.dropped += 1
+            return 0
+        var o = self.ns * 8
+        self.sty[o], self.sty[o + 1], self.sty[o + 2], self.sty[o + 3] = UInt32(mode), c1, bits(gx), bits(gy)
+        self.sty[o + 4], self.sty[o + 5], self.sty[o + 6], self.sty[o + 7] = bits(sx), bits(sy), bits(sr), sc
+        self.ns += 1
+        return self.ns - 1
+
+    def srect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, style: Int, border: Float32 = 0, bcol: UInt32 = 0):
+        """Rounded rect filled and shadowed by a style() id, with an optional border."""
+        self.push(SRECT | min(max(Int(border * 4 + 0.5), 0), 255) << 8 | min(max(style, 0), NSTY - 1) << 16, x0, y0, x1, y1, r, c, bcol)
 
     def line(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, w: Float32, c: UInt32):
         self.push(LINE, x0, y0, x1, y1, w * 0.5, c)
@@ -228,6 +286,10 @@ struct Draw(Movable):
             pen += Float32(self.font.g[g + 6])
         return pen
 
+    def shadow_pad(self, id: Int) -> Float32:
+        var o = id * 8
+        return 2 * flt(self.sty[o + 6]) + max(abs(flt(self.sty[o + 4])), abs(flt(self.sty[o + 5]))) if self.sty[o + 7] >> 24 > 0 else Float32(0)
+
     def span(self, k: Int) -> SIMD[DType.int32, 4]:
         """Tiles command k may touch: tx0, tx1, ty0, ty1 (half open), from its box, blur, line width or third corner."""
         var o = k * CW
@@ -236,7 +298,7 @@ struct Draw(Movable):
         var y0 = flt(self.cmd[o + 2])
         var x1 = flt(self.cmd[o + 3])
         var y1 = flt(self.cmd[o + 4])
-        var pad = Float32(2) + (2 * flt(self.cmd[o + 7]) if kind == RECT else (flt(self.cmd[o + 5]) if kind == LINE else (Float32((self.cmd[o] >> 16) & 255) if kind == RRECT else 0)))
+        var pad = Float32(2) + (2 * flt(self.cmd[o + 7]) if kind == RECT else (flt(self.cmd[o + 5]) if kind == LINE else (Float32((self.cmd[o] >> 16) & 255) if kind == RRECT else (self.shadow_pad(Int(self.cmd[o] >> 16)) if kind == SRECT else 0))))
         var lx, hx, ly, hy = min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1)
         if kind == TRI:
             lx, hx = min(lx, flt(self.cmd[o + 5])), max(hx, flt(self.cmd[o + 5]))
