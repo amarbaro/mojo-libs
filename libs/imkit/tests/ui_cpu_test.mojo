@@ -331,6 +331,24 @@ def main() raises:
     var last = rui.d.n - 1
     rui.finish()
     check(clip_at(rui, 2 * TX + 2, last) == FULL and clip_at(rui, 13 * TX + 13, last) == FULL, "clip: replaced then unclip leaves no stale clip in the tiles of either rect", fails)
+    # non-finite and huge coordinates: NaN commands drop (counted), infinite and 1e30 ones clamp, so a full-layer rect covers every tile
+    var nan = Float32(0) / Float32(0)
+    var inf = Float32(1) / Float32(0)
+    var dropped0 = rui.d.dropped
+    rui.begin(idle)
+    rui.rect(nan, 10, 50, 50, 0, fc)
+    rui.rect(-inf, -inf, inf, inf, 0, fc)
+    rui.line(0, 0, nan, 5, 1, fc)
+    rui.rect(0, 0, 50, 50, 0, fc, nan)
+    rui.tri(1, 1, 5, 5, 1, nan, fc)
+    rui.rect(10, 10, 1e30, 50, 0, fc)
+    rui.rect(1e30, 1e30, 2e30, 2e30, 0, fc)
+    rui.finish()
+    check(rui.d.dropped - dropped0 == 4 and rui.d.n == 3 and in_bin(rui, 0, 0) and in_bin(rui, 5 * TX + 5, 0) and in_bin(rui, (TY - 1) * TX + TX - 1, 0), "NaN commands drop, a -inf..inf rect is binned into every tile", fails)
+    var off_layer = False
+    for t in range(TX * TY):
+        off_layer = off_layer or in_bin(rui, t, 2)
+    check(in_bin(rui, TX - 1, 1) and in_bin(rui, 3 * TX + TX - 1, 1) and not in_bin(rui, 4 * TX, 1) and not off_layer, "1e30 edge reaches the last column only in its rows; a rect wholly past the layer is in no tile", fails)
     # GLASS: the tint over the backdrop sample inside, the sample under a clear tint, nothing outside
     var bkd = SIMD[DType.float32, 4](10, 20, 30, 255)
     var tint = rgba(100, 0, 0, 128)

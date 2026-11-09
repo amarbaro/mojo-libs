@@ -51,4 +51,6 @@ mutant "icon_img ignores its size" ui.mojo 's/(Float32(m\[3 \* i + 1\]) if w <= 
 mutant "png IHDR length unchecked" assets.mojo 's/if n != 13:/if n != 13 and n == 99:/' assets_test
 mutant "png size cap off" assets.mojo 's/if w > MAXPX or h > MAXPX or w \* h > MAXPX:/if w < 0:/' assets_test
 mutant "clip replace keeps the old clip" draw.mojo 's/^        self.unclip()$/        pass/' ui_cpu_test
+mutant "push keeps NaN commands" draw.mojo 's/ or x0 != x0 or y0 != y0 or x1 != x1 or y1 != y1 or r != r//' ui_cpu_test
+mutant "push does not clamp infinities" draw.mojo 's/bits(sane(x0)), bits(sane(y0)), bits(sane(x1))/bits(x0), bits(y0), bits(x1)/; s/= bits(sane(y1)), bits(r)/= bits(y1), bits(r)/' ui_cpu_test
 echo "PASS mutants"

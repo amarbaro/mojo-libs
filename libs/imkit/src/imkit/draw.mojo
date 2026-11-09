@@ -38,6 +38,7 @@ comptime FULL = SIMD[DType.float32, 4](-1e9, -1e9, 1e9, 1e9)
 comptime SRECT = 6  # kind word: kind | border px * 4 << 8 | style id << 16; c = fill (gradient start), aux = border rgba
 comptime NSTY = 256  # styles per frame (id 0 is none)
 comptime RRECT = 5  # kind word: kind | border px * 4 << 8 | glow px << 16 | gradient i8 << 24; aux = border and glow rgba
+comptime BIG = Float32(1e6)  # coordinates clamp to +-BIG: Int() of an infinity or 1e30 is undefined, and no layer is that large
 comptime ISRC = get_defined_int["UI_IMG", 65536]()  # source pixels for images (RGBA u32, the app fills them; -DUI_IMG= for more)
 
 comptime TUI = TileTensor[DType.uint32, type_of(row_major[UW * UH]()), MutAnyOrigin]
@@ -52,6 +53,12 @@ comptime TSRC = TileTensor[DType.uint32, type_of(row_major[ISRC]()), MutAnyOrigi
 
 def rgba(r: Int, g: Int, b: Int, a: Int) -> UInt32:
     return UInt32(r) | UInt32(g) << 8 | UInt32(b) << 16 | UInt32(a) << 24
+
+
+@always_inline
+def sane(v: Float32) -> Float32:
+    """v clamped to +-BIG (NaN is the caller's to drop)."""
+    return min(max(v, -BIG), BIG)
 
 
 @always_inline
@@ -298,16 +305,19 @@ struct Draw(Movable):
         self.binned = -1
 
     def push(mut self, kind: Int, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, aux: UInt32 = 0):
-        if self.n == NCMD:
+        if self.n == NCMD or x0 != x0 or y0 != y0 or x1 != x1 or y1 != y1 or r != r:  # full, or NaN: dropped, counted
             self.dropped += 1
             return
         var o = self.n * CW
-        self.cmd[o], self.cmd[o + 1], self.cmd[o + 2], self.cmd[o + 3] = UInt32(kind), bits(x0), bits(y0), bits(x1)
-        self.cmd[o + 4], self.cmd[o + 5], self.cmd[o + 6], self.cmd[o + 7] = bits(y1), bits(r), c, aux
+        self.cmd[o], self.cmd[o + 1], self.cmd[o + 2], self.cmd[o + 3] = UInt32(kind), bits(sane(x0)), bits(sane(y0)), bits(sane(x1))
+        self.cmd[o + 4], self.cmd[o + 5], self.cmd[o + 6], self.cmd[o + 7] = bits(sane(y1)), bits(r), c, aux
         self.n += 1
 
     def rect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, blur: Float32 = 0):
-        self.push(RECT, x0, y0, x1, y1, r, c, bits(blur))
+        if blur != blur:
+            self.dropped += 1
+            return
+        self.push(RECT, x0, y0, x1, y1, r, c, bits(min(blur, BIG)))
 
     def rrect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, border: Float32 = 0,
               bcol: UInt32 = 0, glow: Float32 = 0, grad: Int = 0):
@@ -321,12 +331,12 @@ struct Draw(Movable):
         """Add a style for this frame and return its id (0, none, when the table is full): fill gradient from the command's
         color to c1 (mode 1 linear along (gx, gy) in rect units, 2 radial) and a shadow of the shape moved by (sx, sy),
         blurred by sr, in sc."""
-        if self.ns == NSTY:
+        if self.ns == NSTY or gx != gx or gy != gy or sx != sx or sy != sy or sr != sr:
             self.dropped += 1
             return 0
         var o = self.ns * 8
         self.sty[o], self.sty[o + 1], self.sty[o + 2], self.sty[o + 3] = UInt32(mode), c1, bits(gx), bits(gy)
-        self.sty[o + 4], self.sty[o + 5], self.sty[o + 6], self.sty[o + 7] = bits(sx), bits(sy), bits(sr), sc
+        self.sty[o + 4], self.sty[o + 5], self.sty[o + 6], self.sty[o + 7] = bits(sane(sx)), bits(sane(sy)), bits(sane(sr)), sc
         self.ns += 1
         return self.ns - 1
 
@@ -338,7 +348,7 @@ struct Draw(Movable):
         """Clip everything drawn from here to unclip() to the rect (hard edge at pixel centers; a new clip replaces the old,
         which is ended first so a tile only the old one covered does not keep it)."""
         self.unclip()
-        self.cur_clip = SIMD[DType.float32, 4](x0, y0, x1, y1)
+        self.cur_clip = SIMD[DType.float32, 4](sane(x0), sane(y0), sane(x1), sane(y1))
         self.push(CLIP, x0, y0, x1, y1, 0, 0, 0)
 
     def unclip(mut self):
@@ -354,7 +364,10 @@ struct Draw(Movable):
         self.push(LINE, x0, y0, x1, y1, w * 0.5, c)
 
     def tri(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, x2: Float32, y2: Float32, c: UInt32):
-        self.push(TRI, x0, y0, x1, y1, x2, c, bits(y2))
+        if y2 != y2:
+            self.dropped += 1
+            return
+        self.push(TRI, x0, y0, x1, y1, sane(x2), c, bits(sane(y2)))
 
     def image(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, off: Int, sw: Int, sh: Int, alpha: Int = 255):
         """Draw sw x sh source pixels starting at `off` (the app's RGBA in the source buffer) scaled to the rect.
@@ -396,7 +409,7 @@ struct Draw(Movable):
         var y0 = flt(self.cmd[o + 2])
         var x1 = flt(self.cmd[o + 3])
         var y1 = flt(self.cmd[o + 4])
-        var pad = Float32(2) + (2 * flt(self.cmd[o + 7]) if kind == RECT else (flt(self.cmd[o + 5]) if kind == LINE else (Float32((self.cmd[o] >> 16) & 255) if kind == RRECT else (self.shadow_pad(Int(self.cmd[o] >> 16)) if kind == SRECT else 0))))
+        var pad = min(Float32(2) + (2 * flt(self.cmd[o + 7]) if kind == RECT else (flt(self.cmd[o + 5]) if kind == LINE else (Float32((self.cmd[o] >> 16) & 255) if kind == RRECT else (self.shadow_pad(Int(self.cmd[o] >> 16)) if kind == SRECT else 0)))), BIG)
         var lx, hx, ly, hy = min(x0, x1), max(x0, x1), min(y0, y1), max(y0, y1)
         if kind == TRI:
             lx, hx = min(lx, flt(self.cmd[o + 5])), max(hx, flt(self.cmd[o + 5]))
