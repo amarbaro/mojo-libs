@@ -18,4 +18,4 @@
 | `Audio(rate)`; `put`, `queued` | SDL3 mono float32 playback stream |
 
 Capacities: 4096 commands, `UI_BINS` tile entries (32,768), `UI_IMG` image pixels (65,536). Past a capacity whole commands
-drop and `ui.dropped` counts them.
+drop and `ui.d.dropped` counts them.

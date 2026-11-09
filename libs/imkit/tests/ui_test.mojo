@@ -12,7 +12,9 @@ from std.sys import argv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 from imkit.font import AW, Font
-from imkit.ui import ACCENT, AH, BAD, GOOD, ISRC, NBIN, TEXT, TX, TY, UH, UW, WARN, Ui
+from imkit.draw import AH, ISRC, NBIN, TX, TY, UH, UW
+from imkit.theme import ACCENT, BAD, GOOD, TEXT, WARN
+from imkit.ui import Ui
 from imkit.window import Input
 from imkit.layer import Layer
 
@@ -52,8 +54,8 @@ def main() raises:
     var c1 = frame(ui, press)
     var c2 = frame(ui, release)
     var c3 = frame(ui, release)  # a release with nothing active is no click
-    print("clicks idle/press/release/again:", c0, c1, c2, c3, "commands", ui.n, "tile entries", Int(ui.off[TX * TY]), "dropped", ui.dropped)
-    if c0 or c1 or not c2 or c3 or ui.dropped:
+    print("clicks idle/press/release/again:", c0, c1, c2, c3, "commands", ui.d.n, "tile entries", Int(ui.d.off[TX * TY]), "dropped", ui.d.dropped)
+    if c0 or c1 or not c2 or c3 or ui.d.dropped:
         fails += 1
     var ctx = DeviceContext()
     var layer = Layer(ctx, ui)
@@ -124,7 +126,7 @@ def main() raises:
     ui.image(200, 400, 208, 408, 7, 4, 4)
     ui.image(0, 0, 8, 8, ISRC - 3, 4, 4)  # source past the buffer: dropped and counted, not drawn
     ui.finish()
-    var dropped0 = ui.dropped
+    var dropped0 = ui.d.dropped
     layer.render(ui)
     var near = lambda (p: UInt32, q: UInt32) -> Bool: abs(Int(p & 255) - Int(q & 255)) <= 1 and abs(Int((p >> 8) & 255) - Int((q >> 8) & 255)) <= 1 and (p >> 24) == 255
     var tl = layer.pixels[401 * UW + 201]
@@ -150,7 +152,7 @@ def main() raises:
     if not near(si, srcpx[10]) or not si_raised or layer.pixels[1] >> 24 != 255:
         fails += 1
     # past NBIN tile entries: whole commands drop (counted), the ones kept still draw
-    ui.dropped = 0
+    ui.d.dropped = 0
     ui.begin(idle)
     var each = TX * TY  # a full-screen rect touches every tile
     var want = NBIN // each + 5
@@ -158,8 +160,8 @@ def main() raises:
         ui.rect(0, 0, Float32(UW), Float32(UH), 0, ACCENT)
     ui.finish()
     layer.render(ui)
-    print("overflow: asked", want, "kept", ui.n, "dropped", ui.dropped, "tile entries", Int(ui.off[TX * TY]), "of", NBIN)
-    if ui.n != NBIN // each or ui.dropped != want - NBIN // each or Int(ui.off[TX * TY]) > NBIN or layer.pixels[360 * UW + 640] >> 24 != 255:
+    print("overflow: asked", want, "kept", ui.d.n, "dropped", ui.d.dropped, "tile entries", Int(ui.d.off[TX * TY]), "of", NBIN)
+    if ui.d.n != NBIN // each or ui.d.dropped != want - NBIN // each or Int(ui.d.off[TX * TY]) > NBIN or layer.pixels[360 * UW + 640] >> 24 != 255:
         fails += 1
     # render before finish raises
     ui.begin(idle)
@@ -174,7 +176,7 @@ def main() raises:
         fails += 1
     ui.finish()
     # Oversized atlases fail before device buffers are allocated.
-    ui.font.atlas.resize(AW * AH + 1, 0)
+    ui.d.font.atlas.resize(AW * AH + 1, 0)
     var rejected = False
     try:
         var invalid = Layer(ctx, ui)

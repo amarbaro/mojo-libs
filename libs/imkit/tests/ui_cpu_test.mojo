@@ -10,7 +10,9 @@ usage: IMKIT_FONT=/path/font.ttf mojo run -I src tests/ui_cpu_test.mojo  (defaul
 from std.os import getenv
 from imkit.font import Font
 from imkit.layer import image_fits
-from imkit.ui import ACCENT, ISRC, NBIN, NCMD, SC_BACKSPACE, TX, TY, UH, UW, Ui
+from imkit.draw import ISRC, NBIN, NCMD, TX, TY, UH, UW
+from imkit.theme import ACCENT
+from imkit.ui import SC_BACKSPACE, Ui
 from imkit.window import Input
 
 
@@ -21,8 +23,8 @@ def check(ok: Bool, name: String, mut fails: Int):
 
 
 def in_bin(ui: Ui, tile: Int, k: Int) -> Bool:
-    for j in range(Int(ui.off[tile]), Int(ui.off[tile + 1])):
-        if Int(ui.bins[j]) == k:
+    for j in range(Int(ui.d.off[tile]), Int(ui.d.off[tile + 1])):
+        if Int(ui.d.bins[j]) == k:
             return True
     return False
 
@@ -64,30 +66,30 @@ def main() raises:
     var e1 = frame(ui, elsewhere)
     var e2 = frame(ui, elsewhere_up)
     check(not e1 and not e2, "press and release elsewhere is no click", fails)
-    check(ui.dropped == 0 and ui.n > 10, "demo frame: commands kept, none dropped", fails)
+    check(ui.d.dropped == 0 and ui.d.n > 10, "demo frame: commands kept, none dropped", fails)
     # the panel background is the second command (shadow first); it covers tile (60 / 16, 400 / 16) and not the far corner
     var near = (60 // 16) * TX + 400 // 16
     var far = (TY - 1) * TX + (TX - 1)
     check(in_bin(ui, near, 1) and not in_bin(ui, far, 1), "panel command is in a covered tile's bin and not in a far one", fails)
     var total = 0
-    for k in range(ui.n):
-        var s = ui.span(k)
+    for k in range(ui.d.n):
+        var s = ui.d.span(k)
         total += Int(s[1] - s[0]) * Int(s[3] - s[2])
-    check(Int(ui.off[TX * TY]) == total and total <= NBIN, "bin entries equal the sum of the spans", fails)
+    check(Int(ui.d.off[TX * TY]) == total and total <= NBIN, "bin entries equal the sum of the spans", fails)
     # tile entry overflow: full-screen rects touch every tile; past NBIN whole commands drop
-    ui.dropped = 0
+    ui.d.dropped = 0
     ui.begin(idle)
     var want = NBIN // (TX * TY) + 5
     for _ in range(want):
         ui.rect(0, 0, Float32(TX * 16), Float32(TY * 16), 0, ACCENT)
     ui.finish()
-    check(ui.n == NBIN // (TX * TY) and ui.dropped == want - NBIN // (TX * TY) and Int(ui.off[TX * TY]) <= NBIN, "past NBIN whole commands drop, counted", fails)
+    check(ui.d.n == NBIN // (TX * TY) and ui.d.dropped == want - NBIN // (TX * TY) and Int(ui.d.off[TX * TY]) <= NBIN, "past NBIN whole commands drop, counted", fails)
     # command list overflow
-    ui.dropped = 0
+    ui.d.dropped = 0
     ui.begin(idle)
     for _ in range(NCMD + 10):
         ui.rect(0, 0, 4, 4, 0, ACCENT)
-    check(ui.n == NCMD and ui.dropped == 10, "past NCMD commands drop, counted", fails)
+    check(ui.d.n == NCMD and ui.d.dropped == 10, "past NCMD commands drop, counted", fails)
     # text fields
     var back = SIMD[DType.uint64, 2](0)
     back[SC_BACKSPACE >> 6] = UInt64(1) << UInt64(SC_BACKSPACE & 63)
@@ -119,11 +121,11 @@ def main() raises:
     check(image_fits(16, 4, 4) and image_fits(ISRC, 256, ISRC // 256) and not image_fits(ISRC + 256, 256, ISRC // 256 + 1) and not image_fits(15, 4, 4)
           and not image_fits(16, 0, 4) and not image_fits(16, 4, -4) and not image_fits(16, 0x10000, 1), "image_fits: fits, raises on over ISRC, short slice, bad sides", fails)
     # a 4 x 4 image on a rect much larger than the layer (and one starting off-screen) is clipped to the tiles, not dropped
-    fui.dropped = 0
+    fui.d.dropped = 0
     fui.begin(idle)
     fui.image(-300, -200, Float32(UW + 300), Float32(UH + 200), 0, 4, 4)
     fui.finish()
-    check(fui.dropped == 0 and fui.n == 1 and Int(fui.off[TX * TY]) == TX * TY, "oversize image rect clipped to the layer's tiles", fails)
+    check(fui.d.dropped == 0 and fui.d.n == 1 and Int(fui.d.off[TX * TY]) == TX * TY, "oversize image rect clipped to the layer's tiles", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")

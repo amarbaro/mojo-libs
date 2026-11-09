@@ -9,7 +9,8 @@ all allocated once on the app's own DeviceContext. render(ui) after ui.finish() 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from layout import TileTensor, row_major
 from .font import AW
-from .ui import AH, CW, ISRC, NBIN, NCMD, TX, TY, UH, UW, Ui, compose
+from .draw import AH, CW, ISRC, NBIN, NCMD, TX, TY, UH, UW, compose
+from .ui import Ui
 
 
 def image_fits(n: Int, w: Int, h: Int) -> Bool:
@@ -29,8 +30,8 @@ struct Layer(Movable):
 
     def __init__(out self, ctx: DeviceContext[], ui: Ui) raises:
         comptime assert UW > 0 and UH > 0 and UW % 16 == 0 and UH % 16 == 0, "UI_W, UI_H: positive multiples of 16"
-        if len(ui.font.atlas) > AW * AH:
-            raise Error("Layer: font atlas " + String(len(ui.font.atlas)) + " B over the compose capacity " + String(AW * AH))
+        if len(ui.d.font.atlas) > AW * AH:
+            raise Error("Layer: font atlas " + String(len(ui.d.font.atlas)) + " B over the compose capacity " + String(AW * AH))
         self.ctx = ctx
         self.img = ctx.enqueue_create_buffer[DType.uint32](UW * UH)
         self.cmd = ctx.enqueue_create_buffer[DType.uint32](NCMD * CW)
@@ -40,7 +41,7 @@ struct Layer(Movable):
         self.src = ctx.enqueue_create_buffer[DType.uint32](ISRC)
         self.pixels = ctx.enqueue_create_host_buffer[DType.uint32](UW * UH)
         self.src.enqueue_fill(0)
-        ctx.enqueue_copy(self.atlas.create_sub_buffer[DType.uint8](0, len(ui.font.atlas)), ui.font.atlas.unsafe_ptr())
+        ctx.enqueue_copy(self.atlas.create_sub_buffer[DType.uint8](0, len(ui.d.font.atlas)), ui.d.font.atlas.unsafe_ptr())
         ctx.synchronize()  # the atlas is the caller's
 
     def set_image(mut self, px: Span[UInt32, _], w: Int, h: Int) raises:
@@ -60,14 +61,14 @@ struct Layer(Movable):
 
     def render(mut self, ui: Ui) raises:
         """Upload the finished frame, compose, copy to pixels; returns when pixels is ready."""
-        if ui.binned != ui.n:
+        if ui.d.binned != ui.d.n:
             raise Error("Layer.render: call Ui.finish() first")
-        if ui.n:
-            self.ctx.enqueue_copy(self.cmd.create_sub_buffer[DType.uint32](0, ui.n * CW), ui.cmd.unsafe_ptr())
-        var used = Int(ui.off[TX * TY])
+        if ui.d.n:
+            self.ctx.enqueue_copy(self.cmd.create_sub_buffer[DType.uint32](0, ui.d.n * CW), ui.d.cmd.unsafe_ptr())
+        var used = Int(ui.d.off[TX * TY])
         if used:
-            self.ctx.enqueue_copy(self.bins.create_sub_buffer[DType.uint16](0, used), ui.bins.unsafe_ptr())
-        self.ctx.enqueue_copy(self.off, ui.off.unsafe_ptr())
+            self.ctx.enqueue_copy(self.bins.create_sub_buffer[DType.uint16](0, used), ui.d.bins.unsafe_ptr())
+        self.ctx.enqueue_copy(self.off, ui.d.off.unsafe_ptr())
         self.launch()
         self.ctx.enqueue_copy(self.pixels, self.img)
         self.ctx.synchronize()  # ui's lists are read by the copies above
