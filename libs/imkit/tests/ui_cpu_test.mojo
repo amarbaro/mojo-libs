@@ -8,6 +8,7 @@ the focused flag; image_fits (set_image's check) and an image rect larger than t
 usage: IMKIT_FONT=/path/font.ttf mojo run -I src tests/ui_cpu_test.mojo  (default font: Roboto Medium)
 """
 from std.os import getenv
+from imkit.draw import flt
 from imkit.font import Font
 from imkit.layer import image_fits
 from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, FULL, bits, clipped, rgba, rrect, srect
@@ -190,6 +191,27 @@ def main() raises:
     aui.begin(idle, 0.02)  # id 9 was asked for last frame: kept; nobody asks now
     aui.begin(idle, 0.02)
     check(first == 0 and abs(stepped - 0.104) < 1e-5 and len(aui.anim.id) == 0, "Ui.begin(input, dt): spring steps by dt, an unasked id is evicted", fails)
+    # DPI: logical coordinates. The icon at logical (10, 10)-(46, 46) draws at that times the scale, and a click needs the
+    # mouse (layer pixels) inside it: its center clicks, 0.2 past the right edge and 0.2 before the left edge do not, 0.2 inside the left edge does.
+    for sc in [Float32(1), Float32(1.5), Float32(2)]:
+        var dui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+        dui.set_scale(sc)
+        var hits = List[Bool]()
+        for px in [Float32(28), Float32(46.2), Float32(9.8), Float32(10.2)]:  # logical x of the mouse; y is 28
+            var mx = px * sc
+            var ps = Input(mx, 28 * sc, 0, 0, 0, 1, 1, 0, keys, False)
+            var rl = Input(mx, 28 * sc, 0, 0, 0, 0, 0, 1, keys, False)
+            for inp in [ps.copy(), rl.copy()]:
+                dui.begin(inp)
+                dui.x, dui.y = 10, 10
+                var clicked = dui.icon(1, 0)
+                dui.finish()
+                if inp.released & 1:
+                    hits.append(clicked)
+        var x0 = flt(dui.d.cmd[1])
+        var x1 = flt(dui.d.cmd[3])
+        check(hits[0] and not hits[1] and not hits[2] and hits[3] and abs(x0 - 10 * sc) < 1e-4 and abs(x1 - 46 * sc) < 1e-4
+              and abs(dui.w() * sc - Float32(UW)) < 1e-3, "DPI " + String(sc) + ": hit test in logical units, rect drawn at logical x scale", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")

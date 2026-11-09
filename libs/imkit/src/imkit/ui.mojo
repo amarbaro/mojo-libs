@@ -14,6 +14,7 @@ comptime SC_BACKSPACE = 42  # SDL scancode
 struct Ui(Movable):
     var d: Draw
     var anim: Anim  # widget id -> spring (anim.mojo)
+    var scale: Float32  # layer pixels per logical unit (DPI 1.5: 1.5); widgets, cursor and input are logical
     var inp: Input
     var active: Int  # widget held by the mouse (0: none)
     var over: Bool  # the mouse is over UI this frame: the scene does not take it
@@ -25,20 +26,42 @@ struct Ui(Movable):
     def __init__(out self, var font: Font):
         self.d = Draw(font^)
         self.anim = Anim()
+        self.scale = 1
         self.active, self.over, self.x, self.y = 0, False, 0, 0
         self.focus, self.field_focused = 0, False
         self.inp = Input(0, 0, 0, 0, 0, 0, 0, 0, SIMD[DType.uint64, 2](0), False)
 
     def begin(mut self, inp: Input, dt: Float32 = 0):
         """Start a frame: this frame's input and its length in seconds (0: springs hold still)."""
-        self.inp = inp.copy()
+        self.inp = inp.logical(self.scale)  # the mouse arrives in layer pixels
         self.anim.begin(dt)
         self.d.begin()
         self.over = False
         self.field_focused = False
 
+    def set_scale(mut self, scale: Float32):
+        """DPI: draw `scale` layer pixels per logical unit. Call before begin(); the font sizes stay in layer pixels, so
+        build the Font with sizes times scale for a sharp result."""
+        self.scale = scale
+
+    def w(self) -> Float32:
+        """Width of the layer in logical units."""
+        return Float32(UW) / self.scale
+
+    def h(self) -> Float32:
+        return Float32(UH) / self.scale
+
+    def tw(self, s: StringSlice, size: Int) -> Float32:
+        """Logical width of s at font size index `size`."""
+        return Float32(self.d.font.width(s, size)) / self.scale
+
+    def asc(self, size: Int) -> Float32:
+        """Logical ascent of font size index `size`."""
+        return Float32(self.d.font.ascent[size]) / self.scale
+
     def rect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, blur: Float32 = 0):
-        self.d.rect(x0, y0, x1, y1, r, c, blur)
+        var k = self.scale
+        self.d.rect(x0 * k, y0 * k, x1 * k, y1 * k, r * k, c, blur * k)
 
     def rrect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, border: Float32 = 0,
               bcol: UInt32 = 0, glow: Float32 = 0, grad: Int = 0):
@@ -58,16 +81,21 @@ struct Ui(Movable):
         self.d.unclip()
 
     def line(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, w: Float32, c: UInt32):
-        self.d.line(x0, y0, x1, y1, w, c)
+        var k = self.scale
+        self.d.line(x0 * k, y0 * k, x1 * k, y1 * k, w * k, c)
 
     def tri(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, x2: Float32, y2: Float32, c: UInt32):
-        self.d.tri(x0, y0, x1, y1, x2, y2, c)
+        var k = self.scale
+        self.d.tri(x0 * k, y0 * k, x1 * k, y1 * k, x2 * k, y2 * k, c)
 
     def image(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, off: Int, sw: Int, sh: Int, alpha: Int = 255):
-        self.d.image(x0, y0, x1, y1, off, sw, sh, alpha)
+        var k = self.scale
+        self.d.image(x0 * k, y0 * k, x1 * k, y1 * k, off, sw, sh, alpha)
 
     def text(mut self, x: Float32, y: Float32, s: StringSlice, size: Int, c: UInt32) -> Float32:
-        return self.d.text(x, y, s, size, c)
+        """Draw s with its top at y (logical); the origin snaps to a whole layer pixel. Returns the logical x after it."""
+        var k = self.scale
+        return self.d.text(round(x * k), round(y * k), s, size, c) / k
 
     def animate(mut self, id: Int, target: Float32) -> Float32:
         """The spring value for widget id moving toward target (first sight: the target itself)."""
@@ -97,8 +125,8 @@ struct Ui(Movable):
         var x0, y0 = self.x, self.y
         var hc = self.clickable(id, x0, y0, x0 + w, y0 + h)
         self.rect(x0, y0, x0 + w, y0 + h, h * 0.5, color if on else (HOVER if hc[0] else SURFACE))
-        var tw = Float32(self.d.font.width(label, 0))
-        _ = self.text(x0 + (w - tw) * 0.5, y0 + (h - Float32(self.d.font.ascent[0])) * 0.5 - 1, label, 0, TEXT)
+        var tw = self.tw(label, 0)
+        _ = self.text(x0 + (w - tw) * 0.5, y0 + (h - self.asc(0)) * 0.5 - 1, label, 0, TEXT)
         self.x += w + 8
         return hc[1]
 
@@ -129,9 +157,9 @@ struct Ui(Movable):
         self.rect(x0 - 1.5, y0 - 1.5, x0 + w + 1.5, y0 + 31.5, 8, ACCENT if on else SURFACE)
         self.rect(x0, y0, x0 + w, y0 + 30, 7, HOVER if hc[0] and not on else SURFACE)
         var s = 0
-        while s < buf.byte_length() and self.d.font.width(StringSlice(unsafe_from_utf8=buf.as_bytes()[s:]), 0) > Int(w) - 24:
+        while s < buf.byte_length() and self.tw(StringSlice(unsafe_from_utf8=buf.as_bytes()[s:]), 0) > w - 24:
             s += 1
-        var pen = self.text(x0 + 10, y0 + (30 - Float32(self.d.font.ascent[0])) * 0.5 - 1, StringSlice(unsafe_from_utf8=buf.as_bytes()[s:]), 0, TEXT)
+        var pen = self.text(x0 + 10, y0 + (30 - self.asc(0)) * 0.5 - 1, StringSlice(unsafe_from_utf8=buf.as_bytes()[s:]), 0, TEXT)
         if on:
             self.rect(pen + 1, y0 + 7, pen + 2.5, y0 + 23, 0.5, TEXT)
         self.y += 38
