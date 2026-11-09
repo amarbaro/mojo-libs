@@ -510,6 +510,18 @@ def main() raises:
     rs.rrect(20, 20, 40, 40, 4, ACCENT)
     rs.finish()
     check(flt(rs.d.cmd[3]) == 75 and flt(rs.d.cmd[8 + 1]) == 30 and flt(rs.d.cmd[8 + 5]) == 6, "DPI 1.5: clip and rrect are scaled to layer pixels", fails)
+    # glass and icon_img take logical coordinates too: positions and given sizes scale, an asset's own size stays in layer pixels
+    rs.begin(idle)
+    rs.assets.names.append("a")
+    rs.assets.meta.extend([0, 8, 6])
+    rs.assets.px = List[UInt32](length=48, fill=0)
+    rs.glass(10, 20, 50, 60, 4, ACCENT)
+    _ = rs.icon_img("a", 10, 20)
+    _ = rs.icon_img("a", 10, 20, 16, 12)
+    rs.finish()
+    check(rs.d.n == 3 and flt(rs.d.cmd[1]) == 15 and flt(rs.d.cmd[4]) == 90 and flt(rs.d.cmd[5]) == 6, "DPI 1.5: glass is scaled to layer pixels", fails)
+    check(flt(rs.d.cmd[8 + 1]) == 15 and flt(rs.d.cmd[8 + 2]) == 30 and flt(rs.d.cmd[8 + 3]) == 23 and flt(rs.d.cmd[8 + 4]) == 36, "DPI 1.5: icon_img origin scales, its own size stays in layer pixels", fails)
+    check(flt(rs.d.cmd[16 + 3]) == 15 + 24 and flt(rs.d.cmd[16 + 4]) == 30 + 18, "DPI 1.5: icon_img with a given size scales it", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")

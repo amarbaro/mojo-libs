@@ -47,5 +47,5 @@ mutant "png average rounds up" assets.mojo 's/pred = (a + b) \/\/ 2/pred = (a + 
 mutant "png rgb alpha" assets.mojo 's/cur\[x \* bpp + 3\] if bpp == 4 else 255/cur[x * bpp + 3] if bpp == 4 else 0/' assets_test
 mutant "png row up filter ignored" assets.mojo 's/                pred = b$/                pred = 0/' assets_test
 mutant "atlas offsets restart" assets.mojo 's/String(len(bin) \/\/ 4) + " " + String(pic\[0\])/"0 " + String(pic[0])/' assets_test
-mutant "icon_img ignores its size" ui.mojo 's/(Float32(m\[3 \* i + 1\]) if w <= 0 else w)/w/' assets_test
+mutant "icon_img ignores its size" ui.mojo 's/(Float32(m\[3 \* i + 1\]) if w <= 0 else w \* k)/w * k/' assets_test
 echo "PASS mutants"

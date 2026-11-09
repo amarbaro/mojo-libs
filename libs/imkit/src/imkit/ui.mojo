@@ -114,17 +114,19 @@ struct Ui(Movable):
         self.d.unclip()
 
     def glass(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, tint: UInt32):
-        self.d.glass(x0, y0, x1, y1, r, tint)
+        var k = self.scale
+        self.d.glass(x0 * k, y0 * k, x1 * k, y1 * k, r * k, tint)
 
     def icon_img(mut self, name: StringSlice, x: Float32, y: Float32, w: Float32 = 0, h: Float32 = 0, alpha: Int = 255) -> Bool:
-        """Draw the asset `name` with its top left at (x, y), at its own size unless w and h are given; False (and the
-        drop is counted) if there is no such asset."""
+        """Draw the asset `name` with its top left at (x, y) and, if given, size w x h (logical), else its own size in layer
+        pixels; False (and the drop is counted) if there is no such asset."""
         var i = self.assets.find(name)
         if i < 0:
             self.d.dropped += 1
             return False
         ref m = self.assets.meta
-        self.d.image(x, y, x + (Float32(m[3 * i + 1]) if w <= 0 else w), y + (Float32(m[3 * i + 2]) if h <= 0 else h), m[3 * i], m[3 * i + 1], m[3 * i + 2], alpha)
+        var k = self.scale
+        self.d.image(x * k, y * k, x * k + (Float32(m[3 * i + 1]) if w <= 0 else w * k), y * k + (Float32(m[3 * i + 2]) if h <= 0 else h * k), m[3 * i], m[3 * i + 1], m[3 * i + 2], alpha)
         return True
 
     def line(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, w: Float32, c: UInt32):
