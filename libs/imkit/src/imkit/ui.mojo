@@ -13,7 +13,11 @@ comptime SC_BACKSPACE = 42  # SDL scancode
 
 
 def num(x: Float32) -> String:
-    """x for an axis label: whole above 100, else one decimal."""
+    """x for an axis label: whole above 100, else one decimal; NaN and magnitudes from 1e9 on (Int cannot hold them) as text."""
+    if x != x:
+        return "nan"
+    if abs(x) >= 1e9:
+        return ">1e9" if x > 0 else "<-1e9"
     if abs(x) >= 100:
         return String(Int(round(x)))
     var t = Int(round(abs(x) * 10))
@@ -335,15 +339,17 @@ struct Ui(Movable):
         that touch the viewport (the rest are never emitted; the edge rows are clipped); row k sits at scroll_y(k). Call
         scroll_end after the rows."""
         var x0, y0 = self.x, self.y
+        var rl = rh if rh > 0 and rh < Float32(1e6) else Float32(1)  # a height of 0, below 0, NaN or inf reads as 1: Int() of off // 0 is undefined
+        var nr = max(rows, 0)
         var hot = self.hovered(x0, y0, x0 + w, y0 + h)
-        off = min(max(off - (self.inp.wheel * rh if hot else 0), Float32(0)), max(Float32(rows) * rh - h, Float32(0)))
+        off = min(max(off - (self.inp.wheel * rl if hot else 0), Float32(0)), max(Float32(nr) * rl - h, Float32(0)))
         self.vp = SIMD[DType.float32, 4](x0, y0, w, h)
-        self.rh, self.soff, self.srows = rh, off, rows
+        self.rh, self.soff, self.srows = rl, off, nr
         self.rect(x0, y0, x0 + w, y0 + h, self.theme.radius * 0.5, self.theme.surface)
         if hot:
             self.over = True
         self.clip(x0, y0, x0 + w, y0 + h)
-        return (Int(off // rh), min(Int(-((-(off + h)) // rh)), rows))  # floor(off / rh), ceil((off + h) / rh)
+        return (Int(off // rl), min(Int(-((-(off + h)) // rl)), nr))  # floor(off / rh), ceil((off + h) / rh)
 
     def scroll_y(self, k: Int) -> Float32:
         """Top of row k of the current scroll list, in logical units."""

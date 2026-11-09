@@ -14,7 +14,7 @@ from imkit.font import Font
 from imkit.layer import image_fits
 from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, FULL, bits, clipped, glass, rgba, rrect, srect
 from imkit.theme import ACCENT, TEXT, Theme, flat, neon, glass as tglass
-from imkit.ui import SC_BACKSPACE, Ui, cp_ceil, cp_floor
+from imkit.ui import SC_BACKSPACE, Ui, cp_ceil, cp_floor, num
 from imkit.window import Input
 
 
@@ -539,6 +539,20 @@ def main() raises:
     rs.rrect(20, 20, 40, 40, 4, ACCENT)
     rs.finish()
     check(flt(rs.d.cmd[3]) == 75 and flt(rs.d.cmd[8 + 1]) == 30 and flt(rs.d.cmd[8 + 5]) == 6, "DPI 1.5: clip and rrect are scaled to layer pixels", fails)
+    # a row height of 0, negative or NaN: the visible rows stay inside 0..rows (the height reads as 1), and axis labels print
+    # something readable for NaN and for values Int cannot hold
+    var qn = Float32(0) / Float32(0)
+    var qi = Float32(1) / Float32(0)
+    var sx = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var rows_ok = True
+    for rh in [Float32(0), Float32(-4), qn, qi]:
+        sx.begin(idle)
+        var soff = Float32(0)
+        var vr = sx.scroll_begin(2, 100, 100, 10, rh, soff)
+        sx.scroll_end()
+        rows_ok = rows_ok and 0 <= vr[0] <= vr[1] <= 10 and soff == soff
+    check(rows_ok, "scroll_begin: a row height of 0, negative, NaN or inf keeps first <= end within the rows", fails)
+    check(num(qn) == "nan" and num(qi) == ">1e9" and num(-qi) == "<-1e9" and num(1e30) == ">1e9" and num(12.34) == "12.3" and num(-0.04) == "0.0" and num(250.4) == "250", "num: NaN and huge values print as text, ordinary ones as before", fails)
     # a font size index the Font does not have: nothing is drawn or measured, the draw is counted, no out-of-range read
     var zs = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
     zs.begin(idle)
