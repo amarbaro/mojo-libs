@@ -1,0 +1,1 @@
+- Public sync b0a0281 overwrote a local fix (f56d2a3) -> before a sync commit, `git log <public>..HEAD -- src` lists local fixes; re-apply each one and run core-gate.
