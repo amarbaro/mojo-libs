@@ -135,8 +135,9 @@ struct Window(Movable):
                 inp.wheel += f[7]
             elif kind == EV_TEXT:  # SDL_TextInputEvent: the char* at offset 24, owned by SDL until the next poll
                 var p = UnsafePointer[UInt8, MutAnyOrigin](unsafe_from_address=e.unsafe_bitcast[Int]()[3])
-                var n = Int(external_call["strlen", UInt64](p))
-                inp.text += String(unsafe_from_utf8=Span(unsafe_ptr=p, length=n))
+                var n = Int(external_call["strnlen", UInt64](p, UInt64(256)))  # bounded: never scan past 256 bytes
+                if inp.text.byte_length() + n <= 1024:  # one frame's typing; drop the rest rather than grow
+                    inp.text += String(unsafe_from_utf8=Span(unsafe_ptr=p, length=n))
             elif kind == EV_KEY_DOWN or kind == EV_KEY_UP:
                 var sc = Int(e.unsafe_bitcast[UInt32]()[6])
                 if sc < 128:
