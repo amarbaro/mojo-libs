@@ -45,3 +45,5 @@
 - A SIMD self-compare `v.ne(v)` was folded to false, so NaN commands were not dropped, while the scalar `x != x` worked -> use `isnan` for a NaN test; the NaN test in ui_cpu_test caught it the same minute, so a guard keeps its test when it is rewritten for speed.
 - Under load the same base binary read 17.3 and 20.4 us in one session -> compare 8 alternating rounds and give the median and the min of both, not one pair.
 - A stale mutant sed failed a 25-minute gate three times (reworded line each time), and the written rule did not stop it -> it is a gate now: `scripts/ci.sh` runs `MUTANT_DRY=1 scripts/mutants.sh`, which checks in under a second that every sed still changes its file; a commit that rewords a mutated line fails in the first minute.
+
+- A merge commit written with `git merge -m` carried a model attribution line; the selftag gate checks `git commit` only. -> Merge messages follow the commit rules: no attribution, check `git log -1 --format=%B` after every merge.
