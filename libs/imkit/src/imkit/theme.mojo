@@ -15,6 +15,7 @@ struct Theme(Copyable, Movable):
     var warn: UInt32
     var bad: UInt32
     var text: UInt32
+    var on_accent: UInt32  # text on an accent fill (a pressed toggle, a selected row)
     var muted: UInt32
     var shadow: UInt32
     var border_c: UInt32  # outline color of panels and fields (used when border > 0)
@@ -26,19 +27,19 @@ struct Theme(Copyable, Movable):
 
 def glass() -> Theme:
     return Theme(rgba(17, 19, 26, 214), rgba(36, 40, 52, 255), rgba(52, 57, 74, 255), rgba(99, 102, 241, 255),
-                 rgba(52, 211, 153, 255), rgba(251, 191, 36, 255), rgba(248, 113, 113, 255), rgba(229, 231, 235, 255),
+                 rgba(52, 211, 153, 255), rgba(251, 191, 36, 255), rgba(248, 113, 113, 255), rgba(229, 231, 235, 255), rgba(255, 255, 255, 255),
                  rgba(148, 155, 172, 255), rgba(0, 0, 0, 120), rgba(255, 255, 255, 30), 12, 1, 0, 14)
 
 
 def neon() -> Theme:
     return Theme(rgba(6, 4, 14, 224), rgba(20, 14, 38, 255), rgba(36, 24, 66, 255), rgba(0, 240, 255, 255),
-                 rgba(57, 255, 136, 255), rgba(255, 214, 10, 255), rgba(255, 45, 120, 255), rgba(235, 240, 255, 255),
+                 rgba(57, 255, 136, 255), rgba(255, 214, 10, 255), rgba(255, 45, 120, 255), rgba(235, 240, 255, 255), rgba(6, 4, 14, 255),
                  rgba(150, 130, 200, 255), rgba(0, 240, 255, 90), rgba(0, 240, 255, 200), 8, 0.5, 1, 24)
 
 
 def flat() -> Theme:
     return Theme(rgba(246, 247, 249, 255), rgba(226, 229, 234, 255), rgba(208, 213, 222, 255), rgba(37, 99, 235, 255),
-                 rgba(22, 163, 74, 255), rgba(217, 119, 6, 255), rgba(220, 38, 38, 255), rgba(17, 24, 39, 255),
+                 rgba(22, 163, 74, 255), rgba(217, 119, 6, 255), rgba(220, 38, 38, 255), rgba(17, 24, 39, 255), rgba(255, 255, 255, 255),
                  rgba(100, 108, 122, 255), rgba(0, 0, 0, 40), rgba(176, 184, 198, 255), 4, 0.25, 1, 5)
 
 

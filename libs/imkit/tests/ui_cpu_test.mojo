@@ -71,7 +71,7 @@ def colors(mut ui: Ui, t: Theme) -> List[UInt32]:
 
 
 def only_roles(c: List[UInt32], t: Theme) -> Bool:
-    var roles = [t.panel, t.surface, t.hover, t.accent, t.good, t.warn, t.bad, t.text, t.muted, t.shadow, t.border_c]
+    var roles = [t.panel, t.surface, t.hover, t.accent, t.good, t.warn, t.bad, t.text, t.on_accent, t.muted, t.shadow, t.border_c]
     for v in c:
         var ok = False
         for r in roles:
@@ -79,6 +79,39 @@ def only_roles(c: List[UInt32], t: Theme) -> Bool:
         if not ok:
             return False
     return True
+
+
+def sframe(mut ui: Ui, inp: Input, v: Float32) -> Float32:
+    ui.begin(inp)
+    ui.x, ui.y = 20, 20  # track x 20 to 220, y 20 to 44
+    var nv = ui.slider(1, v, 0, 100, 200)
+    ui.finish()
+    return nv
+
+
+def mframe(mut ui: Ui, inp: Input, mut picked: Int):
+    """A menu at (20, 20): header 20..120 x 20..50, popup items 58..86, 86..114, 114..142 (x 24..116)."""
+    ui.begin(inp)
+    ui.x, ui.y = 20, 20
+    if ui.menu_begin(1, "File", 100, 3):
+        for k in range(3):
+            if ui.menu_item("item"):
+                picked = k
+        ui.menu_end()
+    ui.finish()
+
+
+def lframe(mut ui: Ui, inp: Input, rows: Int, mut off: Float32, mut sel: Int) -> Tuple[Int, Int]:
+    """A scroll list of 200 x 100 at (20, 20), rows of 24; returns the rows drawn."""
+    ui.begin(inp)
+    ui.x, ui.y = 20, 20
+    var fe = ui.scroll_begin(1, 200, 100, rows, 24, off)
+    for k in range(fe[0], fe[1]):
+        if ui.scroll_row(10 + k, k, "row", sel == k):
+            sel = k
+    ui.scroll_end()
+    ui.finish()
+    return fe
 
 
 def main() raises:
@@ -252,6 +285,84 @@ def main() raises:
     check(only_roles(cg, glass()) and only_roles(cn, neon()) and only_roles(cf, flat()), "theme: every drawn colour is a role of the active preset", fails)
     check(cg != cn and cn != cf and cg != cf and len(cg) > 20, "theme: glass, neon and flat draw different frames", fails)
     check(cg == cg2 and tui.d.dropped == 0, "theme: switching presets at runtime and back gives the first frame again", fails)
+    # slider: a press captures the mouse, the value follows x (also outside the track), the release position counts, then it holds
+    var sui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var mouse = SIMD[DType.uint64, 2](0)
+    var v = sframe(sui, Input(120, 32, 0, 0, 0, 0, 0, 0, mouse, False), 10)
+    check(v == 10, "slider: hover alone keeps the value", fails)
+    v = sframe(sui, Input(120, 32, 0, 0, 0, 1, 1, 0, mouse, False), v)
+    check(v == 50, "slider: press at the middle of the track sets 50", fails)
+    v = sframe(sui, Input(170, 32, 0, 0, 0, 1, 0, 0, mouse, False), v)
+    check(v == 75, "slider: held motion follows the mouse", fails)
+    v = sframe(sui, Input(500, 300, 0, 0, 0, 1, 0, 0, mouse, False), v)
+    check(v == 100, "slider: the drag is captured outside the track, clamped", fails)
+    v = sframe(sui, Input(70, 300, 0, 0, 0, 0, 0, 1, mouse, False), v)
+    check(v == 25, "slider: the release position counts", fails)
+    v = sframe(sui, Input(180, 32, 0, 0, 0, 0, 0, 0, mouse, False), v)
+    check(v == 25 and sui.active == 0, "slider: after release the value holds and the capture is gone", fails)
+    v = sframe(sui, Input(400, 32, 0, 0, 0, 1, 1, 0, mouse, False), v)
+    v = sframe(sui, Input(180, 32, 0, 0, 0, 1, 0, 0, mouse, False), v)
+    check(v == 25, "slider: a press outside never captures", fails)
+    _ = sframe(sui, Input(180, 32, 0, 0, 0, 0, 0, 1, mouse, False), v)
+    # menu: header click opens, item click picks once and closes, outside press / Escape / header click close, closed items are dead
+    var mui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var pick = -1
+    var esc = SIMD[DType.uint64, 2](0)
+    esc[0] = UInt64(1) << 41
+    mframe(mui, Input(60, 35, 0, 0, 0, 0, 0, 0, mouse, False), pick)
+    var closed_n = mui.d.n
+    mframe(mui, Input(60, 35, 0, 0, 0, 1, 1, 0, mouse, False), pick)
+    check(mui.menu == 0, "menu: a press on the header does not open it yet", fails)
+    mframe(mui, Input(60, 35, 0, 0, 0, 0, 0, 1, mouse, False), pick)
+    check(mui.menu == 1 and mui.d.n > closed_n and mui.over, "menu: the header click opens the popup (more commands, mouse over UI)", fails)
+    mframe(mui, Input(300, 300, 0, 0, 0, 0, 0, 0, mouse, False), pick)
+    check(mui.menu == 1 and pick == -1, "menu: stays open while idle", fails)
+    mframe(mui, Input(60, 100, 0, 0, 0, 1, 1, 0, mouse, False), pick)
+    mframe(mui, Input(60, 100, 0, 0, 0, 0, 0, 1, mouse, False), pick)
+    var picked_once = pick == 1 and mui.menu == 0
+    mframe(mui, Input(300, 300, 0, 0, 0, 0, 0, 0, mouse, False), pick)
+    check(picked_once and pick == 1 and mui.d.n == closed_n, "menu: item 1 picked once, the popup gone next frame", fails)
+    pick = -1
+    mframe(mui, Input(60, 100, 0, 0, 0, 1, 1, 0, mouse, False), pick)
+    mframe(mui, Input(60, 100, 0, 0, 0, 0, 0, 1, mouse, False), pick)
+    check(pick == -1, "menu: a closed menu has no clickable items", fails)
+    mui.menu = 1
+    mframe(mui, Input(400, 300, 0, 0, 0, 1, 1, 0, mouse, False), pick)
+    check(mui.menu == 0, "menu: a press outside closes it", fails)
+    mui.menu = 1
+    mframe(mui, Input(300, 300, 0, 0, 0, 0, 0, 0, esc, False), pick)
+    check(mui.menu == 0, "menu: Escape closes it", fails)
+    mui.menu = 1
+    mframe(mui, Input(60, 35, 0, 0, 0, 1, 1, 0, mouse, False), pick)
+    mframe(mui, Input(60, 35, 0, 0, 0, 0, 0, 1, mouse, False), pick)
+    check(mui.menu == 0, "menu: the header click toggles it closed", fails)
+    # scroll list: whole rows inside the viewport only; the wheel over it scrolls, clamped; commands do not grow with the row count
+    var lui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var off = Float32(0)
+    var sel = -1
+    var fe = lframe(lui, Input(60, 60, 0, 0, 0, 0, 0, 0, mouse, False), 50, off, sel)
+    check(fe[0] == 0 and fe[1] == 4, "scroll list: rows 0..3 fit 100 high", fails)
+    var n50 = lui.d.n
+    fe = lframe(lui, Input(60, 60, 0, 0, -2, 0, 0, 0, mouse, False), 50, off, sel)
+    check(off == 48 and fe[0] == 2 and fe[1] == 6, "scroll list: wheel -2 scrolls two rows, rows 2..5", fails)
+    fe = lframe(lui, Input(400, 300, 0, 0, -2, 0, 0, 0, mouse, False), 50, off, sel)
+    check(off == 48, "scroll list: the wheel outside the viewport does nothing", fails)
+    off = 10
+    fe = lframe(lui, Input(400, 300, 0, 0, 0, 0, 0, 0, mouse, False), 50, off, sel)
+    check(fe[0] == 1 and fe[1] == 4, "scroll list: a part-row offset draws only whole rows", fails)
+    off = 48
+    _ = lframe(lui, Input(60, 56, 0, 0, 0, 1, 1, 0, mouse, False), 50, off, sel)  # row 3: y 44 to 68
+    _ = lframe(lui, Input(60, 56, 0, 0, 0, 0, 0, 1, mouse, False), 50, off, sel)
+    check(sel == 3, "scroll list: a click on a scrolled row selects it", fails)
+    _ = lframe(lui, Input(400, 300, 0, 0, -1000, 0, 0, 0, mouse, False), 50, off, sel)
+    var top = off
+    _ = lframe(lui, Input(60, 60, 0, 0, -1000, 0, 0, 0, mouse, False), 50, off, sel)
+    var bottom = off
+    _ = lframe(lui, Input(60, 60, 0, 0, 1000, 0, 0, 0, mouse, False), 50, off, sel)
+    check(bottom == 50 * 24 - 100 and off == 0 and top == 48, "scroll list: offset clamps to 0 and rows * rh - h", fails)
+    off = 0
+    _ = lframe(lui, Input(400, 300, 0, 0, 0, 0, 0, 0, mouse, False), 100000, off, sel)
+    check(lui.d.n == n50, "scroll list: 100000 rows emit the same commands as 50", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")

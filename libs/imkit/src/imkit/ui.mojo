@@ -22,6 +22,14 @@ struct Ui(Movable):
     var x: Float32  # layout cursor
     var y: Float32
     var focus: Int  # id of the text field that takes typing (0: none yet; the first field drawn takes it)
+    var menu: Int  # id of the open menu (0: none)
+    var pop: SIMD[DType.float32, 4]  # the open menu's popup box this frame: x0, y0, w, h
+    var in_menu: Bool  # between menu_begin (open) and menu_end
+    var vp: SIMD[DType.float32, 4]  # the scroll list's viewport this frame: x0, y0, w, h
+    var rh: Float32  # its row height
+    var soff: Float32  # its scroll offset
+    var srows: Int  # its row count
+    var mk: Int  # items drawn so far in the open menu
     var field_focused: Bool  # a field drawn this frame has focus: the app sends keys to typing, not to shortcuts
 
     def __init__(out self, var font: Font):
@@ -31,6 +39,9 @@ struct Ui(Movable):
         self.theme = glass()
         self.active, self.over, self.x, self.y = 0, False, 0, 0
         self.focus, self.field_focused = 0, False
+        self.menu, self.in_menu, self.rh, self.soff, self.srows, self.mk = 0, False, 24, 0, 0, 0
+        self.pop = SIMD[DType.float32, 4](0)
+        self.vp = SIMD[DType.float32, 4](0)
         self.inp = Input(0, 0, 0, 0, 0, 0, 0, 0, SIMD[DType.uint64, 2](0), False)
 
     def begin(mut self, inp: Input, dt: Float32 = 0):
@@ -135,7 +146,7 @@ struct Ui(Movable):
         var t = self.theme.copy()
         self.rect(x0, y0, x0 + w, y0 + h, h * 0.5 * t.round, (color if color != 0 else t.accent) if on else (t.hover if hc[0] else t.surface))
         var tw = self.tw(label, 0)
-        _ = self.text(x0 + (w - tw) * 0.5, y0 + (h - self.asc(0)) * 0.5 - 1, label, 0, self.theme.text)
+        _ = self.text(x0 + (w - tw) * 0.5, y0 + (h - self.asc(0)) * 0.5 - 1, label, 0, self.theme.on_accent if on else self.theme.text)
         self.x += w + 8
         return hc[1]
 
@@ -183,15 +194,16 @@ struct Ui(Movable):
         var t = self.theme.copy()
         self.rect(x0, y0, x0 + 36, y0 + 36, 18 * t.round, t.accent if on else (t.hover if hc[0] else t.surface))
         var cx, cy = x0 + 18, y0 + 18
+        var g = t.on_accent if on else t.text
         if kind == 0 or kind == 2:
-            self.tri(cx - 5, cy - 7, cx - 5, cy + 7, cx + 7, cy, t.text)
+            self.tri(cx - 5, cy - 7, cx - 5, cy + 7, cx + 7, cy, g)
         if kind == 1:
-            self.rect(cx - 6, cy - 7, cx - 2, cy + 7, 1.5, t.text)
-            self.rect(cx + 2, cy - 7, cx + 6, cy + 7, 1.5, t.text)
+            self.rect(cx - 6, cy - 7, cx - 2, cy + 7, 1.5, g)
+            self.rect(cx + 2, cy - 7, cx + 6, cy + 7, 1.5, g)
         if kind == 2:
-            self.rect(cx + 7, cy - 7, cx + 10, cy + 7, 1, t.text)
+            self.rect(cx + 7, cy - 7, cx + 10, cy + 7, 1, g)
         if kind == 3:
-            self.rect(cx - 6, cy - 6, cx + 6, cy + 6, 2, t.text)
+            self.rect(cx - 6, cy - 6, cx + 6, cy + 6, 2, g)
         self.x += 44
         return hc[1]
 
@@ -213,6 +225,100 @@ struct Ui(Movable):
             var yb = y0 + h - 3 - (h - 6) * (vals[k] - lo) / max(hi - lo, 1e-6)
             self.line(x0 + w * Float32(k - 1) / Float32(max(n - 1, 1)), ya, x0 + w * Float32(k) / Float32(max(n - 1, 1)), yb, 1.6, c)
         self.y += h + 8
+    def slider(mut self, id: Int, v: Float32, lo: Float32, hi: Float32, w: Float32) -> Float32:
+        """Horizontal slider of w at the cursor (24 high); returns the new value. A press on it captures the mouse: the
+        value follows the mouse x until release, also outside the track. Next row."""
+        var x0, y0 = self.x, self.y
+        var hc = self.clickable(id, x0 - 8, y0, x0 + w + 8, y0 + 24)
+        var cap = self.active == id and (self.inp.down | self.inp.released) & 1 != 0
+        var nv = lo + (hi - lo) * min(max((self.inp.x - x0) / w, Float32(0)), Float32(1)) if cap else v
+        var f = min(max((nv - lo) / max(hi - lo, 1e-6), Float32(0)), Float32(1))
+        var t = self.theme.copy()
+        var r = 7 + 2 * self.animate(id, Float32(1) if hc[0] or cap else Float32(0))
+        self.rect(x0, y0 + 9, x0 + w, y0 + 15, 3, t.surface)
+        self.rect(x0, y0 + 9, x0 + w * f, y0 + 15, 3, t.accent)
+        self.rect(x0 + w * f - r, y0 + 12 - r, x0 + w * f + r, y0 + 12 + r, r, t.text)
+        self.y += 30
+        return nv
+
+    def menu_begin(mut self, id: Int, label: StringSlice, w: Float32, n: Int) -> Bool:
+        """Menu header (a button of w) at the cursor and, when open, a popup of n items under it. Returns open: then call
+        menu_item n times and menu_end. One menu is open at a time. Draw menus after the other widgets: draw order is z order."""
+        var x0, y0 = self.x, self.y
+        if self.button(id, label, w, 30, self.menu == id):
+            self.menu = 0 if self.menu == id else id
+        self.in_menu = self.menu == id
+        if self.in_menu:
+            self.pop = SIMD[DType.float32, 4](x0, y0 + 34, w, Float32(n) * 28 + 8)
+            var t = self.theme.copy()
+            self.rect(x0 + 2, y0 + 38, x0 + w + 2, y0 + 46 + Float32(n) * 28, t.radius * 0.6 + 2, t.shadow, t.blur)
+            if t.border > 0:
+                self.rect(x0 - t.border, y0 + 34 - t.border, x0 + w + t.border, y0 + 42 + Float32(n) * 28 + t.border, t.radius * 0.6 + t.border, t.border_c)
+            self.rect(x0, y0 + 34, x0 + w, y0 + 42 + Float32(n) * 28, t.radius * 0.6, t.panel)
+            self.over = True
+            self.mk = 0
+        return self.in_menu
+
+    def menu_item(mut self, label: StringSlice) -> Bool:
+        """Next item of the open menu; returns clicked, which also closes the menu."""
+        if not self.in_menu:
+            return False
+        var x0, y0, w = self.pop[0] + 4, self.pop[1] + 4 + Float32(self.mk) * 28, self.pop[2] - 8
+        self.mk += 1
+        var hc = self.clickable(0x100000 + self.mk, x0, y0, x0 + w, y0 + 28)
+        if hc[0]:
+            self.rect(x0, y0, x0 + w, y0 + 28, self.theme.radius * 0.4, self.theme.hover)
+        _ = self.text(x0 + 10, y0 + (28 - self.asc(0)) * 0.5 - 1, label, 0, self.theme.text)
+        if hc[1]:
+            self.menu = 0
+        return hc[1]
+
+    def menu_end(mut self):
+        """Close the open menu on a press outside its popup, or on Escape (scancode 41)."""
+        var out = not self.hovered(self.pop[0], self.pop[1] - 34, self.pop[0] + self.pop[2], self.pop[1] + self.pop[3])  # header and popup
+        if self.in_menu and (self.inp.key(41) or (self.inp.pressed & 1 != 0 and out)):
+            self.menu = 0
+        self.in_menu = False
+
+    def scroll_begin(mut self, id: Int, w: Float32, h: Float32, rows: Int, rh: Float32, mut off: Float32) -> Tuple[Int, Int]:
+        """Scroll list viewport of w x h at the cursor over `rows` rows of height rh. `off` is the caller's scroll offset
+        (logical units, moved by the wheel over the viewport, clamped). Returns (first, end): the rows to draw, whole rows
+        inside the viewport only (the rest are never emitted); row k sits at scroll_y(k). Call scroll_end after the rows."""
+        var x0, y0 = self.x, self.y
+        var hot = self.hovered(x0, y0, x0 + w, y0 + h)
+        off = min(max(off - (self.inp.wheel * rh if hot else 0), Float32(0)), max(Float32(rows) * rh - h, Float32(0)))
+        self.vp = SIMD[DType.float32, 4](x0, y0, w, h)
+        self.rh, self.soff, self.srows = rh, off, rows
+        self.rect(x0, y0, x0 + w, y0 + h, self.theme.radius * 0.5, self.theme.surface)
+        if hot:
+            self.over = True
+        var first = Int(-((-off) // rh))  # ceil(off / rh)
+        var end = min(Int((off + h) // rh), rows)
+        return (first, max(end, first))
+
+    def scroll_y(self, k: Int) -> Float32:
+        """Top of row k of the current scroll list, in logical units."""
+        return self.vp[1] - self.soff + Float32(k) * self.rh
+
+    def scroll_row(mut self, id: Int, k: Int, label: StringSlice, on: Bool = False) -> Bool:
+        """Selectable text row k of the current scroll list (call for the rows scroll_begin returned); returns clicked."""
+        var x0, y0, w = self.vp[0], self.scroll_y(k), self.vp[2] - 10
+        var hc = self.clickable(id, x0, y0, x0 + w, y0 + self.rh)
+        if on or hc[0]:
+            self.rect(x0 + 2, y0, x0 + w, y0 + self.rh, self.theme.radius * 0.4, self.theme.accent if on else self.theme.hover)
+        _ = self.text(x0 + 10, y0 + (self.rh - self.asc(0)) * 0.5 - 1, label, 0, self.theme.on_accent if on else self.theme.text)
+        return hc[1]
+
+    def scroll_end(mut self):
+        """Scrollbar thumb for the list just drawn; moves the cursor to the row under it."""
+        var h, full = self.vp[3], Float32(self.srows) * self.rh
+        if full > h:
+            var x1 = self.vp[0] + self.vp[2] - 6
+            var th = max(h * h / full, Float32(16))
+            var ty = self.vp[1] + (h - th) * self.soff / (full - h)
+            self.rect(x1, ty, x1 + 4, ty + th, 2, self.theme.muted)
+        self.x, self.y = self.vp[0], self.vp[1] + h + 8
+
     def finish(mut self):
         """End the frame: a release ends the active widget (after every widget saw it); bin the draw list."""
         if self.inp.released & 1:
