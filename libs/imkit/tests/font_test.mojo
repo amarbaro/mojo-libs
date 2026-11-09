@@ -22,6 +22,17 @@ def main() raises:
     if len(f.atlas) >= AW * AH // 2 or len(f.atlas) < AW * f.height or len(f.atlas) % (64 * AW) != 0:
         print("FAIL host atlas is not sized by the rows in use")
         fails += 1
+    # a Font with more than 16 sizes: the cache key must tell size slot 16 from slot 0 (e-acute is 6 px at size 10, 13 at 26)
+    var many = List[Int]()
+    for k in range(17):
+        many.append(10 + k)
+    var mf = Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), many^)
+    var g0 = mf.glyph(0, 233)
+    var g16 = mf.glyph(16, 233)
+    print("17 sizes: e-acute width at slot 0", mf.g[g0 + 2], "slot 16", mf.g[g16 + 2])
+    if g0 == g16 or mf.g[g16 + 2] <= mf.g[g0 + 2]:
+        print("FAIL size slot 16 returned slot 0's glyph")
+        fails += 1
     # skyline: 300 boxes of mixed sizes on 64 x 64 stay inside, never overlap; a box bigger than the sheet is refused
     var sky = Skyline(64, 64)
     var rx = List[Int]()

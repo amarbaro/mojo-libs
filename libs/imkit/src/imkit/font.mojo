@@ -48,7 +48,7 @@ struct Font(Movable):
     var sizes: List[Int]
     var ascent: List[Int]
     var g: List[Int16]  # [size][ASCII char][GM], then one GM per cached other codepoint (ext)
-    var ext: Dict[Int, Int]  # codepoint << 4 | size slot -> offset into g
+    var ext: Dict[Int, Int]  # codepoint << 8 | size slot -> offset into g (256 size slots at most)
     var sky: Skyline
     var dirty0: Int  # atlas rows rasterized since the last clean(): dirty0 <= row < dirty1
     var dirty1: Int
@@ -59,6 +59,8 @@ struct Font(Movable):
     var fb: Int  # fallback face (0: none)
 
     def __init__(out self, path: String, var sizes: List[Int], fallback: String = "") raises:
+        if len(sizes) > 256:
+            raise Error("Font: " + String(len(sizes)) + " sizes, 256 at most")
         self.ft = OwnedDLHandle("libfreetype.so.6")
         var lib = 0
         var face = 0
@@ -133,7 +135,7 @@ struct Font(Movable):
         fallback) and cached; a glyph neither font has, or one that does not fit the atlas, is '?'."""
         if FIRST <= c < FIRST + NCH:
             return ((s * NCH) + (c - FIRST)) * GM
-        var key = c << 4 | s
+        var key = c << 8 | s
         var hit = self.ext.get(key)
         if hit:
             return hit.value()
