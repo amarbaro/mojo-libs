@@ -53,6 +53,10 @@ def main() raises:
   N. Reap each child once: a second call raises `No child processes`.
 - `spawn(env=[])` inherits. `new_session=True` makes pid == pgid: `killpg(pid, sig)` kills
   the tree. A missing program raises at `spawn`, not at `reap`.
+- `spawn_pair(argv)` runs a child whose stdin and stdout are one socketpair end and returns
+  `(pid, fd)`: `send_all(fd, ...)`, `recv(fd, buf)`, `shutdown_write(fd)` for stdin end of file
+  (output stays readable), `recv` 0 at end of output, then `reap`. Close `fd` yourself. Its
+  stderr is yours.
 - Sockets from `unix_listen` and `accept` are non-blocking: `accept` gives -1 when nobody
   waits, `recv` gives -1 when nothing arrived and 0 at end of stream. `recv` appends to your
   list; `clear()` it between calls to reuse the buffer.
