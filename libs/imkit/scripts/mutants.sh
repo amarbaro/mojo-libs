@@ -48,4 +48,7 @@ mutant "png rgb alpha" assets.mojo 's/cur\[x \* bpp + 3\] if bpp == 4 else 255/c
 mutant "png row up filter ignored" assets.mojo 's/                pred = b$/                pred = 0/' assets_test
 mutant "atlas offsets restart" assets.mojo 's/String(len(bin) \/\/ 4) + " " + String(pic\[0\])/"0 " + String(pic[0])/' assets_test
 mutant "icon_img ignores its size" ui.mojo 's/(Float32(m\[3 \* i + 1\]) if w <= 0 else w \* k)/w * k/' assets_test
+mutant "png IHDR length unchecked" assets.mojo 's/if n != 13:/if n != 13 and n == 99:/' assets_test
+mutant "png size cap off" assets.mojo 's/if w > MAXPX or h > MAXPX or w \* h > MAXPX:/if w < 0:/' assets_test
+mutant "clip replace keeps the old clip" draw.mojo 's/^        self.unclip()$/        pass/' ui_cpu_test
 echo "PASS mutants"

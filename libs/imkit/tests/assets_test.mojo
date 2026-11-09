@@ -44,6 +44,17 @@ def refuses(var bytes: List[UInt8], at: Int, v: UInt8) -> Bool:
     return False
 
 
+def error_of(var bytes: List[UInt8], edits: List[Tuple[Int, UInt8]]) -> String:
+    """The message png_decode raises for `bytes` with the edits applied, "" if it decodes."""
+    for e in edits:
+        bytes[e[0]] = e[1]
+    try:
+        _ = png_decode(Span(bytes))
+    except e:
+        return String(e)
+    return ""
+
+
 def main() raises:
     var fails = 0
     check(same("rgba.png", "rgba.raw"), "RGBA, row filters 0 to 4 cycling", fails)
@@ -55,6 +66,15 @@ def main() raises:
     check(refuses(good.copy(), 0, 0x88) and refuses(good.copy(), 24, 16) and refuses(good.copy(), 25, 3) and refuses(good.copy(), 28, 1) and refuses(good.copy(), -40, 0),
           "refused: bad signature, 16-bit, palette, interlaced, truncated", fails)
     check(not refuses(good.copy(), 24, 8), "an untouched IHDR is accepted", fails)
+    # bad input must raise a png: error, and before a size-driven allocation (20000 x 20000 would ask for 1.6 GB)
+    check(error_of(good.copy(), [(11, UInt8(12))]).find("IHDR") >= 0 and error_of(good.copy(), [(11, UInt8(14))]).find("IHDR") >= 0,
+          "refused: an IHDR chunk that is not 13 bytes", fails)
+    check(error_of(good.copy(), [(18, UInt8(0x4E)), (19, UInt8(0x20)), (22, UInt8(0x4E)), (23, UInt8(0x20))]).find("too large") >= 0,
+          "refused before allocating: 20000 x 20000 pixels", fails)
+    check(error_of(good.copy(), [(16, UInt8(0xFF)), (17, UInt8(0xFF)), (18, UInt8(0xFF)), (19, UInt8(0xFF))]).find("too large") >= 0,
+          "refused before allocating: 4 G pixels wide", fails)
+    check(error_of(good.copy(), [(8, UInt8(0xFF)), (9, UInt8(0xFF)), (10, UInt8(0xFF)), (11, UInt8(0xFF))]).find("truncated") >= 0,
+          "refused: a chunk length past the end of the file", fails)
     pack(["tests/fixtures/rgba.png", "tests/fixtures/rgb.png", "tests/fixtures/pil.png"], ".work/assets_test")
     var a = Assets(".work/assets_test")
     check(len(a.px) == 3 * 480 and a.find("rgb") == 1 and a.meta[3] == 480 and a.meta[4] == 24 and a.meta[5] == 20 and a.find("pil") == 2 and a.meta[6] == 960 and a.find("nope") == -1,
