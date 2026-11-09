@@ -335,7 +335,9 @@ struct Draw(Movable):
         self.push(SRECT | min(max(Int(border * 4 + 0.5), 0), 255) << 8 | min(max(style, 0), NSTY - 1) << 16, x0, y0, x1, y1, r, c, bcol)
 
     def clip(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32):
-        """Clip everything drawn from here to unclip() to the rect (hard edge at pixel centers; a new clip replaces the old)."""
+        """Clip everything drawn from here to unclip() to the rect (hard edge at pixel centers; a new clip replaces the old,
+        which is ended first so a tile only the old one covered does not keep it)."""
+        self.unclip()
         self.cur_clip = SIMD[DType.float32, 4](x0, y0, x1, y1)
         self.push(CLIP, x0, y0, x1, y1, 0, 0, 0)
 

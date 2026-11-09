@@ -31,6 +31,18 @@ def in_bin(ui: Ui, tile: Int, k: Int) -> Bool:
     return False
 
 
+def clip_at(ui: Ui, tile: Int, k: Int) -> SIMD[DType.float32, 4]:
+    """The clip rect compose would hold in `tile` when it reaches command k (walks the tile's bin as the kernel does);
+    (7, 7, 7, 7) if k is not in the tile."""
+    var c = FULL
+    for j in range(Int(ui.d.off[tile]), Int(ui.d.off[tile + 1])):
+        var q = Int(ui.d.bins[j])
+        if q == k:
+            return c
+        c = ui.d.clip_after(q, c)
+    return SIMD[DType.float32, 4](7)
+
+
 def frame(mut ui: Ui, inp: Input) -> Bool:
     ui.begin(inp)
     ui.panel(24, 20, 520, 96, "Run")
@@ -300,6 +312,15 @@ def main() raises:
     rui.finish()
     check(rui.d.n == 4 and in_bin(rui, 2 * TX + 2, 1) and in_bin(rui, 4 * TX + 4, 1) and not in_bin(rui, 0, 1) and not in_bin(rui, 5 * TX + 5, 1) and not in_bin(rui, 2 * TX + 5, 1), "clip: a clipped command is binned only into the clip's tiles", fails)
     check(in_bin(rui, 0, 3) and in_bin(rui, 5 * TX + 5, 3) and in_bin(rui, 2 * TX + 2, 2) and in_bin(rui, 0, 0) == False, "clip: after unclip the next command covers all its tiles; the end marker sits in the clip's tiles", fails)
+    # a clip replaced by another, then unclip: a tile only the first covered must not keep it for the commands after unclip
+    rui.begin(idle)
+    rui.clip(32, 32, 64, 64)
+    rui.clip(200, 200, 232, 232)
+    rui.unclip()
+    rui.rect(0, 0, 1000, 700, 0, fc)
+    var last = rui.d.n - 1
+    rui.finish()
+    check(clip_at(rui, 2 * TX + 2, last) == FULL and clip_at(rui, 13 * TX + 13, last) == FULL, "clip: replaced then unclip leaves no stale clip in the tiles of either rect", fails)
     # GLASS: the tint over the backdrop sample inside, the sample under a clear tint, nothing outside
     var bkd = SIMD[DType.float32, 4](10, 20, 30, 255)
     var tint = rgba(100, 0, 0, 128)
