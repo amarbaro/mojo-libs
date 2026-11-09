@@ -8,7 +8,7 @@ Command: CW uint32 = kind, x0, y0, x1, y1, r, rgba, aux (floats stored as bits).
 (r, aux) as the third corner; image: r = offset into the app's source pixels (a float holds it exactly below 2^24),
 rgba = alpha in the top byte, aux = source width | height << 16, sampled nearest over the rect.
 """
-from std.math import sqrt
+from std.math import isnan, sqrt
 from std.memory import bitcast
 from std.sys import get_defined_int
 from max.gpu import block_dim, block_idx, thread_idx
@@ -305,12 +305,14 @@ struct Draw(Movable):
         self.binned = -1
 
     def push(mut self, kind: Int, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, aux: UInt32 = 0):
-        if self.n == NCMD or x0 != x0 or y0 != y0 or x1 != x1 or y1 != y1 or r != r:  # full, or NaN: dropped, counted
+        var v = SIMD[DType.float32, 4](x0, y0, x1, y1)
+        if self.n == NCMD or isnan(v).reduce_or() or r != r:  # full, or NaN: dropped, counted
             self.dropped += 1
             return
+        v = min(max(v, -BIG), BIG)
         var o = self.n * CW
-        self.cmd[o], self.cmd[o + 1], self.cmd[o + 2], self.cmd[o + 3] = UInt32(kind), bits(sane(x0)), bits(sane(y0)), bits(sane(x1))
-        self.cmd[o + 4], self.cmd[o + 5], self.cmd[o + 6], self.cmd[o + 7] = bits(sane(y1)), bits(r), c, aux
+        self.cmd[o], self.cmd[o + 1], self.cmd[o + 2], self.cmd[o + 3] = UInt32(kind), bits(v[0]), bits(v[1]), bits(v[2])
+        self.cmd[o + 4], self.cmd[o + 5], self.cmd[o + 6], self.cmd[o + 7] = bits(v[3]), bits(r), c, aux
         self.n += 1
 
     def rect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, blur: Float32 = 0):
