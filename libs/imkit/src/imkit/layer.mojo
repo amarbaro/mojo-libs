@@ -28,8 +28,8 @@ struct Layer(Movable):
     var off: DeviceBuffer[DType.uint32]
     var atlas: DeviceBuffer[DType.uint8]
     var sty: DeviceBuffer[DType.uint32]
-    var scene: DeviceBuffer[DType.uint32]  # the app's frame for set_scene
-    var q: List[DeviceBuffer[DType.uint32]]  # the 1 / BQ scene: down, after the horizontal pass, blurred (q[2], sampled by GLASS)
+    var scene: DeviceBuffer[DType.uint32]  # the app's frame for set_scene (empty until the first set_scene)
+    var q: List[DeviceBuffer[DType.uint32]]  # the 1 / BQ scene: down, after the horizontal pass blurred (q[2], sampled by GLASS)
     var src: DeviceBuffer[DType.uint32]  # image sources (Ui.image): the app writes its RGBA here
     var pixels: HostBuffer[DType.uint32]  # the composed layer, valid after render() returns
     var asset_px: Int  # pool pixels [0, asset_px) hold set_assets' atlas
@@ -46,7 +46,7 @@ struct Layer(Movable):
         self.off = ctx.enqueue_create_buffer[DType.uint32](TX * TY + 1)
         self.atlas = ctx.enqueue_create_buffer[DType.uint8](AW * AH)
         self.sty = ctx.enqueue_create_buffer[DType.uint32](NSTY * 8)
-        self.scene = ctx.enqueue_create_buffer[DType.uint32](UW * UH)
+        self.scene = ctx.enqueue_create_buffer[DType.uint32](0)  # allocated by the first set_scene
         self.q = [ctx.enqueue_create_buffer[DType.uint32](QW * QH) for _ in range(3)]
         self.q[2].enqueue_fill(0)  # no backdrop until a scene is blurred
         self.src = ctx.enqueue_create_buffer[DType.uint32](ISRC)
@@ -76,10 +76,12 @@ struct Layer(Movable):
         self.ctx.enqueue_function(self.ctx.compile_function[blur_axis[1, 0]](), TileTensor(self.q[1], row_major[QW * QH]()), TileTensor(self.q[0], row_major[QW * QH]()), grid_dim=n, block_dim=256)
         self.ctx.enqueue_function(self.ctx.compile_function[blur_axis[0, 1]](), TileTensor(self.q[2], row_major[QW * QH]()), TileTensor(self.q[1], row_major[QW * QH]()), grid_dim=n, block_dim=256)
 
-    def set_scene(self, px: Span[UInt32, _]) raises:
+    def set_scene(mut self, px: Span[UInt32, _]) raises:
         """Copy the app's UW * UH frame (host RGBA) and blur it for GLASS; waits (px is the caller's)."""
         if len(px) != UW * UH:
             raise Error("Layer.set_scene: " + String(len(px)) + " px given, the layer is " + String(UW * UH))
+        if len(self.scene) == 0:
+            self.scene = self.ctx.enqueue_create_buffer[DType.uint32](UW * UH)
         self.ctx.enqueue_copy(self.scene, px.unsafe_ptr())
         self.blur_from(self.scene)
         self.ctx.synchronize()
