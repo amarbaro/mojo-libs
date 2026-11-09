@@ -91,17 +91,21 @@ struct Ui(Movable):
 
     def rrect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, border: Float32 = 0,
               bcol: UInt32 = 0, glow: Float32 = 0, grad: Int = 0):
-        self.d.rrect(x0, y0, x1, y1, r, c, border, bcol, glow, grad)
+        var k = self.scale
+        self.d.rrect(x0 * k, y0 * k, x1 * k, y1 * k, r * k, c, border * k, bcol, glow * k, grad)
 
     def style(mut self, c1: UInt32 = 0, mode: Int = 0, gx: Float32 = 0, gy: Float32 = 1, sx: Float32 = 0, sy: Float32 = 0,
               sr: Float32 = 0, sc: UInt32 = 0) -> Int:
-        return self.d.style(c1, mode, gx, gy, sx, sy, sr, sc)
+        var k = self.scale  # offsets and radius are logical; the gradient direction is a unit vector
+        return self.d.style(c1, mode, gx, gy, sx * k, sy * k, sr * k, sc)
 
     def srect(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, c: UInt32, style: Int, border: Float32 = 0, bcol: UInt32 = 0):
-        self.d.srect(x0, y0, x1, y1, r, c, style, border, bcol)
+        var k = self.scale
+        self.d.srect(x0 * k, y0 * k, x1 * k, y1 * k, r * k, c, style, border * k, bcol)
 
     def clip(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32):
-        self.d.clip(x0, y0, x1, y1)
+        var k = self.scale
+        self.d.clip(x0 * k, y0 * k, x1 * k, y1 * k)
 
     def unclip(mut self):
         self.d.unclip()

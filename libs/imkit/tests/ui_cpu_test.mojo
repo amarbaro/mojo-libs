@@ -434,6 +434,14 @@ def main() raises:
     pframe(pui, List[Float32](length=1, fill=5))
     pframe(pui, List[Float32]())
     check(count(pui, LINE) == 3 and pui.d.dropped == 0, "plot: one sample and none draw only the axes", fails)
+    # DPI also reaches rrect and clip (lane A's methods): logical in, layer pixels out
+    var rs = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    rs.set_scale(1.5)
+    rs.begin(idle)
+    rs.clip(10, 10, 50, 50)
+    rs.rrect(20, 20, 40, 40, 4, ACCENT)
+    rs.finish()
+    check(flt(rs.d.cmd[3]) == 75 and flt(rs.d.cmd[8 + 1]) == 30 and flt(rs.d.cmd[8 + 5]) == 6, "DPI 1.5: clip and rrect are scaled to layer pixels", fails)
     if fails:
         raise Error("FAIL " + String(fails) + " ui_cpu checks")
     print("PASS ui_cpu_test")
