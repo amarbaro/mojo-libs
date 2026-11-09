@@ -14,7 +14,7 @@ from imkit.font import Font
 from imkit.layer import image_fits
 from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, FULL, bits, clipped, glass, rgba, rrect, srect
 from imkit.theme import ACCENT, Theme, flat, neon, glass as tglass
-from imkit.ui import SC_BACKSPACE, Ui
+from imkit.ui import SC_BACKSPACE, Ui, cp_ceil, cp_floor
 from imkit.window import Input
 
 
@@ -240,6 +240,16 @@ def main() raises:
     var e = String()
     _ = typed(fui, e, b, Input(300, 300, 0, 0, 0, 0, 0, 0, back, False))
     check(e == "", "Backspace on an empty field does nothing", fails)
+    var u = String("a") + chr(233) + chr(0x4E2D)  # 1 + 2 + 3 bytes
+    for want in ["a" + chr(233), "a", ""]:
+        _ = typed(fui, u, b, Input(300, 300, 0, 0, 0, 0, 0, 0, back, False))
+        check(u == want, "Backspace removes the last code point, not a byte of it (" + String(want.byte_length()) + " bytes left)", fails)
+    # the tail of a long text starts on a code point (Roboto's U+FFFD is as wide as its letters, so the stray start cannot
+    # win the width scan here; the boundary helpers are checked directly)
+    var cs = String("a") + chr(233) + chr(0x4E2D) + chr(0x1F600)  # 1 + 2 + 3 + 4 bytes
+    var cu = cs.as_bytes()
+    check(cp_floor(cu, 2) == 1 and cp_floor(cu, 5) == 3 and cp_floor(cu, 8) == 6 and cp_floor(cu, 0) == 0 and cp_floor(cu, 1) == 1 and cp_floor(cu, 10) == 10, "cp_floor: back to the start of the code point", fails)
+    check(cp_ceil(cu, 2) == 3 and cp_ceil(cu, 4) == 6 and cp_ceil(cu, 7) == 10 and cp_ceil(cu, 1) == 1 and cp_ceil(cu, 10) == 10, "cp_ceil: forward to the next code point start", fails)
     _ = typed(fui, a, b, Input(50, 60, 0, 0, 0, 1, 1, 0, keys, False))  # press on field 2
     _ = typed(fui, a, b, Input(50, 60, 0, 0, 0, 0, 0, 1, keys, False))  # release: click
     check(fui.focus == 2, "a click gives the field focus", fails)

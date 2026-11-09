@@ -20,6 +20,22 @@ def num(x: Float32) -> String:
     return ("-" if x < 0 and t > 0 else "") + String(t // 10) + "." + String(t % 10)
 
 
+def cp_floor(b: Span[UInt8, _], i: Int) -> Int:
+    """The start of the UTF-8 code point that byte i is in (i itself if it starts one or is past the end)."""
+    var k = i
+    while 0 < k < len(b) and b[k] & 0xC0 == 0x80:
+        k -= 1
+    return k
+
+
+def cp_ceil(b: Span[UInt8, _], i: Int) -> Int:
+    """The first code point start at or after byte i (len(b) if none)."""
+    var k = i
+    while k < len(b) and b[k] & 0xC0 == 0x80:
+        k += 1
+    return k
+
+
 struct Ui(Movable):
     var d: Draw
     var anim: Anim  # widget id -> spring (anim.mojo)
@@ -186,7 +202,7 @@ struct Ui(Movable):
     def field(mut self, id: Int, mut buf: String, max: Int) -> Bool:
         """Single-line text box (360 x 30) at the cursor; next row. A click gives it focus, and so does the first field drawn
         while none has it. The focused field appends the ASCII 32-126 of this frame's Input.text up to `max` bytes, then
-        removes the last byte on Backspace; a long text shows its tail. Returns True if buf changed."""
+        removes the last code point on Backspace; a long text shows its tail. Returns True if buf changed."""
         var x0, y0, w = self.x, self.y, Float32(360)
         var hc = self.clickable(id, x0, y0, x0 + w, y0 + 30)
         if hc[1] or self.focus == 0:
@@ -203,7 +219,7 @@ struct Ui(Movable):
                 buf = buf + String(unsafe_from_utf8=Span(add))
                 changed = True
             if self.inp.key(SC_BACKSPACE) and buf.byte_length() > 0:
-                var keep = buf.byte_length() - 1
+                var keep = cp_floor(buf.as_bytes(), buf.byte_length() - 1)
                 var cut = String(unsafe_from_utf8=buf.as_bytes()[:keep])
                 buf = cut^
                 changed = True
@@ -213,7 +229,7 @@ struct Ui(Movable):
         self.rect(x0, y0, x0 + w, y0 + 30, fr, t.hover if hc[0] and not on else t.surface)
         var s = 0
         while s < buf.byte_length() and self.tw(StringSlice(unsafe_from_utf8=buf.as_bytes()[s:]), 0) > w - 24:
-            s += 1
+            s = cp_ceil(buf.as_bytes(), s + 1)
         var pen = self.text(x0 + 10, y0 + (30 - self.asc(0)) * 0.5 - 1, StringSlice(unsafe_from_utf8=buf.as_bytes()[s:]), 0, t.text)
         if on:
             self.rect(pen + 1, y0 + 7, pen + 2.5, y0 + 23, 0.5, t.text)
@@ -351,9 +367,7 @@ struct Ui(Movable):
         """Bytes of s (cut on a code point) whose width at size 0 is at most w."""
         var n = s.byte_length()
         while n > 0 and self.tw(StringSlice(unsafe_from_utf8=s.as_bytes()[:n]), 0) > w:
-            n -= 1
-            while 0 < n < s.byte_length() and s.as_bytes()[n] & 0xC0 == 0x80:
-                n -= 1
+            n = cp_floor(s.as_bytes(), n - 1)
         return n
 
     def table_begin(mut self, id: Int, heads: List[String], widths: List[Float32], h: Float32, rows: Int, rh: Float32, mut off: Float32) -> Tuple[Int, Int]:
