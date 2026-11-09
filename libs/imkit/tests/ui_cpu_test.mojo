@@ -8,7 +8,7 @@ the focused flag; image_fits (set_image's check) and an image rect larger than t
 usage: IMKIT_FONT=/path/font.ttf mojo run -I src tests/ui_cpu_test.mojo  (default font: Roboto Medium)
 """
 from std.os import getenv
-from imkit.draw import GLYPH, LINE, flt
+from imkit.draw import CLIP, GLYPH, LINE, flt
 from imkit.font import Font
 from imkit.layer import image_fits
 from imkit.draw import ISRC, NBIN, NCMD, NSTY, TX, TY, UH, UW, FULL, bits, clipped, rgba, rrect, srect
@@ -367,20 +367,27 @@ def main() raises:
     mframe(mui, Input(60, 35, 0, 0, 0, 1, 1, 0, mouse, False), pick)
     mframe(mui, Input(60, 35, 0, 0, 0, 0, 0, 1, mouse, False), pick)
     check(mui.menu == 0, "menu: the header click toggles it closed", fails)
-    # scroll list: whole rows inside the viewport only; the wheel over it scrolls, clamped; commands do not grow with the row count
+    # scroll list: only rows touching the viewport, clipped to it; the wheel over it scrolls, clamped; commands do not grow with the row count
     var lui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
     var off = Float32(0)
     var sel = -1
     var fe = lframe(lui, Input(60, 60, 0, 0, 0, 0, 0, 0, mouse, False), 50, off, sel)
-    check(fe[0] == 0 and fe[1] == 4, "scroll list: rows 0..3 fit 100 high", fails)
+    check(fe[0] == 0 and fe[1] == 5, "scroll list: rows 0..4 touch the 100 high viewport (the last is clipped)", fails)
     var n50 = lui.d.n
     fe = lframe(lui, Input(60, 60, 0, 0, -2, 0, 0, 0, mouse, False), 50, off, sel)
-    check(off == 48 and fe[0] == 2 and fe[1] == 6, "scroll list: wheel -2 scrolls two rows, rows 2..5", fails)
+    check(off == 48 and fe[0] == 2 and fe[1] == 7, "scroll list: wheel -2 scrolls two rows, rows 2..6", fails)
     fe = lframe(lui, Input(400, 300, 0, 0, -2, 0, 0, 0, mouse, False), 50, off, sel)
     check(off == 48, "scroll list: the wheel outside the viewport does nothing", fails)
     off = 10
     fe = lframe(lui, Input(400, 300, 0, 0, 0, 0, 0, 0, mouse, False), 50, off, sel)
-    check(fe[0] == 1 and fe[1] == 4, "scroll list: a part-row offset draws only whole rows", fails)
+    check(fe[0] == 0 and fe[1] == 5, "scroll list: a part-row offset still draws the touched rows", fails)
+    off = 0
+    _ = lframe(lui, Input(60, 130, 0, 0, 0, 1, 1, 0, mouse, False), 50, off, sel)  # row 4: y 116 to 140, the viewport ends at 120
+    _ = lframe(lui, Input(60, 130, 0, 0, 0, 0, 0, 1, mouse, False), 50, off, sel)
+    check(sel == -1, "scroll list: the clipped part of an edge row is not clickable", fails)
+    _ = lframe(lui, Input(60, 118, 0, 0, 0, 1, 1, 0, mouse, False), 50, off, sel)
+    _ = lframe(lui, Input(60, 118, 0, 0, 0, 0, 0, 1, mouse, False), 50, off, sel)
+    check(sel == 4, "scroll list: the visible part of an edge row is", fails)
     off = 48
     _ = lframe(lui, Input(60, 56, 0, 0, 0, 1, 1, 0, mouse, False), 50, off, sel)  # row 3: y 44 to 68
     _ = lframe(lui, Input(60, 56, 0, 0, 0, 0, 0, 1, mouse, False), 50, off, sel)
@@ -392,6 +399,11 @@ def main() raises:
     _ = lframe(lui, Input(60, 60, 0, 0, 1000, 0, 0, 0, mouse, False), 50, off, sel)
     check(bottom == 50 * 24 - 100 and off == 0 and top == 48, "scroll list: offset clamps to 0 and rows * rh - h", fails)
     off = 0
+    _ = lframe(lui, Input(400, 300, 0, 0, 0, 0, 0, 0, mouse, False), 50, off, sel)
+    var clips = 0
+    for k in range(lui.d.n):
+        clips += 1 if Int(lui.d.cmd[k * 8] & 255) == CLIP else 0
+    check(clips == 2 and Int(lui.d.cmd[(lui.d.n - 1) * 8] & 255) != CLIP, "scroll list: one clip and one unclip around the rows", fails)
     _ = lframe(lui, Input(400, 300, 0, 0, 0, 0, 0, 0, mouse, False), 100000, off, sel)
     check(lui.d.n == n50, "scroll list: 100000 rows emit the same commands as 50", fails)
     # table: header, columns, cells cut to their column, whole visible rows only, row click, bounded commands

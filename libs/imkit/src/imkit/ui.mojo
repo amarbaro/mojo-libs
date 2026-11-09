@@ -296,8 +296,9 @@ struct Ui(Movable):
 
     def scroll_begin(mut self, id: Int, w: Float32, h: Float32, rows: Int, rh: Float32, mut off: Float32) -> Tuple[Int, Int]:
         """Scroll list viewport of w x h at the cursor over `rows` rows of height rh. `off` is the caller's scroll offset
-        (logical units, moved by the wheel over the viewport, clamped). Returns (first, end): the rows to draw, whole rows
-        inside the viewport only (the rest are never emitted); row k sits at scroll_y(k). Call scroll_end after the rows."""
+        (logical units, moved by the wheel over the viewport, clamped). Returns (first, end): the rows to draw, the ones
+        that touch the viewport (the rest are never emitted; the edge rows are clipped); row k sits at scroll_y(k). Call
+        scroll_end after the rows."""
         var x0, y0 = self.x, self.y
         var hot = self.hovered(x0, y0, x0 + w, y0 + h)
         off = min(max(off - (self.inp.wheel * rh if hot else 0), Float32(0)), max(Float32(rows) * rh - h, Float32(0)))
@@ -306,9 +307,8 @@ struct Ui(Movable):
         self.rect(x0, y0, x0 + w, y0 + h, self.theme.radius * 0.5, self.theme.surface)
         if hot:
             self.over = True
-        var first = Int(-((-off) // rh))  # ceil(off / rh)
-        var end = min(Int((off + h) // rh), rows)
-        return (first, max(end, first))
+        self.clip(x0, y0, x0 + w, y0 + h)
+        return (Int(off // rh), min(Int(-((-(off + h)) // rh)), rows))  # floor(off / rh), ceil((off + h) / rh)
 
     def scroll_y(self, k: Int) -> Float32:
         """Top of row k of the current scroll list, in logical units."""
@@ -317,7 +317,7 @@ struct Ui(Movable):
     def table_row(mut self, id: Int, k: Int, on: Bool = False) -> Bool:
         """Row k's hover or selection background (click target) of the current scroll list or table; returns clicked."""
         var x0, y0, w = self.vp[0], self.scroll_y(k), self.vp[2] - 10
-        var hc = self.clickable(id, x0, y0, x0 + w, y0 + self.rh)
+        var hc = self.clickable(id, x0, max(y0, self.vp[1]), x0 + w, min(y0 + self.rh, self.vp[1] + self.vp[3]))  # the visible part only
         if on or hc[0]:
             self.rect(x0 + 2, y0, x0 + w, y0 + self.rh, self.theme.radius * 0.4, self.theme.accent if on else self.theme.hover)
         return hc[1]
@@ -407,6 +407,7 @@ struct Ui(Movable):
     def scroll_end(mut self):
         """Scrollbar thumb for the list just drawn; moves the cursor to the row under it."""
         var h, full = self.vp[3], Float32(self.srows) * self.rh
+        self.unclip()
         if full > h:
             var x1 = self.vp[0] + self.vp[2] - 6
             var th = max(h * h / full, Float32(16))
