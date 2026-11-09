@@ -11,6 +11,7 @@ from std.os import getenv
 from std.sys import argv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
+from imkit.assets import Assets, pack
 from imkit.font import Font
 from imkit.font import AH, AW
 from imkit.draw import BR, ISRC, NBIN, QH, QW, TX, TY, UH, UW, bits, glass, rgba, rrect, srect
@@ -308,6 +309,27 @@ def main() raises:
         if want < 40 or got != want or pg != qg:
             cjk_ok = False
     if not cjk_ok:
+        fails += 1
+    # asset atlas: pack a PNG, load it, put it in the pool, draw it 1:1: every pixel on the card is the PNG's (alpha too)
+    pack(["tests/fixtures/rgba.png"], ".work/ui_assets")
+    var assets = Assets(".work/ui_assets")
+    var apx = assets.px.copy()
+    layer.set_assets(assets)
+    ui.assets = assets^
+    ui.begin(idle)
+    var drew = ui.icon_img("rgba", 800, 600)
+    ui.finish()
+    layer.render(ui)
+    var adiff = 0
+    for y in range(20):
+        for x in range(24):
+            var want = apx[y * 24 + x]
+            var got = layer.pixels[(600 + y) * UW + 800 + x]
+            var wa = Int(want >> 24)
+            if abs(Int(got >> 24) - wa) > 1 or (wa >= 40 and (abs(Int(got & 255) - Int(want & 255)) > 2 or abs(Int((got >> 8) & 255) - Int((want >> 8) & 255)) > 2 or abs(Int((got >> 16) & 255) - Int((want >> 16) & 255)) > 2)):
+                adiff += 1
+    print("assets: icon_img drew", drew, "pixels differing from the PNG", adiff, "of 480")
+    if not drew or adiff:
         fails += 1
     # past NBIN tile entries: whole commands drop (counted), the ones kept still draw
     ui.d.dropped = 0

@@ -9,6 +9,7 @@ own buffer plus the 3.7 MB copy to `pixels` (readback()), which only a host cons
 """
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from layout import TileTensor, row_major
+from .assets import Assets
 from .font import AH, AW
 from .draw import CW, ISRC, NBIN, NCMD, NSTY, QH, QW, TX, TY, UH, UW, blur_axis, blur_down, compose
 from .ui import Ui
@@ -74,6 +75,15 @@ struct Layer(Movable):
             raise Error("Layer.set_scene: " + String(len(px)) + " px given, the layer is " + String(UW * UH))
         self.ctx.enqueue_copy(self.scene, px.unsafe_ptr())
         self.blur_from(self.scene)
+        self.ctx.synchronize()
+
+    def set_assets(self, a: Assets) raises:
+        """Copy an asset atlas's pixels to the image pool from offset 0 and wait; Ui.icon_img draws them. set_image also
+        writes at 0, so use one of the two, or draw the other's pictures from offsets past len(a.px)."""
+        if len(a.px) > ISRC:
+            raise Error("Layer.set_assets: " + String(len(a.px)) + " px over ISRC " + String(ISRC) + " (-DUI_IMG=)")
+        if len(a.px) > 0:
+            self.ctx.enqueue_copy(self.src.create_sub_buffer[DType.uint32](0, len(a.px)), a.px.unsafe_ptr())
         self.ctx.synchronize()
 
     def launch(self) raises:

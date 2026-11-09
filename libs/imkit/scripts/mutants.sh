@@ -42,4 +42,10 @@ mutant "glyph cache ignores the size" font.mojo 's/var key = c << 4 | s/var key 
 mutant "no fallback font" font.mojo 's/(self.fb if self.fb != 0 and/(0 if self.fb != 0 and/' font_test
 mutant "dirty rows not tracked" font.mojo 's/self.dirty0, self.dirty1 = min(self.dirty0, y), max(self.dirty1, y + h)/self.dirty0 = self.dirty0/' font_test
 mutant "dirty rows not uploaded" layer.mojo 's/if ui.d.font.dirty1 > ui.d.font.dirty0:/if ui.d.font.dirty1 > 99999:/' ui_test gpu
+mutant "png paeth wrong" assets.mojo 's/pred = a if pa <= pb and pa <= pc else (b if pb <= pc else c)/pred = a if pa <= pb and pa <= pc else (c if pb <= pc else b)/' assets_test
+mutant "png average rounds up" assets.mojo 's/pred = (a + b) \/\/ 2/pred = (a + b + 1) \/\/ 2/' assets_test
+mutant "png rgb alpha" assets.mojo 's/cur\[x \* bpp + 3\] if bpp == 4 else 255/cur[x * bpp + 3] if bpp == 4 else 0/' assets_test
+mutant "png row up filter ignored" assets.mojo 's/                pred = b$/                pred = 0/' assets_test
+mutant "atlas offsets restart" assets.mojo 's/String(len(bin) \/\/ 4) + " " + String(pic\[0\])/"0 " + String(pic[0])/' assets_test
+mutant "icon_img ignores its size" ui.mojo 's/(Float32(m\[3 \* i + 1\]) if w <= 0 else w)/w/' assets_test
 echo "PASS mutants"

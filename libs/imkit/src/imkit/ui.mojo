@@ -2,6 +2,7 @@
 returns its interaction (clicked, toggled, dragged) and appends draw commands to a `Draw` (draw.mojo) that finish() bins
 for the compose kernel. Colors come from theme.mojo.
 """
+from .assets import Assets
 from .draw import Draw, TX, TY, NBIN, NCMD, CW, UW, UH, ISRC, AH, rgba
 from .font import Font
 from .theme import ACCENT, BAD, GOOD, HOVER, MUTED, PANEL, SHADOW, SURFACE, TEXT, WARN
@@ -19,11 +20,13 @@ struct Ui(Movable):
     var y: Float32
     var focus: Int  # id of the text field that takes typing (0: none yet; the first field drawn takes it)
     var field_focused: Bool  # a field drawn this frame has focus: the app sends keys to typing, not to shortcuts
+    var assets: Assets  # icon_img's pictures: the app sets it and calls Layer.set_assets with it
 
     def __init__(out self, var font: Font):
         self.d = Draw(font^)
         self.active, self.over, self.x, self.y = 0, False, 0, 0
         self.focus, self.field_focused = 0, False
+        self.assets = Assets()
         self.inp = Input(0, 0, 0, 0, 0, 0, 0, 0, SIMD[DType.uint64, 2](0), False)
 
     def begin(mut self, inp: Input):
@@ -54,6 +57,17 @@ struct Ui(Movable):
 
     def glass(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, r: Float32, tint: UInt32):
         self.d.glass(x0, y0, x1, y1, r, tint)
+
+    def icon_img(mut self, name: StringSlice, x: Float32, y: Float32, w: Float32 = 0, h: Float32 = 0, alpha: Int = 255) -> Bool:
+        """Draw the asset `name` with its top left at (x, y), at its own size unless w and h are given; False (and the
+        drop is counted) if there is no such asset."""
+        var i = self.assets.find(name)
+        if i < 0:
+            self.d.dropped += 1
+            return False
+        ref m = self.assets.meta
+        self.d.image(x, y, x + (Float32(m[3 * i + 1]) if w <= 0 else w), y + (Float32(m[3 * i + 2]) if h <= 0 else h), m[3 * i], m[3 * i + 1], m[3 * i + 2], alpha)
+        return True
 
     def line(mut self, x0: Float32, y0: Float32, x1: Float32, y1: Float32, w: Float32, c: UInt32):
         self.d.line(x0, y0, x1, y1, w, c)
