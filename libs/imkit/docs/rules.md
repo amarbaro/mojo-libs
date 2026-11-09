@@ -44,3 +44,4 @@
 - My first fix renamed `scroll_begin`'s parameters to avoid shadowing, which would break keyword callers (`rows=`, `rh=`) -> never rename a public parameter to fix a local; use a local name (`rl`, `nr`).
 - A SIMD self-compare `v.ne(v)` was folded to false, so NaN commands were not dropped, while the scalar `x != x` worked -> use `isnan` for a NaN test; the NaN test in ui_cpu_test caught it the same minute, so a guard keeps its test when it is rewritten for speed.
 - Under load the same base binary read 17.3 and 20.4 us in one session -> compare 8 alternating rounds and give the median and the min of both, not one pair.
+- A stale mutant sed failed a 25-minute gate three times (reworded line each time), and the written rule did not stop it -> it is a gate now: `scripts/ci.sh` runs `MUTANT_DRY=1 scripts/mutants.sh`, which checks in under a second that every sed still changes its file; a commit that rewords a mutated line fails in the first minute.

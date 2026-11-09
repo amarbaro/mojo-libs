@@ -64,14 +64,16 @@ Int(layer.pixels.unsafe_ptr()))`). The kernel is asked from `ctx.compile_functio
 | draw list 4096 x 8 x u32 | 128 KB |
 | tile bins NBIN x u16 (default 32,768) | 64 KB |
 | tile offsets (80 x 45 + 1) x u32 | 14 KB |
-| atlas 512 x 1024 x u8 (device and host) | 512 KB |
+| atlas 512 x 1024 x u8 (device 512 KB; host only the rows in use, in steps of 64: 64 KB for ASCII at three sizes) | 512 KB + 64 KB |
 | styles 256 x 8 x u32 | 8 KB |
-| backdrop 3 x 320 x 180 x u32 + scene copy 1280 x 720 x u32 | 0.7 + 3.7 MB |
+| backdrop 3 x 320 x 180 x u32 | 0.7 MB |
+| scene copy 1280 x 720 x u32, allocated by the first `set_scene` | 0 or 3.7 MB |
 | image sources ISRC x u32 (device, default 65,536) | 256 KB |
 | layer 1280 x 720 x u32 (device) | 3.7 MB |
-| Layer pinned host RGBA 1280 x 720 x u32 | 3.7 MB |
+| Layer pinned host RGBA 1280 x 720 x u32, allocated by the first `readback()` / `render()` | 0 or 3.7 MB |
 
-All allocated once. Per frame: the used commands + tile entries + offsets up (150 commands, 2,197 entries: 23 KB,
+Allocated once (the scene copy and the pinned `pixels` on first use). A demo frame allocates nothing on the host heap (0 mallocs for
+build + finish); `render_into` makes 12 small ones (3.8 KB) inside the runtime. Per frame: the used commands + tile entries + offsets up (150 commands, 2,197 entries: 23 KB,
 was a fixed 602 KB), one compose launch, a layer copy back only when asked (3.7 MB, most of `render`'s ~204 us), one texture upload.
 
 ## Not yet

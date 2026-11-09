@@ -38,4 +38,6 @@ drop and `ui.d.dropped` counts them.
 
 ## Asset atlas
 
+Bad input (v0.8.1): a NaN coordinate drops its command (counted in `ui.d.dropped`), infinite and huge ones clamp to +-1e6; a font size index the `Font` lacks draws nothing (counted) and measures 0; `scroll_begin` reads a row height of 0, negative, NaN or inf as 1; axis labels print `nan`, `>1e9`, `<-1e9`; `png_decode` raises `png: IHDR chunk is N bytes` and `png: W x H is too large` (64 M pixels) before allocating; `clip` ends the clip in force before starting a new one (one extra command); `Font` takes up to 256 sizes.
+
 `python3 tools/png_fixture.py` writes the test fixtures. `mojo run -I src tools/pack_atlas.mojo assets/atlas assets/src/*.png` packs 8-bit RGB/RGBA PNGs (Blender icons, ComfyUI textures) into `assets/atlas.bin` (RGBA bytes) and `assets/atlas.txt` (`name offset width height`, name = file stem). At run time: `ui.assets = Assets("assets/atlas")`, `layer.set_assets(ui.assets)` once (copies to the image pool from offset 0; a `set_image` picture below `len(assets.px)` makes it raise, so give `set_image` an offset past the atlas), then `ui.icon_img("play", x, y)` each frame (own size, or `w, h` to scale; `alpha`); an unknown name returns False and counts in `ui.d.dropped`.

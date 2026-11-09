@@ -10,6 +10,7 @@ mutant() {  # name file sed-expression test [gpu]: a GPU test runs under GPU_WRA
   rm -rf "$d"; mkdir -p "$d"; cp -r src "$d/src"
   sed -i "$expr" "$d/src/imkit/$file"
   cmp -s "src/imkit/$file" "$d/src/imkit/$file" && { echo "FAIL $name: sed changed nothing"; exit 1; }
+  [ -z "${MUTANT_DRY:-}" ] || { echo "OK $name"; return 0; }  # MUTANT_DRY=1: only check that every sed still matches (seconds)
   # shellcheck disable=SC2086
   if ${5:+${GPU_WRAP:-}} timeout 300 $M run -I "$d/src" "tests/$test.mojo" > "$d/out.txt" 2>&1; then
     echo "FAIL $name: $test still passes"; exit 1
@@ -51,8 +52,9 @@ mutant "icon_img ignores its size" ui.mojo 's/(Float32(m\[3 \* i + 1\]) if w <= 
 mutant "png IHDR length unchecked" assets.mojo 's/if n != 13:/if n != 13 and n == 99:/' assets_test
 mutant "png size cap off" assets.mojo 's/if w > MAXPX or h > MAXPX or w \* h > MAXPX:/if w < 0:/' assets_test
 mutant "clip replace keeps the old clip" draw.mojo 's/^        self.unclip()$/        pass/' ui_cpu_test
-mutant "push keeps NaN commands" draw.mojo 's/ or x0 != x0 or y0 != y0 or x1 != x1 or y1 != y1 or r != r//' ui_cpu_test
-mutant "push does not clamp infinities" draw.mojo 's/bits(sane(x0)), bits(sane(y0)), bits(sane(x1))/bits(x0), bits(y0), bits(x1)/; s/= bits(sane(y1)), bits(r)/= bits(y1), bits(r)/' ui_cpu_test
+mutant "push keeps NaN commands" draw.mojo 's/ or isnan(v).reduce_or() or r != r//' ui_cpu_test
+mutant "push does not clamp infinities" draw.mojo 's/^        v = min(max(v, -BIG), BIG)$/        pass/' ui_cpu_test
 mutant "set_image may overwrite the atlas" layer.mojo 's/if off < self.asset_px:/if off < 0:/' ui_test gpu
 mutant "set_assets may overwrite a picture" layer.mojo 's/if len(a.px) > self.img_lo:/if len(a.px) > ISRC + 1:/' ui_test gpu
+[ -z "${MUTANT_DRY:-}" ] || { echo "PASS mutants (dry: every sed matches)"; exit 0; }
 echo "PASS mutants"
