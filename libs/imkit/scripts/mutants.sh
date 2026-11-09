@@ -35,4 +35,11 @@ mutant "glass tint ignored" draw.mojo 's/return over(over(acc, back, fill), unpa
 mutant "glass backdrop ignored" draw.mojo 's/return over(over(acc, back, fill), unpack(c), fill)/return over(acc, unpack(c), fill)/' ui_cpu_test
 mutant "blur skips the vertical pass" layer.mojo 's/blur_axis\[0, 1\]/blur_axis[1, 0]/' ui_test gpu
 mutant "blur taps unweighted" draw.mojo 's/var wk = Float32(BR + 1 - abs(k))/var wk = Float32(1)/' ui_test gpu
+mutant "utf8 three-byte lead" font.mojo 's/(3 if c >> 4 == 14/(3 if c >> 4 == 15/' font_test
+mutant "utf8 continuation unchecked" font.mojo 's/if Int(b\[i + k\]) >> 6 != 2:/if False:/' font_test
+mutant "skyline ignores taller steps" atlas.mojo 's/y = max(y, self.ys\[j\])/y = self.ys[i]/' font_test
+mutant "glyph cache ignores the size" font.mojo 's/var key = c << 4 | s/var key = c << 4/' font_test
+mutant "no fallback font" font.mojo 's/(self.fb if self.fb != 0 and/(0 if self.fb != 0 and/' font_test
+mutant "dirty rows not tracked" font.mojo 's/self.dirty0, self.dirty1 = min(self.dirty0, y), max(self.dirty1, y + h)/self.dirty0 = self.dirty0/' font_test
+mutant "dirty rows not uploaded" layer.mojo 's/if ui.d.font.dirty1 > ui.d.font.dirty0:/if ui.d.font.dirty1 > 99999:/' ui_test gpu
 echo "PASS mutants"

@@ -11,8 +11,9 @@ from std.os import getenv
 from std.sys import argv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
-from imkit.font import AW, Font
-from imkit.draw import AH, BR, ISRC, NBIN, QH, QW, TX, TY, UH, UW, bits, glass, rgba, rrect, srect
+from imkit.font import Font
+from imkit.font import AH, AW
+from imkit.draw import BR, ISRC, NBIN, QH, QW, TX, TY, UH, UW, bits, glass, rgba, rrect, srect
 from imkit.theme import ACCENT, BAD, GOOD, TEXT, WARN
 from imkit.ui import Ui
 from imkit.window import Input
@@ -276,6 +277,37 @@ def main() raises:
     var blur_us = Float64(perf_counter_ns() - t0) / 200 / 1000
     print("glass: worst difference GPU vs host blur", gworst, "left", hex(gl), "edge", hex(gm), "right", hex(gr), "; blur_from", blur_us, "us")
     if gworst > 2 or (gl & 255) < 250 or (gr >> 16) & 255 < 250 or (gm & 255) < 100 or (gm & 255) > 160 or layer.pixels[340 * UW + 540] != 0:
+        fails += 1
+    # UTF-8 + dynamic atlas: 日 is rasterized on the first frame, 語 only during the second (Layer sends the dirty rows); each glyph's
+    # pixels on the card are exactly where the host atlas has ink, and a glyph neither font has draws as the '?' glyph
+    var cui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22], "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc"))
+    var clayer = Layer(ctx, cui)
+    var cjk_ok = True
+    var cps = List[Int]()
+    cps.append(0x65E5)
+    cps.append(0x8A9E)
+    cps.append(0xE000)
+    for round in range(2):
+        cui.begin(idle)
+        var mark = String(chr(cps[round]))
+        _ = cui.text(50, 100, mark, 1, TEXT)
+        _ = cui.text(150, 100, String(chr(0xE000)), 1, TEXT)
+        cui.finish()
+        clayer.render(cui)
+        var gi = cui.d.font.glyph(1, cps[round])
+        var gxx, gyy = 50 + Int(cui.d.font.g[gi + 4]), 100 + cui.d.font.ascent[1] - Int(cui.d.font.g[gi + 5])
+        var gw, gh, ax, ay = Int(cui.d.font.g[gi + 2]), Int(cui.d.font.g[gi + 3]), Int(cui.d.font.g[gi]), Int(cui.d.font.g[gi + 1])
+        var want, got = 0, 0
+        for r in range(gh):
+            for k in range(gw):
+                want += 1 if cui.d.font.atlas[(ay + r) * AW + ax + k] > 0 else 0
+                got += 1 if clayer.pixels[(gyy + r) * UW + gxx + k] >> 24 > 0 else 0
+        var qg = cui.d.font.glyph(1, ord("?"))
+        var pg = cui.d.font.glyph(1, 0xE000)
+        print("cjk round", round, "U+", hex(cps[round]), "ink on host", want, "on card", got, "; U+E000 is '?':", pg == qg)
+        if want < 40 or got != want or pg != qg:
+            cjk_ok = False
+    if not cjk_ok:
         fails += 1
     # past NBIN tile entries: whole commands drop (counted), the ones kept still draw
     ui.d.dropped = 0

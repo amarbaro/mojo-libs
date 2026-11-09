@@ -13,7 +13,7 @@ from std.memory import bitcast
 from std.sys import get_defined_int
 from max.gpu import block_dim, block_idx, thread_idx
 from layout import TileTensor, row_major
-from .font import AW, Font
+from .font import AH, AW, Font, decode
 
 comptime UW = get_defined_int["UI_W", 1280]()
 comptime UH = get_defined_int["UI_H", 720]()
@@ -23,7 +23,6 @@ comptime TY = UH // TILE
 comptime NBIN = get_defined_int["UI_BINS", 32768]()  # tile entries per frame (a command once per tile it touches); past it whole commands drop, counted
 comptime NCMD = 4096
 comptime CW = 8
-comptime AH = 256  # atlas rows on the card (font.mojo packs ~120 for three sizes)
 comptime RECT = 0
 comptime GLYPH = 1
 comptime LINE = 2
@@ -364,11 +363,15 @@ struct Draw(Movable):
         self.push(IMAGE, x0, y0, x1, y1, Float32(off), UInt32(alpha) << 24, UInt32(sw) | UInt32(sh) << 16)
 
     def text(mut self, x: Float32, y: Float32, s: StringSlice, size: Int, c: UInt32) -> Float32:
-        """Draw s with its top at y; returns the x after it."""
+        """Draw UTF-8 s with its top at y; returns the x after it."""
         var pen = x
         var base = y + Float32(self.font.ascent[size])
-        for ch in s.as_bytes():
-            var g = self.font.glyph(size, Int(ch))
+        var b = s.as_bytes()
+        var i = 0
+        while i < len(b):
+            var d = decode(b, i)
+            i += d[1]
+            var g = self.font.glyph(size, d[0])
             var w = Float32(self.font.g[g + 2])
             if w > 0:
                 var gx = pen + Float32(self.font.g[g + 4])

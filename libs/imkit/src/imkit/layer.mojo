@@ -9,8 +9,8 @@ own buffer plus the 3.7 MB copy to `pixels` (readback()), which only a host cons
 """
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from layout import TileTensor, row_major
-from .font import AW
-from .draw import AH, CW, ISRC, NBIN, NCMD, NSTY, QH, QW, TX, TY, UH, UW, blur_axis, blur_down, compose
+from .font import AH, AW
+from .draw import CW, ISRC, NBIN, NCMD, NSTY, QH, QW, TX, TY, UH, UW, blur_axis, blur_down, compose
 from .ui import Ui
 
 
@@ -32,7 +32,7 @@ struct Layer(Movable):
     var src: DeviceBuffer[DType.uint32]  # image sources (Ui.image): the app writes its RGBA here
     var pixels: HostBuffer[DType.uint32]  # the composed layer, valid after render() returns
 
-    def __init__(out self, ctx: DeviceContext[], ui: Ui) raises:
+    def __init__(out self, ctx: DeviceContext[], mut ui: Ui) raises:
         comptime assert UW > 0 and UH > 0 and UW % 16 == 0 and UH % 16 == 0, "UI_W, UI_H: positive multiples of 16"
         if len(ui.d.font.atlas) > AW * AH:
             raise Error("Layer: font atlas " + String(len(ui.d.font.atlas)) + " B over the compose capacity " + String(AW * AH))
@@ -51,6 +51,7 @@ struct Layer(Movable):
         self.src.enqueue_fill(0)
         ctx.enqueue_copy(self.atlas.create_sub_buffer[DType.uint8](0, len(ui.d.font.atlas)), ui.d.font.atlas.unsafe_ptr())
         ctx.synchronize()  # the atlas is the caller's
+        ui.d.font.clean()
 
     def set_image(mut self, px: Span[UInt32, _], w: Int, h: Int) raises:
         """Copy a w x h picture (packed r | g << 8 | b << 16 | a << 24, row-major) to pool offset 0 and wait; draw it with
@@ -86,7 +87,7 @@ struct Layer(Movable):
             TileTensor(self.off, row_major[TX * TY + 1]()), TileTensor(self.atlas, row_major[AW * AH]()),
             TileTensor(self.src, row_major[ISRC]()), TileTensor(self.sty, row_major[NSTY * 8]()), TileTensor(self.q[2], row_major[QW * QH]()), grid_dim=(UW * UH + 255) // 256, block_dim=256)
 
-    def render_into(self, ui: Ui, buf: DeviceBuffer[DType.uint32]) raises:
+    def render_into(self, mut ui: Ui, buf: DeviceBuffer[DType.uint32]) raises:
         """Upload the finished frame and compose into the caller's device buffer: no layer readback, so a GPU consumer
         (a texture, a blend kernel on the same DeviceContext) reads it in stream order. Returns when ui's lists are free to reuse."""
         if ui.d.binned != ui.d.n:
@@ -99,6 +100,10 @@ struct Layer(Movable):
         if used:
             self.ctx.enqueue_copy(self.bins.create_sub_buffer[DType.uint16](0, used), ui.d.bins.unsafe_ptr())
         self.ctx.enqueue_copy(self.off, ui.d.off.unsafe_ptr())
+        if ui.d.font.dirty1 > ui.d.font.dirty0:  # glyphs rasterized since the last frame: their rows only
+            var r0, n = ui.d.font.dirty0 * AW, (ui.d.font.dirty1 - ui.d.font.dirty0) * AW
+            self.ctx.enqueue_copy(self.atlas.create_sub_buffer[DType.uint8](r0, n), Span(ui.d.font.atlas)[r0 : r0 + n].unsafe_ptr())
+            ui.d.font.clean()
         if ui.d.ns > 1:
             self.ctx.enqueue_copy(self.sty.create_sub_buffer[DType.uint32](0, ui.d.ns * 8), ui.d.sty.unsafe_ptr())
         self.launch_to(buf)
@@ -109,7 +114,7 @@ struct Layer(Movable):
         self.ctx.enqueue_copy(self.pixels, self.img)
         self.ctx.synchronize()
 
-    def render(self, ui: Ui) raises:
+    def render(self, mut ui: Ui) raises:
         """Upload the finished frame, compose, copy to pixels; returns when pixels is ready (render_into + readback)."""
         self.render_into(ui, self.img)
         self.readback()
