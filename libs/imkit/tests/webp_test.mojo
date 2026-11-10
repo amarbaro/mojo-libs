@@ -17,7 +17,9 @@ def names(prefix: String) -> List[String]:
     var all: List[String] = [
         "ll_bg", "ll_bg_small", "ll_icon", "ll_icon2", "ll_icon_exact", "ll_pal4", "ll_pal2", "ll_pal16", "ll_noise", "ll_tiny", "ll_odd",
         "ly_bg", "ly_bg_q30", "ly_bg_small", "ly_bg_odd", "ly_bg_sharp", "ly_bg_seg", "ly_bg_simple",
-        "ly_alpha_raw", "ly_alpha_ll", "ly_alpha_fast", "ly_alpha_best", "ly_alpha_bg",
+        "ly_alpha_raw", "ly_alpha_ll", "ly_alpha_fast", "ly_alpha_best", "ly_alpha_bg", "ly_alpha_h", "ly_alpha_v",
+        "ly_part2", "ly_part8", "ly_flat", "ly_flat_alpha", "ly_seg1", "ly_strong", "ly_simple_strong", "ly_q100", "ly_q100_noise", "ly_q2",
+        "ly_1x1", "ly_17x1", "ly_1x17", "ly_16x16", "ly_33x31",
     ]
     var out = List[String]()
     for n in all:

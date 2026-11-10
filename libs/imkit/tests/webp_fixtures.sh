@@ -45,4 +45,43 @@ enc ly_alpha_ll "$IC" -quality 75 -define webp:alpha-compression=1 -define webp:
 enc ly_alpha_fast "$IC" -quality 75 -define webp:alpha-compression=1 -define webp:alpha-filtering=1
 enc ly_alpha_best "$IC2" -quality 75 -define webp:alpha-compression=1 -define webp:alpha-filtering=2
 enc ly_alpha_bg "$BG" "${SMALL[@]}" -alpha set -channel A -evaluate set 60% +channel -quality 75
+# libwebp through ctypes (tests/webp_oracle_enc.py) for what ImageMagick cannot set: token partitions (only honoured with
+# low_memory), skip probability, one segment, the strongest filters, huge coefficients, tiny sizes
+enc2() {
+  local n=$1 src=$2 size=$3; shift 3
+  magick "$src" -resize "$size!" -depth 8 "rgba:$D/$n.in" || { echo "FAIL fixture: $n"; exit 1; }
+  python3 tests/webp_oracle_enc.py "$D/$n.in" "${size%x*}" "${size#*x}" "$D/$n.webp" "$@" || { echo "FAIL fixture: $n (oracle encoder)"; exit 1; }
+  rm "$D/$n.in"
+  magick "$D/$n.webp" -depth 8 "rgba:$D/$n.rgba" || { echo "FAIL golden: $n"; exit 1; }
+}
+magick -size 96x64 xc:'#3a6' -fill white -draw 'circle 48,32 48,10' -fill '#c33' -draw 'rectangle 4,4,20,12' "$D/flat.png"
+enc2 ly_part2 "$BG" 160x90 partitions=1 low_memory=1
+enc2 ly_part8 "$BG" 160x90 partitions=3 low_memory=1 segments=4
+enc2 ly_flat "$D/flat.png" 96x64 low_memory=1 partitions=2
+enc2 ly_flat_alpha "$IC" 128x128 low_memory=1 partitions=1 alpha_compression=1
+enc2 ly_seg1 "$BG" 160x90 segments=1 sns_strength=0
+enc2 ly_strong "$BG" 160x90 filter_strength=100 filter_sharpness=0 segments=3
+enc2 ly_simple_strong "$BG" 160x90 filter_strength=90 filter_type=0 filter_sharpness=7
+enc2 ly_q100 "$D/flat.png" 97x53 quality=100 method=6
+enc2 ly_q100_noise "$BG" 97x53 quality=100 method=6 sns_strength=0 filter_strength=0
+enc2 ly_q2 "$BG" 160x90 quality=2 method=6
+enc2 ly_1x1 "$BG" 1x1
+enc2 ly_17x1 "$BG" 17x1
+enc2 ly_1x17 "$BG" 1x17
+enc2 ly_16x16 "$BG" 16x16 low_memory=1
+enc2 ly_33x31 "$BG" 33x31 partitions=1 low_memory=1
+rm "$D/flat.png"
+# alpha pre-filters the encoder picks by itself (checked below): plasma seed 1 wants horizontal, seed 2 vertical
+magick -size 70x50 -seed 1 plasma:fractal -blur 0x1 -colorspace gray "$D/a_h.png"
+magick -size 70x50 -seed 2 plasma:fractal -blur 0x1 -colorspace gray "$D/a_v.png"
+for k in h v; do
+  magick -size 70x50 xc:red "$D/a_$k.png" -compose CopyOpacity -composite "$D/a_$k.png"
+  enc ly_alpha_$k "$D/a_$k.png" -quality 75 -define webp:alpha-compression=1 -define webp:alpha-filtering=2
+  rm "$D/a_$k.png"
+done
+# prove the fixtures reach every un-filter: the filter bits (2-3) of the ALPH header byte
+alph_filter() { local off; off=$(grep -obUa ALPH "$1" | head -1 | cut -d: -f1); echo $(( ($(od -An -tu1 -j$((off + 8)) -N1 "$1") >> 2) & 3 )); }
+[ "$(alph_filter "$D/ly_alpha_h.webp")" = 1 ] || { echo "FAIL fixture: ly_alpha_h does not use the horizontal alpha filter"; exit 1; }
+[ "$(alph_filter "$D/ly_alpha_v.webp")" = 2 ] || { echo "FAIL fixture: ly_alpha_v does not use the vertical alpha filter"; exit 1; }
+[ "$(alph_filter "$D/ly_alpha_fast.webp")" = 3 ] || { echo "FAIL fixture: ly_alpha_fast does not use the gradient alpha filter"; exit 1; }
 ls "$D"/*.webp | wc -l | xargs echo "PASS webp_fixtures files:"
