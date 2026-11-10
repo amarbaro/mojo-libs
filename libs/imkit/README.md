@@ -38,7 +38,7 @@ FreeType are called through Mojo's FFI.
 | `imkit.jpeg` | pure Mojo JPEG decoder, baseline and progressive (`jpeg_decode`) |
 | `imkit.webp` | pure Mojo WebP decoder: lossless, lossy and alpha (`webp_decode`) |
 | `imkit.styles`, `imkit.contrast` | 29 generated themes (`style(name)`, `STYLE_NAMES`) and the WCAG contrast gate every theme passes |
-| `imkit.theme` | `Theme` roles and the presets `glass()`, `neon()`, `flat()`; the module constants are the glass values |
+| `imkit.theme` | `Theme` roles and the presets `glass()`, `neon()`, `flat()`, `amarbaro()`, `amarbaro_light()`; the module constants are the glass values |
 
 ## Use
 
