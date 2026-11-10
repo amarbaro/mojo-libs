@@ -3,6 +3,7 @@ to RGB with the file's matrix coefficients and range, the way libavif does: bili
 siting, float math, round to nearest. Pixels are r | g << 8 | b << 16 | a << 24, as `jpeg_decode` / `webp_decode`.
 Matrices: 0 identity (GBR), 1 BT.709, 2 unspecified (BT.601 like libavif), 5 / 6 BT.601, 9 BT.2020 NCL; others raise."""
 from imkit.avif import avif_info
+from imkit.jpeg import MAXPX
 from imkit.av1obu import parse_av1
 from imkit.av1dec import decode_frame
 from imkit.av1frame import Frame, Plane
@@ -53,6 +54,8 @@ def to8(v: Float64) -> UInt32:
 def avif_decode(d: Span[UInt8, _]) raises -> Tuple[Int, Int, List[UInt32]]:
     """(width, height, pixels) of an AVIF still image (intra-coded primary item), RGBA 8-bit."""
     var info = avif_info(d)
+    if info.width <= 0 or info.height <= 0 or info.width * info.height > MAXPX:
+        raise Error("avif: " + String(info.width) + " x " + String(info.height) + " is too large")
     var st = parse_av1(Span(item_bytes(d, info.primary_off, info.primary_len)))
     var f = decode_frame(st)
     var w = f.planes[0].w
