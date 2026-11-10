@@ -1,5 +1,6 @@
 """WCAG 2 contrast of packed rgba colours (r | g << 8 | b << 16 | a << 24, alpha ignored) and the theme gate the style
-presets must pass: text/panel and on_accent/accent >= 4.5, muted/panel >= 3."""
+presets must pass: text/panel, text/surface and on_accent/accent >= 4.5, muted/panel >= 3, good/warn/bad vs panel >= 3,
+surface/panel >= 1.25 (a control is visible on its panel) and hover/surface >= 1.1."""
 from std.math import pow
 from .theme import Theme
 
@@ -32,4 +33,13 @@ def theme_faults(t: Theme) -> String:
         out += "on_accent/accent " + r2(contrast(t.on_accent, t.accent)) + " "
     if contrast(t.muted, t.panel) < 3.0:
         out += "muted/panel " + r2(contrast(t.muted, t.panel)) + " "
+    if contrast(t.text, t.surface) < 4.5:
+        out += "text/surface " + r2(contrast(t.text, t.surface)) + " "
+    if contrast(t.surface, t.panel) < 1.25:
+        out += "surface/panel " + r2(contrast(t.surface, t.panel)) + " "
+    if contrast(t.hover, t.surface) < 1.1:
+        out += "hover/surface " + r2(contrast(t.hover, t.surface)) + " "
+    for c in [t.good, t.warn, t.bad]:
+        if contrast(c, t.panel) < 3.0:
+            out += "status/panel " + r2(contrast(c, t.panel)) + " "
     return out

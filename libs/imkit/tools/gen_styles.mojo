@@ -92,13 +92,17 @@ def theme_of(path: String, radius: Float64, round: Float64, border: Float64, blu
     var base = cols[pi]
     var away = rgba(255, 255, 255, 255) if contrast(rgba(255, 255, 255, 255), base) > contrast(rgba(0, 0, 0, 255), base) else rgba(0, 0, 0, 255)
     var accent = push(cols[ai], base, 3.0, 255)
-    var on_accent = push(accent, accent, 4.5, 255)
+    var on_accent = rgba(255, 255, 255, 255) if contrast(rgba(255, 255, 255, 255), accent) >= contrast(rgba(0, 0, 0, 255), accent) else rgba(0, 0, 0, 255)  # pure black or white: a label, not a tint
     var text = push(mix(base, away, 0.9, 255), base, 7.0, 255)
     var muted = push(mix(base, away, 0.55, 255), base, 3.2, 255)
     var good = push(rgba(52, 199, 120, 255), base, 3.0, 255)
     var warn = push(rgba(240, 170, 40, 255), base, 3.0, 255)
     var bad = push(rgba(235, 80, 80, 255), base, 3.0, 255)
-    var t = Theme(panel, mix(base, away, 0.08, 255), mix(base, away, 0.16, 255), accent, good, warn, bad, text, on_accent, muted,
+    var surface = push(mix(base, away, 0.08, 255), base, 1.6, 255)  # a control must read against its panel; 1.6 so >= 1.25 survives the translucent panel on screen
+    var hover = push(mix(surface, away, 0.08, 255), surface, 1.15, 255)
+    if contrast(text, surface) < 4.5:  # labels sit on controls too
+        text = push(text, surface, 4.5, 255)
+    var t = Theme(panel, surface, hover, accent, good, warn, bad, text, on_accent, muted,
                   rgba(0, 0, 0, 110), mix(accent, accent, 0, 90), Float32(radius), Float32(round), Float32(border), Float32(blur))
     var f = theme_faults(t)
     if f != "":

@@ -3,7 +3,7 @@ black is 21:1."""
 from imkit.contrast import contrast, theme_faults
 from imkit.draw import rgba
 from imkit.styles import STYLE_NAMES, style
-from imkit.theme import Theme, flat
+from imkit.theme import Theme, amarbaro, amarbaro_light, flat
 
 
 def main() raises:
@@ -20,6 +20,10 @@ def main() raises:
     if theme_faults(flat()) != "":
         print("FAIL gate: flat", theme_faults(flat()))
         fails += 1
+    for t in [amarbaro(), amarbaro_light()]:
+        if theme_faults(t) != "":
+            print("FAIL gate: amarbaro preset", theme_faults(t))
+            fails += 1
     var n = 0
     for name in materialize[STYLE_NAMES]():
         var f = theme_faults(style(name))

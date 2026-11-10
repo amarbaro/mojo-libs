@@ -14,7 +14,7 @@ from imkit.draw import TX, TY, UH, UW
 from imkit.font import Font
 from imkit.layer import Layer
 from imkit.styles import STYLE_NAMES, style
-from imkit.theme import Theme, flat, glass, neon
+from imkit.theme import Theme, amarbaro, amarbaro_light, flat, glass, neon
 from imkit.ui import Ui
 from imkit.window import Input, Window
 
@@ -46,18 +46,21 @@ struct State(Movable):
             self.zoom[i] = self.wave[1200 + i]
 
 
-comptime NPRESET = 3 + len(materialize[STYLE_NAMES]())  # glass, neon, flat, then the generated styles
+comptime NBUILT = 5  # glass, neon, flat, amarbaro, amarbaro-light; then the generated styles
+comptime NPRESET = NBUILT + len(materialize[STYLE_NAMES]())
 
 
 def name_of(i: Int) -> String:
-    return "glass" if i == 0 else ("neon" if i == 1 else ("flat" if i == 2 else String(materialize[STYLE_NAMES]()[i - 3])))
+    if i < NBUILT:
+        return ["glass", "neon", "flat", "amarbaro", "amarbaro-light"][i]
+    return String(materialize[STYLE_NAMES]()[i - NBUILT])
 
 
 def theme_of(i: Int) -> Theme:
-    if i < 3:
-        return glass() if i == 0 else (neon() if i == 1 else flat())
+    if i < NBUILT:
+        return glass() if i == 0 else (neon() if i == 1 else (flat() if i == 2 else (amarbaro() if i == 3 else amarbaro_light())))
     try:
-        return style(materialize[STYLE_NAMES]()[i - 3])
+        return style(materialize[STYLE_NAMES]()[i - NBUILT])
     except:
         return glass()
 
@@ -120,12 +123,25 @@ def draw(mut ui: Ui, inp: Input, dt: Float32, mut s: State):
     ui.table_end()
 
     ui.panel(864, 20, 1256, 330, "Text sizes")
-    _ = ui.text(880, 62, "Small 13 px text", 0, ui.theme.text)
-    _ = ui.text(880, 84, "Medium 16 px text", 1, ui.theme.text)
-    _ = ui.text(880, 112, "Large 22 px text", 2, ui.theme.text)
-    ui.x, ui.y = 880, 160
-    ui.spark(s.zoom, 0, 10, 360, 70, ui.theme.bad)
-    _ = ui.text(880, ui.y, "last menu pick: " + s.last, 0, ui.theme.muted)
+    ui.x, ui.y = 880, 58
+    ui.heading("Display 36", 5, 360)
+    ui.heading("Heading 28", 4, 360)
+    _ = ui.text(880, ui.y, "Large 22 px text", 2, ui.theme.text)
+    ui.y += 28
+    _ = ui.text(880, ui.y, "Medium 16 px text", 1, ui.theme.text)
+    ui.y += 22
+    _ = ui.text(880, ui.y, "Small 13 px text", 0, ui.theme.text)
+    ui.y += 18
+    ui.caption("Caption 11 px, muted", 3)
+    ui.x = 880
+    _ = ui.badge("new", ui.theme.accent)
+    _ = ui.badge("ok", ui.theme.good)
+    _ = ui.badge("warn", ui.theme.warn)
+    _ = ui.badge("error", ui.theme.bad)
+    ui.x, ui.y = 880, ui.y + 26
+    ui.separator(360)
+    ui.kv("frame", "16.7 ms", 360)
+    ui.kv("last menu pick", s.last, 360)
 
     ui.panel(864, 350, 1256, 700, "Menu")
     ui.x, ui.y = 880, 392
@@ -172,7 +188,7 @@ def shot(path: String, layer: Layer, bg: List[UInt32]) raises:
 
 
 def main() raises:
-    var ui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22]))
+    var ui = Ui(Font(getenv("IMKIT_FONT", "/usr/share/fonts/TTF/Roboto-Medium.ttf"), [13, 16, 22, 11, 28, 36]))  # slots 0-2 as before; 3 = caption 11, 4 = heading 28, 5 = display 36
     var ctx = DeviceContext()
     var layer = Layer(ctx, ui)
     var bg = List[UInt32](length=UW * UH, fill=0)

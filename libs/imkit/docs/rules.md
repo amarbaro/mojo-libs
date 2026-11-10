@@ -62,3 +62,7 @@
 - A bash call that ended in `cd .work/webp` left the shell there and the next relative path missed -> never `cd` in a lane Bash call; use `( cd dir && ... )` or absolute paths.
 - A new `tools/*.py` table generator was refused by the Python gate (CLAUDE.md section 9) -> build-time generators are Mojo (`tools/vp8_tables.mojo`); Python stays an oracle named `*_oracle*` / `*_test*`.
 - Per-call `List` literals inside `coeffs`, `idct_add` and `pred4` (three heap allocations per 4x4 block) cost 8 of 36 ms for a 1280x720 VP8 frame -> a hot per-block function takes its constant tables and scratch as arguments.
+- Light styles shipped buttons the colour of their panel and a grey label on the selected button: the contrast gate checked text and accent, never control fill vs panel or label vs fill -> the gate covers every pair a widget draws (text/surface, surface/panel >= 1.25, hover/surface, status/panel), and on_accent is pure black or white.
+- Theme numbers passed (surface/panel 1.35) while the screen showed 1.19: panels are translucent over the background -> control contrast is measured on the rendered frame (linear-light WCAG ratio of sampled pixels), and the generator aims at 1.6.
+- A pixel check first used gamma-encoded values and reported every theme at 1.08 -> contrast from pixels uses linearised sRGB.
+- Badge labels used the accent's label colour on warn/bad pills and vanished -> a label on a coloured fill picks black or white for that fill.
