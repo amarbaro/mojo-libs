@@ -1,7 +1,7 @@
 """JPEG decoder check (CPU): jpeg_decode against the ImageMagick goldens that tests/jpeg_test.sh writes, bad-input mutants of good
 files, and the decode time. Run it through the script.
-usage: jpeg_test check DIR | mutants FILE... | bench FILE"""
-from std.os import listdir
+usage: jpeg_test check DIR | mutants FILE... | fuzz FILE N | bench FILE"""
+from std.os import getenv, listdir
 from std.sys import argv
 from std.time import perf_counter_ns
 from imkit.assets import MAXPX as PNG_MAXPX
@@ -21,6 +21,10 @@ def check(dir: String) raises:
     sort(names)
     if len(names) == 0:
         raise Error("no fixtures in " + dir)
+    # The decoder repeats libjpeg's integer IDCT, fancy upsampling and colour constants, so the default bar is bit-exact: the brief's
+    # bar (max diff 2, mean 0.5) let an IDCT constant off by one pass (max 2, mean 2e-5). JPEG_MAXDIFF=2 restores the brief's bar.
+    var tol = Int(getenv("JPEG_MAXDIFF", "0"))
+    var tmean = 0.5 if tol > 0 else 0.0
     var fails = 0
     for n in names:
         var pic = jpeg_decode(Span(load(dir + "/" + n)))
@@ -39,7 +43,7 @@ def check(dir: String) raises:
             if Int(v >> 24) != Int(gold[4 * i + 3]):
                 worst = 999
         var mean = Float64(sum) / Float64(3 * len(gold) // 4)
-        var ok = worst <= 2 and mean <= 0.5
+        var ok = worst <= tol and mean <= tmean
         print("PASS" if ok else "FAIL", n, String(pic[0]) + "x" + String(pic[1]), "max", worst, "mean", mean)
         if not ok:
             fails += 1
@@ -112,6 +116,41 @@ def mutants(path: String) raises -> Int:
     return fails
 
 
+def fuzz(path: String, n: Int) raises:
+    """N random corruptions (1 to 4 bytes replaced, deterministic LCG) of a good file, then every sampling-factor byte 0x00 to 0xFF for
+    each component. Each must decode or raise; a crash or a hang fails the run (the script puts a timeout on it)."""
+    var b = load(path)
+    var seed = 12345
+    var raised, decoded = 0, 0
+    for i in range(n):
+        var m = List[UInt8](b)
+        seed = (seed * 6364136223846793005 + 1442695040888963407) & 0x7FFFFFFFFFFFFFFF
+        for _ in range(1 + (seed >> 40) % 4):
+            seed = (seed * 6364136223846793005 + 1442695040888963407) & 0x7FFFFFFFFFFFFFFF
+            m[(seed >> 20) % len(m)] = UInt8((seed >> 52) & 255)
+        if i % 100 == 0:
+            print("fuzz", path, "case", i, flush=True)
+        try:
+            _ = jpeg_decode(Span(m))
+            decoded += 1
+        except:
+            raised += 1
+    var sof = -1
+    for i in range(len(b) - 1):
+        if b[i] == 0xFF and (b[i + 1] == 0xC0 or b[i + 1] == 0xC2) and sof < 0:
+            sof = i
+    for comp in range(Int(b[sof + 9])):
+        for hv in range(256):
+            var m = List[UInt8](b)
+            m[sof + 11 + 3 * comp] = UInt8(hv)
+            try:
+                _ = jpeg_decode(Span(m))
+                decoded += 1
+            except:
+                raised += 1
+    print("PASS fuzz", path, ":", raised, "raised,", decoded, "decoded, no crash or hang")
+
+
 def bench(path: String) raises:
     var b = load(path)
     var t = List[Int]()
@@ -138,5 +177,7 @@ def main() raises:
             fails += mutants(String(a[i]))
         if fails > 0:
             raise Error(String(fails) + " mutants did not raise")
+    elif a[1] == "fuzz":
+        fuzz(String(a[2]), Int(a[3]))
     else:
         bench(String(a[2]))

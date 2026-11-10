@@ -29,6 +29,9 @@ gen bg_grey_prog $BG -quality 80 -colorspace Gray -interlace JPEG
 gen bg_odd_420 $BG -crop 1277x717+3+2 +repage -quality 80 -sampling-factor 2x2
 gen bg_odd_prog $BG -crop 1277x717+3+2 +repage -quality 80 -sampling-factor 2x2 -interlace JPEG
 gen bg_tiny_420 $BG -crop 3x5+10+10 +repage -quality 90 -sampling-factor 2x2
+gen small_prog_420 $BG -crop 200x120+40+30 +repage -quality 75 -sampling-factor 2x2 -interlace JPEG -define jpeg:restart-interval=3
+gen small_base_422 $BG -crop 203x117+40+30 +repage -quality 75 -sampling-factor 2x1
+gen small_grey $BG -crop 100x90+40+30 +repage -quality 75 -colorspace Gray
 gen bg_one_px $BG -crop 1x1+10+10 +repage -quality 90
 # icons: small, odd sizes, flattened on white (a JPEG has no alpha)
 for f in $(ls $S/*/icons/*.png | awk 'NR % 29 == 1'); do
@@ -46,6 +49,10 @@ fi
 .work/jpeg_test check "$D" || { echo "FAIL jpeg: accuracy"; exit 1; }
 # mutants: every one must raise, never crash or hang (10 s for the whole run)
 timeout 10 .work/jpeg_test mutants "$D/bg_q75_422.jpg" "$D/bg_prog_420.jpg" "$D/bg_restart.jpg" || { echo "FAIL jpeg: mutants (exit $?)"; exit 1; }
+# fuzz: random corruptions and every sampling-factor byte, in-process, 60 s for the whole run
+timeout 60 .work/jpeg_test fuzz "$D/small_prog_420.jpg" 400 | tail -1 || { echo "FAIL jpeg: fuzz progressive (exit $?)"; exit 1; }
+timeout 60 .work/jpeg_test fuzz "$D/small_base_422.jpg" 400 | tail -1 || { echo "FAIL jpeg: fuzz baseline (exit $?)"; exit 1; }
+timeout 60 .work/jpeg_test fuzz "$D/small_grey.jpg" 400 | tail -1 || { echo "FAIL jpeg: fuzz grey (exit $?)"; exit 1; }
 # speed: median of 5 decodes in one process
 .work/jpeg_test bench "$BG" || { echo "FAIL jpeg: bench"; exit 1; }
 echo "PASS jpeg"
