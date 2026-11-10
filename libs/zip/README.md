@@ -10,7 +10,7 @@ bytes it writes are the bytes `zlib` writes at every level.
 
 <!-- install -->
 Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-zip` (import `zipfile` and `deflate`). From source: `git clone https://github.com/amarbaro/mojo-zip`, then `mojo run -I mojo-zip/src app.mojo`.
-Toolchains: Mojo 1.2 stable, and the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) nightly matrix.
+Toolchains: Mojo 1.2 stable, and the nightly 1.3.0.dev2026110805 in the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) matrix.
 
 ```mojo
 from zipfile import ZipReader, ZipWriter, ZIP_DEFLATED

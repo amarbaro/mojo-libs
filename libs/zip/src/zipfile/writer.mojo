@@ -61,8 +61,8 @@ struct ZipWriter(Movable):
         var w = ZipWriter(compression, compresslevel, allow_zip64)
         w.path = path.copy()
         w.to_file = True
-        var f = open(path, "w")
-        f.close()
+        with open(path, "w"):
+            pass  # create or truncate; the archive is appended at close
         return w^
 
     def set_comment(mut self, comment: Span[UInt8, _]):
@@ -70,9 +70,8 @@ struct ZipWriter(Movable):
 
     def _flush(mut self) raises:
         if self.to_file and len(self.buf) > 0:
-            var f = open(self.path, "a")
-            f.write_bytes(Span(self.buf))
-            f.close()
+            with open(self.path, "a") as f:
+                f.write_bytes(Span(self.buf))
             self.buf.clear()
 
     def to_bytes(self) raises -> List[UInt8]:
