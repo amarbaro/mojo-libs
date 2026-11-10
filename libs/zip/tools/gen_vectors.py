@@ -40,7 +40,7 @@ class E:
         s.__dict__.update(kw)
 
 
-def build(entries, comment=b"", pre=b"", cd_extra_size=0, eocd=True, eocd_over=None, tail=b""):
+def build(entries, comment=b"", pre=b"", cd_extra_size=0, eocd=True, eocd_over=None, tail=b"", cd_junk=b""):
     out = bytearray(pre)
     offs = []
     for e in entries:
@@ -66,6 +66,7 @@ def build(entries, comment=b"", pre=b"", cd_extra_size=0, eocd=True, eocd_over=N
         cd += struct.pack("<4s4B4HL2L5H2L", b"PK\1\2", e.cv & 255, e.cs, e.ev & 255, e.rs, e.flag, e.ct, e.time, e.date, crc,
                           cz & 0xFFFFFFFF, fz & 0xFFFFFFFF, len(nmb), len(e.extra), len(e.cmt), e.vol, e.ia, e.ea, ho & 0xFFFFFFFF)
         cd += nmb + e.extra + e.cmt
+    cd += cd_junk
     out += cd
     if eocd:
         n, sz, of = len(entries), len(cd) + cd_extra_size, cd_start
@@ -144,6 +145,9 @@ R("cd.size_too_big", build([A], eocd_over={"size": 5000, "off": len(build([A], e
 R("cd.trailing_bytes", build([A], cd_extra_size=10))
 R("cd.trailing_45", build([A], cd_extra_size=45))
 R("cd.trailing_46", build([A], cd_extra_size=46))
+for jn in (1, 45, 46, 47):
+    R(f"cd.junk{jn}", build([A], cd_junk=bytes(jn)))
+R("cd.junk46_magic", build([A], cd_junk=b"PK\1\2" + bytes(42)))
 bad = bytearray(cdb)
 i = bad.rindex(b"PK\1\2")
 bad[i:i + 4] = b"PK\1\3"

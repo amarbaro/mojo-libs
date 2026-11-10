@@ -14,7 +14,7 @@ src/zipfile/reader.mojo|var eof = r.status == INF_END or k >= C|var eof = r.stat
 src/zipfile/zipinfo.mojo|if self.compress_size == 0xFFFFFFFF:|if self.compress_size == 0xFFFFFFFE:
 src/zipfile/zipinfo.mojo|if Int(data[0]) == 1 and|if Int(data[0]) >= 1 and
 src/zipfile/zipinfo.mojo|put16(extra, 16)|put16(extra, 17)
-src/zipfile/zipinfo.mojo|return self.flag_bits | MASK_UTF_FILENAME|return self.flag_bits
+src/zipfile/zipinfo.mojo|var ascii = True|var ascii = False
 src/zipfile/writer.mojo|zinfo.flag_bits = MASK_UTF_FILENAME|zinfo.flag_bits = 0
 src/zipfile/writer.mojo|* 1.05 >|* 1.0 >
 src/zipfile/writer.mojo|zinfo.external_attr = 0o600 << 16|zinfo.external_attr = 0o644 << 16
@@ -23,5 +23,6 @@ src/zipfile/writer.mojo|put16(tail, 45)|put16(tail, 46)
 src/deflate/crc32.mojo|var c = ~start|var c = start
 src/deflate/inflate.mojo|if ln != (nln ^ 0xFFFF):|if ln != (nln ^ 0xFFFE):
 src/deflate/inflate.mojo|rep = 3 + b.take(2)|rep = 4 + b.take(2)
-src/deflate/deflate.mojo|if static_lenb <= opt_lenb:|if static_lenb < opt_lenb:
+src/deflate/deflate.mojo|if stored_len + 4 <= opt_lenb and buf_off >= 0:|if stored_len + 4 < opt_lenb and buf_off >= 0:
 src/deflate/deflate.mojo|self.max_chain_length = Int(_CFG[self.level * 5 + 3])|self.max_chain_length = Int(_CFG[self.level * 5 + 2])
+

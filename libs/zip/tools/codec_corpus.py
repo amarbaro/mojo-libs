@@ -41,6 +41,18 @@ def mixed(n):
     return bytes(out[:n])
 
 
+def alpha(n, k):
+    return bytes(R.randrange(k) + 97 for _ in range(n))
+
+
+def tiny():
+    """60 short inputs over small alphabets: the static/dynamic/stored boundary of block selection."""
+    out = {}
+    for i in range(60):
+        out[f"tiny{i:02d}"] = alpha(R.randrange(1, 90), R.randrange(2, 12))
+    return out
+
+
 INPUTS = {
     "empty": b"", "b1": b"a", "b2": b"ab", "b3": b"abc", "b4": b"aaaa", "hello": b"hello hello hello world ",
     "zeros1k": bytes(1000), "zeros64k": bytes(65536), "zeros100k": bytes(100000), "zeros1m": bytes(1 << 20),
@@ -51,8 +63,10 @@ INPUTS = {
     "rand65535": rnd(65535), "rand65536": rnd(65536), "rand65537": rnd(65537), "rand70000": rnd(70000), "rand300k": rnd(300000),
     "rand1m": rnd(1 << 20), "struct100k": structured(100000), "struct1m": structured(1 << 20), "mixed500k": mixed(500000),
     "mixed2m": mixed(2 << 20), "win98304": text(98304), "win98305": text(98305), "win131072": mixed(131072),
+    "alpha4_300k": alpha(300000, 4), "alpha2_100k": alpha(100000, 2), "alpha9_400k": alpha(400000, 9),
     "alltext_nl": b"line\n" * 20000, "bytes256": bytes(range(256)) * 300, "sparse": (bytes(5000) + b"x") * 30,
 }
+INPUTS.update(tiny())
 LEVELS = list(range(10)) + [-1]
 
 
