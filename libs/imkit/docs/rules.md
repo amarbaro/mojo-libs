@@ -48,3 +48,4 @@
 
 - A merge commit written with `git merge -m` carried a model attribution line; the selftag gate checks `git commit` only. -> Merge messages follow the commit rules: no attribution, check `git log -1 --format=%B` after every merge.
 - v0.8.0 shipped with pyproject.toml still at 0.7.3; v0.8.1 had to fix it. -> Every release bumps `version` in pyproject.toml and the uv.lock entry in the same commit as the note.
+- CI failed at tests/font_test: the CJK fallback path was hard-coded to the Arch location, Ubuntu runners have no such file -> every font path in a test comes from an env var that scripts/ci.sh resolves over Arch and Debian locations, and the workflow installs the package.
