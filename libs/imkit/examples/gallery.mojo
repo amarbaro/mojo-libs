@@ -13,6 +13,7 @@ from max.gpu.host import DeviceContext
 from imkit.draw import TX, TY, UH, UW
 from imkit.font import Font
 from imkit.layer import Layer
+from imkit.styles import STYLE_NAMES, style
 from imkit.theme import Theme, flat, glass, neon
 from imkit.ui import Ui
 from imkit.window import Input, Window
@@ -45,12 +46,20 @@ struct State(Movable):
             self.zoom[i] = self.wave[1200 + i]
 
 
+comptime NPRESET = 3 + len(materialize[STYLE_NAMES]())  # glass, neon, flat, then the generated styles
+
+
 def name_of(i: Int) -> String:
-    return "glass" if i == 0 else ("neon" if i == 1 else "flat")
+    return "glass" if i == 0 else ("neon" if i == 1 else ("flat" if i == 2 else String(materialize[STYLE_NAMES]()[i - 3])))
 
 
 def theme_of(i: Int) -> Theme:
-    return glass() if i == 0 else (neon() if i == 1 else flat())
+    if i < 3:
+        return glass() if i == 0 else (neon() if i == 1 else flat())
+    try:
+        return style(materialize[STYLE_NAMES]()[i - 3])
+    except:
+        return glass()
 
 
 def draw(mut ui: Ui, inp: Input, dt: Float32, mut s: State):
@@ -81,6 +90,8 @@ def draw(mut ui: Ui, inp: Input, dt: Float32, mut s: State):
     for k in range(3):
         if ui.button(20 + k, name_of(k), 80, 30, s.preset == k):
             s.preset = k
+    if ui.button(23, "style: " + name_of(max(s.preset, 3)), 200, 30, s.preset >= 3):
+        s.preset = 3 if s.preset < 3 or s.preset + 1 >= NPRESET else s.preset + 1
     ui.x, ui.y = 40, ui.y + 40
     ui.plot(s.wave, 0, 10, 368, 170, ui.theme.accent)
     _ = ui.text(40, ui.y, "UTF-8: Grüße, 日本語, ✓", 0, ui.theme.muted)
@@ -170,7 +181,7 @@ def main() raises:
     if len(argv()) > 2 and String(argv()[1]) == "--shots":
         var dir = String(argv()[2])
         s.off1, s.off2 = 70, 2600  # scrolled, so the clipped edge rows show
-        for p in range(3):
+        for p in range(NPRESET):
             s.preset = p
             ui.menu = 40  # the menu open
             draw(ui, Input(600, 690, 0, 0, 0, 0, 0, 0, keys, False), 0, s)
