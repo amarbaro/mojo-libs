@@ -8,6 +8,7 @@ PNG test oracle, tests/jpeg_test.sh the JPEG one.
 """
 from std.ffi import OwnedDLHandle
 from imkit.jpeg import jpeg_decode
+from imkit.webp import webp_decode
 
 
 comptime MAXPX = 1 << 26  # the largest picture png_decode allocates for: 64 M pixels, 256 MB as RGBA
@@ -79,7 +80,7 @@ def png_decode(d: Span[UInt8, _]) raises -> Tuple[Int, Int, List[UInt32]]:
 def image_decode(d: Span[UInt8, _]) raises -> Tuple[Int, Int, List[UInt32]]:
     """(width, height, pixels) of a JPEG or PNG, told apart by signature."""
     if len(d) >= 12 and d[0] == 0x52 and d[1] == 0x49 and d[2] == 0x46 and d[3] == 0x46 and d[8] == 0x57 and d[9] == 0x45 and d[10] == 0x42 and d[11] == 0x50:
-        raise Error("webp: no decoder in this build yet")  # becomes `return webp_decode(d)` when imkit.webp is merged
+        return webp_decode(d)
     if len(d) >= 2 and d[0] == 0xFF and d[1] == 0xD8:
         return jpeg_decode(d)
     return png_decode(d)
