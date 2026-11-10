@@ -568,6 +568,11 @@ struct TileStats(Copyable, Movable):
     var palette: Int
     var cfl: Int
     var filter_intra: Int
+    var golomb: Int
+    var vartx_split: Int
+    var wiener: Int
+    var sgrproj: Int
+    var segmented: Int
 
     def __init__(out self):
         self.blocks = 0
@@ -580,6 +585,11 @@ struct TileStats(Copyable, Movable):
         self.palette = 0
         self.cfl = 0
         self.filter_intra = 0
+        self.golomb = 0
+        self.vartx_split = 0
+        self.wiener = 0
+        self.sgrproj = 0
+        self.segmented = 0
 
 
 @fieldwise_init

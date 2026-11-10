@@ -302,6 +302,8 @@ def decode_block(mut ts: TileState, r: Int, c: Int, bsize: Int) raises:
     ts.stats.mi_covered += min(bw4, ts.mi_col_end - c) * min(bh4, ts.mi_row_end - r)
     if ts.skip:
         ts.stats.skip += 1
+    if ts.segment_id > 0:
+        ts.stats.segmented += 1
     if ts.use_intrabc:
         ts.stats.intrabc += 1
     if ts.palette_size_y > 0 or ts.palette_size_uv > 0:
@@ -823,6 +825,7 @@ def read_var_tx_size(mut ts: TileState, row: Int, col: Int, tx_sz: Int, depth: I
     var w4 = global_constant[TX_WIDTH]()[tx_sz] // MI_SIZE
     var h4 = global_constant[TX_HEIGHT]()[tx_sz] // MI_SIZE
     if split:
+        ts.stats.vartx_split += 1
         var sub = global_constant[SPLIT_TX_SIZE]()[tx_sz]
         var step_w = global_constant[TX_WIDTH]()[sub] // MI_SIZE
         var step_h = global_constant[TX_HEIGHT]()[sub] // MI_SIZE
@@ -952,6 +955,7 @@ def read_lr_unit(mut ts: TileState, plane: Int, unit_row: Int, unit_col: Int) ra
     var u = ts.lr_base[plane] + unit_row * ts.lr_unit_cols[plane] + unit_col
     ts.lr_type[u] = rtype
     if rtype == RESTORE_WIENER:
+        ts.stats.wiener += 1
         for pass_i in range(2):
             var first = 0
             if plane > 0:
@@ -965,6 +969,7 @@ def read_lr_unit(mut ts: TileState, plane: Int, unit_row: Int, unit_col: Int) ra
                 ts.lr_wiener[u * 6 + pass_i * 3 + j] = v
                 ts.ref_lr_wiener[ref_i] = v
     elif rtype == RESTORE_SGRPROJ:
+        ts.stats.sgrproj += 1
         var sgr_set = ts.lit(SGRPROJ_PARAMS_BITS)
         ts.lr_sgr_set[u] = sgr_set
         for i in range(2):

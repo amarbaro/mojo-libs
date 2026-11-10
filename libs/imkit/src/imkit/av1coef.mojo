@@ -455,6 +455,7 @@ def coeffs(mut ts: TileState, plane: Int, start_x: Int, start_y: Int, tx_sz: Int
                 for _ in range(length - 1):
                     x = (x << 1) | ts.lit(1)
                 ts.quant[pos] = x + 14
+                ts.stats.golomb += 1
             if pos == 0 and ts.quant[pos] > 0:
                 dc_category = 1 if sign == 1 else 2
             ts.quant[pos] = ts.quant[pos] & 0xFFFFF
