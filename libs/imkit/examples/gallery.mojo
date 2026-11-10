@@ -88,7 +88,7 @@ def draw(mut ui: Ui, inp: Input, dt: Float32, mut s: State):
 
     ui.panel(24, 370, 424, 700, "Theme and plot")
     for k in range(3):
-        if ui.button(20 + k, name_of(k), 80, 30, s.preset == k):
+        if ui.button(20 + k, name_of(k), (368 - 2 * 8) / 3, 30, s.preset == k):  # three equal buttons + two 8 px gaps = 368, the panel inner width
             s.preset = k
     ui.x, ui.y = 40, ui.y + 40  # own row: three preset buttons already fill the panel width
     if ui.button(23, "style: " + name_of(max(s.preset, 3)), 368, 30, s.preset >= 3):
