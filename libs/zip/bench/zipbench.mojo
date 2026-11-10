@@ -3,7 +3,7 @@ from std.sys import argv
 from std.time import perf_counter_ns
 from std.benchmark import keep
 from zipfile import ZipReader
-from gzip import crc32
+from deflate import crc32
 
 
 def main() raises:
