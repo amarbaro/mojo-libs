@@ -124,6 +124,11 @@ def main() raises:
         golden(fails)
     elif mode == "mutants":
         mutants(fails)
+    elif mode == "once":  # once NAME [decode]: for /usr/bin/time -f %M, peak RSS with and without the decode
+        var bytes = slurp(DIR + argv()[2] + ".webp")
+        if len(argv()) > 3:
+            var d = webp_decode(Span(bytes))
+            print("decoded " + String(d[0]) + " x " + String(d[1]))
     else:
         bench()
     if fails > 0:
