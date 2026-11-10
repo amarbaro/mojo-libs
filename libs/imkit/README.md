@@ -26,7 +26,8 @@ FreeType are called through Mojo's FFI.
 | `imkit.font` | glyph atlas from a TrueType font (ASCII 32-126, a few pixel sizes, alpha8), built once at start |
 | `imkit.draw` | `Draw` (`ui.d`): the command list, tile binning, the `compose` kernel; counters `ui.d.n`, `ui.d.dropped` |
 | `imkit.ui` | `Ui`: `begin(input)`, `panel`, `button`, `icon`, `bar`, `spark`, `text`, `field` (single-line text box), `rect`, `line`, `tri`, `image`, `finish()` |
-| `imkit.atlas`, `imkit.assets` | skyline packer for the glyph atlas; PNG asset atlas (`pack`, `Assets`, `png_decode`) |
+| `imkit.atlas`, `imkit.assets` | skyline packer for the glyph atlas; PNG and JPEG asset atlas (`pack`, `Assets`, `image_decode`, `png_decode`) |
+| `imkit.jpeg` | pure Mojo JPEG decoder, baseline and progressive (`jpeg_decode`) |
 | `imkit.theme` | `Theme` roles and the presets `glass()`, `neon()`, `flat()`; the module constants are the glass values |
 
 ## Use
