@@ -299,7 +299,7 @@ struct ZipReader(Movable, Sized):
         var d = Span(self.data)
         var h = zi.header_offset
         if h < 0:
-            raise Error("OSError: [Errno 22] Invalid argument")
+            raise Error("ValueError: negative seek value " + String(h))
         if h >= len(d) or len(d) - h < 30:
             raise bad_zip("Truncated file header")
         if u32(d, h) != 0x04034B50:
@@ -354,7 +354,7 @@ struct ZipReader(Movable, Sized):
                     raise Error("EOFError")
                 out = List[UInt8](d[ds : ds + take])
             else:
-                var r = inflate_raw(d[ds : ds + k], _MAX_N, F)
+                var r = inflate_raw(d[ds : ds + k], _MAX_N, min(F, k * 1100 + 65536))  # deflate expands at most ~1032:1
                 if r.status == INF_BAD:
                     raise Error("error: zlib")
                 var eof = r.status == INF_END or k >= C
