@@ -34,6 +34,7 @@ comptime MAX_TILE_ROWS = 64
 
 comptime SEG_FEATURE_BITS = [8, 6, 6, 6, 6, 3, 0, 0]
 comptime SEG_FEATURE_SIGNED = [True, True, True, True, True, False, False, False]
+comptime SEG_FEATURE_MAX = [255, 63, 63, 63, 63, 7, 0, 0]  # Segmentation_Feature_Max
 
 
 struct Bits(Movable):
@@ -102,10 +103,11 @@ struct Bits(Movable):
         return v
 
     def su(mut self, n: Int) raises -> Int:
-        """su(n): signed value, n magnitude bits then a sign bit."""
+        """su(n) (section 4.10.6): n bits, two's complement, the first bit read is the sign."""
         var v = self.f(n)
-        if self.f(1) == 1:
-            return -v
+        var sign_mask = 1 << (n - 1)
+        if v & sign_mask != 0:
+            v -= 2 * sign_mask
         return v
 
     def ns(mut self, n: Int) raises -> Int:
@@ -161,6 +163,8 @@ struct TileInfo(Copyable, Movable):
     var rows: Int
     var context_update_tile_id: Int
     var tile_size_bytes: Int
+    var mi_col_starts: List[Int]  # MiColStarts, cols + 1 entries, the last one MiCols
+    var mi_row_starts: List[Int]  # MiRowStarts, rows + 1 entries, the last one MiRows
 
     def __init__(out self):
         self.uniform = True
@@ -170,6 +174,8 @@ struct TileInfo(Copyable, Movable):
         self.rows = 1
         self.context_update_tile_id = 0
         self.tile_size_bytes = 0
+        self.mi_col_starts = List[Int]()
+        self.mi_row_starts = List[Int]()
 
 
 struct SequenceHeader(Copyable, Movable):
@@ -365,15 +371,19 @@ struct FrameHeader(Copyable, Movable):
 
 
 struct Av1Stream(Movable):
-    """What the test needs: the parsed headers and the tile byte sizes."""
+    """The parsed headers, the item's bytes and each tile's byte range inside them."""
 
     var seq: SequenceHeader
     var frame: FrameHeader
+    var data: List[UInt8]
+    var tile_offs: List[Int]
     var tile_sizes: List[Int]
 
     def __init__(out self):
         self.seq = SequenceHeader()
         self.frame = FrameHeader()
+        self.data = List[UInt8]()
+        self.tile_offs = List[Int]()
         self.tile_sizes = List[Int]()
 
 
@@ -393,7 +403,9 @@ def parse_color_config(mut b: Bits, mut s: SequenceHeader) raises:
             s.bit_depth = 10
         else:
             s.bit_depth = 8
-    s.mono_chrome = b.f(1) == 1
+    s.mono_chrome = False
+    if s.profile != 1:
+        s.mono_chrome = b.f(1) == 1
     if s.mono_chrome:
         s.num_planes = 1
     else:
@@ -573,6 +585,7 @@ def parse_tile_info(mut b: Bits, seq: SequenceHeader, width: Int, height: Int) r
         var cols = 0
         var start = 0
         while start < sb_cols:
+            ti.mi_col_starts.append(start << sb_shift)
             cols += 1
             start += tile_width_sb
         ti.cols = cols
@@ -586,6 +599,7 @@ def parse_tile_info(mut b: Bits, seq: SequenceHeader, width: Int, height: Int) r
         var rows = 0
         start = 0
         while start < sb_rows:
+            ti.mi_row_starts.append(start << sb_shift)
             rows += 1
             start += tile_height_sb
         ti.rows = rows
@@ -598,6 +612,7 @@ def parse_tile_info(mut b: Bits, seq: SequenceHeader, width: Int, height: Int) r
             if start >= sb_cols:
                 break
             var max_w = min(sb_cols - start, max_tile_width_sb)
+            ti.mi_col_starts.append(start << sb_shift)
             var size_sb = b.ns(max_w) + 1
             widest = max(widest, size_sb)
             start += size_sb
@@ -616,6 +631,7 @@ def parse_tile_info(mut b: Bits, seq: SequenceHeader, width: Int, height: Int) r
             if start >= sb_rows:
                 break
             var max_h = min(sb_rows - start, max_h_sb)
+            ti.mi_row_starts.append(start << sb_shift)
             var size_sb = b.ns(max_h) + 1
             start += size_sb
             rows += 1
@@ -623,6 +639,8 @@ def parse_tile_info(mut b: Bits, seq: SequenceHeader, width: Int, height: Int) r
             raise Error("av1: empty tile row layout")
         ti.rows = rows
         ti.rows_log2 = tile_log2(1, rows)
+    ti.mi_col_starts.append(mi_cols)
+    ti.mi_row_starts.append(mi_rows)
     if ti.cols_log2 > 0 or ti.rows_log2 > 0:
         ti.context_update_tile_id = b.f(ti.rows_log2 + ti.cols_log2)
         ti.tile_size_bytes = b.f(2) + 1
@@ -685,10 +703,12 @@ def parse_segmentation(mut b: Bits, mut fh: FrameHeader, primary_ref_frame: Int)
                 fh.seg_feature_enabled[i * SEG_LVL_MAX + j] = enabled
                 if enabled:
                     var bits = materialize[SEG_FEATURE_BITS]()[j]
-                    var v = b.f(bits)
+                    var limit = materialize[SEG_FEATURE_MAX]()[j]
+                    var v: Int
                     if materialize[SEG_FEATURE_SIGNED]()[j]:
-                        if v != 0 and b.f(1) == 1:
-                            v = -v
+                        v = max(-limit, min(limit, b.su(1 + bits)))
+                    else:
+                        v = min(limit, b.f(bits))
                     fh.seg_feature_data[i * SEG_LVL_MAX + j] = v
 
 
@@ -767,11 +787,9 @@ def parse_lr(mut b: Bits, mut fh: FrameHeader, seq: SequenceHeader) raises:
         if seq.use_128x128_superblock:
             _ = b.f(1)  # lr_unit_shift, always >= 1
         else:
-            if b.f(1) == 1:
-                pass  # lr_unit_shift = 1, then +1
-            else:
-                _ = b.f(1)  # lr_unit_shift 0 -> -1, 1 -> 0
-        if seq.num_planes > 1 and uses_chroma:
+            if b.f(1) == 1:  # lr_unit_shift
+                _ = b.f(1)  # lr_unit_extra_shift
+        if seq.subsampling_x and seq.subsampling_y and uses_chroma:
             _ = b.f(1)  # lr_uv_shift
 
 
@@ -921,10 +939,9 @@ def parse_frame_header(mut b: Bits, seq: SequenceHeader) raises -> FrameHeader:
     parse_loop_filter(b, fh, seq)
     parse_cdef(b, fh, seq)
     parse_lr(b, fh, seq)
-    if not fh.coded_lossless and not fh.allow_intrabc:
+    if not fh.coded_lossless:  # read_tx_mode()
         fh.tx_mode_select = b.f(1) == 1
-    if not fh.coded_lossless:
-        fh.reduced_tx_set = b.f(1) == 1
+    fh.reduced_tx_set = b.f(1) == 1
     # frame_reference_mode(), skip_mode_params() and global_motion_params()
     # read nothing for an intra frame (sections 5.9.26 .. 5.9.28).
     parse_film_grain(b, fh, seq)
@@ -933,8 +950,8 @@ def parse_frame_header(mut b: Bits, seq: SequenceHeader) raises -> FrameHeader:
 
 # ---- 5.10 tile group ----
 
-def parse_tile_group(mut b: Bits, ti: TileInfo) raises -> List[Int]:
-    """tile_group_obu() (section 5.10): locate each tile's byte range, no symbol decoding."""
+def parse_tile_group(mut b: Bits, ti: TileInfo, mut offs: List[Int]) raises -> List[Int]:
+    """tile_group_obu() (section 5.10): locate each tile's byte range (start offsets appended to offs), no symbol decoding."""
     var num_tiles = ti.cols * ti.rows
     if num_tiles < 1:
         raise Error("av1: tile group without tiles")
@@ -949,9 +966,9 @@ def parse_tile_group(mut b: Bits, ti: TileInfo) raises -> List[Int]:
         raise Error("av1: bad tile group range")
     b.align()
     var sizes = List[Int]()
-    for _ in range(tg_start, tg_end + 1):
+    for tile_num in range(tg_start, tg_end + 1):
         var size = 0
-        if tg_end > tg_start:
+        if tile_num != tg_end:  # the last tile has no size field: it runs to the end of the OBU
             if ti.tile_size_bytes < 1:
                 raise Error("av1: tile size field missing")
             size = b.le(ti.tile_size_bytes) + 1
@@ -960,6 +977,7 @@ def parse_tile_group(mut b: Bits, ti: TileInfo) raises -> List[Int]:
         if size < 0 or b.byte_pos() + size > b.end:
             raise Error("av1: tile data overruns the tile group")
         sizes.append(size)
+        offs.append(b.byte_pos())
         b.pos = b.byte_pos() + size
         b.left = 0
     return sizes^
@@ -1006,7 +1024,7 @@ def parse_av1(d: Span[UInt8, _]) raises -> Av1Stream:
             out.frame = parse_frame_header(pb, out.seq)
             have_frame = True
             pb.align()
-            out.tile_sizes = parse_tile_group(pb, out.frame.tile_info)
+            out.tile_sizes = parse_tile_group(pb, out.frame.tile_info, out.tile_offs)
         elif typ == OBU_FRAME_HEADER or typ == OBU_REDUNDANT_FRAME_HEADER:
             if not have_seq:
                 raise Error("av1: frame header before the sequence header")
@@ -1017,10 +1035,11 @@ def parse_av1(d: Span[UInt8, _]) raises -> Av1Stream:
             if not have_frame:
                 raise Error("av1: tile group before the frame header")
             var pb = Bits(buf, ps, pe)
-            out.tile_sizes = parse_tile_group(pb, out.frame.tile_info)
+            out.tile_sizes = parse_tile_group(pb, out.frame.tile_info, out.tile_offs)
         pos = pe
     if not have_seq:
         raise Error("av1: no sequence header OBU")
     if not have_frame:
         raise Error("av1: no frame header OBU")
+    out.data = buf^
     return out^
