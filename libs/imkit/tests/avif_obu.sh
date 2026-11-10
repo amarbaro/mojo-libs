@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Stage 2 gate (AV1 OBU headers): tests/av1obu_info.mojo prints the parsed headers; they must equal ffmpeg's trace_headers bitstream filter
 # (an independent AV1 syntax parser) on every fixture: seq profile, frame size (max_frame_*_minus_1 + 1), tiles (1 << tile_cols_log2 x 1 << tile_rows_log2),
-# base_q_idx. A truncated AV1 payload must raise (no crash, no hang).
+# base_q_idx. (A truncated-payload check is not here yet: the bit reader raises on overrun, untested by this gate.)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 F=.work/avif; M=${MOJO:-.venv/bin/mojo}
