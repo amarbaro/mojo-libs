@@ -50,3 +50,7 @@
 - v0.8.0 shipped with pyproject.toml still at 0.7.3; v0.8.1 had to fix it. -> Every release bumps `version` in pyproject.toml and the uv.lock entry in the same commit as the note.
 - CI failed at tests/font_test: the CJK fallback path was hard-coded to the Arch location, Ubuntu runners have no such file -> every font path in a test comes from an env var that scripts/ci.sh resolves over Arch and Debian locations, and the workflow installs the package.
 - A ComfyUI render under gpu-wait died at spawn (`with-comfy` not found): gpu-wait starts jobs with a clean environment -> wrap every gpu-wait command as `env PATH="$PATH" HOME="$HOME" /abs/path/tool`.
+- The gallery's style button ran past its panel in all 32 shots, and the shots were reported without being looked at -> any widget change gets a cropped render of its panel opened and checked before it is reported; a new row starts when the row's widths pass the panel's inner width.
+- A JPEG/WebP decoder was started on dlopen'd libturbojpeg/libwebp -> imkit takes no new system library; a missing piece is written in pure Mojo, with ImageMagick only as the test oracle.
+- Packed raw icon atlases (512 KB per style, 15 MB) were first written into git -> ship compressed sources (PNG) and build raw atlases into .work.
+- The gallery's UTF-8 sample shows ??? for CJK and the check mark: its Font is built without the CJK fallback -> a sample text line is checked in the render, not assumed.

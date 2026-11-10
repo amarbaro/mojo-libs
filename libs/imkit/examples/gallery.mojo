@@ -90,7 +90,8 @@ def draw(mut ui: Ui, inp: Input, dt: Float32, mut s: State):
     for k in range(3):
         if ui.button(20 + k, name_of(k), 80, 30, s.preset == k):
             s.preset = k
-    if ui.button(23, "style: " + name_of(max(s.preset, 3)), 200, 30, s.preset >= 3):
+    ui.x, ui.y = 40, ui.y + 40  # own row: three preset buttons already fill the panel width
+    if ui.button(23, "style: " + name_of(max(s.preset, 3)), 368, 30, s.preset >= 3):
         s.preset = 3 if s.preset < 3 or s.preset + 1 >= NPRESET else s.preset + 1
     ui.x, ui.y = 40, ui.y + 40
     ui.plot(s.wave, 0, 10, 368, 170, ui.theme.accent)
