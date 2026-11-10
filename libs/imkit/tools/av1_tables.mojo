@@ -1,9 +1,9 @@
-"""Regenerate src/imkit/av1cdf.mojo: every default CDF table of the AV1 spec (section 10, `Default_*_Cdf`) in the decoder's
-stored form. The spec writes each CDF as increasing cumulative values ending in 32768, then a 0 counter; the decoder
+"""Regenerate src/imkit/av1tab.mojo: every default CDF table of the AV1 spec (section 10, `Default_*_Cdf`) in the decoder's
+stored form, and the 32 coefficient scan tables (`Default_Scan_*`, `Mrow_Scan_*`, `Mcol_Scan_*`, each checked to be a permutation). The spec writes each CDF as increasing cumulative values ending in 32768, then a 0 counter; the decoder
 (src/imkit/av1sym.mojo) stores 32768 - value for each of the N entries and keeps the counter, so a row of N + 1 numbers
 {c0 .. c(N-2), 32768, 0} becomes {32768 - c0 .. 32768 - c(N-2), 0, 0}. Each row is checked (non-decreasing, 32768 last,
 counter 0) and each table's row length is checked to be constant. Build-time tool, nothing here runs at decode time.
-usage: mojo run tools/av1_cdfs.mojo SPEC_TABLES_MD, the spec's 10.additional.tables.md from
+usage: mojo run tools/av1_tables.mojo SPEC_TABLES_MD, the spec's 10.additional.tables.md from
        `gh api repos/AOMediaCodec/av1-spec/contents/10.additional.tables.md -H "Accept: application/vnd.github.raw" > FILE`."""
 from std.sys import argv
 
@@ -92,10 +92,40 @@ def parse_table(b: Span[UInt8, _], start: Int, name: String) raises -> Table:
     return Table(name, dims, row, vals^)
 
 
-def emit(t: Table) -> String:
-    var s = "        self." + field_name(t.name) + " = cdf(  # " + t.name + String(t.dims.strip()) + ", " + String(len(t.vals) // t.row) + " rows\n"
+def parse_scan(b: Span[UInt8, _], start: Int, name: String) raises -> List[Int]:
+    """A scan table: every number inside its braces; must be a permutation of 0 .. w*h - 1 (w x h from the name)."""
+    var i = start + name.byte_length()
+    while b[i] != UInt8(ord("{")):
+        i += 1
+    var vals = List[Int]()
+    var v, have = 0, False
+    while b[i] != UInt8(ord("}")):
+        var c = b[i]
+        if c >= 48 and c <= 57:
+            v = v * 10 + Int(c) - 48
+            have = True
+        elif have:
+            vals.append(v)
+            v = 0
+            have = False
+        i += 1
+    if have:
+        vals.append(v)
+    var seen = List[Bool](length=len(vals), fill=False)
+    for x in vals:
+        if x >= len(vals) or seen[x]:
+            raise Error("FAIL scan " + name + ": not a permutation")
+        seen[x] = True
+    var dims = name.split("_")[2].split("x")
+    if Int(dims[0]) * Int(dims[1]) != len(vals):
+        raise Error("FAIL scan " + name + ": " + String(len(vals)) + " entries")
+    return vals^
+
+
+def emit_list(field: String, comment: String, vals: List[Int]) -> String:
+    var s = "        self." + field + " = u16s(  # " + comment + "\n"
     var line = String()
-    for n in t.vals:
+    for n in vals:
         line += String(n) + " "
         if line.byte_length() > 104:
             s += "            \"" + line + "\"\n"
@@ -105,12 +135,25 @@ def emit(t: Table) -> String:
     return s + "        )\n"
 
 
+def lower(name: String) -> String:
+    var out = List[UInt8]()
+    for c in name.as_bytes():
+        out.append(c + 32 if c >= 65 and c <= 90 else c)
+    return String(unsafe_from_utf8=Span(out))
+
+
+def emit(t: Table) -> String:
+    return emit_list(field_name(t.name), t.name + String(t.dims.strip()) + ", " + String(len(t.vals) // t.row) + " rows", t.vals)
+
+
 def main() raises:
     var src: String
     with open(argv()[1], "r") as f:
         src = f.read()
     var b = src.as_bytes()
     var tables = List[Table]()
+    var scan_names = List[String]()
+    var scans = List[List[Int]]()
     var i = 0
     while True:
         var at = src.find("Default_", i)
@@ -121,16 +164,37 @@ def main() raises:
             e += 1
         i = e
         var name = String(unsafe_from_utf8=b[at:e])
+        if (at == 0 or b[at - 1] == 10) and e < len(b) and b[e] == UInt8(ord("[")) and "_Scan_" in name:
+            scan_names.append(name)
+            scans.append(parse_scan(b, at, name))
+            continue
         if (at > 0 and b[at - 1] != 10) or e >= len(b) or b[e] != UInt8(ord("[")) or not name.endswith("_Cdf"):
             continue  # a mention in the prose, not a definition
         tables.append(parse_table(b, at, name))
+    for prefix in ["Mrow_Scan_", "Mcol_Scan_"]:
+        var j = 0
+        while True:
+            var at = src.find(prefix, j)
+            if at < 0:
+                break
+            var e = at
+            while e < len(b) and is_ident(b[e]):
+                e += 1
+            j = e
+            if (at == 0 or b[at - 1] == 10) and e < len(b) and b[e] == UInt8(ord("[")):
+                var name = String(unsafe_from_utf8=b[at:e])
+                scan_names.append(name)
+                scans.append(parse_scan(b, at, name))
+    if len(scans) != 32:
+        raise Error("FAIL av1_tables: " + String(len(scans)) + " scan tables, expected 32")
     if len(tables) < 90:
-        raise Error("FAIL av1_cdfs: only " + String(len(tables)) + " tables found")
-    var s = String('"""AV1 default CDF tables (spec section 10), generated by tools/av1_cdfs.mojo (do not edit).\n\n')
+        raise Error("FAIL av1_tables: only " + String(len(tables)) + " tables found")
+    var s = String('"""AV1 default CDF and scan tables (spec section 10), generated by tools/av1_tables.mojo (do not edit).\n\n')
     s += "Stored form of src/imkit/av1sym.mojo: each CDF of N symbols is N + 1 UInt16, entry i = 32768 - spec value, entry N - 1 = 0,\n"
-    s += "entry N = the adaptation counter. A table is flat in the spec's index order: row r of a table with row length L starts at r * L.\n"
+    s += "entry N = the adaptation counter (struct Cdfs). struct Scans holds the 32 scan orders.\n"
+    s += "CDF detail: A table is flat in the spec's index order: row r of a table with row length L starts at r * L.\n"
     s += 'The constant `<NAME>_N` is N (symbols per CDF) for each field. Tables are text, parsed once by Cdfs()."""\n'
-    s += "\n\ndef cdf(s: StringSlice) -> List[UInt16]:\n    \"\"\"Space separated integers to a CDF list.\"\"\"\n"
+    s += "\n\ndef u16s(s: StringSlice) -> List[UInt16]:\n    \"\"\"Space separated integers to a list.\"\"\"\n"
     s += "    var r = List[UInt16]()\n    var v, have = 0, False\n    for b in s.as_bytes():\n"
     s += "        if b >= 48 and b <= 57:\n            v = v * 10 + Int(b) - 48\n            have = True\n"
     s += "        elif have:\n            r.append(UInt16(v))\n            v = 0\n            have = False\n    return r^\n\n"
@@ -144,6 +208,12 @@ def main() raises:
     s += "\n    def __init__(out self):\n"
     for t in tables:
         s += emit(t)
-    with open("src/imkit/av1cdf.mojo", "w") as f:
+    s += "\n\nstruct Scans(Copyable, Movable):\n    \"\"\"The spec's coefficient scan orders (section 10), position k of the scan -> coefficient index.\"\"\"\n\n"
+    for n in scan_names:
+        s += "    var " + lower(n) + ": List[UInt16]\n"
+    s += "\n    def __init__(out self):\n"
+    for k in range(len(scans)):
+        s += emit_list(lower(scan_names[k]), scan_names[k] + ", " + String(len(scans[k])) + " entries", scans[k])
+    with open("src/imkit/av1tab.mojo", "w") as f:
         f.write(s)
-    print("PASS av1_cdfs: " + String(len(tables)) + " tables, " + String(total) + " entries -> src/imkit/av1cdf.mojo")
+    print("PASS av1_tables: " + String(len(tables)) + " CDF tables, " + String(total) + " entries, " + String(len(scans)) + " scans -> src/imkit/av1tab.mojo")
