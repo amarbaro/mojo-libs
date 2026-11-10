@@ -290,6 +290,7 @@ struct FrameHeader(Copyable, Movable):
     var width: Int
     var height: Int
     var upscaled_width: Int
+    var superres_denom: Int  # SuperresDenom, SUPERRES_NUM (8) without superres
     var render_width: Int
     var render_height: Int
     var base_q_idx: Int
@@ -347,6 +348,7 @@ struct FrameHeader(Copyable, Movable):
         self.width = 0
         self.height = 0
         self.upscaled_width = 0
+        self.superres_denom = 8
         self.render_width = 0
         self.render_height = 0
         self.base_q_idx = 0
@@ -951,7 +953,8 @@ def parse_frame_header(mut b: Bits, seq: SequenceHeader) raises -> FrameHeader:
     fh.upscaled_width = fh.width
     if seq.enable_superres:
         if b.f(1) == 1:  # use_superres
-            var denom = b.f(3) + 9
+            var denom = b.f(3) + 9  # coded_denom + SUPERRES_DENOM_MIN
+            fh.superres_denom = denom
             fh.width = (fh.upscaled_width * 8 + (denom >> 1)) // denom
     if b.f(1) == 1:  # render_and_frame_size_different
         fh.render_width = b.f(16) + 1

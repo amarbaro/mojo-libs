@@ -225,9 +225,46 @@ def crop(f: Frame, w: Int, h: Int) -> Frame:
     return o^
 
 
+def tdiv(a: Int, b: Int) -> Int:
+    """The spec's integer division: truncation toward zero (Mojo's // floors)."""
+    var q = abs(a) // abs(b)
+    return q if (a >= 0) == (b > 0) else -q
+
+
+def upscale(f: Frame, tables: Tables, frame_width: Int, upscaled_width: Int, frame_height: Int, mi_cols: Int) raises -> Frame:
+    """Upscaling process (7.16): each plane widened from FrameWidth to UpscaledWidth with the 8-tap Upscale_Filter.
+    The output keeps the 128-sample padding of the input frames so loop restoration sees one geometry."""
+    var o = Frame(((upscaled_width + 127) >> 7) << 7, f.planes[0].h, f.bit_depth, f.sub_x, f.sub_y, len(f.planes))
+    var mx = (1 << f.bit_depth) - 1
+    for p in range(len(f.planes)):
+        var sx = f.sub_x if p > 0 else 0
+        var sy = f.sub_y if p > 0 else 0
+        var down_w = (frame_width + sx) >> sx
+        var up_w = (upscaled_width + sx) >> sx
+        var plane_h = (frame_height + sy) >> sy
+        var step = ((down_w << 14) + (up_w // 2)) // up_w
+        var err = up_w * step - (down_w << 14)
+        var init = tdiv(-((up_w - down_w) << 13) + up_w // 2, up_w) + (1 << 7) - tdiv(err, 2)
+        init &= (1 << 14) - 1
+        var max_x = (mi_cols >> sx) * 4 - 1
+        if max_x >= f.planes[p].w or up_w > o.planes[p].w or plane_h > f.planes[p].h:
+            raise Error("av1dec: upscale plane geometry")
+        ref src = f.planes[p]
+        for y in range(plane_h):
+            var row = y * src.stride
+            for x in range(up_w):
+                var src_x = -(1 << 14) + init + x * step
+                var px_x = src_x >> 14
+                var sub = (src_x & ((1 << 14) - 1)) >> 8
+                var sum = 0
+                for k in range(8):
+                    var sxk = min(max(px_x + k - 3, 0), max_x)
+                    sum += Int(src.px[row + sxk]) * Int(tables.upscale_filter[sub * 8 + k])
+                o.planes[p].set(x, y, min(max((sum + 64) >> 7, 0), mx))
+    return o^
+
+
 def decode_frame(st: Av1Stream) raises -> Frame:
-    if st.frame.upscaled_width != st.frame.width:
-        raise Error("av1dec: superres is not supported")
     var ts = parse_frame(st)
     var tables = Tables()
     # padded to whole 128x128 superblocks: transform blocks and CFL luma reads overhang MiCols * 4
@@ -245,6 +282,9 @@ def decode_frame(st: Av1Stream) raises -> Frame:
     var pre = frame.copy()
     if st.seq.enable_cdef and not ts.coded_lossless and not ts.frame.allow_intrabc:
         cdef(frame, pre, build_cdef_input(ts))
+    if st.frame.upscaled_width != st.frame.width:  # superres: CDEF output and its input both go to UpscaledWidth
+        frame = upscale(frame, tables, st.frame.width, st.frame.upscaled_width, st.frame.height, ts.mi_cols)
+        pre = upscale(pre, tables, st.frame.width, st.frame.upscaled_width, st.frame.height, ts.mi_cols)
     if ts.frame.uses_lr:
         var cdef_out = frame.copy()
         loop_restoration(frame, cdef_out, pre, build_lr_input(ts))

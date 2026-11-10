@@ -923,8 +923,6 @@ def decode_signed_subexp_with_ref_bool(mut ts: TileState, low: Int, high: Int, k
 def read_lr(mut ts: TileState, r: Int, c: Int, bsize: Int) raises:
     if ts.frame.allow_intrabc:
         return
-    if ts.frame.upscaled_width != ts.frame.width:
-        raise Error("av1tile: superres is not supported")
     var w = global_constant[NUM_4X4_WIDE]()[bsize]
     var h = global_constant[NUM_4X4_HIGH]()[bsize]
     for plane in range(ts.num_planes):
@@ -936,8 +934,11 @@ def read_lr(mut ts: TileState, r: Int, c: Int, bsize: Int) raises:
             var unit_cols = ts.lr_unit_cols[plane]
             var row_start = (r * (MI_SIZE >> sy) + unit_size - 1) // unit_size
             var row_end = min(unit_rows, ((r + h) * (MI_SIZE >> sy) + unit_size - 1) // unit_size)
-            var col_start = (c * (MI_SIZE >> sx) + unit_size - 1) // unit_size
-            var col_end = min(unit_cols, ((c + w) * (MI_SIZE >> sx) + unit_size - 1) // unit_size)
+            # with superres the columns are counted in the upscaled frame (SuperresDenom / SUPERRES_NUM)
+            var numerator = (MI_SIZE >> sx) * ts.frame.superres_denom
+            var denominator = unit_size * SUPERRES_NUM
+            var col_start = (c * numerator + denominator - 1) // denominator
+            var col_end = min(unit_cols, ((c + w) * numerator + denominator - 1) // denominator)
             for unit_row in range(row_start, row_end):
                 for unit_col in range(col_start, col_end):
                     read_lr_unit(ts, plane, unit_row, unit_col)
