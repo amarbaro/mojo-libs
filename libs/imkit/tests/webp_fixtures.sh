@@ -71,13 +71,11 @@ enc2 ly_1x17 "$BG" 1x17
 enc2 ly_16x16 "$BG" 16x16 low_memory=1
 enc2 ly_33x31 "$BG" 33x31 partitions=1 low_memory=1
 rm "$D/flat.png"
-# alpha pre-filters the encoder picks by itself (checked below): deterministic ramps, not plasma (its seeds differ across ImageMagick builds)
-magick -size 70x50 gradient:black-white -colorspace gray "$D/a_h.png"   # rows are flat: the horizontal filter wins on any ImageMagick
-magick -size 50x70 gradient:black-white -rotate 90 -colorspace gray "$D/a_v.png"   # columns are flat: the vertical filter wins
+# alpha pre-filters: which filter libwebp picks depends on its version (Arch and Ubuntu 26.04 differ for the same input), so the two
+# filtered-alpha fixtures are committed files (tests/fixtures/webp/, made here and checked below); only their goldens are decoded here
 for k in h v; do
-  magick -size 70x50 xc:red "$D/a_$k.png" -compose CopyOpacity -composite "$D/a_$k.png"
-  enc ly_alpha_$k "$D/a_$k.png" -quality 75 -define webp:alpha-compression=1 -define webp:alpha-filtering=2
-  rm "$D/a_$k.png"
+  cp "tests/fixtures/webp/ly_alpha_$k.webp" "$D/" || { echo "FAIL fixture: tests/fixtures/webp/ly_alpha_$k.webp missing"; exit 1; }
+  magick "$D/ly_alpha_$k.webp" -depth 8 "rgba:$D/ly_alpha_$k.rgba" || { echo "FAIL golden: ly_alpha_$k"; exit 1; }
 done
 # prove the fixtures reach every un-filter: the filter bits (2-3) of the ALPH header byte
 alph_filter() { local off; off=$(grep -obUa ALPH "$1" | head -1 | cut -d: -f1); echo $(( ($(od -An -tu1 -j$((off + 8)) -N1 "$1") >> 2) & 3 )); }
