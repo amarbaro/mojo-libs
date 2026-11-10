@@ -34,6 +34,8 @@ comptime MAX_TILE_ROWS = 64
 
 comptime SEG_FEATURE_BITS = [8, 6, 6, 6, 6, 3, 0, 0]
 comptime SEG_FEATURE_SIGNED = [True, True, True, True, True, False, False, False]
+comptime RESTORATION_TILESIZE_MAX = 256
+comptime REMAP_LR_TYPE = [0, 3, 1, 2]  # Remap_Lr_Type: NONE, SWITCHABLE, WIENER, SGRPROJ (RESTORE_* values 0 NONE, 1 WIENER, 2 SGRPROJ, 3 SWITCHABLE)
 comptime SEG_FEATURE_MAX = [255, 63, 63, 63, 63, 7, 0, 0]  # Segmentation_Feature_Max
 
 
@@ -318,6 +320,7 @@ struct FrameHeader(Copyable, Movable):
     var cdef_bits: Int
     var frame_restoration_type: List[Int]
     var uses_lr: Bool
+    var loop_restoration_size: List[Int]  # LoopRestorationSize per plane
     var tx_mode_select: Bool
     var reduced_tx_set: Bool
     var apply_grain: Bool
@@ -364,6 +367,7 @@ struct FrameHeader(Copyable, Movable):
         self.cdef_bits = 0
         self.frame_restoration_type = List[Int](length=3, fill=0)
         self.uses_lr = False
+        self.loop_restoration_size = [256, 256, 256]
         self.tx_mode_select = False
         self.reduced_tx_set = False
         self.apply_grain = False
@@ -777,20 +781,26 @@ def parse_lr(mut b: Bits, mut fh: FrameHeader, seq: SequenceHeader) raises:
     var uses_chroma = False
     for i in range(seq.num_planes):
         var lr_type = b.f(2)
-        fh.frame_restoration_type[i] = lr_type
+        fh.frame_restoration_type[i] = materialize[REMAP_LR_TYPE]()[lr_type]  # FrameRestorationType
         if lr_type != 0:
             uses = True
             if i > 0:
                 uses_chroma = True
     fh.uses_lr = uses
     if uses:
+        var shift: Int
         if seq.use_128x128_superblock:
-            _ = b.f(1)  # lr_unit_shift, always >= 1
+            shift = b.f(1) + 1  # lr_unit_shift, then ++
         else:
-            if b.f(1) == 1:  # lr_unit_shift
-                _ = b.f(1)  # lr_unit_extra_shift
+            shift = b.f(1)  # lr_unit_shift
+            if shift == 1:
+                shift += b.f(1)  # lr_unit_extra_shift
+        var uv_shift = 0
         if seq.subsampling_x and seq.subsampling_y and uses_chroma:
-            _ = b.f(1)  # lr_uv_shift
+            uv_shift = b.f(1)  # lr_uv_shift
+        fh.loop_restoration_size[0] = RESTORATION_TILESIZE_MAX >> (2 - shift)
+        fh.loop_restoration_size[1] = fh.loop_restoration_size[0] >> uv_shift
+        fh.loop_restoration_size[2] = fh.loop_restoration_size[0] >> uv_shift
 
 
 def parse_film_grain(mut b: Bits, mut fh: FrameHeader, seq: SequenceHeader) raises:
