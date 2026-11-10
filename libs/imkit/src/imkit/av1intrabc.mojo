@@ -208,11 +208,13 @@ def round2s(x: Int, n: Int) -> Int:
     return -((-x + (1 << (n - 1))) >> n)
 
 
-def predict_intrabc(mut frame: Frame, plane: Int, x: Int, y: Int, w: Int, h: Int, mv_row: Int, mv_col: Int) raises:
+def predict_intrabc(
+    mut frame: Frame, plane: Int, x: Int, y: Int, w: Int, h: Int, mv_row: Int, mv_col: Int, mi_cols: Int, mi_rows: Int
+) raises:
     """predict_inter for use_intrabc (7.11.3.1 steps 9 to 13, 7.11.3.3, 7.11.3.4): the reference is the frame being decoded,
     scale 1 << 14, BILINEAR in both directions (Subpel_Filters[3][p] is 128 - 8 p, 8 p at taps 3 and 4), one reference, so
     InterRound0 = 3, InterRound1 = 11 (5 and 9 at 12 bit) and the result is Clip1(pred). Source positions clamp to the plane,
-    which the caller allocates as MiCols * 4 by MiRows * 4 (the spec's RefUpscaledWidth[-1] / RefFrameHeight[-1])."""
+    to MiCols * 4 by MiRows * 4 (the spec's RefUpscaledWidth[-1] / RefFrameHeight[-1]); the planes may be larger."""
     var sx = frame.sub_x if plane > 0 else 0
     var sy = frame.sub_y if plane > 0 else 0
     var round0 = 3
@@ -223,8 +225,8 @@ def predict_intrabc(mut frame: Frame, plane: Int, x: Int, y: Int, w: Int, h: Int
     var maxv = (1 << frame.bit_depth) - 1
     var pw = frame.planes[plane].w
     var ph = frame.planes[plane].h
-    var last_x = pw - 1
-    var last_y = ph - 1
+    var last_x = ((mi_cols * 4 + sx) >> sx) - 1
+    var last_y = ((mi_rows * 4 + sy) >> sy) - 1
     var orig_x = (x << 4) + ((2 * mv_col) >> sx) + 8
     var orig_y = (y << 4) + ((2 * mv_row) >> sy) + 8
     var base_x = orig_x * (1 << 14) - (8 << 14)

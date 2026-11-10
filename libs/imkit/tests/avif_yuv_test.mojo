@@ -5,6 +5,7 @@ from std.sys import argv
 from imkit.avif import avif_info
 from imkit.av1obu import parse_av1
 from imkit.av1dec import decode_frame
+from imkit.av1frame import Frame
 
 
 def header_field(h: String, key: String) -> String:
@@ -24,12 +25,22 @@ def main() raises:
         y4m = f.read_bytes()
     var payload = List[UInt8]()
     if argv()[1].endswith(".obu"):
-        payload = data^
+        payload = data.copy()
     else:
         var info = avif_info(Span(data))
         for i in range(info.primary_len):
             payload.append(data[info.primary_off + i])
     var frame = decode_frame(parse_av1(Span(payload)))
+    var alpha = Frame(1, 1, 8, 0, 0, 1)
+    var has_alpha = False
+    if not argv()[1].endswith(".obu"):
+        var ai = avif_info(Span(data))
+        if ai.alpha_len > 0:
+            var ap = List[UInt8]()
+            for i in range(ai.alpha_len):
+                ap.append(data[ai.alpha_off + i])
+            alpha = decode_frame(parse_av1(Span(ap)))
+            has_alpha = True
     var nl = 0
     while y4m[nl] != 10:
         nl += 1
@@ -38,8 +49,11 @@ def main() raises:
     var wide = c.endswith("p10") or c.endswith("p12")
     var pos = nl + 1 + 6  # "FRAME\n"
     var total_bad = 0
-    for p in range(len(frame.planes)):
-        ref pl = frame.planes[p]
+    var planes = frame.planes.copy()
+    if has_alpha:  # avifdec writes C444alpha: the alpha item's luma follows Y, U, V
+        planes.append(alpha.planes[0].copy())
+    for p in range(len(planes)):
+        ref pl = planes[p]
         var bad = 0
         var maxd = 0
         for y in range(pl.h):

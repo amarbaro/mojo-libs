@@ -85,7 +85,8 @@ def replay_block(ts: TileState, tables: Tables, mut frame: Frame, mut rin: Recon
             var psz = subsampled_size(b.mi_size, sx, sy)
             var w4 = global_constant[NUM_4X4_WIDE]()[psz]
             var h4 = global_constant[NUM_4X4_HIGH]()[psz]
-            predict_intrabc(frame, plane, (b.mi_col >> sx) * 4, (b.mi_row >> sy) * 4, w4 * 4, h4 * 4, b.mv_row, b.mv_col)
+            predict_intrabc(frame, plane, (b.mi_col >> sx) * 4, (b.mi_row >> sy) * 4, w4 * 4, h4 * 4, b.mv_row, b.mv_col,
+                            ts.mi_cols, ts.mi_rows)
     var pal_y = u16s(b.palette_y)
     var pal_u = u16s(b.palette_u)
     var pal_v = u16s(b.palette_v)
@@ -229,7 +230,8 @@ def decode_frame(st: Av1Stream) raises -> Frame:
         raise Error("av1dec: superres is not supported")
     var ts = parse_frame(st)
     var tables = Tables()
-    var frame = Frame(ts.mi_cols * 4, ts.mi_rows * 4, st.seq.bit_depth, ts.sub_x, ts.sub_y, ts.num_planes)
+    # padded to whole 128x128 superblocks: transform blocks and CFL luma reads overhang MiCols * 4
+    var frame = Frame(((ts.mi_cols * 4 + 127) >> 7) << 7, ((ts.mi_rows * 4 + 127) >> 7) << 7, st.seq.bit_depth, ts.sub_x, ts.sub_y, ts.num_planes)
     var rin = recon_input(st)
     seg_qm_levels(ts, rin)
     var iin = IntraInput()
