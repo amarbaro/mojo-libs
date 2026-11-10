@@ -4,6 +4,7 @@ from imkit.av1frame import Frame
 from imkit.av1lf import LfInput, loop_filter
 from imkit.av1cdef import CdefInput, cdef, cdef_direction
 from imkit.av1tab import Tables
+from imkit.av1lr import LrInput, loop_restoration
 
 def show(v: List[Int]) -> String:
     var s = String("")
@@ -115,6 +116,42 @@ def dir_of(kind: Int) raises -> Tuple[Int, Int]:
                 hi = j % 2 == 0
             fr.planes[0].set(j, i, 200 if hi else 56)
     return cdef_direction(fr, Tables(), 0, 0)
+
+
+def lr_case(name: String, bd: Int, sx: Int, sy: Int, fh: Int, uw: Int, sizes: List[Int], want: List[Int], mut failures: Int) raises:
+    """Pseudo-random deblocked and CDEF frames, per-unit types / coefficients as tools/av1_lr_oracle.py (unit_params);
+    expected checksums come from that oracle (spec 7.17 transcribed per 4x4 block)."""
+    var pre = Frame(uw, fh, bd, sx, sy, 3)
+    var cd = Frame(uw, fh, bd, sx, sy, 3)
+    var top = (1 << bd) - 1
+    for p in range(3):
+        for y in range(pre.planes[p].h):
+            for x in range(pre.planes[p].w):
+                var v = (x * 29 + y * 31 + ((x * y) % 13) * 11 + p * 40) % 256
+                if bd != 8:
+                    v = v * 4 + x % 4
+                pre.planes[p].set(x, y, v)
+                var c = v + ((x + y) % 5 - 2) * (1 if bd == 8 else 4)
+                cd.planes[p].set(x, y, max(0, min(top, c)))
+    var inp = LrInput(fh, uw, sx, sy, 3, True, [3, 3, 3], sizes)
+    for p in range(3):
+        for u in range(inp.unit_rows[p] * inp.unit_cols[p]):
+            inp.lr_type[p][u] = UInt8((u * 2 + p) % 3)
+            inp.lr_wiener[p][u * 6 + 0] = ((u * 3) % 16) - 5 if p == 0 else 0
+            inp.lr_wiener[p][u * 6 + 1] = -10 + u * 4
+            inp.lr_wiener[p][u * 6 + 2] = 20 + u * 5
+            inp.lr_wiener[p][u * 6 + 3] = ((u * 2) % 16) - 4 if p == 0 else 0
+            inp.lr_wiener[p][u * 6 + 4] = -8 + u * 3
+            inp.lr_wiener[p][u * 6 + 5] = 25 - u * 4
+            inp.lr_sgr_set[p][u] = UInt8((u * 5 + p * 3 + 1) % 16)
+            inp.lr_sgr_xqd[p][u * 2] = -20 + u * 7 + p
+            inp.lr_sgr_xqd[p][u * 2 + 1] = 30 - u * 9 + p * 2
+    var out = cd.copy()
+    loop_restoration(out, cd, pre, inp)
+    var got = List[Int]()
+    for p in range(3):
+        got.append(checksum(out, p))
+    check(name, got, want, failures)
 
 
 def main() raises:
@@ -255,6 +292,12 @@ def main() raises:
     cdef_case("cdef var_str 12 (var 272278)", 8, 1, 1, 72, 15, [4063013, 247761, 247761], failures)
     cdef_case("cdef var_str 13 (var 756196)", 8, 1, 1, 120, 15, [3964709, 235473, 235473], failures)
     cdef_case("cdef 8-bit 422", 8, 1, 0, 0, 4, [4259339, 1065841, 1127905], failures)
+
+    lr_case("lr 8-bit 420", 8, 1, 1, 100, 100, [64, 32, 32], [2087952885, 397919868, 394847886], failures)
+    lr_case("lr 10-bit 420", 10, 1, 1, 100, 100, [64, 32, 32], [4131646498, 1596227082, 1583994783], failures)
+    lr_case("lr 8-bit 444", 8, 0, 0, 70, 90, [64, 64, 64], [2555199730, 2530183361, 2515035396], failures)
+    lr_case("lr 8-bit 422", 8, 1, 0, 90, 66, [64, 64, 64], [2250325124, 561384703, 568675589], failures)
+    lr_case("lr 8-bit 420 odd size", 8, 1, 1, 75, 71, [64, 32, 32], [1827391241, 120472115, 117237280], failures)
 
     if failures == 0:
         print("PASS av1filter")
