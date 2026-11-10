@@ -1,0 +1,2 @@
+- A fixture without the feature (no rim) made trayRim rows pass as -1 == -1 -> every new op gets one fixture where the feature is present and the expected value is not a sentinel.
+- A neighbour table built for one scan order (LBP clockwise) was reused for raster reconstruction -> each scan states its own neighbour set.
