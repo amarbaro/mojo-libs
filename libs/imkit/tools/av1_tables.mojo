@@ -3,7 +3,8 @@ stored form, and the 32 coefficient scan tables (`Default_Scan_*`, `Mrow_Scan_*`
 (src/imkit/av1sym.mojo) stores 32768 - value for each of the N entries and keeps the counter, so a row of N + 1 numbers
 {c0 .. c(N-2), 32768, 0} becomes {32768 - c0 .. 32768 - c(N-2), 0, 0}. Each row is checked (non-decreasing, 32768 last,
 counter 0) and each table's row length is checked to be constant. Build-time tool, nothing here runs at decode time.
-usage: mojo run tools/av1_tables.mojo SPEC_TABLES_MD, the spec's 10.additional.tables.md from
+usage: mojo run tools/av1_tables.mojo SPEC_TABLES_MD [MORE_SPEC_MD]..., the spec's 10.additional.tables.md (then e.g.
+       08.decoding.process.md for the numeric tables of section 7) from
        `gh api repos/AOMediaCodec/av1-spec/contents/10.additional.tables.md -H "Accept: application/vnd.github.raw" > FILE`."""
 from std.sys import argv
 
@@ -122,8 +123,48 @@ def parse_scan(b: Span[UInt8, _], start: Int, name: String) raises -> List[Int]:
     return vals^
 
 
-def emit_list(field: String, comment: String, vals: List[Int]) -> String:
-    var s = "        self." + field + " = u16s(  # " + comment + "\n"
+def parse_numeric(b: Span[UInt8, _], start: Int) -> List[Int]:
+    """Every number of the table body that starts at the first `{` after b[start]; empty when the body holds anything but
+    numbers, signs, commas, braces, spaces and /* comments */ (a table of symbols)."""
+    var i = start
+    while i < len(b) and b[i] != UInt8(ord("{")):
+        if b[i] == 10:
+            return List[Int]()
+        i += 1
+    var depth = 0
+    var vals = List[Int]()
+    var v, have, neg = 0, False, False
+    while i < len(b):
+        var c = b[i]
+        if c == UInt8(ord("/")) and i + 1 < len(b) and b[i + 1] == UInt8(ord("*")):
+            i += 2
+            while i + 1 < len(b) and not (b[i] == UInt8(ord("*")) and b[i + 1] == UInt8(ord("/"))):
+                i += 1
+            i += 2
+            continue
+        if c >= 48 and c <= 57:
+            v = v * 10 + Int(c) - 48
+            have = True
+        else:
+            if have:
+                vals.append(-v if neg else v)
+                v, have, neg = 0, False, False
+            if c == UInt8(ord("-")):
+                neg = True
+            elif c == UInt8(ord("{")):
+                depth += 1
+            elif c == UInt8(ord("}")):
+                depth -= 1
+                if depth == 0:
+                    return vals^
+            elif c != UInt8(ord(",")) and c != 32 and c != 10 and c != 9 and c != 13:
+                return List[Int]()
+        i += 1
+    return List[Int]()
+
+
+def emit_list(field: String, comment: String, vals: List[Int], conv: String = "u16s") -> String:
+    var s = "        self." + field + " = " + conv + "(  # " + comment + "\n"
     var line = String()
     for n in vals:
         line += String(n) + " "
@@ -144,6 +185,27 @@ def lower(name: String) -> String:
 
 def emit(t: Table) -> String:
     return emit_list(field_name(t.name), t.name + String(t.dims.strip()) + ", " + String(len(t.vals) // t.row) + " rows", t.vals)
+
+
+def numeric_tables(src: String, mut names: List[String], mut tabs: List[List[Int]]) raises:
+    """Every `Name[...] = {` table at a line start whose body is numbers only (CDFs and scans excluded)."""
+    var b = src.as_bytes()
+    var i = 0
+    while i < len(b):
+        var at = i
+        var e = at
+        while e < len(b) and is_ident(b[e]):
+            e += 1
+        if e > at and b[at] >= 65 and b[at] <= 90 and e < len(b) and b[e] == UInt8(ord("[")):
+            var name = String(unsafe_from_utf8=b[at:e])
+            if not name.endswith("_Cdf") and not ("_Scan_" in name) and not (name in names):
+                var vals = parse_numeric(b, e)
+                if len(vals) > 0:
+                    names.append(name)
+                    tabs.append(vals^)
+        while i < len(b) and b[i] != 10:
+            i += 1
+        i += 1
 
 
 def main() raises:
@@ -198,6 +260,11 @@ def main() raises:
     s += "    var r = List[UInt16]()\n    var v, have = 0, False\n    for b in s.as_bytes():\n"
     s += "        if b >= 48 and b <= 57:\n            v = v * 10 + Int(b) - 48\n            have = True\n"
     s += "        elif have:\n            r.append(UInt16(v))\n            v = 0\n            have = False\n    return r^\n\n"
+    s += "\ndef i32s(s: StringSlice) -> List[Int32]:\n    \"\"\"Space separated signed integers to a list.\"\"\"\n"
+    s += "    var r = List[Int32]()\n    var v, have, neg = 0, False, False\n    for b in s.as_bytes():\n"
+    s += "        if b >= 48 and b <= 57:\n            v = v * 10 + Int(b) - 48\n            have = True\n        else:\n"
+    s += "            if have:\n                r.append(Int32(-v if neg else v))\n                v, have, neg = 0, False, False\n"
+    s += "            neg = b == 45\n    return r^\n\n"
     var total = 0
     for t in tables:
         s += "comptime " + field_name(t.name).upper() + "_N = " + String(t.row - 1) + "\n"
@@ -214,6 +281,23 @@ def main() raises:
     s += "\n    def __init__(out self):\n"
     for k in range(len(scans)):
         s += emit_list(lower(scan_names[k]), scan_names[k] + ", " + String(len(scans[k])) + " entries", scans[k])
+    var tnames = List[String]()
+    var tabs = List[List[Int]]()
+    numeric_tables(src, tnames, tabs)
+    for k in range(2, len(argv())):
+        var more: String
+        with open(argv()[k], "r") as f:
+            more = f.read()
+        numeric_tables(more, tnames, tabs)
+    s += "\n\nstruct Tables(Copyable, Movable):\n    \"\"\"The spec's numeric constant tables (sections 7 and 10), flat in index order, as Int32.\"\"\"\n\n"
+    for n in tnames:
+        s += "    var " + lower(n) + ": List[Int32]\n"
+    s += "\n    def __init__(out self):\n"
+    var tsum = 0
+    for k in range(len(tabs)):
+        s += emit_list(lower(tnames[k]), tnames[k] + ", " + String(len(tabs[k])) + " entries", tabs[k], "i32s")
+        tsum += len(tabs[k])
+    print("numeric tables " + String(len(tnames)) + ", " + String(tsum) + " entries")
     with open("src/imkit/av1tab.mojo", "w") as f:
         f.write(s)
     print("PASS av1_tables: " + String(len(tables)) + " CDF tables, " + String(total) + " entries, " + String(len(scans)) + " scans -> src/imkit/av1tab.mojo")
