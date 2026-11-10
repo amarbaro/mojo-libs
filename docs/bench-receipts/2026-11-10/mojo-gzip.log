@@ -1,0 +1,6 @@
+mojo    inflate 21777800 B 22 ms; deflate 51368 B 3 ms, peak RSS 35 MB
+python  inflate 21777800 B 20 ms; deflate 51368 B 3 ms, peak RSS 13 MB
+mojo    inflate 21777800 B 21 ms; deflate 51368 B 3 ms, peak RSS 35 MB
+python  inflate 21777800 B 20 ms; deflate 51368 B 3 ms, peak RSS 13 MB
+mojo    inflate 21777800 B 22 ms; deflate 51368 B 3 ms, peak RSS 35 MB
+python  inflate 21777800 B 20 ms; deflate 51368 B 4 ms, peak RSS 13 MB

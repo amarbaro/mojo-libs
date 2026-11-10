@@ -1,0 +1,6 @@
+mojo    f_ms 33 g_ms 119 e_ms 124 check 6889003 6870286 9000000 | peak RSS 13 MB
+python  f_ms 197 g_ms 280 e_ms 208 check 6889003 6870286 9000000 | peak RSS 13 MB
+mojo    f_ms 33 g_ms 121 e_ms 123 check 6889003 6870286 9000000 | peak RSS 13 MB
+python  f_ms 191 g_ms 186 e_ms 296 check 6889003 6870286 9000000 | peak RSS 13 MB
+mojo    f_ms 34 g_ms 124 e_ms 122 check 6889003 6870286 9000000 | peak RSS 13 MB
+python  f_ms 190 g_ms 185 e_ms 201 check 6889003 6870286 9000000 | peak RSS 13 MB

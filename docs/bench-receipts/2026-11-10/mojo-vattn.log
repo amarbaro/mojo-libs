@@ -1,0 +1,22 @@
+PASS .work/case-129-3: L=129 H=4 mojo max 9.208e-04 mean 5.316e-05 | no sdpa arm, gate 2e-3 abs
+PASS .work/case-4097-2: L=4097 H=2 mojo max 4.974e-04 mean 1.690e-05 | no sdpa arm, gate 2e-3 abs
+PASS .work/real: L=32760 H=40 mojo max 2.786e-03 mean 8.075e-05 | sdpa max 2.786e-03 mean 8.076e-05, gate 1.5x
+PASS 3/3
+(null): No such file or directory
+(null): No such file or directory
+(null): No such file or directory
+(null): No such file or directory
+rep 1 sdpa L=32760 H=40 ms/call=2032.05 TFLOPS=10.8
+rep 1 .work/run_vattn vattn_fwd L= 32760  H= 40  ms/call= 2048.6584722  TFLOPS= 10.728726503835851
+rep 2 .work/run_vattn vattn_fwd L= 32760  H= 40  ms/call= 1803.4802702000002  TFLOPS= 12.18726748009422
+(null): No such file or directory
+(null): No such file or directory
+(null): No such file or directory
+(null): No such file or directory
+rep 2 sdpa L=32760 H=40 ms/call=1948.10 TFLOPS=11.3
+(null): No such file or directory
+(null): No such file or directory
+(null): No such file or directory
+(null): No such file or directory
+rep 3 sdpa L=32760 H=40 ms/call=1742.23 TFLOPS=12.6
+rep 3 .work/run_vattn vattn_fwd L= 32760  H= 40  ms/call= 2120.7192224  TFLOPS= 10.364170898175756

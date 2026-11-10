@@ -1,0 +1,6 @@
+mojo    build_us 47 parse_ms 220 check 6840000 | peak RSS 13 MB
+python  build_us 18511 parse_ms 2954 check 6840000 | peak RSS 16 MB
+mojo    build_us 43 parse_ms 192 check 6840000 | peak RSS 13 MB
+python  build_us 10785 parse_ms 2838 check 6840000 | peak RSS 15 MB
+mojo    build_us 41 parse_ms 192 check 6840000 | peak RSS 13 MB
+python  build_us 9740 parse_ms 2844 check 6840000 | peak RSS 16 MB

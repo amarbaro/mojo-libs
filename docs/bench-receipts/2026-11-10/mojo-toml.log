@@ -1,0 +1,6 @@
+mojo    bytes 3126670 node_B 96 ; parse_ms 93 lookup_ms 4 check 20012000 | peak RSS 91 MB
+python  bytes 3126670 parse_ms 495 lookup_ms 1 check 20012000 | peak RSS 87 MB
+mojo    bytes 3126670 node_B 96 ; parse_ms 100 lookup_ms 5 check 20012000 | peak RSS 91 MB
+python  bytes 3126670 parse_ms 583 lookup_ms 1 check 20012000 | peak RSS 87 MB
+mojo    bytes 3126670 node_B 96 ; parse_ms 101 lookup_ms 6 check 20012000 | peak RSS 91 MB
+python  bytes 3126670 parse_ms 525 lookup_ms 2 check 20012000 | peak RSS 87 MB

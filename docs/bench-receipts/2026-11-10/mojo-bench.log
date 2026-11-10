@@ -1,0 +1,6 @@
+mojo    stats 20x(n=200, B=1000) 12 ms, peak RSS 11 MB
+python  stats 20x(n=200, B=1000) 1445 ms, peak RSS 12 MB
+mojo    stats 20x(n=200, B=1000) 12 ms, peak RSS 11 MB
+python  stats 20x(n=200, B=1000) 1460 ms, peak RSS 12 MB
+mojo    stats 20x(n=200, B=1000) 12 ms, peak RSS 11 MB
+python  stats 20x(n=200, B=1000) 1428 ms, peak RSS 12 MB

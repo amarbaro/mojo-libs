@@ -1,0 +1,12 @@
+mojo    parse ms 189 check 400000 | peak RSS 44 MB
+python  parse ms 708 check 400000 | peak RSS 45 MB
+mojo    dumps ms 274 check 88990500 | peak RSS 44 MB
+python  dumps ms 397 check 88990500 | peak RSS 49 MB
+mojo    parse ms 228 check 400000 | peak RSS 44 MB
+python  parse ms 731 check 400000 | peak RSS 45 MB
+mojo    dumps ms 417 check 88990500 | peak RSS 44 MB
+python  dumps ms 384 check 88990500 | peak RSS 50 MB
+mojo    parse ms 187 check 400000 | peak RSS 44 MB
+python  parse ms 705 check 400000 | peak RSS 45 MB
+mojo    dumps ms 287 check 88990500 | peak RSS 44 MB
+python  dumps ms 393 check 88990500 | peak RSS 50 MB

@@ -1,0 +1,67 @@
+after round=1 cpu=0
+parse ns/op 7.74629
+parse_compact ns/op 4.848
+parse_urn ns/op 8.19229
+parse_braces ns/op 8.1937
+str ns/op 23.67498
+hex ns/op 20.28878
+urn ns/op 24.16879
+bytes ns/op 4.22929
+bytes_le ns/op 4.2845
+hash ns/op 1.026
+uuid3 ns/op 144.87349
+uuid5 ns/op 130.94351
+uuid4 ns/op 28.37828
+uuid7_gen ns/op 37.40877
+UUID bytes 16 checksum 143031975808299541226116750214135423129 4669030921739681232
+0.05 s 10136 KB
+after round=2 cpu=0
+parse ns/op 7.5252
+parse_compact ns/op 4.6008
+parse_urn ns/op 8.33849
+parse_braces ns/op 8.50409
+str ns/op 23.50129
+hex ns/op 20.34108
+urn ns/op 24.37328
+bytes ns/op 4.2937
+bytes_le ns/op 4.9918
+hash ns/op 1.4076
+uuid3 ns/op 147.70689
+uuid5 ns/op 131.6523
+uuid4 ns/op 30.39248
+uuid7_gen ns/op 37.75357
+UUID bytes 16 checksum 185268475645036572603982836804192554092 4669030921739681232
+0.05 s 10200 KB
+after round=3 cpu=0
+parse ns/op 9.68869
+parse_compact ns/op 7.5933
+parse_urn ns/op 10.31889
+parse_braces ns/op 8.40369
+str ns/op 23.86269
+hex ns/op 20.68528
+urn ns/op 24.84098
+bytes ns/op 4.2374
+bytes_le ns/op 4.2252
+hash ns/op 1.0732
+uuid3 ns/op 149.65089
+uuid5 ns/op 136.7999
+uuid4 ns/op 28.36178
+uuid7_gen ns/op 37.41397
+UUID bytes 16 checksum 162274410530579264994258406949623302286 4669030921739681232
+0.05 s 10176 KB
+CPython reference
+parse ns/op 590.38066
+parse_compact ns/op 509.98933
+parse_urn ns/op 656.58163
+parse_braces ns/op 602.35826
+str ns/op 334.27105
+hex ns/op 128.58551
+urn ns/op 348.43485
+bytes ns/op 81.98864
+bytes_le ns/op 317.49957
+hash ns/op 113.56491
+uuid3 ns/op 1127.07208
+uuid5 ns/op 1102.3278
+uuid4 ns/op 548.8186
+uuid7_gen ns/op 935.5076
+0.75 s 14916 KB

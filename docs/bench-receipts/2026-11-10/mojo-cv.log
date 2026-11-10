@@ -1,0 +1,573 @@
+PASS rod_vec - [0] max:1e-12: maxdiff 0.0 (tol 1e-12)
+PASS rod_zero - [0] max:1e-12: maxdiff 0.0 (tol 1e-12)
+PASS rod_mat - [0] max:1e-9: maxdiff 4.440892098500626e-16 (tol 1e-09)
+PASS rod_mat_pi - [0] max:1e-6: maxdiff 1.4901161193847656e-08 (tol 1e-06)
+PASS rod_mat_id - [0] max:1e-12: maxdiff 0.0 (tol 1e-12)
+PASS proj_d4 - [0] max:1e-9: maxdiff 5.684341886080802e-14 (tol 1e-09)
+PASS proj_d5 - [0] max:1e-9: maxdiff 5.684341886080802e-14 (tol 1e-09)
+PASS proj_d8 - [0] max:1e-9: maxdiff 5.684341886080802e-14 (tol 1e-09)
+PASS proj_d12 - [0] max:1e-9: maxdiff 5.684341886080802e-14 (tol 1e-09)
+PASS proj_nodist - [0] max:1e-9: maxdiff 9.947598300641403e-14 (tol 1e-09)
+PASS fproj - [0] max:1e-9: maxdiff 1.1368683772161603e-13 (tol 1e-09)
+PASS undist_d4 - [0] max:1e-9: maxdiff 5.551115123125783e-17 (tol 1e-09)
+PASS undist_d8 - [0] max:1e-9: maxdiff 1.1102230246251565e-16 (tol 1e-09)
+PASS undist_rp - [0] max:1e-9: maxdiff 1.1368683772161603e-13 (tol 1e-09)
+PASS undist_zero - [0] max:1e-12: maxdiff 5.551115123125783e-17 (tol 1e-12)
+PASS fundist - [0] max:1e-9: maxdiff 5.551115123125783e-17 (tol 1e-09)
+PASS fundist_rp - [0] max:1e-9: maxdiff 1.2434497875801753e-13 (tol 1e-09)
+PASS rectmap_d5 - [0] max:0.001: maxdiff 0.0 (tol 0.001)  [1] max:0.001: maxdiff 1.2505552149377763e-12 (tol 0.001)
+PASS rectmap_id - [0] max:0.001: maxdiff 0.0 (tol 0.001)  [1] max:0.001: maxdiff 0.0 (tol 0.001)
+PASS frectmap - [0] max:0.001: maxdiff 0.0 (tol 0.001)  [1] max:0.001: maxdiff 4.76837158203125e-07 (tol 0.001)
+PASS aff_ransac - [0] max:1e-4: maxdiff 1.6379944947075842e-06 (tol 0.0001)  [1] exact: maxdiff 0.0
+PASS aff_tight - [0] max:1e-4: maxdiff 1.6379944947075842e-06 (tol 0.0001)  [1] exact: maxdiff 0.0
+PASS pnp_d4 - [0] max:1e-6: maxdiff 2.3314683517128287e-15 (tol 1e-06)  [1] max:1e-6: maxdiff 6.217248937900877e-15 (tol 1e-06)
+PASS pnp_planar - [0] max:1e-6: maxdiff 6.814447145453428e-09 (tol 1e-06)  [1] max:1e-6: maxdiff 2.0998116134762768e-08 (tol 1e-06)
+PASS pnp_nodist - [0] max:0.05: maxdiff 1.2027761564503692e-09 (tol 0.05)  [1] max:0.05: maxdiff 3.29243752261732e-08 (tol 0.05)
+PASS pnp_ransac - [0] max:1e-6: maxdiff 5.7044166917874506e-08 (tol 1e-06)  [1] max:1e-6: maxdiff 6.581577860487187e-08 (tol 1e-06)  [2] exact: maxdiff 0.0
+PASS ess_ransac - [0] max:2e-3: maxdiff 3.036127821376411e-09 (tol 0.002)  [1] exact: maxdiff 0.0
+PASS rect_zero - [0] max:1e-9: maxdiff 5.112577028398846e-14 (tol 1e-09)  [1] max:1e-9: maxdiff 1.2970527429878587e-14 (tol 1e-09)  [2] max:1e-3: maxdiff 8.681529862997195e-06 (tol 0.001)  [3] max:1e-3: maxdiff 8.681529862997195e-06 (tol 0.001)  [4] max:1e-3: maxdiff 8.681529862997195e-06 (tol 0.001)
+PASS rect_dist - [0] max:1e-9: maxdiff 5.112577028398846e-14 (tol 1e-09)  [1] max:1e-9: maxdiff 1.2970527429878587e-14 (tol 1e-09)  [2] max:1e-3: maxdiff 1.7667262568465958e-06 (tol 0.001)  [3] max:1e-3: maxdiff 1.7667262568465958e-06 (tol 0.001)  [4] max:1e-3: maxdiff 1.7667262568465958e-06 (tol 0.001)
+PASS rect_nozd - [0] max:1e-9: maxdiff 5.112577028398846e-14 (tol 1e-09)  [1] max:1e-9: maxdiff 1.2970527429878587e-14 (tol 1e-09)  [2] max:1e-3: maxdiff 2.1309306248440407e-06 (tol 0.001)  [3] max:1e-3: maxdiff 5.264474566502031e-06 (tol 0.001)  [4] max:1e-3: maxdiff 6.160057705528743e-05 (tol 0.001)
+PASS ess_noisy - [0] max:0.15: maxdiff 0.012947750512932676 (tol 0.15)  [1] frac:0:0.85: within 0.0: 1.0000 (want 0.85)
+PASS pose_masked - [0] max:1e-9: maxdiff 1.9984014443252818e-15 (tol 1e-09)  [1] max:1e-9: maxdiff 6.869504964868156e-16 (tol 1e-09)  [2] exact: maxdiff 0.0
+PASS pose_all - [0] max:1e-9: maxdiff 1.9984014443252818e-15 (tol 1e-09)  [1] max:1e-9: maxdiff 6.869504964868156e-16 (tol 1e-09)  [2] frac:12:0.8: within 12.0: 1.0000 (want 0.8)
+PASS sgbm_dots - [0] frac:16:0.9: within 16.0: 0.9424 (want 0.9)
+PASS sgbm_block3 - [0] frac:16:0.9: within 16.0: 0.9530 (want 0.9)
+PASS sgbm_mind - [0] frac:16:0.9: within 16.0: 0.9413 (want 0.9)
+PASS chess_a - [0] pts:0.5:0.95: ref points matched within 0.5: 1.0000 (want 0.95)
+PASS chess_b_rot - [0] pts:0.5:0.95: ref points matched within 0.5: 1.0000 (want 0.95)
+PASS chess_c - [0] pts:1.0:0.95: ref points matched within 1.0: 1.0000 (want 0.95)
+PASS chess_none - [0] cnt:0: count 0 vs 0
+PASS aruco_four - [0] exact: maxdiff 0.0  [1] max:1.5: maxdiff 0.0 (tol 1.5)
+PASS aruco_persp - [0] exact: maxdiff 0.0  [1] max:1.5: maxdiff 0.0 (tol 1.5)
+PASS aruco_none - [0] exact: maxdiff 0  [1] exact: maxdiff 0
+PASS fproj_zero_rot - [0] max:1e-9: maxdiff 5.684341886080802e-14 (tol 1e-09)
+PASS frectmap_small - [0] max:0.001: maxdiff 0.0 (tol 0.001)  [1] max:0.001: maxdiff 0.0 (tol 0.001)
+PASS pnp_ransac_pl - [0] max:1e-5: maxdiff 7.142837016305137e-08 (tol 1e-05)  [1] max:1e-5: maxdiff 5.363795718693609e-08 (tol 1e-05)  [2] exact: maxdiff 0.0
+PASS pnp_epnp_four - [0] max:1e-6: maxdiff 1.0532937383400665e-08 (tol 1e-06)  [1] max:1e-6: maxdiff 1.8874054930062556e-08 (tol 1e-06)
+PASS pnp_epnp_noise - [0] max:1e-6: maxdiff 1.8664127465761737e-09 (tol 1e-06)  [1] max:1e-6: maxdiff 2.3499324264264487e-08 (tol 1e-06)
+PASS ess_five_minimal - [0] max:1e-5: maxdiff 4.3770542745846797e-14 (tol 1e-05)  [1] exact: maxdiff 0.0
+PASS ess_five_clean - [0] max:1e-6: maxdiff 2.3525625891807067e-13 (tol 1e-06)  [1] exact: maxdiff 0.0
+PASS ess_five_roots - [0] max:1e-6: maxdiff 1.7522094886146533e-13 (tol 1e-06)  [1] exact: maxdiff 0.0
+PASS rect_alpha0 - [0] max:1e-9: maxdiff 5.112577028398846e-14 (tol 1e-09)  [1] max:1e-9: maxdiff 1.2970527429878587e-14 (tol 1e-09)  [2] max:1e-3: maxdiff 6.198123628564645e-06 (tol 0.001)  [3] max:1e-3: maxdiff 6.198123628564645e-06 (tol 0.001)  [4] max:1e-3: maxdiff 6.198123628564645e-06 (tol 0.001)
+PASS rect_alpha1 - [0] max:1e-9: maxdiff 5.112577028398846e-14 (tol 1e-09)  [1] max:1e-9: maxdiff 1.2970527429878587e-14 (tol 1e-09)  [2] max:1e-3: maxdiff 5.124147264723433e-06 (tol 0.001)  [3] max:1e-3: maxdiff 5.124147264723433e-06 (tol 0.001)  [4] max:1e-3: maxdiff 5.124147264723433e-06 (tol 0.001)
+PASS rect_vertical - [0] max:1e-9: maxdiff 2.5663499103600884e-14 (tol 1e-09)  [1] max:1e-9: maxdiff 2.5590640717609858e-14 (tol 1e-09)  [2] max:1e-3: maxdiff 2.3697363076280453e-06 (tol 0.001)  [3] max:1e-3: maxdiff 2.3697363076280453e-06 (tol 0.001)  [4] max:1e-3: maxdiff 3.182456817540924e-05 (tol 0.001)
+PASS rect_vertical_a - [0] max:1e-9: maxdiff 2.5663499103600884e-14 (tol 1e-09)  [1] max:1e-9: maxdiff 2.5590640717609858e-14 (tol 1e-09)  [2] max:1e-3: maxdiff 5.8457260365685215e-06 (tol 0.001)  [3] max:1e-3: maxdiff 5.8457260365685215e-06 (tol 0.001)  [4] max:1e-3: maxdiff 3.182456817540924e-05 (tol 0.001)
+PASS flip_x_hd - [0] exact: maxdiff 0.0
+PASS flip_y_odd - [0] exact: maxdiff 0.0
+PASS flip_xy_one - [0] exact: maxdiff 0.0
+PASS flip_y_f32 - [0] exact: maxdiff 0.0
+PASS rotate_cw_hd - [0] exact: maxdiff 0.0
+PASS rotate_180_odd - [0] exact: maxdiff 0.0
+PASS rotate_ccw_i16 - [0] exact: maxdiff 0.0
+PASS transpose_hd - [0] exact: maxdiff 0.0
+PASS transpose_i32 - [0] exact: maxdiff 0.0
+PASS absdiff_hd - [0] exact: maxdiff 0.0
+PASS absdiff_g1 - [0] exact: maxdiff 0.0
+PASS absdiff_i16 - [0] exact: maxdiff 0.0
+PASS absdiff_f32 - [0] max:0.001: maxdiff 0.0 (tol 0.001)
+PASS bitwise_and_hd - [0] exact: maxdiff 0.0
+PASS bitwise_or_odd - [0] exact: maxdiff 0.0
+PASS bitwise_xor_f32 - [0] exact: maxdiff 0.0
+PASS bitwise_not_hd - [0] exact: maxdiff 0.0
+PASS bitwise_not_one - [0] exact: maxdiff 0.0
+PASS convert_u8_f32_hd - [0] max:0.000001: maxdiff 5.960464477539063e-08 (tol 1e-06)
+PASS convert_f32_u8_half - [0] exact: maxdiff 0.0
+PASS convert_f32_i16_scale - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS convert_f64_i32 - [0] exact: maxdiff 0.0
+PASS convert_u8_u8_one - [0] exact: maxdiff 0.0
+PASS bitwise_and_odd - [0] exact: maxdiff 0.0
+PASS bitwise_or_hd - [0] exact: maxdiff 0.0
+PASS bitwise_xor_hd - [0] exact: maxdiff 0.0
+PASS bitwise_xor_i16 - [0] exact: maxdiff 0.0
+PASS bf_ab - [0] exact: maxdiff 0.0
+PASS bf_one - [0] exact: maxdiff 0.0
+PASS bf_self - [0] exact: maxdiff 0.0
+PASS knn_ab - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS knn_ratio_tight - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS orb_sm - [0] orb:1.0:0.95:2: kp matched 0.959 (want 0.95), mean hamming 1.2 (want <= 2.0), ours 196 ref 196
+PASS orb_hd - [0] orb:1.0:0.95:2: kp matched 0.972 (want 0.95), mean hamming 1.4 (want <= 2.0), ours 500 ref 500
+PASS orb_blank - [0] orb:1.0:0.95:2: no ref keypoints
+PASS gran_hdg - [0] max:0: maxdiff 0.0 (tol 0.0)
+PASS gran_smg - [0] max:0: maxdiff 0.0 (tol 0.0)
+PASS gran_bin - [0] max:0: maxdiff 0.0 (tol 0.0)
+PASS glcm_smg - [0] max:1e-9: maxdiff 4.440892098500626e-16 (tol 1e-09)
+PASS glcm_hdg_diag - [0] max:1e-9: maxdiff 1.1102230246251565e-16 (tol 1e-09)
+PASS lbp_smg - [0] max:1e-12: maxdiff 0.0 (tol 1e-12)
+PASS lbp_hdg - [0] max:1e-12: maxdiff 0.0 (tol 1e-12)
+PASS rmm_down_hdg - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS rmm_up_smg - [0] exact: maxdiff 0.0
+PASS gmm_hdg - [0] max:1e-9: maxdiff 0.0 (tol 1e-09)
+PASS gmm_smg - [0] max:1e-9: maxdiff 0.0 (tol 1e-09)
+PASS tophat_hdg - [0] exact: maxdiff 0.0
+PASS tophat_smg - [0] exact: maxdiff 0.0
+PASS smooth_hdg - [0] max:1e-12: maxdiff 0.0 (tol 1e-12)
+PASS smooth_smg - [0] max:1e-12: maxdiff 0.0 (tol 1e-12)
+PASS sharp_hdg - [0] max:1e-6: maxdiff 0.0 (tol 1e-06)
+PASS sharp_smg - [0] max:1e-6: maxdiff 0.0 (tol 1e-06)
+PASS acorr_hdg - [0] max:1e-9: maxdiff 1.887379141862766e-15 (tol 1e-09)
+PASS acorr_smg - [0] max:1e-9: maxdiff 1.5543122344752192e-15 (tol 1e-09)
+PASS wav_hdg - [0] max:1e-9: maxdiff 0.0 (tol 1e-09)
+PASS wav_smg - [0] max:1e-9: maxdiff 0.0 (tol 1e-09)
+PASS rim_hdg - [0] exact: maxdiff 0.0
+PASS rim_binhd - [0] exact: maxdiff 0.0
+PASS grec_smg - [0] max:0: maxdiff 0.0 (tol 0.0)
+PASS grec_bin - [0] max:0: maxdiff 0.0 (tol 0.0)
+PASS gmm_hdg_big - [0] max:1e-9: maxdiff 0.0 (tol 1e-09)
+PASS rim_syn - [0] exact: maxdiff 0.0
+PASS gauss5_hd - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS gauss_s2_hdg - [0] max:2: maxdiff 1.0 (tol 2.0)
+PASS gauss5_odd - [0] exact: maxdiff 0.0
+PASS gauss5_smg - [0] exact: maxdiff 0.0
+PASS gauss5_sm - [0] exact: maxdiff 0.0
+PASS gauss7_odd - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS gauss_f32 - [0] max:0.01: maxdiff 3.0517578125e-05 (tol 0.01)
+PASS gauss3_one - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS pyrdown_hd - [0] exact: maxdiff 0.0
+PASS pyrdown_smg - [0] exact: maxdiff 0.0
+PASS pyrdown_sm - [0] exact: maxdiff 0.0
+PASS pyrdown_hdg - [0] exact: maxdiff 0.0
+PASS pyrdown_odd - [0] exact: maxdiff 0.0
+PASS pyrdown_one - [0] exact: maxdiff 0.0
+PASS pyrdown_f32 - [0] max:0.01: maxdiff 3.0517578125e-05 (tol 0.01)
+PASS sobel_dx_hdg - [0] exact: maxdiff 0.0
+PASS sobel_dy5_hd - [0] exact: maxdiff 0.0
+PASS sobel_scharr_g1 - [0] exact: maxdiff 0.0
+PASS sobel_f32_dxx - [0] max:0.05: maxdiff 0.00048828125 (tol 0.05)
+PASS thresh_bin_hdg - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS thresh_inv_sm - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS thresh_trunc_g1 - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS thresh_tozero_g1 - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS thresh_tozinv_hd - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS thresh_otsu_hdg - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS thresh_otsu_one - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS thresh_tri_hdg - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS thresh_tri_bin - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS thresh_tri_blank - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS thresh_tri_g2 - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS thresh_f32 - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0
+PASS integral_hdg - [0] exact: maxdiff 0.0
+PASS integral_hd - [0] exact: maxdiff 0.0
+PASS integral_odd - [0] exact: maxdiff 0.0
+PASS integral_f32 - [0] max:0.001: maxdiff 0.0 (tol 0.001)
+PASS integral_one - [0] exact: maxdiff 0.0
+PASS erode_hdg - [0] exact: maxdiff 0.0
+PASS erode_hd5 - [0] exact: maxdiff 0.0
+PASS dilate_cross_sm - [0] exact: maxdiff 0.0
+PASS dilate_ell_smg - [0] exact: maxdiff 0.0
+PASS erode_ell_odd - [0] exact: maxdiff 0.0
+PASS dilate_one - [0] exact: maxdiff 0.0
+PASS erode_f32 - [0] exact: maxdiff 0.0
+PASS cvt_gray_hd - [0] exact: maxdiff 0.0
+PASS cvt_rgb2gray_odd - [0] exact: maxdiff 0.0
+PASS cvt_gray2bgr_g1 - [0] exact: maxdiff 0.0
+PASS cvt_swap_hd - [0] exact: maxdiff 0.0
+PASS cvt_hsv_hd - [0] exact: maxdiff 0.0
+PASS cvt_hsv_odd - [0] exact: maxdiff 0.0
+PASS cvt_hsv_one - [0] exact: maxdiff 0.0
+PASS cvt_hsv2bgr_odd - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS cvt_ycrcb_hd - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS cvt_ycrcb2bgr_sm - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS cvt_gray_f32 - [0] max:0.01: maxdiff 0.0 (tol 0.01)
+PASS cvt_lab_hd - [0] max:2: maxdiff 2.0 (tol 2.0)
+PASS cvt_lab_one - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS cvt_lab_f32 - [0] max:0.01: maxdiff 0.0070343017578125 (tol 0.01)
+PASS cvt_lab2bgr_sm - [0] max:2: maxdiff 1.0 (tol 2.0)
+PASS cvt_lab2bgr_one - [0] max:2: maxdiff 0.0 (tol 2.0)
+PASS cvt_luv_hd - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS cvt_luv_odd - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS cvt_luv_f32 - [0] max:0.01: maxdiff 5.14984130859375e-05 (tol 0.01)
+PASS cvt_luv2bgr_sm - [0] max:2: maxdiff 1.0 (tol 2.0)
+PASS cvt_luv2bgr_f32 - [0] frac:0.001:0.9999: within 0.001: 1.0000 (want 0.9999)
+PASS cvt_lab2bgr_f32 - [0] max:0.001: maxdiff 7.174164056777954e-05 (tol 0.001)
+PASS resize_down_lin_hd - [0] exact: maxdiff 0.0
+PASS resize_up_lin_sm - [0] exact: maxdiff 0.0
+PASS resize_nn_hd - [0] exact: maxdiff 0.0
+PASS resize_nn_odd - [0] exact: maxdiff 0.0
+PASS resize_cub_sm - [0] max:2: maxdiff 1.0 (tol 2.0)
+PASS resize_cub_hdg - [0] max:2: maxdiff 1.0 (tol 2.0)
+PASS resize_lan_sm - [0] max:2: maxdiff 1.0 (tol 2.0)
+PASS resize_lan_hdg - [0] max:2: maxdiff 1.0 (tol 2.0)
+PASS resize_lin_one - [0] exact: maxdiff 0.0
+PASS resize_lin_f32 - [0] max:0.01: maxdiff 6.103515625e-05 (tol 0.01)
+PASS resize_half_g - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS resize_half_c - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS resize_area_hd - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS resize_area_frac - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS resize_area_up2 - [0] exact: maxdiff 0.0
+PASS resize_area_shrinkx - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS resize_area_up - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS resize_area_odd - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS resize_area_one - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS resize_area_f32 - [0] max:0.01: maxdiff 0.0 (tol 0.01)
+PASS warp_rot_hd - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS warp_rot_hdg - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS warp_rot_sm - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS warp_nn_sm - [0] exact: maxdiff 0.0
+PASS warp_cub_smg - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS warp_rep_odd - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS warp_inv_g1 - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS warp_f32 - [0] max:0.5: maxdiff 0.0010986328125 (tol 0.5)
+PASS remap_lin_hd - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS remap_lin_hdg - [0] max:1: maxdiff 1.0 (tol 1.0)
+PASS remap_lin_sm - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS remap_nn_sm - [0] exact: maxdiff 0.0
+PASS remap_cub_smg - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS remap_odd_const - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS remap_odd_refl - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS blob_sm - [0] max:0.02: maxdiff 0.0 (tol 0.02)
+PASS blob_hd - [0] max:1: maxdiff 0.0 (tol 1.0)
+PASS ccl8_bin - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] max:1e-9: maxdiff 0.0 (tol 1e-09)
+PASS ccl4_binhd - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] max:1e-9: maxdiff 0.0 (tol 1e-09)
+PASS ccl8_shapes - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] max:1e-9: maxdiff 0.0 (tol 1e-09)
+PASS ccl_blank - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] max:1e-9: maxdiff 0.0 (tol 1e-09)
+PASS canny_hdg - [0] exact: maxdiff 0.0
+PASS canny_smg_l2 - [0] exact: maxdiff 0.0
+PASS canny_sm5 - [0] exact: maxdiff 0.0
+PASS canny_blank - [0] exact: maxdiff 0.0
+PASS canny_g1 - [0] exact: maxdiff 0.0
+PASS contours_ext_shapes - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] exact: maxdiff 0.0
+PASS contours_list_shapes - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] exact: maxdiff 0.0
+PASS contours_simple_shapes - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] exact: maxdiff 0.0
+PASS contours_ext_bin - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] exact: maxdiff 0.0
+PASS contours_list_bin - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] exact: maxdiff 0.0
+PASS contours_blank - [0] exact: maxdiff 0  [1] exact: maxdiff 0  [2] exact: maxdiff 0
+PASS contours_full - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] exact: maxdiff 0.0
+PASS contours_ccomp_shapes - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] exact: maxdiff 0.0
+PASS contours_tree_shapes - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] exact: maxdiff 0.0
+PASS contours_tree_simple - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] exact: maxdiff 0.0
+PASS contours_ccomp_bin - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] exact: maxdiff 0.0
+PASS contours_tree_bin - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] exact: maxdiff 0.0
+PASS contours_tree_binhd - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] exact: maxdiff 0.0
+PASS contours_tree_blank - [0] exact: maxdiff 0  [1] exact: maxdiff 0  [2] exact: maxdiff 0
+PASS contours_tree_full - [0] exact: maxdiff 0.0  [1] exact: maxdiff 0.0  [2] exact: maxdiff 0.0
+PASS gftt_hdg - [0] pts:0.5:0.95: ref points matched within 0.5: 1.0000 (want 0.95)
+PASS gftt_smg - [0] pts:0.5:0.98: ref points matched within 0.5: 1.0000 (want 0.98)
+PASS gftt_blank - [0] cnt:0: count 0 vs 0
+PASS gftt_harris_hdg - [0] pts:0.5:0.95: ref points matched within 0.5: 1.0000 (want 0.95)
+PASS gftt_harris_smg - [0] pts:0.5:0.98: ref points matched within 0.5: 1.0000 (want 0.98)
+PASS gftt_harris_blank - [0] cnt:0: count 0 vs 0
+PASS line_diag_hd - [0] exact: maxdiff 0.0
+PASS line_steep_g1 - [0] exact: maxdiff 0.0
+PASS line_clip_sm - [0] exact: maxdiff 0.0
+PASS line_out_sm - [0] exact: maxdiff 0.0
+PASS line_thick_hd - [0] exact: maxdiff 0.0
+PASS line_thick_g1 - [0] exact: maxdiff 0.0
+PASS line_thick_flat - [0] exact: maxdiff 0.0
+PASS line_thick_dot - [0] exact: maxdiff 0.0
+PASS line_thick_clip - [0] frac:0:0.995: within 0.0: 0.9984 (want 0.995)
+PASS rect_thick_sm - [0] exact: maxdiff 0.0
+PASS line_hor_odd - [0] exact: maxdiff 0.0
+PASS rect_edge_sm - [0] exact: maxdiff 0.0
+PASS rect_fill_odd - [0] exact: maxdiff 0.0
+PASS hog_scores_smg - [0] max:0.01: maxdiff 0.0027332305908203125 (tol 0.01)
+PASS hog_scores_hdg - [0] max:0.01: maxdiff 0.004639625549316406 (tol 0.01)
+PASS hog_raw_smg - [0] pts:1:0.99: ref points matched within 1.0: 1.0000 (want 0.99)
+PASS hog_raw_hdg - [0] pts:1:0.99: ref points matched within 1.0: 0.9960 (want 0.99)
+PASS hog_group_smg - [0] pts:2:0.99: ref points matched within 2.0: 1.0000 (want 0.99)
+PASS hog_group_smg2 - [0] pts:2:0.99: ref points matched within 2.0: 1.0000 (want 0.99)
+PASS hog_group_hdg - [0] pts:2:0.99: ref points matched within 2.0: 1.0000 (want 0.99)
+PASS hog_none - [0] cnt:0: count 0 vs 0
+PASS group_rects_hdg - [0] pts:0.5:1.0: ref points matched within 0.5: 1.0000 (want 1.0)
+PASS grabcut_scene - [0] iou:0.95: iou 1.0000 (want 0.95)
+PASS grabcut_shot - [0] iou:0.85: iou 1.0000 (want 0.85)
+PASS grabcut_tiny - [0] iou:0.6: iou 1.0000 (want 0.6)
+PASS resize_13_lin_hd - [0] exact: maxdiff 0.0
+PASS resize_07_lin_hd - [0] exact: maxdiff 0.0
+PASS subpix_sm - [0] max:0.05: maxdiff 0.001129150390625 (tol 0.05)
+PASS subpix_win3 - [0] max:0.05: maxdiff 1.52587890625e-05 (tol 0.05)
+PASS subpix_edge - [0] max:0.05: maxdiff 3.0517578125e-05 (tol 0.05)
+PASS lk_sm - [0] max:0.1: maxdiff 0.05419921875 (tol 0.1)  [1] exact: maxdiff 0.0  [2] frac:1:0.98: within 1.0: 1.0000 (want 0.98)
+PASS lk_sm_win9 - [0] frac:0.1:0.95: within 0.1: 0.9836 (want 0.95)  [1] exact: maxdiff 0.0  [2] frac:1:0.95: within 1.0: 0.9918 (want 0.95)
+PASS fb_shift - [0] max:0.02: maxdiff 0.015460968017578125 (tol 0.02)
+PASS fb_frames - [0] max:0.02: maxdiff 0.011775016784667969 (tol 0.02)
+PASS fb_poly7 - [0] max:0.01: maxdiff 0.006413936614990234 (tol 0.01)
+PASS fb_tiny - [0] max:0.02: maxdiff 7.748603820800781e-07 (tol 0.02)
+rows: 285  pass: 285  fail: 0
+| op | row | ours ms | cv2 ms | ratio |
+|---|---|---|---|---|
+| Rodrigues | rod_vec | 0.00 | 0.00 | 0.17 |
+| Rodrigues | rod_zero | 0.00 | 0.00 | 0.08 |
+| Rodrigues | rod_mat | 0.01 | 0.00 | 2.35 |
+| Rodrigues | rod_mat_pi | 0.00 | 0.00 | 0.43 |
+| Rodrigues | rod_mat_id | 0.00 | 0.00 | 0.35 |
+| projectPoints | proj_d4 | 0.00 | 0.01 | 0.13 |
+| projectPoints | proj_d5 | 0.00 | 0.01 | 0.13 |
+| projectPoints | proj_d8 | 0.00 | 0.01 | 0.11 |
+| projectPoints | proj_d12 | 0.00 | 0.01 | 0.15 |
+| projectPoints | proj_nodist | 0.00 | 0.01 | 0.13 |
+| fisheye_projectPoints | fproj | 0.00 | 0.01 | 0.31 |
+| undistortPoints | undist_d4 | 0.00 | 0.00 | 0.57 |
+| undistortPoints | undist_d8 | 0.00 | 0.00 | 0.52 |
+| undistortPoints | undist_rp | 0.00 | 0.01 | 0.49 |
+| undistortPoints | undist_zero | 0.00 | 0.00 | 0.59 |
+| fisheye_undistortPoints | fundist | 0.00 | 0.00 | 1.07 |
+| fisheye_undistortPoints | fundist_rp | 0.00 | 0.00 | 0.93 |
+| initUndistortRectifyMap | rectmap_d5 | 1.24 | 0.76 | 1.64 |
+| initUndistortRectifyMap | rectmap_id | 0.03 | 0.01 | 4.74 |
+| fisheye_initUndistortRectifyMap | frectmap | 0.49 | 1.20 | 0.41 |
+| estimateAffine2D | aff_ransac | 0.01 | 0.03 | 0.52 |
+| estimateAffine2D | aff_tight | 0.02 | 0.03 | 0.63 |
+| solvePnP | pnp_d4 | 0.21 | 0.06 | 3.55 |
+| solvePnP | pnp_planar | 0.09 | 0.07 | 1.18 |
+| solvePnP | pnp_nodist | 0.36 | 0.08 | 4.20 |
+| solvePnPRansac | pnp_ransac | 4.17 | 0.91 | 4.61 |
+| findEssentialMat | ess_ransac | 14.91 | 2.01 | 7.42 |
+| stereoRectify | rect_zero | 0.01 | 0.02 | 0.40 |
+| stereoRectify | rect_dist | 0.01 | 0.02 | 0.41 |
+| stereoRectify | rect_nozd | 0.01 | 0.02 | 0.39 |
+| findEssentialMat | ess_noisy | 15.81 | 2.04 | 7.75 |
+| recoverPose | pose_masked | 0.70 | 0.21 | 3.33 |
+| recoverPose | pose_all | 0.95 | 0.21 | 4.49 |
+| StereoSGBM | sgbm_dots | 10.66 | 2.42 | 4.40 |
+| StereoSGBM | sgbm_block3 | 10.85 | 2.33 | 4.65 |
+| StereoSGBM | sgbm_mind | 8.88 | 1.60 | 5.53 |
+| findChessboardCorners | chess_a | 0.62 | 0.84 | 0.75 |
+| findChessboardCorners | chess_b_rot | 0.60 | 1.01 | 0.60 |
+| findChessboardCorners | chess_c | 0.49 | 3.59 | 0.14 |
+| findChessboardCorners | chess_none | 6.01 | 10.31 | 0.58 |
+| aruco_detect | aruco_four | 6.55 | 1.73 | 3.79 |
+| aruco_detect | aruco_persp | 1.79 | 0.40 | 4.52 |
+| aruco_detect | aruco_none | 1.49 | 0.64 | 2.34 |
+| fisheye_projectPoints | fproj_zero_rot | 0.00 | 0.01 | 0.28 |
+| fisheye_initUndistortRectifyMap | frectmap_small | 0.02 | 0.02 | 1.00 |
+| solvePnPRansac | pnp_ransac_pl | 0.50 | 0.29 | 1.72 |
+| solvePnP | pnp_epnp_four | 0.29 | 0.07 | 4.10 |
+| solvePnP | pnp_epnp_noise | 0.33 | 0.08 | 3.94 |
+| findEssentialMat | ess_five_minimal | 0.63 | 0.14 | 4.35 |
+| findEssentialMat | ess_five_clean | 0.58 | 0.15 | 3.84 |
+| findEssentialMat | ess_five_roots | 0.40 | 0.16 | 2.56 |
+| stereoRectify | rect_alpha0 | 0.02 | 0.02 | 0.91 |
+| stereoRectify | rect_alpha1 | 0.02 | 0.02 | 0.79 |
+| stereoRectify | rect_vertical | 0.01 | 0.02 | 0.40 |
+| stereoRectify | rect_vertical_a | 0.02 | 0.02 | 0.82 |
+| flip | flip_x_hd | 0.36 | 0.14 | 2.60 |
+| flip | flip_y_odd | 0.01 | 0.00 | 9.73 |
+| flip | flip_xy_one | 0.01 | 0.00 | 7.30 |
+| flip | flip_y_f32 | 0.01 | 0.00 | 8.55 |
+| rotate | rotate_cw_hd | 1.02 | 1.18 | 0.86 |
+| rotate | rotate_180_odd | 0.01 | 0.00 | 11.41 |
+| rotate | rotate_ccw_i16 | 0.01 | 0.00 | 2.99 |
+| transpose | transpose_hd | 0.18 | 0.11 | 1.66 |
+| transpose | transpose_i32 | 0.01 | 0.00 | 11.83 |
+| absdiff | absdiff_hd | 0.10 | 0.26 | 0.39 |
+| absdiff | absdiff_g1 | 0.01 | 0.00 | 9.01 |
+| absdiff | absdiff_i16 | 0.01 | 0.00 | 12.95 |
+| absdiff | absdiff_f32 | 0.01 | 0.00 | 8.87 |
+| bitwise_and | bitwise_and_hd | 0.11 | 0.25 | 0.43 |
+| bitwise_or | bitwise_or_odd | 0.01 | 0.00 | 8.49 |
+| bitwise_xor | bitwise_xor_f32 | 0.01 | 0.00 | 11.02 |
+| bitwise_not | bitwise_not_hd | 0.11 | 0.17 | 0.64 |
+| bitwise_not | bitwise_not_one | 0.01 | 0.00 | 12.01 |
+| convert | convert_u8_f32_hd | 0.33 | 12.30 | 0.03 |
+| convert | convert_f32_u8_half | 0.01 | 0.01 | 1.45 |
+| convert | convert_f32_i16_scale | 0.01 | 0.01 | 0.91 |
+| convert | convert_f64_i32 | 0.01 | 0.01 | 1.58 |
+| convert | convert_u8_u8_one | 0.01 | 0.01 | 1.44 |
+| bitwise_and | bitwise_and_odd | 0.01 | 0.00 | 8.01 |
+| bitwise_or | bitwise_or_hd | 0.11 | 0.22 | 0.51 |
+| bitwise_xor | bitwise_xor_hd | 0.12 | 0.22 | 0.56 |
+| bitwise_xor | bitwise_xor_i16 | 0.01 | 0.00 | 9.20 |
+| bfmatch | bf_ab | 0.73 | 0.44 | 1.68 |
+| bfmatch | bf_one | 0.02 | 0.01 | 3.27 |
+| bfmatch | bf_self | 0.53 | 0.13 | 4.22 |
+| knnmatch | knn_ab | 0.81 | 0.47 | 1.71 |
+| knnmatch | knn_ratio_tight | 0.44 | 0.46 | 0.96 |
+| ORB | orb_sm | 2.25 | 1.97 | 1.14 |
+| ORB | orb_hd | 11.49 | 14.06 | 0.82 |
+| ORB | orb_blank | 0.20 | 0.03 | 7.72 |
+| granulometry | gran_hdg | 9.54 | 7.26 | 1.31 |
+| granulometry | gran_smg | 0.72 | 0.60 | 1.20 |
+| granulometry | gran_bin | 6.26 | 3.23 | 1.94 |
+| glcm | glcm_smg | 0.54 | 9.20 | 0.06 |
+| glcm | glcm_hdg_diag | 8.61 | 81.16 | 0.11 |
+| lbpHist | lbp_smg | 0.25 | 7.72 | 0.03 |
+| lbpHist | lbp_hdg | 3.82 | 34.43 | 0.11 |
+| resizeMmpx | rmm_down_hdg | 0.12 | 2.02 | 0.06 |
+| resizeMmpx | rmm_up_smg | 0.06 | 0.11 | 0.54 |
+| granulometryMm | gmm_hdg | 51.14 | 16.51 | 3.10 |
+| granulometryMm | gmm_smg | 2.27 | 1.31 | 1.73 |
+| tophat | tophat_hdg | 3.40 | 1.86 | 1.83 |
+| tophat | tophat_smg | 1.28 | 1.66 | 0.77 |
+| smoothFraction | smooth_hdg | 2.55 | 6.59 | 0.39 |
+| smoothFraction | smooth_smg | 0.17 | 1.16 | 0.15 |
+| sharpMap | sharp_hdg | 5.65 | 3.79 | 1.49 |
+| sharpMap | sharp_smg | 0.36 | 1.01 | 0.35 |
+| autocorr | acorr_hdg | 16.43 | 71.16 | 0.23 |
+| autocorr | acorr_smg | 0.61 | 8.20 | 0.07 |
+| waveletEnergy | wav_hdg | 7.79 | 7.83 | 1.00 |
+| waveletEnergy | wav_smg | 0.50 | 0.64 | 0.77 |
+| trayRim | rim_hdg | 4.94 | 1.33 | 3.72 |
+| trayRim | rim_binhd | 4.97 | 1.35 | 3.70 |
+| granulometryRec | grec_smg | 4.84 | 16.55 | 0.29 |
+| granulometryRec | grec_bin | 32.76 | 112.77 | 0.29 |
+| granulometryMm | gmm_hdg_big | 25.85 | 11.49 | 2.25 |
+| trayRim | rim_syn | 0.57 | 0.18 | 3.24 |
+| GaussianBlur | gauss5_hd | 0.13 | 0.36 | 0.35 |
+| GaussianBlur | gauss_s2_hdg | 0.38 | 0.86 | 0.44 |
+| GaussianBlur | gauss5_odd | 0.01 | 0.00 | 2.85 |
+| GaussianBlur | gauss5_smg | 0.01 | 0.08 | 0.15 |
+| GaussianBlur | gauss5_sm | 0.02 | 0.13 | 0.14 |
+| GaussianBlur | gauss7_odd | 0.01 | 0.01 | 0.88 |
+| GaussianBlur | gauss_f32 | 0.01 | 0.00 | 2.20 |
+| GaussianBlur | gauss3_one | 0.01 | 0.00 | 6.13 |
+| pyrDown | pyrdown_hd | 0.06 | 1.09 | 0.05 |
+| pyrDown | pyrdown_smg | 0.01 | 0.04 | 0.25 |
+| pyrDown | pyrdown_sm | 0.01 | 0.09 | 0.15 |
+| pyrDown | pyrdown_hdg | 0.04 | 0.30 | 0.12 |
+| pyrDown | pyrdown_odd | 0.01 | 0.00 | 4.32 |
+| pyrDown | pyrdown_one | 0.01 | 0.00 | 9.18 |
+| pyrDown | pyrdown_f32 | 0.01 | 0.00 | 4.77 |
+| Sobel | sobel_dx_hdg | 0.11 | 0.48 | 0.23 |
+| Sobel | sobel_dy5_hd | 0.41 | 1.18 | 0.35 |
+| Sobel | sobel_scharr_g1 | 0.01 | 0.00 | 1.99 |
+| Sobel | sobel_f32_dxx | 0.01 | 0.00 | 2.30 |
+| threshold | thresh_bin_hdg | 0.04 | 0.02 | 2.13 |
+| threshold | thresh_inv_sm | 0.01 | 0.01 | 1.59 |
+| threshold | thresh_trunc_g1 | 0.01 | 0.00 | 4.05 |
+| threshold | thresh_tozero_g1 | 0.01 | 0.00 | 3.77 |
+| threshold | thresh_tozinv_hd | 0.10 | 0.16 | 0.64 |
+| threshold | thresh_otsu_hdg | 0.05 | 1.16 | 0.04 |
+| threshold | thresh_otsu_one | 0.01 | 0.00 | 3.84 |
+| threshold | thresh_tri_hdg | 0.05 | 1.07 | 0.04 |
+| threshold | thresh_tri_bin | 0.01 | 0.08 | 0.14 |
+| threshold | thresh_tri_blank | 0.01 | 0.00 | 2.72 |
+| threshold | thresh_tri_g2 | 0.01 | 0.00 | 2.38 |
+| threshold | thresh_f32 | 0.01 | 0.00 | 3.30 |
+| integral | integral_hdg | 0.37 | 0.35 | 1.06 |
+| integral | integral_hd | 1.29 | 1.40 | 0.92 |
+| integral | integral_odd | 0.01 | 0.00 | 7.80 |
+| integral | integral_f32 | 0.01 | 0.00 | 5.97 |
+| integral | integral_one | 0.01 | 0.00 | 8.25 |
+| erode | erode_hdg | 0.07 | 0.46 | 0.15 |
+| erode | erode_hd5 | 0.33 | 0.77 | 0.43 |
+| dilate | dilate_cross_sm | 0.11 | 0.06 | 1.68 |
+| dilate | dilate_ell_smg | 0.08 | 0.08 | 0.90 |
+| erode | erode_ell_odd | 0.02 | 0.00 | 4.23 |
+| dilate | dilate_one | 0.02 | 0.00 | 7.12 |
+| erode | erode_f32 | 0.02 | 0.00 | 5.06 |
+| cvtColor | cvt_gray_hd | 0.09 | 0.40 | 0.22 |
+| cvtColor | cvt_rgb2gray_odd | 0.01 | 0.00 | 7.24 |
+| cvtColor | cvt_gray2bgr_g1 | 0.01 | 0.00 | 6.30 |
+| cvtColor | cvt_swap_hd | 0.10 | 0.05 | 1.84 |
+| cvtColor | cvt_hsv_hd | 1.97 | 0.88 | 2.25 |
+| cvtColor | cvt_hsv_odd | 0.01 | 0.00 | 3.85 |
+| cvtColor | cvt_hsv_one | 0.01 | 0.00 | 6.46 |
+| cvtColor | cvt_hsv2bgr_odd | 0.01 | 0.00 | 4.06 |
+| cvtColor | cvt_ycrcb_hd | 0.56 | 0.62 | 0.90 |
+| cvtColor | cvt_ycrcb2bgr_sm | 0.07 | 0.08 | 0.98 |
+| cvtColor | cvt_gray_f32 | 0.01 | 0.00 | 6.59 |
+| cvtColor | cvt_lab_hd | 2.23 | 0.68 | 3.28 |
+| cvtColor | cvt_lab_one | 0.18 | 0.00 | 192.98 |
+| cvtColor | cvt_lab_f32 | 0.18 | 0.00 | 95.01 |
+| cvtColor | cvt_lab2bgr_sm | 0.32 | 0.25 | 1.32 |
+| cvtColor | cvt_lab2bgr_one | 0.18 | 0.00 | 180.94 |
+| cvtColor | cvt_luv_hd | 1.97 | 0.94 | 2.09 |
+| cvtColor | cvt_luv_odd | 0.18 | 0.00 | 75.75 |
+| cvtColor | cvt_luv_f32 | 0.19 | 0.00 | 99.83 |
+| cvtColor | cvt_luv2bgr_sm | 0.31 | 0.32 | 0.99 |
+| cvtColor | cvt_luv2bgr_f32 | 0.34 | 0.23 | 1.46 |
+| cvtColor | cvt_lab2bgr_f32 | 0.31 | 0.42 | 0.74 |
+| resize | resize_down_lin_hd | 0.04 | 0.25 | 0.18 |
+| resize | resize_up_lin_sm | 0.12 | 0.42 | 0.30 |
+| resize | resize_nn_hd | 0.17 | 0.25 | 0.70 |
+| resize | resize_nn_odd | 0.01 | 0.00 | 2.65 |
+| resize | resize_cub_sm | 0.38 | 0.46 | 0.83 |
+| resize | resize_cub_hdg | 0.17 | 0.37 | 0.45 |
+| resize | resize_lan_sm | 0.16 | 1.54 | 0.11 |
+| resize | resize_lan_hdg | 1.76 | 3.77 | 0.47 |
+| resize | resize_lin_one | 0.01 | 0.00 | 3.97 |
+| resize | resize_lin_f32 | 0.01 | 0.00 | 2.85 |
+| resize | resize_half_g | 0.01 | 0.01 | 1.06 |
+| resize | resize_half_c | 0.01 | 0.03 | 0.33 |
+| resize | resize_area_hd | 0.54 | 2.78 | 0.20 |
+| resize | resize_area_frac | 0.74 | 2.90 | 0.25 |
+| resize | resize_area_up2 | 0.35 | 0.66 | 0.53 |
+| resize | resize_area_shrinkx | 0.10 | 0.40 | 0.24 |
+| resize | resize_area_up | 0.41 | 0.51 | 0.80 |
+| resize | resize_area_odd | 0.01 | 0.00 | 3.40 |
+| resize | resize_area_one | 0.01 | 0.00 | 3.97 |
+| resize | resize_area_f32 | 0.01 | 0.00 | 4.44 |
+| warpAffine | warp_rot_hd | 0.70 | 2.41 | 0.29 |
+| warpAffine | warp_rot_hdg | 0.46 | 1.18 | 0.39 |
+| warpAffine | warp_rot_sm | 0.04 | 0.15 | 0.25 |
+| warpAffine | warp_nn_sm | 0.27 | 0.16 | 1.68 |
+| warpAffine | warp_cub_smg | 0.51 | 0.56 | 0.91 |
+| warpAffine | warp_rep_odd | 0.01 | 0.01 | 1.31 |
+| warpAffine | warp_inv_g1 | 0.01 | 0.01 | 2.66 |
+| warpAffine | warp_f32 | 0.01 | 0.01 | 1.98 |
+| remap | remap_lin_hd | 0.61 | 1.07 | 0.57 |
+| remap | remap_lin_hdg | 0.40 | 0.92 | 0.44 |
+| remap | remap_lin_sm | 0.21 | 0.97 | 0.22 |
+| remap | remap_nn_sm | 0.28 | 0.08 | 3.39 |
+| remap | remap_cub_smg | 0.43 | 0.38 | 1.12 |
+| remap | remap_odd_const | 0.01 | 0.00 | 3.07 |
+| remap | remap_odd_refl | 0.01 | 0.00 | 2.80 |
+| blobFromImage | blob_sm | 0.05 | 0.26 | 0.20 |
+| blobFromImage | blob_hd | 0.07 | 0.29 | 0.22 |
+| connectedComponentsWithStats | ccl8_bin | 1.42 | 0.44 | 3.27 |
+| connectedComponentsWithStats | ccl4_binhd | 17.18 | 2.52 | 6.81 |
+| connectedComponentsWithStats | ccl8_shapes | 0.04 | 0.04 | 1.10 |
+| connectedComponentsWithStats | ccl_blank | 0.00 | 0.00 | 0.33 |
+| Canny | canny_hdg | 4.88 | 1.43 | 3.40 |
+| Canny | canny_smg_l2 | 0.39 | 0.27 | 1.47 |
+| Canny | canny_sm5 | 0.48 | 0.21 | 2.22 |
+| Canny | canny_blank | 0.03 | 0.01 | 2.88 |
+| Canny | canny_g1 | 0.03 | 0.01 | 3.96 |
+| findContours | contours_ext_shapes | 0.02 | 0.02 | 1.10 |
+| findContours | contours_list_shapes | 0.02 | 0.02 | 0.97 |
+| findContours | contours_simple_shapes | 0.02 | 0.02 | 0.95 |
+| findContours | contours_ext_bin | 0.50 | 0.20 | 2.55 |
+| findContours | contours_list_bin | 0.56 | 0.57 | 0.98 |
+| findContours | contours_blank | 0.00 | 0.00 | 0.15 |
+| findContours | contours_full | 0.00 | 0.01 | 0.27 |
+| findContours | contours_ccomp_shapes | 0.02 | 0.02 | 1.02 |
+| findContours | contours_tree_shapes | 0.02 | 0.02 | 0.95 |
+| findContours | contours_tree_simple | 0.02 | 0.02 | 0.87 |
+| findContours | contours_ccomp_bin | 0.54 | 0.64 | 0.84 |
+| findContours | contours_tree_bin | 0.55 | 0.66 | 0.84 |
+| findContours | contours_tree_binhd | 8.25 | 10.30 | 0.80 |
+| findContours | contours_tree_blank | 0.00 | 0.00 | 0.12 |
+| findContours | contours_tree_full | 0.00 | 0.01 | 0.19 |
+| goodFeaturesToTrack | gftt_hdg | 2.84 | 22.53 | 0.13 |
+| goodFeaturesToTrack | gftt_smg | 0.23 | 1.86 | 0.13 |
+| goodFeaturesToTrack | gftt_blank | 0.06 | 0.01 | 6.21 |
+| goodFeaturesToTrack | gftt_harris_hdg | 1.82 | 20.52 | 0.09 |
+| goodFeaturesToTrack | gftt_harris_smg | 0.19 | 1.65 | 0.12 |
+| goodFeaturesToTrack | gftt_harris_blank | 0.06 | 0.01 | 5.42 |
+| line | line_diag_hd | 0.11 | 0.11 | 0.98 |
+| line | line_steep_g1 | 0.00 | 0.00 | 0.12 |
+| line | line_clip_sm | 0.01 | 0.01 | 0.74 |
+| line | line_out_sm | 0.01 | 0.01 | 0.57 |
+| line | line_thick_hd | 0.20 | 0.16 | 1.27 |
+| line | line_thick_g1 | 0.00 | 0.00 | 0.27 |
+| line | line_thick_flat | 0.02 | 0.01 | 1.31 |
+| line | line_thick_dot | 0.01 | 0.01 | 0.68 |
+| line | line_thick_clip | 0.03 | 0.02 | 1.46 |
+| rectangle | rect_thick_sm | 0.04 | 0.02 | 1.82 |
+| line | line_hor_odd | 0.00 | 0.00 | 0.13 |
+| rectangle | rect_edge_sm | 0.01 | 0.01 | 0.79 |
+| rectangle | rect_fill_odd | 0.00 | 0.00 | 0.16 |
+| HOGScores | hog_scores_smg | 0.20 | 12.26 | 0.02 |
+| HOGScores | hog_scores_hdg | 3.76 | 276.53 | 0.01 |
+| detectMultiScale | hog_raw_smg | 1.82 | 3.79 | 0.48 |
+| detectMultiScale | hog_raw_hdg | 25.90 | 68.85 | 0.38 |
+| detectMultiScale | hog_group_smg | 1.90 | 2.97 | 0.64 |
+| detectMultiScale | hog_group_smg2 | 1.84 | 3.25 | 0.56 |
+| detectMultiScale | hog_group_hdg | 27.60 | 68.75 | 0.40 |
+| detectMultiScale | hog_none | 2.00 | 3.50 | 0.57 |
+| groupRectangles | group_rects_hdg | 0.75 | 1.10 | 0.68 |
+| grabCut | grabcut_scene | 35.20 | 10.75 | 3.27 |
+| grabCut | grabcut_shot | 53.00 | 8.97 | 5.91 |
+| grabCut | grabcut_tiny | 0.10 | 0.06 | 1.65 |
+| resize | resize_13_lin_hd | 0.25 | 0.39 | 0.64 |
+| resize | resize_07_lin_hd | 0.35 | 1.29 | 0.27 |
+| cornerSubPix | subpix_sm | 1.14 | 0.52 | 2.21 |
+| cornerSubPix | subpix_win3 | 0.56 | 0.30 | 1.85 |
+| cornerSubPix | subpix_edge | 3.25 | 1.18 | 2.76 |
+| calcOpticalFlowPyrLK | lk_sm | 9.48 | 1.45 | 6.53 |
+| calcOpticalFlowPyrLK | lk_sm_win9 | 5.79 | 0.41 | 14.24 |
+| calcOpticalFlowFarneback | fb_shift | 19.96 | 16.87 | 1.18 |
+| calcOpticalFlowFarneback | fb_frames | 19.95 | 16.66 | 1.20 |
+| calcOpticalFlowFarneback | fb_poly7 | 17.24 | 16.73 | 1.03 |
+| calcOpticalFlowFarneback | fb_tiny | 1.16 | 0.01 | 95.95 |

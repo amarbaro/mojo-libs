@@ -1,0 +1,6 @@
+mojo    encode 4857439 B 4 ms; decode 1300001 nodes x5 83 ms, peak RSS 81 MB
+python  encode 4857439 B 25 ms; decode 1300001 nodes x5 229 ms, peak RSS 140 MB
+mojo    encode 4857439 B 4 ms; decode 1300001 nodes x5 86 ms, peak RSS 81 MB
+python  encode 4857439 B 24 ms; decode 1300001 nodes x5 236 ms, peak RSS 139 MB
+mojo    encode 4857439 B 4 ms; decode 1300001 nodes x5 84 ms, peak RSS 81 MB
+python  encode 4857439 B 26 ms; decode 1300001 nodes x5 235 ms, peak RSS 140 MB

@@ -1,0 +1,9 @@
+echo handler, 4 workers
+  GET, 1 connections: 194285 requests, 64762 req/s (1 connections, pipeline 1)
+  GET, 8 connections: 1425942 requests, 475314 req/s (8 connections, pipeline 1)
+  GET, 32 connections: 1488005 requests, 496002 req/s (32 connections, pipeline 1)
+  GET, 8 connections, pipeline 16: 7168208 requests, 2389403 req/s (8 connections, pipeline 16)
+Service with metrics, 4 workers
+  POST /add, 8 connections: 1109860 requests, 369953 req/s (8 connections, pipeline 1)
+  SSE, 100000 events to one client: 4977794 bytes in 448 ms (223214 events/s)
+PASS bench

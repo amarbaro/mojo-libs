@@ -1,0 +1,6 @@
+mojo    1000000 lines json 784 ms, text 633 ms, disabled 3 ms, peak RSS 11 MB
+python  1000000 lines 4008 ms, peak RSS 12 MB
+mojo    1000000 lines json 766 ms, text 686 ms, disabled 3 ms, peak RSS 11 MB
+python  1000000 lines 4085 ms, peak RSS 11 MB
+mojo    1000000 lines json 710 ms, text 624 ms, disabled 3 ms, peak RSS 12 MB
+python  1000000 lines 4008 ms, peak RSS 12 MB

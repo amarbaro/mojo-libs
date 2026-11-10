@@ -1,0 +1,6 @@
+mojo    1500 tensors 2 ms check 16, peak RSS 12 MB
+python  1500 tensors 185 ms check 16, peak RSS 32 MB
+mojo    1500 tensors 1 ms check 16, peak RSS 12 MB
+python  1500 tensors 155 ms check 16, peak RSS 31 MB
+mojo    1500 tensors 1 ms check 16, peak RSS 13 MB
+python  1500 tensors 159 ms check 16, peak RSS 31 MB

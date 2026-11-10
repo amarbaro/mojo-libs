@@ -1,0 +1,6 @@
+mojo    spawn us 338.7231  cat GB/s 1.0661289003035401  bytes 268435456 | peak RSS 595 MB
+python  python spawn us 410  cat GB/s 0.68 | peak RSS 787 MB
+mojo    spawn us 335.122795  cat GB/s 1.0621009007396414  bytes 268435456 | peak RSS 595 MB
+python  python spawn us 420  cat GB/s 0.68 | peak RSS 786 MB
+mojo    spawn us 352.74727  cat GB/s 1.0553900599602546  bytes 268435456 | peak RSS 595 MB
+python  python spawn us 410  cat GB/s 0.68 | peak RSS 786 MB

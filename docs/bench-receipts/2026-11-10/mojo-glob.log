@@ -1,0 +1,6 @@
+mojo    *.py  Pattern ns/match 17.13255  fnmatch ns/call 8.72455 ; src/module_1*/*_[0-4]?.txt  Pattern ns/match 68.12965  fnmatch ns/call 1039.64275 ; *[!a-z]*.py  Pattern ns/match 52.2921  fnmatch ns/call 659.32995 ; hits 27264 | peak RSS 14 MB
+python  *.py  python fnmatchcase ns/call 140 ; src/module_1*/*_[0-4]?.txt  python fnmatchcase ns/call 157 ; *[!a-z]*.py  python fnmatchcase ns/call 181 | peak RSS 14 MB
+mojo    *.py  Pattern ns/match 12.824  fnmatch ns/call 7.52 ; src/module_1*/*_[0-4]?.txt  Pattern ns/match 62.48115  fnmatch ns/call 1056.86985 ; *[!a-z]*.py  Pattern ns/match 52.3681  fnmatch ns/call 660.19095 ; hits 27264 | peak RSS 14 MB
+python  *.py  python fnmatchcase ns/call 147 ; src/module_1*/*_[0-4]?.txt  python fnmatchcase ns/call 159 ; *[!a-z]*.py  python fnmatchcase ns/call 175 | peak RSS 14 MB
+mojo    *.py  Pattern ns/match 12.45855  fnmatch ns/call 7.518 ; src/module_1*/*_[0-4]?.txt  Pattern ns/match 62.45415  fnmatch ns/call 1070.7618 ; *[!a-z]*.py  Pattern ns/match 52.71815  fnmatch ns/call 681.1895 ; hits 27264 | peak RSS 14 MB
+python  *.py  python fnmatchcase ns/call 155 ; src/module_1*/*_[0-4]?.txt  python fnmatchcase ns/call 174 ; *[!a-z]*.py  python fnmatchcase ns/call 183 | peak RSS 14 MB

@@ -1,0 +1,27 @@
+BEGIN before round 1 cpu 15
+mojo unpack_from_ns_per_record 29 pack_into_ns_per_record 53 check 4557712369131765184000000
+wall_s 0.10 peak_kb 30816
+BEGIN after round 1 cpu 15
+mojo unpack_from_ns_per_record 28 pack_into_ns_per_record 51 check 4557712369131765184000000
+wall_s 0.10 peak_kb 30824
+BEGIN reference round 1 cpu 15
+python unpack_from_ns_per_record 369 pack_into_ns_per_record 197 check 4557712369131765184000000
+wall_s 2.10 peak_kb 32064
+BEGIN after round 2 cpu 15
+mojo unpack_from_ns_per_record 24 pack_into_ns_per_record 47 check 4557712369131765184000000
+wall_s 0.09 peak_kb 30852
+BEGIN before round 2 cpu 15
+mojo unpack_from_ns_per_record 24 pack_into_ns_per_record 52 check 4557712369131765184000000
+wall_s 0.09 peak_kb 30968
+BEGIN reference round 2 cpu 15
+python unpack_from_ns_per_record 324 pack_into_ns_per_record 174 check 4557712369131765184000000
+wall_s 2.06 peak_kb 31888
+BEGIN before round 3 cpu 15
+mojo unpack_from_ns_per_record 26 pack_into_ns_per_record 52 check 4557712369131765184000000
+wall_s 0.10 peak_kb 30740
+BEGIN after round 3 cpu 15
+mojo unpack_from_ns_per_record 25 pack_into_ns_per_record 51 check 4557712369131765184000000
+wall_s 0.10 peak_kb 30832
+BEGIN reference round 3 cpu 15
+python unpack_from_ns_per_record 346 pack_into_ns_per_record 182 check 4557712369131765184000000
+wall_s 2.03 peak_kb 32060

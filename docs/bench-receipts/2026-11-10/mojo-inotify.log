@@ -1,0 +1,6 @@
+mojo    drain_ms 32 events 200000 check 27555600 | peak RSS 13 MB
+python  drain_ms 95 events 200000 check 27555600 | peak RSS 13 MB
+mojo    drain_ms 32 events 200000 check 27555600 | peak RSS 13 MB
+python  drain_ms 94 events 200000 check 27555600 | peak RSS 13 MB
+mojo    drain_ms 32 events 200000 check 27555600 | peak RSS 13 MB
+python  drain_ms 95 events 200000 check 27555600 | peak RSS 13 MB

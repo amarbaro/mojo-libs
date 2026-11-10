@@ -1,0 +1,6 @@
+mojo    zstd c 49 ms d 28 ms ( 4372426 B ); lz4 c 32 ms d 24 ms ( 8806111 B ), peak RSS 113 MB
+python  zstd c 51 ms d 29 ms (4372426 B); lz4 c 35 ms d 31 ms (8819229 B), peak RSS 124 MB
+mojo    zstd c 53 ms d 29 ms ( 4372426 B ); lz4 c 32 ms d 24 ms ( 8806111 B ), peak RSS 113 MB
+python  zstd c 52 ms d 31 ms (4372426 B); lz4 c 36 ms d 33 ms (8819229 B), peak RSS 124 MB
+mojo    zstd c 62 ms d 31 ms ( 4372426 B ); lz4 c 34 ms d 25 ms ( 8806111 B ), peak RSS 113 MB
+python  zstd c 48 ms d 30 ms (4372426 B); lz4 c 36 ms d 31 ms (8819229 B), peak RSS 124 MB

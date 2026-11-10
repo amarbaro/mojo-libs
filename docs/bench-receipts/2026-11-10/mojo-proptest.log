@@ -1,0 +1,6 @@
+mojo    gen_us_per_case 0.11032725 shrink_ms 0.03656 | mproptest: falsified at case 1 (seed=5); minimal: [206, 794] | peak RSS 13 MB
+python  gen_us_per_case 378.75106545 shrink_ms 57.710652 | falsified | peak RSS 119 MB
+mojo    gen_us_per_case 0.0871317 shrink_ms 0.03787 | mproptest: falsified at case 1 (seed=5); minimal: [206, 794] | peak RSS 13 MB
+python  gen_us_per_case 357.53617935 shrink_ms 57.536451 | falsified | peak RSS 119 MB
+mojo    gen_us_per_case 0.0950357 shrink_ms 0.0376 | mproptest: falsified at case 1 (seed=5); minimal: [206, 794] | peak RSS 13 MB
+python  gen_us_per_case 356.97728870000003 shrink_ms 57.404 | falsified | peak RSS 119 MB

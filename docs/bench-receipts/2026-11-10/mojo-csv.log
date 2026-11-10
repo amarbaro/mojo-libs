@@ -1,0 +1,132 @@
+== stream round 1: Mojo
+Mojo stream bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.175611685
+parse MB/s: 284.71881014068055
+sizes Dialect 40 Reader 168 CsvField 24 OwnedField 32
+wall seconds: 0.22
+peak KB: 58164
+== stream round 1: CPython
+CPython stream bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.495009621
+parse MB/s: 101.008036771
+wall seconds: 0.62
+peak KB: 303404
+== stream round 2: Mojo
+Mojo stream bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.175906934
+parse MB/s: 284.2409270802253
+sizes Dialect 40 Reader 168 CsvField 24 OwnedField 32
+wall seconds: 0.22
+peak KB: 58256
+== stream round 2: CPython
+CPython stream bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.459787328
+parse MB/s: 108.745819981
+wall seconds: 0.58
+peak KB: 303372
+== stream round 3: Mojo
+Mojo stream bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.17510431
+parse MB/s: 285.5437995786626
+sizes Dialect 40 Reader 168 CsvField 24 OwnedField 32
+wall seconds: 0.21
+peak KB: 58252
+== stream round 3: CPython
+CPython stream bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.464043317
+parse MB/s: 107.748454009
+wall seconds: 0.59
+peak KB: 303396
+== owned round 1: Mojo
+Mojo owned bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.382420295
+parse MB/s: 130.74606827548206
+sizes Dialect 40 Reader 168 CsvField 24 OwnedField 32
+wall seconds: 0.42
+peak KB: 240812
+== owned round 1: CPython
+CPython owned bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.531058137
+parse MB/s: 94.151556141
+wall seconds: 0.88
+peak KB: 562932
+== owned round 2: Mojo
+Mojo owned bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.395499268
+parse MB/s: 126.42235787905427
+sizes Dialect 40 Reader 168 CsvField 24 OwnedField 32
+wall seconds: 0.44
+peak KB: 240780
+== owned round 2: CPython
+CPython owned bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.514388681
+parse MB/s: 97.202663758
+wall seconds: 0.89
+peak KB: 563108
+== owned round 3: Mojo
+Mojo owned bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.380623259
+parse MB/s: 131.36335948402987
+sizes Dialect 40 Reader 168 CsvField 24 OwnedField 32
+wall seconds: 0.42
+peak KB: 240920
+== owned round 3: CPython
+CPython owned bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.477158024
+parse MB/s: 104.786983526
+wall seconds: 0.72
+peak KB: 563108
+== write round 1: Mojo
+Mojo write bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.08769153
+parse MB/s: 570.1799250167034
+wall seconds: 0.51
+peak KB: 289920
+== write round 1: CPython
+CPython write bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.388936693
+parse MB/s: 128.555497334
+wall seconds: 1.14
+peak KB: 660776
+== write round 2: Mojo
+Mojo write bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.088442361
+parse MB/s: 565.3393852748911
+wall seconds: 0.52
+peak KB: 290064
+== write round 2: CPython
+CPython write bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.391144601
+parse MB/s: 127.829835493
+wall seconds: 1.13
+peak KB: 660776
+== write round 3: Mojo
+Mojo write bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.088043319
+parse MB/s: 567.9016939377308
+wall seconds: 0.51
+peak KB: 290036
+== write round 3: CPython
+CPython write bytes 49999950 rows 714285
+rows: 714285
+parse seconds: 0.394151594
+parse MB/s: 126.854618277
+wall seconds: 1.14
+peak KB: 660596

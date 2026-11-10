@@ -1,0 +1,6 @@
+mojo    Gpu is 488 bytes; open 724 us; sample 16245 ns each; checksum 8652791698586361 | peak RSS 13 MB
+python  open 227 us; sample 28828 ns each; checksum 8652807065381215 | peak RSS 13 MB
+mojo    Gpu is 488 bytes; open 1388 us; sample 16606 ns each; checksum 8652772609800717 | peak RSS 13 MB
+python  open 227 us; sample 30439 ns each; checksum 8652820176226280 | peak RSS 13 MB
+mojo    Gpu is 488 bytes; open 739 us; sample 16537 ns each; checksum 8652801071535095 | peak RSS 13 MB
+python  open 226 us; sample 29559 ns each; checksum 8652611275162301 | peak RSS 13 MB

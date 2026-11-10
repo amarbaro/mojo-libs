@@ -1,0 +1,9 @@
+mojo run 1: 151282 req/s, server CPU 3.2 us/req, peak RSS 64 MB
+mojo run 2: 155068 req/s, server CPU 3.1 us/req, peak RSS 64 MB
+mojo run 3: 154030 req/s, server CPU 3.1 us/req, peak RSS 64 MB
+asyncio run 1: 65021 req/s, server CPU 12.7 us/req, peak RSS 21 MB
+asyncio run 2: 71957 req/s, server CPU 11.3 us/req, peak RSS 21 MB
+asyncio run 3: 71675 req/s, server CPU 11.4 us/req, peak RSS 21 MB
+uvloop run 1: 153050 req/s, server CPU 3.4 us/req, peak RSS 24 MB
+uvloop run 2: 154048 req/s, server CPU 3.4 us/req, peak RSS 24 MB
+uvloop run 3: 154445 req/s, server CPU 3.4 us/req, peak RSS 24 MB

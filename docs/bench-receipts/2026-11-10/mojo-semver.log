@@ -1,0 +1,6 @@
+mojo    parse ns 34.304325  compare ns 8.461165413533834  ( 77600 ) | peak RSS 13 MB
+python  python parse ns 1294  compare ns 465 | peak RSS 15 MB
+mojo    parse ns 35.319325  compare ns 8.247130325814537  ( 77600 ) | peak RSS 13 MB
+python  python parse ns 1262  compare ns 457 | peak RSS 15 MB
+mojo    parse ns 34.7076875  compare ns 12.420200501253133  ( 77600 ) | peak RSS 13 MB
+python  python parse ns 1266  compare ns 469 | peak RSS 15 MB

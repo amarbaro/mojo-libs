@@ -1,0 +1,3 @@
+run 1: ns per frame (min of 40 rounds of 300 ) 20960 commands 150
+run 2: ns per frame (min of 40 rounds of 300 ) 20991 commands 150
+run 3: ns per frame (min of 40 rounds of 300 ) 20226 commands 150

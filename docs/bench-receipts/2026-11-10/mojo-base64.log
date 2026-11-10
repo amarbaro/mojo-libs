@@ -1,0 +1,102 @@
+BEGIN before round 1 cpu 15
+encode bytes 1024 iterations 10000 GB/s 1.9397826306862247
+decode bytes 1024 iterations 10000 GB/s 1.337641129956669
+b16encode bytes 1024 iterations 10000 GB/s 1.8610663110285264
+b16decode bytes 1024 iterations 10000 GB/s 1.4396892520729978
+checksum 54640000
+encode bytes 67108864 iterations 3 GB/s 1.4202200675053671
+decode bytes 67108864 iterations 3 GB/s 1.3546902376306051
+b16encode bytes 67108864 iterations 3 GB/s 1.391524668857244
+b16decode bytes 67108864 iterations 3 GB/s 1.6195475596279996
+checksum 1073741832
+wall_s 0.75 peak_kb 432608
+BEGIN after round 1 cpu 15
+encode bytes 1024 iterations 10000 GB/s 2.2790906784300984
+decode bytes 1024 iterations 10000 GB/s 1.4463754875514248
+b16encode bytes 1024 iterations 10000 GB/s 1.9614599928245808
+b16decode bytes 1024 iterations 10000 GB/s 1.6592846862607016
+checksum 54640000
+encode bytes 67108864 iterations 3 GB/s 1.5951727905710342
+decode bytes 67108864 iterations 3 GB/s 1.5489609429807307
+b16encode bytes 67108864 iterations 3 GB/s 1.3568107553586946
+b16decode bytes 67108864 iterations 3 GB/s 1.6199816862448142
+checksum 1073741832
+wall_s 0.70 peak_kb 432684
+BEGIN reference round 1 cpu 15
+encode bytes 1024 iterations 10000 GB/s 1.40166908126067 checksum 13680000
+decode bytes 1024 iterations 10000 GB/s 0.8936265836454991 checksum 10240000
+b16encode bytes 1024 iterations 10000 GB/s 0.6490644281381093 checksum 20480000
+b16decode bytes 1024 iterations 10000 GB/s 0.5958453634647989 checksum 10240000
+encode bytes 67108864 iterations 3 GB/s 0.9476040102670559 checksum 268435464
+decode bytes 67108864 iterations 3 GB/s 0.8174535080521143 checksum 201326592
+b16encode bytes 67108864 iterations 3 GB/s 0.3713688178012046 checksum 402653184
+b16decode bytes 67108864 iterations 3 GB/s 0.595524360340311 checksum 201326592
+wall_s 1.67 peak_kb 556832
+BEGIN after round 2 cpu 15
+encode bytes 1024 iterations 10000 GB/s 2.505714325565211
+decode bytes 1024 iterations 10000 GB/s 1.40673929782553
+b16encode bytes 1024 iterations 10000 GB/s 1.9747711415739273
+b16decode bytes 1024 iterations 10000 GB/s 1.5693549123720647
+checksum 54640000
+encode bytes 67108864 iterations 3 GB/s 1.612955095196526
+decode bytes 67108864 iterations 3 GB/s 1.53581678748101
+b16encode bytes 67108864 iterations 3 GB/s 1.334066971043796
+b16decode bytes 67108864 iterations 3 GB/s 1.587651647922852
+checksum 1073741832
+wall_s 0.71 peak_kb 432616
+BEGIN before round 2 cpu 15
+encode bytes 1024 iterations 10000 GB/s 2.422528187321992
+decode bytes 1024 iterations 10000 GB/s 1.3861034466328515
+b16encode bytes 1024 iterations 10000 GB/s 2.0870146519026687
+b16decode bytes 1024 iterations 10000 GB/s 1.604496601726338
+checksum 54640000
+encode bytes 67108864 iterations 3 GB/s 1.5792516162854544
+decode bytes 67108864 iterations 3 GB/s 1.5303325436299622
+b16encode bytes 67108864 iterations 3 GB/s 1.3543265006237724
+b16decode bytes 67108864 iterations 3 GB/s 1.5830768866036427
+checksum 1073741832
+wall_s 0.71 peak_kb 432544
+BEGIN reference round 2 cpu 15
+encode bytes 1024 iterations 10000 GB/s 1.285199273661598 checksum 13680000
+decode bytes 1024 iterations 10000 GB/s 0.9358253216236971 checksum 10240000
+b16encode bytes 1024 iterations 10000 GB/s 0.6470314934365163 checksum 20480000
+b16decode bytes 1024 iterations 10000 GB/s 0.5953735521346641 checksum 10240000
+encode bytes 67108864 iterations 3 GB/s 0.9615126197766249 checksum 268435464
+decode bytes 67108864 iterations 3 GB/s 0.8415864495407378 checksum 201326592
+b16encode bytes 67108864 iterations 3 GB/s 0.36847821301048883 checksum 402653184
+b16decode bytes 67108864 iterations 3 GB/s 0.591066485245456 checksum 201326592
+wall_s 1.67 peak_kb 556828
+BEGIN before round 3 cpu 15
+encode bytes 1024 iterations 10000 GB/s 2.2708377639433097
+decode bytes 1024 iterations 10000 GB/s 1.480880730675808
+b16encode bytes 1024 iterations 10000 GB/s 1.8606676126271737
+b16decode bytes 1024 iterations 10000 GB/s 1.5326165956035456
+checksum 54640000
+encode bytes 67108864 iterations 3 GB/s 1.5951954147857983
+decode bytes 67108864 iterations 3 GB/s 1.5399646405649983
+b16encode bytes 67108864 iterations 3 GB/s 1.3634466846954667
+b16decode bytes 67108864 iterations 3 GB/s 1.6200503457694815
+checksum 1073741832
+wall_s 0.70 peak_kb 432712
+BEGIN after round 3 cpu 15
+encode bytes 1024 iterations 10000 GB/s 2.238011666510035
+decode bytes 1024 iterations 10000 GB/s 1.4162339131594133
+b16encode bytes 1024 iterations 10000 GB/s 2.111427275351561
+b16decode bytes 1024 iterations 10000 GB/s 1.646672354976247
+checksum 54640000
+encode bytes 67108864 iterations 3 GB/s 1.583433106723098
+decode bytes 67108864 iterations 3 GB/s 1.544597136308482
+b16encode bytes 67108864 iterations 3 GB/s 1.3376734938669692
+b16decode bytes 67108864 iterations 3 GB/s 1.623600134283754
+checksum 1073741832
+wall_s 0.71 peak_kb 432544
+BEGIN reference round 3 cpu 15
+encode bytes 1024 iterations 10000 GB/s 1.3537980712343691 checksum 13680000
+decode bytes 1024 iterations 10000 GB/s 0.9296623292108619 checksum 10240000
+b16encode bytes 1024 iterations 10000 GB/s 0.6254725020237761 checksum 20480000
+b16decode bytes 1024 iterations 10000 GB/s 0.5934190178625499 checksum 10240000
+encode bytes 67108864 iterations 3 GB/s 0.9470069407898265 checksum 268435464
+decode bytes 67108864 iterations 3 GB/s 0.8263450060827049 checksum 201326592
+b16encode bytes 67108864 iterations 3 GB/s 0.3696717933702519 checksum 402653184
+b16decode bytes 67108864 iterations 3 GB/s 0.5931276054966068 checksum 201326592
+wall_s 1.68 peak_kb 556760

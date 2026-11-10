@@ -1,0 +1,6 @@
+mojo    insert_ms 80 scan_ms 26 check 20010000000 5688890 | peak RSS 14 MB
+python  insert_ms 223 scan_ms 146 check 20010000000 5688890 | peak RSS 15 MB
+mojo    insert_ms 82 scan_ms 25 check 20010000000 5688890 | peak RSS 15 MB
+python  insert_ms 184 scan_ms 82 check 20010000000 5688890 | peak RSS 15 MB
+mojo    insert_ms 78 scan_ms 25 check 20010000000 5688890 | peak RSS 15 MB
+python  insert_ms 177 scan_ms 84 check 20010000000 5688890 | peak RSS 15 MB

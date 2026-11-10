@@ -1,0 +1,6 @@
+mojo    mmap  GB/s 32.017698534501136 ; read  GB/s 1.4939282564594876 ; ratio mmap/read 21.43188496238835 | peak RSS 986 MB
+python  mmap  GB/s 4.193458100873714 ; read  GB/s 1.722330807551862 ; check 34225520640 | peak RSS 286 MB
+mojo    mmap  GB/s 31.488096514455982 ; read  GB/s 1.4603753035475235 ; ratio mmap/read 21.561646816380375 | peak RSS 986 MB
+python  mmap  GB/s 4.20175745816356 ; read  GB/s 1.7681335509606828 ; check 34225520640 | peak RSS 286 MB
+mojo    mmap  GB/s 31.54489594849695 ; read  GB/s 1.5154445404074124 ; ratio mmap/read 20.81560565721291 | peak RSS 986 MB
+python  mmap  GB/s 4.262416889085475 ; read  GB/s 1.7112754003254678 ; check 34225520640 | peak RSS 286 MB

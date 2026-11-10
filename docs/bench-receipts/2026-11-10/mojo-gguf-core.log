@@ -1,0 +1,6 @@
+mojo    21 kvs 9 tensors 5 tokens 882 B 0 ms, peak RSS 11 MB
+python  21 kvs 9 tensors 5 tokens 882 B 120 ms, peak RSS 35 MB
+mojo    21 kvs 9 tensors 5 tokens 882 B 0 ms, peak RSS 11 MB
+python  21 kvs 9 tensors 5 tokens 882 B 63 ms, peak RSS 36 MB
+mojo    21 kvs 9 tensors 5 tokens 882 B 0 ms, peak RSS 11 MB
+python  21 kvs 9 tensors 5 tokens 882 B 94 ms, peak RSS 36 MB

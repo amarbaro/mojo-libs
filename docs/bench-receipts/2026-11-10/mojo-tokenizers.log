@@ -1,0 +1,42 @@
+== gpt2
+mojo    load 20 ms, encode 99 ms, 1000031 bytes, 491476 ids, peak RSS 35 MB
+crate   load 66 ms, encode 286 ms, 1000031 bytes, 491476 ids, peak RSS 42 MB
+mojo    load 21 ms, encode 65 ms, 1000031 bytes, 491476 ids, peak RSS 35 MB
+crate   load 37 ms, encode 265 ms, 1000031 bytes, 491476 ids, peak RSS 42 MB
+mojo    load 20 ms, encode 63 ms, 1000031 bytes, 491476 ids, peak RSS 34 MB
+crate   load 37 ms, encode 271 ms, 1000031 bytes, 491476 ids, peak RSS 42 MB
+== qwen2.5
+mojo    load 60 ms, encode 72 ms, 1000007 bytes, 425256 ids, peak RSS 62 MB
+crate   load 114 ms, encode 299 ms, 1000007 bytes, 425256 ids, peak RSS 84 MB
+mojo    load 62 ms, encode 70 ms, 1000007 bytes, 425256 ids, peak RSS 61 MB
+crate   load 120 ms, encode 301 ms, 1000007 bytes, 425256 ids, peak RSS 84 MB
+mojo    load 62 ms, encode 71 ms, 1000007 bytes, 425256 ids, peak RSS 61 MB
+crate   load 115 ms, encode 305 ms, 1000007 bytes, 425256 ids, peak RSS 84 MB
+== llama3
+mojo    load 94 ms, encode 65 ms, 1000011 bytes, 373268 ids, peak RSS 76 MB
+crate   load 155 ms, encode 244 ms, 1000011 bytes, 373268 ids, peak RSS 110 MB
+mojo    load 96 ms, encode 64 ms, 1000011 bytes, 373268 ids, peak RSS 76 MB
+crate   load 156 ms, encode 244 ms, 1000011 bytes, 373268 ids, peak RSS 109 MB
+mojo    load 97 ms, encode 66 ms, 1000011 bytes, 373268 ids, peak RSS 76 MB
+crate   load 155 ms, encode 245 ms, 1000011 bytes, 373268 ids, peak RSS 110 MB
+== bert
+mojo    load 6 ms, encode 69 ms, 1000065 bytes, 266446 ids, peak RSS 26 MB
+crate   load 11 ms, encode 357 ms, 1000065 bytes, 266446 ids, peak RSS 34 MB
+mojo    load 7 ms, encode 64 ms, 1000065 bytes, 266446 ids, peak RSS 26 MB
+crate   load 11 ms, encode 270 ms, 1000065 bytes, 266446 ids, peak RSS 34 MB
+mojo    load 6 ms, encode 64 ms, 1000065 bytes, 266446 ids, peak RSS 26 MB
+crate   load 12 ms, encode 295 ms, 1000065 bytes, 266446 ids, peak RSS 34 MB
+== t5
+mojo    load 12 ms, encode 86 ms, 1000153 bytes, 265947 ids, peak RSS 28 MB
+crate   load 28 ms, encode 232 ms, 1000153 bytes, 265947 ids, peak RSS 56 MB
+mojo    load 11 ms, encode 88 ms, 1000153 bytes, 265947 ids, peak RSS 28 MB
+crate   load 28 ms, encode 234 ms, 1000153 bytes, 265947 ids, peak RSS 56 MB
+mojo    load 11 ms, encode 86 ms, 1000153 bytes, 265947 ids, peak RSS 28 MB
+crate   load 28 ms, encode 232 ms, 1000153 bytes, 265947 ids, peak RSS 56 MB
+== xlmr
+mojo    load 107 ms, encode 103 ms, 1000028 bytes, 292680 ids, peak RSS 87 MB
+crate   load 318 ms, encode 256 ms, 1000028 bytes, 292680 ids, peak RSS 317 MB
+mojo    load 125 ms, encode 111 ms, 1000028 bytes, 292680 ids, peak RSS 89 MB
+crate   load 310 ms, encode 236 ms, 1000028 bytes, 292680 ids, peak RSS 317 MB
+mojo    load 161 ms, encode 171 ms, 1000028 bytes, 292680 ids, peak RSS 91 MB
+crate   load 315 ms, encode 231 ms, 1000028 bytes, 292680 ids, peak RSS 317 MB

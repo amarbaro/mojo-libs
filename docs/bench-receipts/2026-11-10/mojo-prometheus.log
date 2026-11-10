@@ -1,0 +1,6 @@
+mojo    inc ns 5.788978  observe ns 20.253366  exposition ms 8.7553291  bytes 720038 | peak RSS 14 MB
+python  python inc ns 203  observe ns 518  exposition ms 57.4  bytes 699874 | peak RSS 37 MB
+mojo    inc ns 5.8975562  observe ns 20.2700198  exposition ms 8.726093  bytes 720038 | peak RSS 14 MB
+python  python inc ns 204  observe ns 515  exposition ms 56.9  bytes 699874 | peak RSS 38 MB
+mojo    inc ns 5.7978578  observe ns 20.7368108  exposition ms 8.77276005  bytes 720038 | peak RSS 14 MB
+python  python inc ns 204  observe ns 526  exposition ms 57.7  bytes 699874 | peak RSS 37 MB
