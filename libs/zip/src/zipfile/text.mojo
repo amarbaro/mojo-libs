@@ -1,4 +1,5 @@
 """Text helpers zipfile needs: cp437 and UTF-8 names, Python-style repr of str and bytes (error texts quote names)."""
+from .printable import is_printable
 
 comptime _CP437 = SIMD[DType.uint16, 128](
     199, 252, 233, 226, 228, 224, 229, 231, 234, 235, 232, 239, 238, 236, 196, 197, 201, 230, 198, 244, 246, 242, 251, 249,
@@ -87,23 +88,7 @@ def utf8_string(b: Span[UInt8, _]) -> String:
 
 
 def _printable(c: Int) -> Bool:
-    """str.isprintable for the characters archive names carry (Latin-1 exact, the common format and
-    space categories above it; everything else assumed printable)."""
-    if c < 0x20 or c == 0x7F:
-        return False
-    if c < 0x7F:
-        return True
-    if c <= 0xA0 or c == 0xAD:
-        return False
-    if c < 0x600:
-        return True
-    if c == 0x61C or c == 0x1680 or c == 0x180E or c == 0xFEFF:
-        return False
-    if (c >= 0x2000 and c <= 0x200F) or (c >= 0x2028 and c <= 0x202F) or (c >= 0x205F and c <= 0x206F) or c == 0x3000:
-        return False
-    if (c >= 0xD800 and c <= 0xF8FF) or (c >= 0xFFF9 and c <= 0xFFFB) or c >= 0xF0000:
-        return False
-    return True
+    return is_printable(c)
 
 
 def _hexd(v: Int, width: Int) -> String:

@@ -179,6 +179,7 @@ R("names.nul_first", build([E(b"\x00abc", b"x")]))
 R("names.quotes", build([E(b"it's", b"1"), E(b'say "hi"', b"2"), E(b"both ' and \"", b"3"), E(b"back\\slash", b"4"), E(b"tab\tnl\ncr\r", b"5")]),
   probes=["it's", 'say "hi"', "nope", "né", "a\nb"])
 R("names.probe_missing", BASE, probes=["missing", "", "a.txt ", "A.TXT"])
+R("names.repr_edges", build([E("a\u00a0b\u00adc\u200bd\ue000e\u3000f".encode(), b"1", flag=0x800), E("x\U000d0000y\U0005f600z".encode("utf-8", "surrogatepass"), b"2", flag=0x800), E("é日😀\u0378q".encode(), b"3", flag=0x800)]))
 R("names.dir", build([E(b"d/", b""), E(b"d/f", b"1")]))
 # ---- extra fields -----------------------------------------------------------------------------------------
 def ex(tp, data):
