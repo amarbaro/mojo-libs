@@ -30,6 +30,8 @@ timeout 60 avifenc -y 420 -q 30 -s 4 -a enable-restoration=1 -a enable-cdef=1 $s
 timeout 30 magick $src -resize 321x179! $F/src-odd.png
 timeout 60 avifenc -y 420 -q 50 -s 6 $F/src-odd.png -o $F/odd.avif > /dev/null
 timeout 60 avifenc -y 420 -q 50 -s 6 -a reduced-tx-type-set=1 $small -o $F/redtx.avif > /dev/null
+timeout 60 avifenc -y 422 -q 60 -s 6 $small -o $F/y422.avif > /dev/null
+timeout 60 avifenc -y 422 -d 10 -q 60 -s 6 $small -o $F/y422_10.avif > /dev/null
 timeout 30 magick $small -rotate 90 -resize 320x180! $F/src-b.png
 timeout 60 avifenc -y 420 -q 50 -s 6 --timescale 30 --duration 4 $small --duration 7 $F/src-b.png -o $F/anim.avif > /dev/null
 # screen.avif: synthetic text screenshot, 2005 intrabc blocks (the gallery screenshot has 120 per tile): MV stack weights and clamps
@@ -42,7 +44,7 @@ timeout 30 magick -size 800x640 xc:white -font DejaVu-Sans-Mono -pointsize 13 -f
 timeout 120 avifenc -y 444 -q 60 -s 6 $F/screen.png -o $F/screen.avif > /dev/null
 has screen.avif 'allow_intrabc +[01]+ = 1$'
 info() { avifdec --info "$F/$1" 2>&1 | grep -qE "$2" || { echo "FAIL fixture $1: avifdec --info has no '$2'"; exit 1; }; }
-info y420.avif 'Format +: YUV420'; info y420_10.avif 'Bit Depth +: 10'; info y420_12.avif 'Bit Depth +: 12'
+info y420.avif 'Format +: YUV420'; info y422.avif 'Format +: YUV422'; info y422_10.avif 'Bit Depth +: 10'; info y420_10.avif 'Bit Depth +: 10'; info y420_12.avif 'Bit Depth +: 12'
 info odd.avif 'Resolution +: 321x179'; info anim.avif '2 frames'
 has sb128.avif 'use_128x128_superblock +[01]+ = 1$'
 has y420_lr.avif 'enable_restoration +[01]+ = 1$'

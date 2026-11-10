@@ -301,7 +301,12 @@ def partition_subsize(partition: Int, bsize: Int) -> Int:
 
 
 def subsampled_size(bsize: Int, sub_x: Int, sub_y: Int) -> Int:
-    """Subsampled_Size[bsize][sub_x][sub_y] for the 4:4:4, 4:2:0 and 4:0:0 cases (4:2:2 is rejected up front)."""
+    """Subsampled_Size[bsize][sub_x][sub_y]: the halved block, or BLOCK_INVALID where the spec table has it (a tall block
+    in 4:2:2, a wide block with only vertical subsampling)."""
+    var w = global_constant[BLOCK_WIDTH]()[bsize]
+    var h = global_constant[BLOCK_HEIGHT]()[bsize]
+    if (sub_x == 1 and sub_y == 0 and h > w) or (sub_x == 0 and sub_y == 1 and w > h):
+        return BLOCK_INVALID
     return block_from_dims(max(global_constant[BLOCK_WIDTH]()[bsize] >> sub_x, 4), max(global_constant[BLOCK_HEIGHT]()[bsize] >> sub_y, 4))
 
 
@@ -820,8 +825,6 @@ struct TileState(Movable):
             raise Error("av1tile: bad tile grid")
         if st.frame.frame_type == 1 or st.frame.frame_type == 3:
             raise Error("av1tile: inter frames are not supported")
-        if st.seq.subsampling_x != st.seq.subsampling_y:
-            raise Error("av1tile: 4:2:2 is not supported")
         self.seq = st.seq.copy()
         self.frame = st.frame.copy()
         self.mi_cols = ti.mi_col_starts[nc - 1]

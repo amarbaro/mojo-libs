@@ -82,9 +82,9 @@ def replay_block(ts: TileState, tables: Tables, mut frame: Frame, mut rin: Recon
         for plane in range(1 + (2 if b.has_chroma else 0)):
             var sx = ts.sub_x if plane > 0 else 0
             var sy = ts.sub_y if plane > 0 else 0
-            var psz = subsampled_size(b.mi_size, sx, sy)
-            var w4 = global_constant[NUM_4X4_WIDE]()[psz]
-            var h4 = global_constant[NUM_4X4_HIGH]()[psz]
+            # the halved block, never BLOCK_INVALID: a tall 4:2:2 block still has a chroma prediction
+            var w4 = max(global_constant[NUM_4X4_WIDE]()[b.mi_size] >> sx, 1)
+            var h4 = max(global_constant[NUM_4X4_HIGH]()[b.mi_size] >> sy, 1)
             predict_intrabc(frame, plane, (b.mi_col >> sx) * 4, (b.mi_row >> sy) * 4, w4 * 4, h4 * 4, b.mv_row, b.mv_col,
                             ts.mi_cols, ts.mi_rows)
     var pal_y = u16s(b.palette_y)
