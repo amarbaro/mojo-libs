@@ -41,3 +41,7 @@ DONE, every item of the brief reached; no `.work/native-failure.md` needed (no l
 ## How to run
 
 `scripts/check.sh` (gate, ~25 s, full text in `.work/native-gate.txt`), `scripts/mutants.sh` (~3 min), `tools/fuzz.py .work/cases --seed N`, `scripts/bench.sh .work/bench-before .work/bench-after`, `scripts/ci.sh` (all).
+
+## Fresh-venv CI run
+
+`.venv` symlink removed, `uv sync` from scratch, `systemd-run --user --scope -p MemoryMax=4G -p MemorySwapMax=0 scripts/ci.sh` (Mojo 1.2.0 2016d0cd): `PASS 5/5` / `PASS ci`, exit 0 (check, mutants 27/27, api 12/12 + CPython re-read, quickstart, README example). No timing runs. Output: `.work/ci-fresh.txt`. The earlier UNVERIFIED item is closed.
