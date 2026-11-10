@@ -14,4 +14,4 @@ Repository = "https://github.com/amarbaro/mojo-zip"
 dev = []
 
 [tool.mojo]
-packages = ["zipfile", "deflate"]  # no C, no dlopen: deflate (zlib port) is part of this repo
+packages = ["deflate", "zipfile"]  # no C, no dlopen: deflate (zlib port) is part of this repo
