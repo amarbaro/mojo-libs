@@ -1,6 +1,6 @@
 # Lane brief: mojo-zip, native (no C)
 
-Model: sonnet, effort high. Repo: ~/Projects/mojo/mojo-zip. Report: exchange/lane-native-report.md, then push DONE.
+Model: sonnet, effort high. Repo: $HOME/Projects/mojo/mojo-zip. Report: exchange/lane-native-report.md, then push DONE.
 
 ## Goal
 Build mojo-zip per docs/plan.md, with one change: no libz. DEFLATE (raw inflate + deflate) and crc32 are pure Mojo.

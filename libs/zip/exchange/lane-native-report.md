@@ -1,6 +1,6 @@
 # Lane report: mojo-zip native (no C)
 
-Model sonnet 5.5, effort high. Repo `~/Projects/mojo/mojo-zip`, branch main, 11 commits on top of `6e67b98`, nothing pushed, no remote.
+Model sonnet 5.5, effort high. Repo `$HOME/Projects/mojo/mojo-zip`, branch main, 11 commits on top of `6e67b98`, nothing pushed, no remote.
 
 ## Result
 

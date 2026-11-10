@@ -1,8 +1,16 @@
 # mojo-zip
 
+<!-- badges -->
+[![ci](https://github.com/amarbaro/mojo-zip/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-zip/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-zip)](https://github.com/amarbaro/mojo-zip/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-zip)](https://github.com/amarbaro/mojo-zip/blob/main/LICENSE)
+<!-- /badges -->
+
 `zipfile` for Mojo, in pure Mojo: read and write ZIP archives (stored and deflated members, zip64, CRC-32, archive and
 member comments) with CPython's `zipfile` behaviour. No C library and no FFI: the DEFLATE codec is a port of zlib, so the
 bytes it writes are the bytes `zlib` writes at every level.
+
+<!-- install -->
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-zip` (import `zipfile` and `deflate`). From source: `git clone https://github.com/amarbaro/mojo-zip`, then `mojo run -I mojo-zip/src app.mojo`.
+Toolchains: Mojo 1.2 stable, and the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) nightly matrix.
 
 ```mojo
 from zipfile import ZipReader, ZipWriter, ZIP_DEFLATED
@@ -17,6 +25,7 @@ def main() raises:
     print(String(unsafe_from_utf8=Span(z.read("hello.txt"))))
     print(len(z), z.infolist()[0].compress_size, z.testzip() == None)
 ```
+<!-- /install -->
 
 ## What is in it
 
@@ -24,6 +33,8 @@ def main() raises:
 |---|---|
 | `zipfile` | `ZipReader` (`open`, `from_bytes`, `namelist`, `infolist`, `getinfo`, `read`, `read_view`, `testzip`), `ZipWriter` (`create`, `writestr`, `mkdir`, `set_comment`, `close`, `to_bytes`), `ZipInfo` |
 | `deflate` | `deflate_raw` (zlib 1.3.2 algorithm, levels 0..9), `inflate_raw`, `inflate`, `crc32` |
+
+The API is in [docs/api.md](docs/api.md), the design in [docs/design.md](docs/design.md), the numbers in [docs/perf.md](docs/perf.md).
 
 Errors are `Error` values whose text is `<PythonClass>: <message>` exactly as CPython raises (`BadZipFile`, `KeyError`,
 `LargeZipFile`, ...), so code ported from Python keeps its messages.
@@ -33,9 +44,9 @@ Errors are `Error` values whose text is `<PythonClass>: <message>` exactly as CP
 `scripts/check.sh` runs the gate (full output in `.work/native-gate.txt`):
 
 - no `DLHandle`, `external_call` or `dlopen` under `src`;
-- 1224 codec rows against Python `zlib`: every level 0..9 byte-identical (one-shot and `compressobj`), inflate of
+- 2610 codec rows against Python `zlib`: every level 0..9 byte-identical (one-shot and `compressobj`), inflate of
   zlib-made, truncated and bit-flipped streams;
-- 224 golden rows replayed through CPython `zipfile` (live) and through mojo-zip, dumps byte-identical;
+- 230 golden rows in 11 oracle scenarios, each replayed through CPython `zipfile` (live) and through mojo-zip, dumps byte-identical;
 - a negative control: a codec with one Huffman length off must fail.
 
 `scripts/mutants.sh` flips one source line at a time and expects the oracle diff to notice (`tests/mutants.txt`).
