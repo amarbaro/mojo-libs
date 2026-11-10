@@ -12,7 +12,7 @@ while IFS='|' read -r f from to; do
   # a mutant that does not compile proves nothing (2026-11-07: typo mutants `UUIDX` counted as kills)
   if ! scripts/capped.sh "$MOJO" build -I src -I tests ${MOJO_FLAGS:-} tests/cases.mojo -o .work/mutant 2>/dev/null; then
     echo "INVALID mutant $n (does not compile): $f: $from -> $to"; bad=$((bad+1))
-  elif CHECK_DIR=.work/mcheck CASES=.work/mutant scripts/check.sh >/dev/null 2>&1; then
+  elif CHECK_DIR=.work/mcheck CASES=.work/mutant scripts/oracle_diff.sh >/dev/null 2>&1; then
     echo "SURVIVED mutant $n: $f: $from -> $to"
   else killed=$((killed+1)); echo "KILLED mutant $n: $f: $from -> $to"; fi
   cp .work/orig.mojo "$f"; cur=""
