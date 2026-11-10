@@ -4,11 +4,19 @@
 [![ci](https://github.com/amarbaro/mojo-imkit/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-imkit/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-imkit)](https://github.com/amarbaro/mojo-imkit/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-imkit)](https://github.com/amarbaro/mojo-imkit/blob/main/LICENSE)
 <!-- /badges -->
 
-The gallery example (`examples/gallery.mojo`) in its three theme presets, rendered on the GPU by `scripts/gallery.sh`:
+The gallery example (`examples/gallery.mojo`), rendered on the GPU by `scripts/gallery.sh`, in the amarbaro themes and the three built-ins:
+
+| amarbaro | amarbaro-light |
+|---|---|
+| ![amarbaro](docs/img/gallery-amarbaro.png) | ![amarbaro-light](docs/img/gallery-amarbaro-light.png) |
 
 | glass | neon | flat |
 |---|---|---|
 | ![glass](docs/img/gallery-glass.png) | ![neon](docs/img/gallery-neon.png) | ![flat](docs/img/gallery-flat.png) |
+
+Eight of the 29 generated styles (`imkit.styles`, each with a background and 8 icons in `assets/styles/`):
+
+![styles](docs/img/styles.jpg)
 
 An immediate-mode GUI for Mojo apps, drawn by the GPU. It takes the idea behind Dear ImGui and imgui-bundle (widgets
 are function calls made every frame, no retained widget tree) and builds it in Mojo around a GPU app's own frame:
@@ -26,8 +34,10 @@ FreeType are called through Mojo's FFI.
 | `imkit.font` | glyph atlas from a TrueType font (ASCII 32-126, a few pixel sizes, alpha8), built once at start |
 | `imkit.draw` | `Draw` (`ui.d`): the command list, tile binning, the `compose` kernel; counters `ui.d.n`, `ui.d.dropped` |
 | `imkit.ui` | `Ui`: `begin(input)`, `panel`, `button`, `icon`, `bar`, `spark`, `text`, `field` (single-line text box), `rect`, `line`, `tri`, `image`, `finish()` |
-| `imkit.atlas`, `imkit.assets` | skyline packer for the glyph atlas; PNG and JPEG asset atlas (`pack`, `Assets`, `image_decode`, `png_decode`) |
+| `imkit.atlas`, `imkit.assets` | skyline packer for the glyph atlas; PNG, JPEG and WebP asset atlas (`pack`, `Assets`, `image_decode`, `png_decode`) |
 | `imkit.jpeg` | pure Mojo JPEG decoder, baseline and progressive (`jpeg_decode`) |
+| `imkit.webp` | pure Mojo WebP decoder: lossless, lossy and alpha (`webp_decode`) |
+| `imkit.styles`, `imkit.contrast` | 29 generated themes (`style(name)`, `STYLE_NAMES`) and the WCAG contrast gate every theme passes |
 | `imkit.theme` | `Theme` roles and the presets `glass()`, `neon()`, `flat()`; the module constants are the glass values |
 
 ## Use
