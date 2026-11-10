@@ -5,7 +5,7 @@ Model sonnet 5.5, effort high. Brief: `exchange/lane-release-brief.md`. No push,
 ## D: docs and skill (commits 79e0ba4, eb702be)
 
 - `docs/api.md`: every name exported by `src/zipfile/__init__.mojo` and `src/deflate/__init__.mojo`, with raise texts taken from `raise` sites in `src`.
-- `skills/mojo-zip/SKILL.md`: 56 lines, mojo-json's shape. Its example block is run by `scripts/docs.sh`, which now covers README and SKILL.md.
+- `skills/mojo-zip/SKILL.md`: 59 lines, mojo-json's shape. Its example block is run by `scripts/docs.sh`, which now covers README and SKILL.md.
 - Badges via `repo-badges` with `REPO_BADGES_SLUG=amarbaro/mojo-zip` (no origin exists, none was added). `.github/workflows/ci.yml` now calls the shared `lib-ci` workflow as in mojo-json; `scripts/ci.sh` prints `PASS n/m` and honours `MOJO=`.
 - CHANGELOG dated 2026-11-10 with no home path; `docs/releases/v0.1.0.md` by hand (the `release-note new` scaffold duplicated the CHANGELOG line and pulled the README into "What it does").
 - `tools/__pycache__/*.pyc` untracked, `__pycache__/` and `*.pyc` ignored.
