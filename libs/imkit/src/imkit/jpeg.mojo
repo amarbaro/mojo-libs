@@ -114,7 +114,8 @@ struct Jpeg(Movable):
     var hv: List[Int]  # symbols
     var hdef: List[Bool]
     var comps: List[Comp]
-    var co: List[Int16]  # coefficients, natural order, 64 per block
+    var co: List[Int16]  # coefficients, natural order, 64 per block; a baseline file keeps one block here and transforms it at once
+    var ws: List[Int]  # IDCT workspace
     var pl: List[UInt8]  # decoded planes
 
     def __init__(out self, src: Span[UInt8, _]):
@@ -150,6 +151,7 @@ struct Jpeg(Movable):
         self.hdef = List[Bool](length=8, fill=False)
         self.comps = List[Comp]()
         self.co = List[Int16]()
+        self.ws = List[Int](length=64, fill=0)
         self.pl = List[UInt8]()
 
     def be16(self, i: Int) -> Int:
@@ -329,7 +331,7 @@ struct Jpeg(Movable):
             nco += c.bw * c.bh * 64
             npl += c.bw * c.bh * 64
             self.comps[i] = c^
-        self.co = List[Int16](length=nco, fill=0)
+        self.co = List[Int16](length=nco if prog else 64, fill=0)
         self.pl = List[UInt8](length=npl, fill=0)
         self.qs = List[Int](length=64 * nf, fill=1)
 
@@ -401,7 +403,9 @@ struct Jpeg(Movable):
                 raise Error("jpeg: bad DC category")
             var df = self.ext(s)
             self.comps[c].pred += df
-            self.co[o] = Int16(self.comps[c].pred)
+            for i in range(64):
+                self.co[i] = 0
+            self.co[0] = Int16(self.comps[c].pred)
             var k = 1
             while k < 64:
                 var rs = self.huff(self.comps[c].ac)
@@ -414,8 +418,9 @@ struct Jpeg(Movable):
                 k += r
                 if k > 63:
                     raise Error("jpeg: coefficient index past 63")
-                self.co[o + self.zz[k]] = Int16(self.ext(sz))
+                self.co[self.zz[k]] = Int16(self.ext(sz))
                 k += 1
+            self.put(c, o, 0)
         elif self.ss == 0:
             if self.ah == 0:
                 var s = self.huff(self.comps[c].dc)
@@ -539,35 +544,41 @@ struct Jpeg(Movable):
         if scans == 0:
             raise Error("jpeg: no image data")
 
+    def put(mut self, c: Int, o: Int, so: Int):
+        """Dequantize and inverse-transform the block whose coefficients are at co[so] into the plane slot of block offset o."""
+        var k = self.comps[c].copy()
+        var pw = k.bw * 8
+        var bi = (o - k.coff) // 64
+        var dst = k.poff + (bi // k.bw) * 8 * pw + (bi % k.bw) * 8
+        var qo = k.q if k.q >= 0 else 64 * c
+        var flat = True
+        for i in range(1, 64):
+            if self.co[so + i] != 0:
+                flat = False
+                break
+        if flat:  # DC only: the whole block is one value
+            var v = UInt8(clamp8(((Int(self.co[so]) * self.qs[qo] + 4) >> 3) + 128))
+            for y in range(8):
+                for x in range(8):
+                    self.pl[dst + y * pw + x] = v
+            return
+        for i in range(64):
+            self.ws[i] = Int(self.co[so + i]) * self.qs[qo + i]
+        for i in range(8):
+            tr(self.ws, i, 8, 11)
+        for y in range(8):
+            tr(self.ws, y * 8, 1, 18)
+            for x in range(8):
+                self.pl[dst + y * pw + x] = UInt8(clamp8(self.ws[y * 8 + x] + 128))
+
     def idct(mut self):
-        var ws = List[Int](length=64, fill=0)
-        for ci in range(len(self.comps)):
-            var k = self.comps[ci].copy()
-            var pw = k.bw * 8
-            var qo = k.q if k.q >= 0 else 64 * ci
-            for by in range(k.bh):
-                for bx in range(k.bw):
-                    var o = k.coff + (by * k.bw + bx) * 64
-                    var dst = k.poff + by * 8 * pw + bx * 8
-                    var flat = True
-                    for i in range(1, 64):
-                        if self.co[o + i] != 0:
-                            flat = False
-                            break
-                    if flat:  # DC only: the whole block is one value
-                        var v = UInt8(clamp8(((Int(self.co[o]) * self.qs[qo] + 4) >> 3) + 128))
-                        for y in range(8):
-                            for x in range(8):
-                                self.pl[dst + y * pw + x] = v
-                        continue
-                    for i in range(64):
-                        ws[i] = Int(self.co[o + i]) * self.qs[qo + i]
-                    for i in range(8):
-                        tr(ws, i, 8, 11)
-                    for y in range(8):
-                        tr(ws, y * 8, 1, 18)
-                        for x in range(8):
-                            self.pl[dst + y * pw + x] = UInt8(clamp8(ws[y * 8 + x] + 128))
+        """Progressive files: transform every block once all scans are in, then drop the coefficients."""
+        if self.prog:
+            for c in range(len(self.comps)):
+                var k = self.comps[c].copy()
+                for bi in range(k.bw * k.bh):
+                    self.put(c, k.coff + bi * 64, k.coff + bi * 64)
+        self.co = List[Int16]()
 
     def up(self, c: Int, y: Int, mut o: List[UInt8]):
         """Row y of component c upsampled to full width into o (w + 2 long), libjpeg's fancy upsampling where it has one."""
