@@ -16,7 +16,7 @@ fails=0
 for f in $F/*.avif; do
   e=$(exp "$f"); g=$(timeout 10 .work/avif_info "$f" 2>&1 | grep -v '^obu0' || true)
   o=$(timeout 10 .work/avif_info "$f" 2>/dev/null | awk '/^obu0/{print $2}' || true)
-  if [ "$e" != "$g" ]; then echo "FAIL $f:"; diff <(echo "$e") <(echo "$g") | head -12; fails=$((fails + 1)); continue; fi
+  if [ "$e" != "$g" ]; then echo "FAIL $f:"; diff <(echo "$e") <(echo "$g") | head -12 || true; fails=$((fails + 1)); continue; fi
   case "$o" in 0x0A|0x0a|0x12) echo "ok   $f";; *) echo "FAIL $f: obu0 '$o', want 0x0A or 0x12"; fails=$((fails + 1));; esac
 done
 head -c 300 $F/alpha.avif > .work/avif_trunc.avif
