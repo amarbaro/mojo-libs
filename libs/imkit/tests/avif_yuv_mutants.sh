@@ -8,7 +8,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 F=.work/avif; M=${MOJO:-.venv/bin/mojo}; W=.work/avifyuvmut; mkdir -p $W
-FILES=${FILES:-"screen.avif big.avif odd.avif y420.avif y420_lr.avif y420_10.avif seg.obu grain.obu lossless.avif alpha.avif"}
+FILES=${FILES:-"superres_big.obu superres16.obu superres11.obu y422.avif dlf.obu screen.avif big.avif odd.avif y420.avif y420_lr.avif y420_10.avif seg.obu grain.obu lossless.avif alpha.avif"}
 mutants=(
   "av1intrabc|intrabc candidate weight 2 -> 1|s/add_ref_mv_candidate(ts, s, mv_row, mv_col, ln \\* 2)/add_ref_mv_candidate(ts, s, mv_row, mv_col, ln)/"
   "?av1intrabc|MV clamp border dropped|s/var border_r = MV_BORDER + bh \\* 8/var border_r = bh * 8/"
@@ -24,6 +24,10 @@ mutants=(
   "av1dec|lr wiener pass order|s/l.lr_wiener\\[p\\]\\[u \\* 6 + k\\] = ts.lr_wiener\\[s \\* 6 + k\\]/l.lr_wiener[p][u * 6 + k] = ts.lr_wiener[s * 6 + (k + 3) % 6]/"
   "av1dec|palette V uses U colours|s/Span(pal_u) if plane == 1 else Span(pal_v)/Span(pal_u)/"
   "av1dec|segment qm level ignored|s/lvl = ts.frame.qm_y if plane == 0/lvl = 15 if plane == 0/"
+  "av1dec|superres: floor instead of truncating division|s/    return q if (a >= 0) == (b > 0) else -q/    return a \/\/ b/"
+  "av1dec|superres filter offset 3 -> 2|s/var sxk = min(max(px_x + k - 3, 0), max_x)/var sxk = min(max(px_x + k - 2, 0), max_x)/"
+  "av1tile|superres LR columns ignore SuperresDenom|s/var numerator = (MI_SIZE >> sx) \* ts.frame.superres_denom/var numerator = (MI_SIZE >> sx) * SUPERRES_NUM/"
+  "av1dec|superres: LR source frame not upscaled|s/        pre = upscale(pre, tables, st.frame.width/        _ = upscale(pre, tables, st.frame.width/"
 )
 mut_one() {
   local i=$1 f=${2%%|*} rest=${2#*|}; local d=${rest%%|*} e=${rest#*|} md=$W/mut$i opt=0
@@ -35,7 +39,7 @@ mut_one() {
   local why=""
   for f2 in $FILES; do
     local ref=$W/../avifyuv/$f2.y4m
-    [ -f "$ref" ] || continue
+    [ -f "$ref" ] || { echo "FAIL mutant run: no reference $ref (run tests/avif_yuv_test.sh first)" > $md/result; return; }
     if ! timeout 60 $md/test $F/$f2 $ref > $md/out 2>&1; then why=$f2; break; fi
   done
   if [ -z "$why" ] && [ $opt = 1 ]; then echo "UNTESTED no fixture reaches: $d" > $md/result; elif [ -z "$why" ]; then echo "FAIL mutant survived: $d" > $md/result; else echo "killed  $d ($why)" > $md/result; fi

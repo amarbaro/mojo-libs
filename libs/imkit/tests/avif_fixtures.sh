@@ -16,10 +16,24 @@ timeout 30 ffmpeg -v error -y -i $small -pix_fmt yuv420p $F/src-320.y4m
 timeout 120 aomenc --limit=1 --kf-max-dist=0 --end-usage=q --cq-level=30 --cpu-used=6 --aq-mode=1 --deltaq-mode=0 \
   -o $F/seg.ivf $F/src-320.y4m > /dev/null 2>&1 || { echo "FAIL aomenc: seg"; exit 1; }
 timeout 30 ffmpeg -v error -y -i $F/seg.ivf -c copy -f obu $F/seg.obu
+timeout 120 aomenc --limit=1 --kf-max-dist=0 --end-usage=q --cq-level=32 --deltaq-mode=2 --delta-lf-mode=1 --cpu-used=6 \
+  -o $F/dlf.ivf $F/src-320.y4m > /dev/null 2>&1 || { echo "FAIL aomenc: dlf"; exit 1; }
+timeout 30 ffmpeg -v error -y -i $F/dlf.ivf -c copy -f obu $F/dlf.obu
+sr() {  # superres key frame with loop restoration: name, source y4m, denominator (9..16)
+  timeout 300 aomenc --limit=1 --kf-max-dist=0 --end-usage=q --cq-level=30 --cpu-used=6 --superres-mode=1 \
+    --superres-kf-denominator=$3 --superres-denominator=$3 --enable-restoration=1 -o $F/$1.ivf $2 > /dev/null 2>&1 || { echo "FAIL aomenc: $1"; exit 1; }
+  timeout 30 ffmpeg -v error -y -i $F/$1.ivf -c copy -f obu $F/$1.obu
+}
+sr superres16 $F/src-320.y4m 16
+sr superres11 $F/src-320.y4m 11
+timeout 30 ffmpeg -v error -y -i $src -pix_fmt yuv420p $F/src-big.y4m
+sr superres_big $F/src-big.y4m 16
 has() { timeout 30 ffmpeg -v trace -i "$F/$1" -c copy -bsf:v trace_headers -f null - 2>&1 | grep -qE "$2" || { echo "FAIL fixture $1: no '$2' in trace_headers"; exit 1; }; }
 has tiles.avif 'tile_cols_log2 +[01]+ = 1$'
 has tiles.avif 'tile_rows_log2 +[01]+ = 1$'
 has seg.obu 'segmentation_enabled +1 = 1$'
+has dlf.obu 'delta_lf_present +1 = 1$'
+for n in superres16 superres11 superres_big; do has $n.obu 'use_superres +1 = 1$'; done
 # Pixel-gate fixtures (lane A): real 4:2:0 (the older a420.avif is 4:4:4), 10 and 12 bit, 128x128 superblocks, loop restoration,
 # an odd size, reduced_tx_set, and a 2-frame sequence (stage 8). Each is checked for the property it exists for.
 timeout 60 avifenc -y 420 -q 50 -s 6 $small -o $F/y420.avif > /dev/null
