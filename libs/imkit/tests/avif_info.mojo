@@ -7,10 +7,11 @@ from std.sys import argv
 from imkit.avif import avif_info
 
 def read_all(path: String) raises -> List[UInt8]:
-var f = open(path, "r")
-var data = f.read_bytes()
-f.close()
-return data^
+var s = open(path, "r").read()
+var out = ListUInt8
+for b in s.as_bytes():
+out.append(b)
+return out^
 
 def main() raises:
 var args = argv()
