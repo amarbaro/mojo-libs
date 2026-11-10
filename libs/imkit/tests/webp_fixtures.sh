@@ -71,9 +71,9 @@ enc2 ly_1x17 "$BG" 1x17
 enc2 ly_16x16 "$BG" 16x16 low_memory=1
 enc2 ly_33x31 "$BG" 33x31 partitions=1 low_memory=1
 rm "$D/flat.png"
-# alpha pre-filters the encoder picks by itself (checked below): plasma seed 1 wants horizontal, seed 2 vertical
-magick -size 70x50 -seed 1 plasma:fractal -blur 0x1 -colorspace gray "$D/a_h.png"
-magick -size 70x50 -seed 2 plasma:fractal -blur 0x1 -colorspace gray "$D/a_v.png"
+# alpha pre-filters the encoder picks by itself (checked below): deterministic ramps, not plasma (its seeds differ across ImageMagick builds)
+magick -size 70x50 gradient:black-white -colorspace gray "$D/a_h.png"   # rows are flat: the horizontal filter wins on any ImageMagick
+magick -size 50x70 gradient:black-white -rotate 90 -colorspace gray "$D/a_v.png"   # columns are flat: the vertical filter wins
 for k in h v; do
   magick -size 70x50 xc:red "$D/a_$k.png" -compose CopyOpacity -composite "$D/a_$k.png"
   enc ly_alpha_$k "$D/a_$k.png" -quality 75 -define webp:alpha-compression=1 -define webp:alpha-filtering=2

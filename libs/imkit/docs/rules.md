@@ -66,3 +66,5 @@
 - Theme numbers passed (surface/panel 1.35) while the screen showed 1.19: panels are translucent over the background -> control contrast is measured on the rendered frame (linear-light WCAG ratio of sampled pixels), and the generator aims at 1.6.
 - A pixel check first used gamma-encoded values and reported every theme at 1.08 -> contrast from pixels uses linearised sRGB.
 - Badge labels used the accent's label colour on warn/bad pills and vanished -> a label on a coloured fill picks black or white for that fill.
+- WebP alpha-filter fixtures came from `plasma:fractal` with fixed seeds; Ubuntu 26.04 ImageMagick draws other pixels from the same seed, the encoder picked another filter and CI failed -> fixtures that must steer an encoder are built from deterministic shapes (ramps), never from RNG textures.
+- The first local CI run of v0.9.0 passed without running the new jpeg/webp/style suites -> a CI run counts as proof only if it ran the tests of what changed; check its log for them.
