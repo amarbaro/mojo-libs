@@ -3,7 +3,7 @@
 luma), written from the spec text with the spec's own names, tables read from the spec (10.additional.tables.md).
 Writes tests/data/av1ipred_cases.txt, one case per line; tests/av1ipred_test.mojo regenerates each frame from the seed with the
 same LCG, runs the Mojo code and compares. Usage: tools/av1ipred_oracle.py SPEC_DIR OUT_FILE [NCASES]
-Python only as oracle (CLAUDE.md section 9): this file is not part of the build."""
+Python is only the oracle here: this file is not part of the build."""
 import re
 import sys
 import random
