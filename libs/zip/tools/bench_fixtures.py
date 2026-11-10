@@ -32,4 +32,16 @@ if not (D / 'big_stored.zip').exists():
 if not (D / 'big_deflate.zip').exists():
     with zipfile.ZipFile(D / 'big_deflate.zip', 'w', zipfile.ZIP_DEFLATED) as z:
         z.writestr(zi('big.bin', zipfile.ZIP_DEFLATED), pattern(64 << 20))
+def text(n):
+    words = [b'alpha ', b'beta ', b'gamma ', b'delta\n', b'epsilon, ', b'zeta. ', b'the ', b'of ', b'a ', b'mojo ', b'zip ']
+    out, x = bytearray(), 12345
+    while len(out) < n:
+        x = (x * 1103515245 + 12345) & 0x7FFFFFFF
+        out += words[(x >> 16) % len(words)]
+    return bytes(out[:n])
+
+
+if not (D / 'big_text.zip').exists():  # realistic dynamic-Huffman inflate: 64 MB of word soup, level 6
+    with zipfile.ZipFile(D / 'big_text.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+        z.writestr(zi('big.bin', zipfile.ZIP_DEFLATED), text(64 << 20))
 print('fixtures ok', file=sys.stderr)

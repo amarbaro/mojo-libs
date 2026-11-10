@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""CPython reference for bench/zipbench.mojo: same three jobs on the same fixtures. Usage: bench_ref.py [many|stored|deflate]"""
+"""CPython reference for bench/zipbench.mojo: the same jobs on the same fixtures. Usage: bench_ref.py [many|stored|deflate|text|compress]"""
+import io
 import sys
 import time
 import zipfile
@@ -12,6 +13,18 @@ if which == 'many':
     total = sum(i.file_size for i in z.infolist())
     n = len(z.namelist())
     check = f'entries {n} bytes {total}'
+elif which == 'compress':
+    words = [b'alpha ', b'beta ', b'gamma ', b'delta\n', b'epsilon, ', b'zeta. ', b'the ', b'of ', b'a ', b'mojo ', b'zip ']
+    buf, x = bytearray(), 12345
+    while len(buf) < 16 << 20:
+        x = (x * 1103515245 + 12345) & 0x7FFFFFFF
+        buf += words[(x >> 16) % len(words)]
+    data = bytes(buf[:16 << 20])
+    t0 = time.perf_counter_ns()
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+        z.writestr('t', data)
+    check = f'bytes {len(out.getvalue())}'
 else:
     z = zipfile.ZipFile(f'.work/bench/big_{which}.zip')
     data = z.read('big.bin')

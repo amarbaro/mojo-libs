@@ -1,5 +1,6 @@
 """ZipReader: CPython zipfile reading semantics (end record, zip64, prepended data, central directory, member checks,
 stored and deflated reads with CRC) over a byte buffer."""
+from std.os.path import getsize
 from deflate import crc32, inflate_raw, INF_END, INF_BAD
 from .text import repr_str, repr_bytes
 from .zipinfo import *
@@ -172,7 +173,7 @@ struct ZipReader(Movable, Sized):
     @staticmethod
     def open(path: String) raises -> ZipReader:
         var f = open(path, "r")
-        return ZipReader(f.read_bytes())
+        return ZipReader(f.read_bytes(getsize(path)))  # one allocation of the file size, no doubling copies
 
     def __len__(self) -> Int:
         return len(self.infos)
@@ -191,6 +192,7 @@ struct ZipReader(Movable, Sized):
         var total = 0
         var p = 0
         var L = len(cd)
+        self.infos.reserve(L // 46 + 1)  # one allocation: growing by doubling would peak at 2x the entries
         while total < er.size:
             if L - p < 46:
                 raise bad_zip("Truncated central directory")

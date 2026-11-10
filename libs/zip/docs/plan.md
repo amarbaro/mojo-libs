@@ -3,6 +3,11 @@
 Reference: CPython 3.14.9 `Lib/zipfile/__init__.py` (read from `/usr/lib/python3.14/zipfile/__init__.py`, line numbers below refer to it). Oracle: that module.
 Original plan by Opus (`.work/plan-original.md`) is kept as the base; the verifier EXTENDED the oracle list and added the measured budget. API changes vs the original are marked **CHANGED** with the reason.
 
+> **Native lane (2026-11-10):** this plan is built with no libz and no mmap; see `docs/design.md`. Superseded here: the dependency and
+> licence lines (`src/deflate` is a zlib 1.3.2 port, zlib licence notice in NOTICE, no `mojo-gzip`/`mojo-mmap`), the zlib-version
+> equality rule (the gate compares bytes with CPython's zlib directly), the mmap line in the memory budget, and item 15 (the
+> `compression type %d (%s)` texts are unreachable: `_check_compression` raises `That compression method is not supported`).
+
 ## Dependencies and licence
 - `gzip` (raw deflate `compress(..., format="raw")` / `decompress(..., format="raw")`, `crc32`) and `mmap` (`MappedFile`): vendored under `src/gzip`, `src/mmap` for a clone build (prometheus precedent); `[tool.mojo] deps` pins `mojo-gzip >=0.1.2,<0.2`, `mojo-mmap >=0.1.0,<0.2`.
 - Behaviour is ported from CPython zipfile (PSF-2.0): ship `LICENSE-PSF-2.0` with the CPython copyright line, NOTICE line, README licence line (protocol "ported code without upstream notice").
