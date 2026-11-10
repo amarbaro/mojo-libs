@@ -4,9 +4,8 @@ from imkit.av1frame import Frame
 from imkit.av1tab import Tables
 from imkit.av1state import (
     MAX_SEGMENTS, SEG_LVL_MAX, SEG_LVL_ALT_Q,
-    TX_SIZES_ALL, TX_32X32, TX_16X32, TX_32X16, TX_16X64, TX_64X16,
+    TX_SIZES_ALL, TX_4X4, TX_32X32, TX_16X32, TX_32X16, TX_16X64, TX_64X16,
     TX_64X64, TX_32X64, TX_64X32,
-    tx_width, tx_height, tx_width_log2, tx_height_log2,
 )
 
 comptime QM_TOTAL_SIZE = 3344
@@ -41,10 +40,10 @@ def brev(num_bits: Int, x: Int) -> Int:
         t += bit << (num_bits - 1 - i)
     return t
 
-def round2(x: Int64, n: Int) -> Int64:
+def round2(x: Int, n: Int) -> Int:
     if n <= 0:
         return x
-    return (x + (Int64(1) << (n - 1))) >> n
+    return (x + (Int(1) << (n - 1))) >> n
 
 def clip3(lo: Int, hi: Int, v: Int) -> Int:
     if v < lo:
@@ -53,7 +52,7 @@ def clip3(lo: Int, hi: Int, v: Int) -> Int:
         return hi
     return v
 
-def clip3_64(lo: Int64, hi: Int64, v: Int64) -> Int64:
+def clip3_64(lo: Int, hi: Int, v: Int) -> Int:
     if v < lo:
         return lo
     if v > hi:
@@ -76,7 +75,7 @@ def ac_q(tables: Tables, bit_depth: Int, q: Int) -> Int:
     return Int(tables.ac_qlookup[idx])
 
 # 7.13.2.1
-def cos128(tables: Tables, angle: Int) -> Int64:
+def cos128(tables: Tables, angle: Int) -> Int:
     var a = angle & 255
     var idx = 0
     var neg = False
@@ -92,10 +91,10 @@ def cos128(tables: Tables, angle: Int) -> Int64:
         idx = 256 - a
     if idx < 0 or idx >= len(tables.cos128_lookup):
         return 0
-    var v = Int64(tables.cos128_lookup[idx])
+    var v = Int(tables.cos128_lookup[idx])
     return -v if neg else v
 
-def butterfly(mut t: List[Int64], a: Int, b: Int, angle: Int, flip: Int, r: Int, tables: Tables):
+def butterfly(mut t: List[Int], a: Int, b: Int, angle: Int, flip: Int, r: Int, tables: Tables):
     var ca = cos128(tables, angle)
     var sa = cos128(tables, angle - 64)
     var ta = t[a]
@@ -109,28 +108,28 @@ def butterfly(mut t: List[Int64], a: Int, b: Int, angle: Int, flip: Int, r: Int,
         t[a] = t[b]
         t[b] = tmp
 
-def hadamard(mut t: List[Int64], a: Int, b: Int, flip: Int, r: Int):
+def hadamard(mut t: List[Int], a: Int, b: Int, flip: Int, r: Int):
     if flip != 0:
         hadamard(t, b, a, 0, r)
         return
     var x = t[a]
     var y = t[b]
-    var lo = -(Int64(1) << (r - 1))
-    var hi = (Int64(1) << (r - 1)) - 1
+    var lo = -(Int(1) << (r - 1))
+    var hi = (Int(1) << (r - 1)) - 1
     t[a] = clip3_64(lo, hi, x + y)
     t[b] = clip3_64(lo, hi, x - y)
 
 # 7.13.2.2
-def dct_permute(mut t: List[Int64], n: Int):
+def dct_permute(mut t: List[Int], n: Int):
     var n0 = 1 << n
-    var copy = List[Int64](length=n0, fill=0)
+    var copy = List[Int](length=n0, fill=0)
     for i in range(n0):
         copy[i] = t[i]
     for i in range(n0):
         t[i] = copy[brev(n, i)]
 
 # 7.13.2.3
-def inverse_dct(mut t: List[Int64], n: Int, r: Int, tables: Tables):
+def inverse_dct(mut t: List[Int], n: Int, r: Int, tables: Tables):
     dct_permute(t, n)
     if n == 6:
         for i in range(16):
@@ -231,9 +230,9 @@ def inverse_dct(mut t: List[Int64], n: Int, r: Int, tables: Tables):
             hadamard(t, i, 63 - i, 0, r)
 
 # 7.13.2.4
-def adst_input_permute(mut t: List[Int64], n: Int):
+def adst_input_permute(mut t: List[Int], n: Int):
     var n0 = 1 << n
-    var copy = List[Int64](length=n0, fill=0)
+    var copy = List[Int](length=n0, fill=0)
     for i in range(n0):
         copy[i] = t[i]
     for i in range(n0):
@@ -241,9 +240,9 @@ def adst_input_permute(mut t: List[Int64], n: Int):
         t[i] = copy[idx]
 
 # 7.13.2.5
-def adst_output_permute(mut t: List[Int64], n: Int):
+def adst_output_permute(mut t: List[Int], n: Int):
     var n0 = 1 << n
-    var copy = List[Int64](length=n0, fill=0)
+    var copy = List[Int](length=n0, fill=0)
     for i in range(n0):
         copy[i] = t[i]
     for i in range(n0):
@@ -255,22 +254,22 @@ def adst_output_permute(mut t: List[Int64], n: Int):
         t[i] = -copy[idx] if (i & 1) != 0 else copy[idx]
 
 # 7.13.2.6
-def inverse_adst4(mut t: List[Int64], r: Int):
-    var s = List[Int64](length=7, fill=0)
-    var x = List[Int64](length=4, fill=0)
-    s[0] = Int64(SINPI_1_9) * t[0]
-    s[1] = Int64(SINPI_2_9) * t[0]
-    s[2] = Int64(SINPI_3_9) * t[1]
-    s[3] = Int64(SINPI_4_9) * t[2]
-    s[4] = Int64(SINPI_1_9) * t[2]
-    s[5] = Int64(SINPI_2_9) * t[3]
-    s[6] = Int64(SINPI_4_9) * t[3]
+def inverse_adst4(mut t: List[Int], r: Int):
+    var s = List[Int](length=7, fill=0)
+    var x = List[Int](length=4, fill=0)
+    s[0] = Int(SINPI_1_9) * t[0]
+    s[1] = Int(SINPI_2_9) * t[0]
+    s[2] = Int(SINPI_3_9) * t[1]
+    s[3] = Int(SINPI_4_9) * t[2]
+    s[4] = Int(SINPI_1_9) * t[2]
+    s[5] = Int(SINPI_2_9) * t[3]
+    s[6] = Int(SINPI_4_9) * t[3]
     var a7 = t[0] - t[2]
     var b7 = a7 + t[3]
     s[0] = s[0] + s[3]
     s[1] = s[1] - s[4]
     s[3] = s[2]
-    s[2] = Int64(SINPI_3_9) * b7
+    s[2] = Int(SINPI_3_9) * b7
     s[0] = s[0] + s[5]
     s[1] = s[1] - s[6]
     x[0] = s[0] + s[3]
@@ -284,7 +283,7 @@ def inverse_adst4(mut t: List[Int64], r: Int):
     t[3] = round2(x[3], 12)
 
 # 7.13.2.7
-def inverse_adst8(mut t: List[Int64], r: Int, tables: Tables):
+def inverse_adst8(mut t: List[Int], r: Int, tables: Tables):
     adst_input_permute(t, 3)
     for i in range(4):
         butterfly(t, 2 * i, 2 * i + 1, 60 - 16 * i, 1, r, tables)
@@ -300,7 +299,7 @@ def inverse_adst8(mut t: List[Int64], r: Int, tables: Tables):
     adst_output_permute(t, 3)
 
 # 7.13.2.8
-def inverse_adst16(mut t: List[Int64], r: Int, tables: Tables):
+def inverse_adst16(mut t: List[Int], r: Int, tables: Tables):
     adst_input_permute(t, 4)
     for i in range(8):
         butterfly(t, 2 * i, 2 * i + 1, 62 - 8 * i, 1, r, tables)
@@ -323,7 +322,7 @@ def inverse_adst16(mut t: List[Int64], r: Int, tables: Tables):
     adst_output_permute(t, 4)
 
 # 7.13.2.9
-def inverse_adst(mut t: List[Int64], n: Int, r: Int, tables: Tables):
+def inverse_adst(mut t: List[Int], n: Int, r: Int, tables: Tables):
     if n == 2:
         inverse_adst4(t, r)
     elif n == 3:
@@ -332,7 +331,7 @@ def inverse_adst(mut t: List[Int64], n: Int, r: Int, tables: Tables):
         inverse_adst16(t, r, tables)
 
 # 7.13.2.10
-def inverse_wht(mut t: List[Int64], shift: Int):
+def inverse_wht(mut t: List[Int], shift: Int):
     var a = t[0] >> shift
     var c = t[1] >> shift
     var d = t[2] >> shift
@@ -350,7 +349,7 @@ def inverse_wht(mut t: List[Int64], shift: Int):
     t[3] = d
 
 # 7.13.2.11-7.13.2.15
-def inverse_identity(mut t: List[Int64], n: Int):
+def inverse_identity(mut t: List[Int], n: Int):
     var n0 = 1 << n
     if n == 2:
         for i in range(n0):
@@ -400,7 +399,7 @@ def flip_lr(tx_type: Int) -> Bool:
 # 7.13.3
 def inverse_transform_2d(
     mut residual: List[Int32],
-    dequant: List[Int64],
+    dequant: List[Int],
     w: Int,
     h: Int,
     tx_size: Int,
@@ -408,23 +407,35 @@ def inverse_transform_2d(
     lossless: Bool,
     bit_depth: Int,
     tables: Tables,
-):
-    var log2w = tx_width_log2(tx_size)
-    var log2h = tx_height_log2(tx_size)
+) raises:
+    var log2w = Int(tables.tx_width_log2[tx_size])
+    var log2h = Int(tables.tx_height_log2[tx_size])
     var row_shift = 0 if lossless else Int(tables.transform_row_shift[tx_size])
     var col_shift = 0 if lossless else 4
     var row_clamp = bit_depth + 8
     var col_clamp = 16 if bit_depth + 6 < 16 else bit_depth + 6
-    var col_lo = -(Int64(1) << (col_clamp - 1))
-    var col_hi = (Int64(1) << (col_clamp - 1)) - 1
-    var t = List[Int64](length=64, fill=0)
+    var col_lo = -(Int(1) << (col_clamp - 1))
+    var col_hi = (Int(1) << (col_clamp - 1)) - 1
+    var t = List[Int](length=64, fill=0)
+    var row_id = not lossless and not row_is_dct(tx_type) and not row_is_adst(tx_type)
+    var col_id = not lossless and not col_is_dct(tx_type) and not col_is_adst(tx_type)
+    if (row_id and log2w > 5) or (col_id and log2h > 5):
+        raise Error("av1recon: identity transform of size 64")
 
     for i in range(h):
+        var any_nz = False
         for j in range(w):
             if i < 32 and j < 32:
                 t[j] = dequant[i * w + j]
             else:
                 t[j] = 0
+            if t[j] != 0:
+                any_nz = True
+        if not any_nz:
+            # every 1D transform maps an all-zero row to zeros
+            for j in range(w):
+                residual[i * w + j] = 0
+            continue
         var diff = log2w - log2h
         if diff == 1 or diff == -1:
             for j in range(w):
@@ -444,7 +455,7 @@ def inverse_transform_2d(
 
     for j in range(w):
         for i in range(h):
-            t[i] = Int64(residual[i * w + j])
+            t[i] = Int(residual[i * w + j])
         if lossless:
             inverse_wht(t, 0)
         elif col_is_dct(tx_type):
@@ -458,7 +469,13 @@ def inverse_transform_2d(
 
 
 struct ReconInput:
-    """Spec variables read by 7.12 reconstruction, flat per-4x4 arrays indexed row * stride + col."""
+    """Block-level spec variables read by 7.12 reconstruction; lane A sets them per block before `reconstruct`.
+
+    bit_depth: BitDepth (8, 10 or 12). lossless: LosslessArray[segment_id] (4x4 WHT path).
+    segment_id: segment of the block. base_q_idx, delta_q_present, current_qindex: frame / block quantizer state.
+    seg_feature_enabled / seg_feature_data: flat [segment * SEG_LVL_MAX + feature] (FeatureEnabled / FeatureData).
+    delta_q_*: DeltaQYDc, DeltaQUDc, DeltaQVDc, DeltaQUAc, DeltaQVAc. using_qmatrix: using_qmatrix.
+    seg_qm_level: flat [plane * MAX_SEGMENTS + segment] (SegQMLevel; 15 = flat matrix)."""
     var bit_depth: Int
     var lossless: Bool
     var segment_id: Int
@@ -553,12 +570,25 @@ def reconstruct(
         raise Error("av1recon: tx_size out of range")
     if tx_type < 0 or tx_type >= 16:
         raise Error("av1recon: tx_type out of range")
+    if inp.bit_depth != 8 and inp.bit_depth != 10 and inp.bit_depth != 12:
+        raise Error("av1recon: bit_depth out of range")
 
-    var w = tx_width(tx_size)
-    var h = tx_height(tx_size)
-    var pl = frame.planes[plane]
-    if x < 0 or y < 0 or x + w > pl.w or y + h > pl.h:
-        raise Error("av1recon: block outside plane")
+    var w = Int(tables.tx_width[tx_size])
+    var h = Int(tables.tx_height[tx_size])
+    var pw = frame.planes[plane].w
+    var ph = frame.planes[plane].h
+    if x < 0 or y < 0 or x >= pw or y >= ph:
+        raise Error("av1recon: block starts outside plane")
+    var tw = 32 if w > 32 else w
+    var th = 32 if h > 32 else h
+    if len(quant) < tw * th:
+        raise Error("av1recon: quant shorter than tw * th")
+    if eob < 0 or eob > tw * th:
+        raise Error("av1recon: eob out of range")
+    if inp.lossless and tx_size != TX_4X4:
+        raise Error("av1recon: lossless needs TX_4X4")
+    if eob == 0:
+        return  # all coefficients zero: Residual is zero for every transform
 
     var dq_denom = 1
     if (
@@ -569,39 +599,36 @@ def reconstruct(
     elif tx_size == TX_64X64 or tx_size == TX_32X64 or tx_size == TX_64X32:
         dq_denom = 4
 
-    var tw = 32 if w > 32 else w
-    var th = 32 if h > 32 else h
-    var dequant = List[Int64](length=w * h, fill=0)
+    var dequant = List[Int](length=w * h, fill=0)
     var dcq = inp.get_dc_quant(tables, plane)
     var acq = inp.get_ac_quant(tables, plane)
     var qm_level = 15
-    if plane >= 0 and plane < 3 and inp.segment_id >= 0 and inp.segment_id < MAX_SEGMENTS:
-        var qi = plane * MAX_SEGMENTS + inp.segment_id
-        if qi >= 0 and qi < len(inp.seg_qm_level):
-            qm_level = inp.seg_qm_level[qi]
-    var plane_type = 1 if plane > 0 else 0
-    var dequant_lo = -(Int64(1) << (7 + inp.bit_depth))
-    var dequant_hi = (Int64(1) << (7 + inp.bit_depth)) - 1
+    if inp.segment_id < 0 or inp.segment_id >= MAX_SEGMENTS:
+        raise Error("av1recon: segment_id out of range")
+    var qi = plane * MAX_SEGMENTS + inp.segment_id
+    if qi < len(inp.seg_qm_level):
+        qm_level = inp.seg_qm_level[qi]
+    if qm_level < 0 or qm_level > 15:
+        raise Error("av1recon: qm level out of range")
+    var use_qm = inp.using_qmatrix and tx_type < IDTX and qm_level < 15
+    var qm_base = ((qm_level * 2 + (1 if plane > 0 else 0)) * QM_TOTAL_SIZE + Int(tables.qm_offset[tx_size]))
+    if use_qm and qm_base + tw * th > len(tables.quantizer_matrix):
+        raise Error("av1recon: quantizer matrix index out of range")
+    var dequant_lo = -(Int(1) << (7 + inp.bit_depth))
+    var dequant_hi = (Int(1) << (7 + inp.bit_depth)) - 1
 
     for i in range(th):
         for j in range(tw):
-            var idx = i * tw + j
-            var qv: Int64 = 0
-            if idx < eob and idx < len(quant):
-                qv = Int64(quant[idx])
-            var q: Int64 = Int64(dcq if (i == 0 and j == 0) else acq)
-            var q2 = q
-            if inp.using_qmatrix and tx_type < IDTX and qm_level < 15:
-                var qm_idx = ((qm_level * 2 + plane_type) * QM_TOTAL_SIZE
-                              + Int(tables.qm_offset[tx_size]) + i * tw + j)
-                if qm_idx >= 0 and qm_idx < len(tables.quantizer_matrix):
-                    q2 = round2(q * Int64(tables.quantizer_matrix[qm_idx]), 5)
-            var dq = qv * q2
-            var sign: Int64 = -1 if dq < 0 else 1
-            var masked = dq if dq >= 0 else -dq
-            masked = masked & 0xFFFFFF
-            var dq2 = sign * (masked // Int64(dq_denom))
-            dequant[i * w + j] = clip3_64(dequant_lo, dequant_hi, dq2)
+            var qv = Int(quant[i * tw + j])
+            if qv == 0:
+                continue
+            var q = Int(dcq if (i == 0 and j == 0) else acq)
+            if use_qm:
+                q = round2(q * Int(tables.quantizer_matrix[qm_base + i * tw + j]), 5)
+            var dq = qv * q
+            var sign: Int = -1 if dq < 0 else 1
+            var masked = (dq if dq >= 0 else -dq) & 0xFFFFFF
+            dequant[i * w + j] = clip3_64(dequant_lo, dequant_hi, sign * (masked // Int(dq_denom)))
 
     var residual = List[Int32](length=w * h, fill=0)
     inverse_transform_2d(
@@ -611,18 +638,15 @@ def reconstruct(
     var ud = flip_ud(tx_type)
     var lr = flip_lr(tx_type)
     var maxv = (1 << inp.bit_depth) - 1
+    # Blocks may overhang the plane (the spec's CurrFrame is unbounded); samples outside are never read back,
+    # so they are not stored. Lane A allocates planes of at least MiCols * 4 (resp. MiRows * 4) samples.
     for i in range(h):
+        var yy = y + ((h - i - 1) if ud else i)
+        if yy >= ph:
+            continue
         for j in range(w):
-            var xx = x + j
-            if lr:
-                xx = x + (w - j - 1)
-            var yy = y + i
-            if ud:
-                yy = y + (h - i - 1)
-            var cur = pl.get(xx, yy)
-            var val = cur + Int(residual[i * w + j])
-            if val < 0:
-                val = 0
-            if val > maxv:
-                val = maxv
-            frame.planes[plane].set(xx, yy, val)
+            var xx = x + ((w - j - 1) if lr else j)
+            if xx >= pw:
+                continue
+            var val = frame.planes[plane].get(xx, yy) + Int(residual[i * w + j])
+            frame.planes[plane].set(xx, yy, clip3(0, maxv, val))

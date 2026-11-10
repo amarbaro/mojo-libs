@@ -314,6 +314,16 @@ struct FrameHeader(Copyable, Movable):
     var delta_lf_res: Int
     var delta_lf_multi: Bool
     var loop_filter_level0: Int
+    var loop_filter_level2: Int  # U
+    var loop_filter_level3: Int  # V
+    var loop_filter_delta_enabled: Bool
+    var loop_filter_ref_deltas: List[Int]  # 8, spec defaults 1 0 0 0 -1 0 -1 -1
+    var loop_filter_mode_deltas: List[Int]  # 2
+    var cdef_y_pri_strength: List[Int]  # 8 entries
+    var cdef_y_sec_strength: List[Int]  # secondary 3 already turned into 4
+    var cdef_uv_pri_strength: List[Int]
+    var cdef_uv_sec_strength: List[Int]
+    var film_grain_pos: Int  # absolute bit position of the apply_grain bit when it was 1, else -1
     var loop_filter_level1: Int
     var loop_filter_sharpness: Int
     var cdef_damping: Int
@@ -361,6 +371,16 @@ struct FrameHeader(Copyable, Movable):
         self.delta_lf_res = 0
         self.delta_lf_multi = False
         self.loop_filter_level0 = 0
+        self.loop_filter_level2 = 0
+        self.loop_filter_level3 = 0
+        self.loop_filter_delta_enabled = False
+        self.loop_filter_ref_deltas = [1, 0, 0, 0, -1, 0, -1, -1]
+        self.loop_filter_mode_deltas = List[Int](length=2, fill=0)
+        self.cdef_y_pri_strength = List[Int](length=8, fill=0)
+        self.cdef_y_sec_strength = List[Int](length=8, fill=0)
+        self.cdef_uv_pri_strength = List[Int](length=8, fill=0)
+        self.cdef_uv_sec_strength = List[Int](length=8, fill=0)
+        self.film_grain_pos = -1
         self.loop_filter_level1 = 0
         self.loop_filter_sharpness = 0
         self.cdef_damping = 3
@@ -742,17 +762,18 @@ def parse_loop_filter(mut b: Bits, mut fh: FrameHeader, seq: SequenceHeader) rai
     fh.loop_filter_level1 = b.f(6)
     if seq.num_planes > 1:
         if fh.loop_filter_level0 != 0 or fh.loop_filter_level1 != 0:
-            _ = b.f(6)
-            _ = b.f(6)
+            fh.loop_filter_level2 = b.f(6)
+            fh.loop_filter_level3 = b.f(6)
     fh.loop_filter_sharpness = b.f(3)
-    if b.f(1) == 1:  # loop_filter_delta_enabled
+    fh.loop_filter_delta_enabled = b.f(1) == 1
+    if fh.loop_filter_delta_enabled:
         if b.f(1) == 1:  # loop_filter_delta_update
-            for _ in range(TOTAL_REFS_PER_FRAME):
+            for i in range(TOTAL_REFS_PER_FRAME):
                 if b.f(1) == 1:
-                    _ = b.su(7)
-            for _ in range(2):
+                    fh.loop_filter_ref_deltas[i] = b.su(7)
+            for i in range(2):
                 if b.f(1) == 1:
-                    _ = b.su(7)
+                    fh.loop_filter_mode_deltas[i] = b.su(7)
 
 
 def parse_cdef(mut b: Bits, mut fh: FrameHeader, seq: SequenceHeader) raises:
@@ -761,16 +782,18 @@ def parse_cdef(mut b: Bits, mut fh: FrameHeader, seq: SequenceHeader) raises:
         return
     fh.cdef_damping = b.f(2) + 3
     fh.cdef_bits = b.f(2)
-    for _ in range(1 << fh.cdef_bits):
-        _ = b.f(4)  # cdef_y_pri_strength
+    for i in range(1 << fh.cdef_bits):
+        fh.cdef_y_pri_strength[i] = b.f(4)
         var ys = b.f(2)
         if ys == 3:
             ys += 1
+        fh.cdef_y_sec_strength[i] = ys
         if seq.num_planes > 1:
-            _ = b.f(4)  # cdef_uv_pri_strength
+            fh.cdef_uv_pri_strength[i] = b.f(4)
             var us = b.f(2)
             if us == 3:
                 us += 1
+            fh.cdef_uv_sec_strength[i] = us
 
 
 def parse_lr(mut b: Bits, mut fh: FrameHeader, seq: SequenceHeader) raises:
@@ -807,9 +830,11 @@ def parse_film_grain(mut b: Bits, mut fh: FrameHeader, seq: SequenceHeader) rais
     """film_grain_params() (section 5.9.30), values consumed but not kept."""
     if not seq.film_grain_params_present:
         return
+    var gpos = b.start * 8 + b.bits_read()
     if b.f(1) == 0:
         return
     fh.apply_grain = True
+    fh.film_grain_pos = gpos
     _ = b.f(16)  # grain_seed
     # frame_type is KEY_FRAME: update_grain is 1 without a bit
     var num_y = b.f(4)

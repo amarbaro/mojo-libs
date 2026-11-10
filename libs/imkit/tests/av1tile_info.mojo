@@ -22,7 +22,8 @@ def item(name: String, data: List[UInt8], off: Int, length: Int) raises:
         if s.mi_covered != s.mi_total:
             raise Error("av1tile: tile " + String(i) + " blocks cover " + String(s.mi_covered) + " of " + String(s.mi_total) + " 4x4 units")
         print(name, "tile", i, "ok blocks", s.blocks, "tx", s.tx_blocks, "nonzero", s.nonzero, "skip", s.skip, "intrabc", s.intrabc,
-              "palette", s.palette, "cfl", s.cfl, "filter_intra", s.filter_intra)
+              "palette", s.palette, "cfl", s.cfl, "filter_intra", s.filter_intra, "golomb", s.golomb, "vartx_split", s.vartx_split,
+              "wiener", s.wiener, "sgrproj", s.sgrproj, "segmented", s.segmented)
 
 
 def main() raises:
