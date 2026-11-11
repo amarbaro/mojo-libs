@@ -2,7 +2,7 @@
 # Full suite on the pinned stable Mojo (.venv) and on the nightly; non-zero if either fails.
 set -uo pipefail
 cd "$(dirname "$0")/.."
-NIGHTLY=${MOJO_NIGHTLY:-/home/mario/Projects/mojo/mojo-nightly/.venv/bin}
+NIGHTLY=${MOJO_NIGHTLY:-$HOME/Projects/mojo/mojo-nightly/.venv/bin}
 rc=0
 tag=$(basename "$PWD")
 for bin in "$PWD/.venv/bin" "$NIGHTLY"; do

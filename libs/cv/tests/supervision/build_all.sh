@@ -3,9 +3,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p build .work
-J=${MOJO_JSON:-/home/mario/Projects/mojo/mojo-json/src}
-C=${MOJO_CV:-/home/mario/Projects/mojo/mojo-cv/src}
-G=${MOJO_GZIP:-/home/mario/Projects/mojo/mojo-gzip/src}
+J=${MOJO_JSON:-$HOME/Projects/mojo/mojo-json/src}
+C=${MOJO_CV:-$HOME/Projects/mojo/mojo-cv/src}
+G=${MOJO_GZIP:-$HOME/Projects/mojo/mojo-gzip/src}
 tests/build.sh; tests/build_metrics.sh; scripts/build_tools.sh
 for f in tests/cases/*.txt; do
   s=$(basename "$f" .txt); [ -x "build/$s" ] && continue
