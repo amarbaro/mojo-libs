@@ -104,6 +104,18 @@ def mutants(path: String) raises -> Int:
     fails += 0 if raises(path + " 65535 x 65535", m) else 1
     m = List[UInt8](b)
     m[sof + 9] = 4
+    var pic = jpeg_decode(Span(b))
+    var px = pic[0] * pic[1]
+    print("case", path, "max_pixels at and below the size", flush=True)
+    try:
+        _ = jpeg_decode(Span(b), max_pixels=px - 1)
+        print("FAIL", path, "decoded past max_pixels")
+        fails += 1
+    except:
+        pass
+    if len(jpeg_decode(Span(b), max_pixels=px)[2]) != px:
+        print("FAIL", path, "max_pixels = size did not decode")
+        fails += 1
     fails += 0 if raises(path + " 4 components", m) else 1
     m = List[UInt8](b)
     m[sof + 4] = 12

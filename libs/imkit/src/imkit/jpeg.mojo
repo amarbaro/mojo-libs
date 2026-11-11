@@ -98,6 +98,7 @@ struct Jpeg(Movable):
     var ri: Int  # restart interval
     var adobe: Int  # Adobe transform flag, -1 none
     var jfif: Bool
+    var maxpx: Int  # largest w * h decoded; MAXPX unless the caller raises it
     var prog: Bool
     var w: Int
     var h: Int
@@ -134,6 +135,7 @@ struct Jpeg(Movable):
         self.ri = 0
         self.adobe = -1
         self.jfif = False
+        self.maxpx = MAXPX
         self.prog = False
         self.w = 0
         self.h = 0
@@ -302,8 +304,8 @@ struct Jpeg(Movable):
         var nf = Int(self.d[s + 5])
         if self.w < 1 or self.h < 1:
             raise Error("jpeg: empty picture")
-        if self.w * self.h > MAXPX:  # before any allocation that grows with w * h
-            raise Error("jpeg: " + String(self.w) + " x " + String(self.h) + " is too large (" + String(MAXPX) + " pixels at most)")
+        if self.w * self.h > self.maxpx:  # before any allocation that grows with w * h
+            raise Error("jpeg: " + String(self.w) + " x " + String(self.h) + " is too large (" + String(self.maxpx) + " pixels at most)")
         if nf == 4:
             raise Error("jpeg: 4 components (CMYK / YCCK) not supported")
         if nf != 1 and nf != 3:
@@ -635,9 +637,11 @@ struct Jpeg(Movable):
         return px^
 
 
-def jpeg_decode(d: Span[UInt8, _]) raises -> Tuple[Int, Int, List[UInt32]]:
-    """(width, height, pixels) of a Huffman JPEG, 8-bit, 1 or 3 components."""
+def jpeg_decode(d: Span[UInt8, _], max_pixels: Int = MAXPX) raises -> Tuple[Int, Int, List[UInt32]]:
+    """(width, height, pixels) of a Huffman JPEG, 8-bit, 1 or 3 components. Refuses more than
+    `max_pixels` (default 64 M, 256 MB as RGBA) before allocating; raise it for larger photos."""
     var j = Jpeg(d)
+    j.maxpx = max_pixels
     j.parse()
     j.idct()
     return (j.w, j.h, j.pixels())
