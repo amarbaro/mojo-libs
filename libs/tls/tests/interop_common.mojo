@@ -1,9 +1,8 @@
 # Shared by the interop programs: a P-256 Signer and a certificate-pinning Verifier (ECDSA only, test use: lane 3's
 # X.509 path validation replaces the pinning in wave 2), DER signature helpers and raw fd I/O for stdio relays.
 from std.ffi import external_call
-from tls.tls13._tmp_crypto.hash import sha256
-from tls.tls13._tmp_crypto.p256 import p256_ecdsa_sign, p256_ecdsa_verify
-from tls.tls13._tmp_crypto.random import csprng_bytes
+from tls.sym import sha256
+from tls.asym import P256Key, p256_verify
 from tls.tls13.verify import Signer, Verifier
 from tls.tls13.wire import bad
 from chk import hexd
@@ -34,16 +33,6 @@ def der_int(x: List[UInt8]) -> List[UInt8]:
     return o^
 
 
-def der_sig(r: List[UInt8], s: List[UInt8]) -> List[UInt8]:
-    var body = der_int(r)
-    body.extend(Span(der_int(s)))
-    var o = List[UInt8]()
-    o.append(0x30)
-    o.append(UInt8(len(body)))
-    o.extend(Span(body))
-    return o^
-
-
 def fixed32(x: List[UInt8], a: Int, n: Int) raises -> List[UInt8]:
     """INTEGER content x[a:a+n] as 32 big-endian bytes."""
     var i = a
@@ -56,18 +45,6 @@ def fixed32(x: List[UInt8], a: Int, n: Int) raises -> List[UInt8]:
     for k in range(i, end):
         o.append(x[k])
     return o^
-
-
-def parse_der_sig(sig: List[UInt8]) raises -> Tuple[List[UInt8], List[UInt8]]:
-    if len(sig) < 8 or sig[0] != 0x30 or Int(sig[1]) != len(sig) - 2 or sig[2] != 2:
-        raise bad("decode_error", "ECDSA signature DER")
-    var rl = Int(sig[3])
-    if 4 + rl + 2 > len(sig) or sig[4 + rl] != 2:
-        raise bad("decode_error", "ECDSA signature DER")
-    var sl = Int(sig[5 + rl])
-    if 6 + rl + sl != len(sig):
-        raise bad("decode_error", "ECDSA signature DER")
-    return (fixed32(sig, 4, rl), fixed32(sig, 6 + rl, sl))
 
 
 struct P256Signer(Signer):
@@ -87,8 +64,7 @@ struct P256Signer(Signer):
         return c^
 
     def sign(self, scheme: Int, content: List[UInt8]) raises -> List[UInt8]:
-        var rs = p256_ecdsa_sign(self.key, sha256(content), csprng_bytes(32))
-        return der_sig(rs[0], rs[1])
+        return P256Key(self.key).sign_sha256(sha256(content))
 
 
 struct P256Pinned(Verifier):
@@ -123,10 +99,7 @@ struct P256Pinned(Verifier):
         var pub = List[UInt8](capacity=65)
         for k in range(65):
             pub.append(self.cert[at + k])
-        var rs = parse_der_sig(sig)
-        try:
-            p256_ecdsa_verify(pub, sha256(signed), rs[0], rs[1])
-        except e:
+        if not p256_verify(pub, sha256(signed), sig):
             raise bad("decrypt_error", "CertificateVerify signature")
 
 

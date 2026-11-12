@@ -1,7 +1,7 @@
 # Interop server: Server13 over stdin/stdout (a relay in tests/interop.py joins it to a TCP socket for openssl s_client,
 # curl, python ssl). Echoes "echo: <data>". usage: interop_server <cert.der> <key.hex> <suite hex|any> <plain|hrr>
 from std.sys import argv, stderr
-from tls.tls13._tmp_crypto.random import csprng_bytes
+from tls.asym import random_bytes
 from tls.tls13.conn import EV_CLOSE, EV_DONE
 from tls.tls13.messages import G_P256
 from tls.tls13.server import Server13, ServerConfig
@@ -11,7 +11,7 @@ from interop_common import P256Signer, read_file, read_hex_file, fd_read, fd_wri
 
 def main() raises:
     var a = argv()
-    var cfg = ServerConfig(csprng_bytes(32), csprng_bytes(32), csprng_bytes(32))
+    var cfg = ServerConfig(random_bytes(32), random_bytes(32), random_bytes(32))
     if String(a[3]) != "any":
         cfg.suites = [atol(String(a[3]), base=16)]
     if String(a[4]) == "hrr":

@@ -1,7 +1,7 @@
 # Gate: our client against our server (no recorded bytes). 3 cipher suites x 2 key exchanges (with and without HRR),
 # data both ways, KeyUpdate both ways, automatic KeyUpdate at the key limit, record_size_limit, ALPN, SNI, byte-wise
 # feeding, every alert the handshake can raise, and fuzzing of both state machines.
-from tls.tls13._tmp_crypto.curve25519 import x25519_public_key
+from tls.asym import x25519_base
 from tls.tls13.client import Client13, default_hello
 from tls.tls13.conn import *
 from tls.tls13.keysched import traffic_key, traffic_iv
@@ -45,7 +45,7 @@ def client(h: Hello, host: String = "example.com") raises -> Client13[RecVerifie
 
 
 def hello(alpn: List[String] = List[String](), sid: Int = 0, suites: List[Int] = List[Int]()) raises -> Hello:
-    var h = default_hello("example.com", fill(32, 0x99), fill(sid, 0x31), x25519_public_key(fill(32, 0x42)), alpn)
+    var h = default_hello("example.com", fill(32, 0x99), fill(sid, 0x31), x25519_base(fill(32, 0x42)), alpn)
     if len(suites) > 0:
         h.suites = suites.copy()
     return h^

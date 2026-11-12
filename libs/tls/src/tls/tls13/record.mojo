@@ -1,8 +1,7 @@
 # mojo-tls lane 4: TLS 1.3 record layer (RFC 8446 5). One Cipher per direction; AEAD is done in place in the
 # output buffer on send; a received record is decrypted into one new buffer, the inner type and padding are stripped.
 from std.ffi import external_call
-from tls.tls13._tmp_crypto.gcm import GcmKey
-from tls.tls13._tmp_crypto.poly1305 import chacha20_poly1305_seal_into, chacha20_poly1305_open_into
+from tls.sym import AesGcm, ChaCha20Poly1305
 from tls.tls13.keysched import CHACHA20_POLY1305_SHA256, suite_key_len
 from tls.tls13.wire import bad
 
@@ -28,7 +27,8 @@ struct Cipher(Movable):
     var iv: List[UInt8]
     var nonce: List[UInt8]
     var seq: UInt64
-    var gcm: List[GcmKey]
+    var gcm: List[AesGcm]
+    var cc: List[ChaCha20Poly1305]
     var limit: Int  # most content bytes in one record (record_size_limit of the peer)
     var pver: Int  # legacy_record_version written on unprotected records
 
@@ -39,7 +39,8 @@ struct Cipher(Movable):
         self.iv = List[UInt8]()
         self.nonce = List[UInt8](length=12, fill=0)
         self.seq = 0
-        self.gcm = List[GcmKey]()
+        self.gcm = List[AesGcm]()
+        self.cc = List[ChaCha20Poly1305]()
         self.limit = MAX_PLAIN
         self.pver = 0x0303
 
@@ -51,16 +52,26 @@ struct Cipher(Movable):
         self.iv = iv.copy()
         self.seq = 0
         self.on = True
+        self._drop()
+        if suite == CHACHA20_POLY1305_SHA256:
+            self.cc.append(ChaCha20Poly1305(key))
+        else:
+            self.gcm.append(AesGcm(key))
+
+    def _drop(mut self):
+        for ref g in self.gcm:
+            g.wipe()
+        for ref c in self.cc:
+            c.wipe()
         self.gcm.clear()
-        if suite != CHACHA20_POLY1305_SHA256:
-            self.gcm.append(GcmKey(key))
+        self.cc.clear()
 
     def wipe(mut self):
         for i in range(len(self.key)):
             self.key[i] = 0
         for i in range(len(self.iv)):
             self.iv[i] = 0
-        self.gcm.clear()
+        self._drop()
         self.on = False
 
     def _nonce(mut self):
@@ -87,21 +98,17 @@ struct Cipher(Movable):
         var inner = n + 1 + pad
         if self.seq == UInt64.MAX or inner + 16 > MAX_CIPHER:
             raise bad("internal_error", "sequence number or padding exhausted")
-        out.resize(base + 5 + inner + 16, 0)  # padding bytes stay zero
-        var a = Int(out.unsafe_ptr()) + base
-        out[base] = UInt8(APP)
-        out[base + 1] = 3
-        out[base + 2] = 3
-        out[base + 3] = UInt8((inner + 16) >> 8)
-        out[base + 4] = UInt8((inner + 16) & 0xFF)
-        _cp(a + 5, Int(data.unsafe_ptr()) + start, n)
-        out[base + 5 + n] = UInt8(ctype)
+        var hdr: List[UInt8] = [UInt8(APP), 3, 3, UInt8((inner + 16) >> 8), UInt8((inner + 16) & 0xFF)]
+        var body = List[UInt8](length=inner, fill=0)  # padding bytes stay zero
+        _cp(Int(body.unsafe_ptr()), Int(data.unsafe_ptr()) + start, n)
+        body[n] = UInt8(ctype)
         self._nonce()
         if self.suite == CHACHA20_POLY1305_SHA256:
-            var t = chacha20_poly1305_seal_into(self.key, self.nonce, a, 5, a + 5, a + 5, inner)
-            Pointer[UInt8, MutAnyOrigin](unsafe_from_address=a + 5 + inner).unsafe_store(0, t)
+            self.cc[0].seal(self.nonce, hdr, body)
         else:
-            self.gcm[0].seal_into(self.nonce, a, 5, a + 5, a + 5, inner)
+            self.gcm[0].seal(self.nonce, hdr, body)
+        out.extend(Span(hdr))
+        out.extend(Span(body))
         self.seq += 1
 
     def open(mut self, rec: List[UInt8]) raises -> Tuple[Int, List[UInt8]]:
@@ -113,15 +120,15 @@ struct Cipher(Movable):
             raise bad("bad_record_mac", "protected record shorter than the tag")
         if self.seq == UInt64.MAX:
             raise bad("internal_error", "sequence number exhausted")
-        var pt = List[UInt8](length=n, fill=0)
-        var a = Int(rec.unsafe_ptr())
-        var ok: Bool
+        var pt = List[UInt8](Span(rec)[5:])
+        var hdr = List[UInt8](Span(rec)[:5])
         self._nonce()
-        if self.suite == CHACHA20_POLY1305_SHA256:
-            ok = chacha20_poly1305_open_into(self.key, self.nonce, a, 5, a + 5, Int(pt.unsafe_ptr()), n, a + 5 + n)
-        else:
-            ok = self.gcm[0].open_into(self.nonce, a, 5, a + 5, Int(pt.unsafe_ptr()), n, a + 5 + n)
-        if not ok:
+        try:
+            if self.suite == CHACHA20_POLY1305_SHA256:
+                self.cc[0].open(self.nonce, hdr, pt)
+            else:
+                self.gcm[0].open(self.nonce, hdr, pt)
+        except:
             raise bad("bad_record_mac", "authentication failed")
         self.seq += 1
         var i = n - 1

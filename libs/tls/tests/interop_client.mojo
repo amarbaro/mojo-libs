@@ -2,8 +2,7 @@
 # python). After the handshake it sends an HTTP request, prints the reply to stderr and closes.
 # usage: interop_client <cert.der pinned> <suite hex|any> <host>
 from std.sys import argv, stderr
-from tls.tls13._tmp_crypto.curve25519 import x25519_public_key
-from tls.tls13._tmp_crypto.random import csprng_bytes
+from tls.asym import x25519_base, random_bytes
 from tls.tls13.client import Client13, default_hello
 from tls.tls13.conn import EV_CLOSE, EV_DONE
 from tls.tls13.wire import bytes_of, str_of
@@ -13,11 +12,11 @@ from interop_common import P256Pinned, read_file, fd_read, fd_write
 def main() raises:
     var a = argv()
     var host = String(a[3])
-    var x = csprng_bytes(32)
-    var h = default_hello(host, csprng_bytes(32), csprng_bytes(32), x25519_public_key(x), [String("http/1.1")])
+    var x = random_bytes(32)
+    var h = default_hello(host, random_bytes(32), random_bytes(32), x25519_base(x), [String("http/1.1")])
     if String(a[2]) != "any":
         h.suites = [atol(String(a[2]), base=16)]
-    var cli = Client13[P256Pinned](h, host, x, csprng_bytes(32), P256Pinned(read_file(String(a[1]))))
+    var cli = Client13[P256Pinned](h, host, x, random_bytes(32), P256Pinned(read_file(String(a[1]))))
     _ = fd_write(1, cli.start())
     var buf = List[UInt8](length=16384, fill=0)
     var got = List[UInt8]()

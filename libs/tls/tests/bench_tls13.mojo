@@ -3,7 +3,7 @@
 # lane 2 is not in the number). usage: bench_tls13 [records] [handshakes]
 from std.sys import argv
 from std.time import perf_counter_ns
-from tls.tls13._tmp_crypto.curve25519 import x25519_public_key
+from tls.asym import x25519_base
 from tls.tls13.client import Client13, default_hello
 from tls.tls13.conn import EV_DONE
 from tls.tls13.record import Cipher, APP
@@ -69,7 +69,7 @@ def one_round(suite: Int, n: Int, chain: List[List[UInt8]]) raises -> Int:
         var cfg = ServerConfig(fill(32, 0x77), fill(32, 0x21), fill(32, 0x12))
         cfg.suites = [suite]
         var srv = Server13[RecSigner](cfg^, RecSigner(chain, fill(64, 0x55), 0x0403, List[UInt8]()))
-        var h = default_hello("example.com", fill(32, 0x99), fill(32, 0x31), x25519_public_key(fill(32, 0x42)), List[String]())
+        var h = default_hello("example.com", fill(32, 0x99), fill(32, 0x31), x25519_base(fill(32, 0x42)), List[String]())
         var cli = Client13[RecVerifier](h, "example.com", fill(32, 0x42), fill(32, 0x13), RecVerifier(chain, fill(64, 0x55), 0x0403, List[UInt8](), "example.com"))
         var so = srv.feed(Span(cli.start()))
         var co = cli.feed(Span(so.send))
@@ -85,7 +85,7 @@ def x25519_rate(n: Int):
     for _ in range(5):
         var t0 = perf_counter_ns()
         for _ in range(n):
-            k = x25519_public_key(k)
+            k = x25519_base(k)
         best = min(best, perf_counter_ns() - t0)
     print("x25519 (ported, temporary), best of 5: " + String(Int(Float64(n) / (Float64(best) / 1e9))) + " scalar mults per second (" + String(Int(best / n / 1000)) + " us each)")
 

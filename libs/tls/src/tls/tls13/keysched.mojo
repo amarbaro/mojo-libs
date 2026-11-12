@@ -1,9 +1,5 @@
 # mojo-tls lane 4: TLS 1.3 key schedule (RFC 8446 7.1-7.3). h = hash length: 32 (SHA-256) or 48 (SHA-384).
-from tls.tls13._tmp_crypto.hash import sha256, sha384
-from tls.tls13._tmp_crypto.hmac import hmac_sha256, hmac_sha384
-from tls.tls13._tmp_crypto.hkdf import (
-    hkdf_extract, hkdf_extract_sha384, hkdf_expand_label, hkdf_expand_label_sha384,
-)
+from tls.sym import Sha256, Sha384, sha256, sha384, hmac, hkdf_extract, hkdf_expand_label
 from tls.tls13.wire import bad, putb
 
 comptime AES128_GCM_SHA256 = 0x1301
@@ -28,17 +24,17 @@ def hash_of(h: Int, d: List[UInt8]) -> List[UInt8]:
 
 
 def hmac_of(h: Int, key: List[UInt8], d: List[UInt8]) -> List[UInt8]:
-    return hmac_sha384(key, d) if h == 48 else hmac_sha256(key, d)
+    return hmac[Sha384](key, d) if h == 48 else hmac[Sha256](key, d)
 
 
 def extract(h: Int, salt: List[UInt8], ikm: List[UInt8]) -> List[UInt8]:
-    return hkdf_extract_sha384(salt, ikm) if h == 48 else hkdf_extract(salt, ikm)
+    return hkdf_extract[Sha384](salt, ikm) if h == 48 else hkdf_extract[Sha256](salt, ikm)
 
 
 def expand_label(h: Int, secret: List[UInt8], label: String, ctx: List[UInt8], n: Int) raises -> List[UInt8]:
     if h == 48:
-        return hkdf_expand_label_sha384(secret, label, ctx, n)
-    return hkdf_expand_label(secret, label, ctx, n)
+        return hkdf_expand_label[Sha384](secret, label, ctx, n)
+    return hkdf_expand_label[Sha256](secret, label, ctx, n)
 
 
 def traffic_key(h: Int, secret: List[UInt8], klen: Int) raises -> List[UInt8]:

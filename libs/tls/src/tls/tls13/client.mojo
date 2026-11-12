@@ -1,8 +1,7 @@
 # mojo-tls lane 4: TLS 1.3 client state machine, sans-IO (RFC 8446 4, 4.1.4 HelloRetryRequest, 4.6 post-handshake).
 # Client13(hello, host, x25519_private, p256_private, verifier): start() returns the ClientHello record, feed(bytes)
 # returns an Out. Randomness is given by the caller (the hello holds the random, the private keys are arguments).
-from tls.tls13._tmp_crypto.curve25519 import x25519_public_key, x25519_shared
-from tls.tls13._tmp_crypto.p256 import p256_public_key, p256_ecdh
+from tls.asym import x25519, x25519_base, P256Key
 from tls.tls13.conn import *
 from tls.tls13.keysched import hash_of, finished_mac, cv_content
 from tls.tls13.messages import *
@@ -13,9 +12,9 @@ from tls.tls13.wire import Rd, bad, ct_equal, wipe, str_of
 
 def kex_public(group: Int, xp: List[UInt8], pp: List[UInt8]) raises -> List[UInt8]:
     if group == G_X25519:
-        return x25519_public_key(xp)
+        return x25519_base(xp)
     if group == G_P256:
-        return p256_public_key(pp)
+        return P256Key(pp).public_bytes()
     raise bad("internal_error", "key exchange group")
 
 
@@ -23,9 +22,9 @@ def kex_shared(group: Int, xp: List[UInt8], pp: List[UInt8], peer: List[UInt8]) 
     """The (EC)DHE secret; a malformed or low-order peer share is illegal_parameter."""
     try:
         if group == G_X25519:
-            return x25519_shared(xp, peer)
+            return x25519(xp, peer)
         if group == G_P256:
-            return p256_ecdh(pp, peer)
+            return P256Key(pp).ecdh(peer)
     except e:
         raise bad("illegal_parameter", "invalid key share")
     raise bad("illegal_parameter", "unsupported key share group")
