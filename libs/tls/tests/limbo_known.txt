@@ -24,9 +24,6 @@ rfc5280::root-missing-basic-constraints
 rfc5280::root-non-critical-basic-constraints
 rfc5280::san::noncritical-with-empty-subject
 rfc5280::san::underscore-dns
-rfc5280::serial::negative
-rfc5280::serial::too-long
-rfc5280::serial::zero
 rfc5280::ski::critical-ski
 rfc5280::ski::intermediate-missing-ski
 rfc5280::ski::root-missing-ski
@@ -50,7 +47,6 @@ webpki::cn::punycode-not-in-san
 webpki::cn::utf8-vs-punycode-mismatch
 webpki::eku::ee-without-eku
 webpki::forbidden-rsa-key-not-divisible-by-8-in-leaf
-webpki::forbidden-rsa-not-divisible-by-8-in-root
 webpki::malformed-aia
 webpki::san::public-suffix-multi-label-wildcard-san
 webpki::san::public-suffix-private-namespace-wildcard-san

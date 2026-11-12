@@ -141,6 +141,11 @@ struct Certificate(Copyable, Movable):
     def signature(self) -> Bytes:
         return self._at(self.sig_off, self.sig_len)
 
+    def serial_ok(self) -> Bool:
+        """RFC 5280 4.1.2.2: positive, non-zero, at most 20 octets."""
+        var s = self.serial()
+        return s[0] < 0x80 and not (len(s) == 1 and s[0] == 0) and len(s) <= 20
+
     def self_issued(self) -> Bool:
         return same(self.subject(), self.issuer())
 

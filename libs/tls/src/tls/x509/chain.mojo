@@ -261,21 +261,28 @@ def _ca_rules(c: Certificate, below: Int, anchor: Bool) raises:
         raise Error("tls: x509: CA extended key usage excludes serverAuth")
 
 
+def _leaf_rules(leaf: Certificate) raises:
+    """End-entity rules; they apply to chain[0] even when it is itself the trust anchor."""
+    if not leaf.serial_ok():
+        raise Error("tls: x509: serial number must be positive, non-zero and at most 20 octets")
+    if leaf.has_eku and not leaf.eku_server:
+        raise Error("tls: x509: leaf extended key usage excludes serverAuth")
+    if leaf.has_ku and (leaf.ku & KU_DIGITAL_SIGNATURE) == 0:
+        raise Error("tls: x509: leaf key usage lacks digitalSignature")
+    if leaf.key_kind == KEY_OTHER or (leaf.key_kind == KEY_RSA and rsa_bits(leaf.key_a) < MIN_RSA_BITS):
+        raise Error("tls: x509: leaf key is not P-256, P-384 or RSA of at least 2048 bits")
+
+
 def _check_path(chain: List[Certificate], below: List[Int], root: Certificate, now: Int) raises:
-    """`below` indexes chain: leaf first, then intermediates up to the one the root signed."""
+    """`below` indexes chain: leaf first, then intermediates up to the one the root signed (empty: the leaf is the root)."""
     var k = len(below)
-    if k > 0:
-        ref leaf = chain[below[0]]
-        if leaf.has_eku and not leaf.eku_server:
-            raise Error("tls: x509: leaf extended key usage excludes serverAuth")
-        if leaf.has_ku and (leaf.ku & KU_DIGITAL_SIGNATURE) == 0:
-            raise Error("tls: x509: leaf key usage lacks digitalSignature")
-        if leaf.key_kind == KEY_OTHER or (leaf.key_kind == KEY_RSA and rsa_bits(leaf.key_a) < MIN_RSA_BITS):
-            raise Error("tls: x509: leaf key is not P-256, P-384 or RSA of at least 2048 bits")
+    _leaf_rules(chain[0])
     var nsi = 0  # intermediates seen so far that are not self-issued (RFC 5280 6.1.4 l)
     for p in range(k):
         ref c = chain[below[p]]
         _valid_at(c, now)
+        if p > 0 and not c.serial_ok():
+            raise Error("tls: x509: serial number must be positive, non-zero and at most 20 octets")
         if c.unknown_critical:
             raise Error("tls: x509: unknown critical extension")
         if c.has_ku and ((c.ku & KU_KEY_CERT_SIGN) != 0) != c.is_ca:
