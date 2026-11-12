@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 MOJO=${MOJO:-/home/mario/Projects/mojo/mojo-tls/.venv/bin/mojo}
 mkdir -p .work/vec .work/gate
-[ -f .work/vec/random-mac.txt ] || python3 -I tools/gen_vec.py random .work/vec
+[ -f .work/vec/random-chacha.txt ] || python3 -I tools/gen_vec.py random .work/vec
 VECS=(${SYM_VECS:-tests/vec/*.txt .work/vec/random-*.txt})
 
 build() {  # build SRCDIR OUT [flags]
@@ -27,14 +27,14 @@ build src .work/gate/soft -D TLS_SOFT_AES=true
 run .work/gate/soft soft
 [ "${1:-}" = vec ] && { echo "PASS vectors"; exit 0; }
 
-mutant() {  # mutant LINE: name|file|sed expression
-  local name file expr
-  IFS='|' read -r name file expr <<< "$1"
+mutant() {  # mutant LINE: name|file|sed expression[|build flags]
+  local name file expr flags
+  IFS='|' read -r name file expr flags <<< "$1"
   local d=.work/gate/m-$name
   rm -rf "$d"; mkdir -p "$d"; cp -r src "$d/src"
   sed -i -E "$expr" "$d/src/$file"
   if cmp -s "src/$file" "$d/src/$file"; then echo "FAIL mutant $name: sed changed nothing"; return 1; fi
-  build "$d/src" "$d/bin" ${MFLAGS:-} || { echo "FAIL mutant $name: does not build"; return 1; }
+  build "$d/src" "$d/bin" ${flags:-} || { echo "FAIL mutant $name: does not build"; return 1; }
   if "$d/bin" "${VECS[@]}" > "$d/out" 2>&1; then echo "FAIL mutant $name: survived"; return 1; fi
   echo "ok mutant $name killed: $(grep -m1 -E '^FAIL|ERROR' "$d/out")"
 }
@@ -45,7 +45,7 @@ while IFS= read -r line; do
   mutant "$line" > ".work/gate/m-${line%%|*}.log" 2>&1 &
   pids+=($!)
   while [ "$(jobs -r | wc -l)" -ge 8 ]; do sleep 0.5; done
-done < tests/mutants.txt
+done < "${MUTANTS:-tests/mutants.txt}"
 bad=0
 for p in "${pids[@]}"; do wait "$p" || bad=1; done
 cat .work/gate/m-*.log

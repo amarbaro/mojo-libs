@@ -10,3 +10,21 @@ hkdf-guard|tls/sym/mac.mojo|s/n > 255 \* H.OUT/n > 256 * H.OUT/
 hkdf-counter|tls/sym/mac.mojo|s/m.append\(UInt8\(i\)\)/m.append(UInt8(i + 1))/
 hkdf-label|tls/sym/mac.mojo|s/"tls13 "/"tls12 "/
 prf-seed|tls/sym/mac.mojo|s/var a = hmac\[H\]\(secret, ls\)/var a = hmac[H](secret, seed)/
+aes-affine|tls/sym/aes.mojo|s/\^ 0x63$/^ 0x62/
+aes-xt|tls/sym/aes.mojo|s/\* 0x1B\)/* 0x1C)/
+aes-rounds|tls/sym/aes.mojo|s/6 \+ len\(key\) \/\/ 4/5 + len(key) \/\/ 4/
+aes-rcon|tls/sym/aes.mojo|s/rcon = _xt\(V16\(rcon\)\)\[0\]/rcon = rcon + 1/
+aes-sbox-soft|tls/sym/aes.mojo|s/var x31 = _mul\(_mul\(x15, x15\), x\)/var x31 = _mul(_mul(x15, x15), x3)/|-D TLS_SOFT_AES=true
+aes-mixcol-soft|tls/sym/aes.mojo|s/v = _xt\(v \^ r1\) \^ r1/v = _xt(v ^ r1) ^ v/|-D TLS_SOFT_AES=true
+aes-shiftrows-soft|tls/sym/aes.mojo|s/shuffle\[0, 5, 10, 15, 4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 6, 11\]/shuffle[0, 5, 10, 15, 4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 11, 6]/|-D TLS_SOFT_AES=true
+gcm-reduce|tls/sym/gcm.mojo|s/_clmul\(hi\[1\], 0x87\)/_clmul(hi[1], 0x86)/
+gcm-mid|tls/sym/gcm.mojo|s/mid \^= _clmul\(x\[0\], h\[1\]\) \^ _clmul\(x\[1\], h\[0\]\)/mid ^= _clmul(x[0], h[1])/
+gcm-power|tls/sym/gcm.mojo|s/self.hp\[7 - i\]\)/self.hp[i])/
+gcm-lenblock|tls/sym/gcm.mojo|s/byte_swap\(UInt64\(n\) \* 8\)/byte_swap(UInt64(n) * 4)/
+gcm-aadpad|tls/sym/gcm.mojo|s/range\(min\(16, n - off\)\)/range(min(15, n - off))/
+gcm-ctr-start|tls/sym/gcm.mojo|s/var ctr = UInt32\(2\)/var ctr = UInt32(3)/
+gcm-ctr8|tls/sym/gcm.mojo|s/ctr \+= 8$/ctr += 7/
+gcm-notag|tls/sym/gcm.mojo|s/raise Error\("tls: bad record mac"\)/return/
+gcm-j0|tls/sym/gcm.mojo|s/j0\[15\] = 1/j0[15] = 2/
+gcm-bmul-soft|tls/sym/gcm.mojo|s/\(x3 \* y1\)$/(x3 * y2)/|-D TLS_SOFT_AES=true
+gcm-rev-soft|tls/sym/gcm.mojo|s/\) >> 1\)$/) >> 2)/|-D TLS_SOFT_AES=true

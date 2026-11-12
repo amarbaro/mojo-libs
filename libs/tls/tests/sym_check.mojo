@@ -4,6 +4,9 @@ from std.collections import Dict
 from std.sys import argv, exit
 from tls.sym.sha2 import *
 from tls.sym.mac import *
+from tls.sym.aes import Aes, V16
+from tls.sym.aead import Aead
+from tls.sym.gcm import AesGcm
 
 
 def unhex(s: StringSlice) raises -> List[UInt8]:
@@ -42,6 +45,43 @@ def same(a: List[UInt8], b: List[UInt8]) -> Bool:
     return len(a) == len(b) and Span(a) == Span(b)
 
 
+def rejects[A: Aead](a: A, iv: List[UInt8], aad: List[UInt8], var bad: List[UInt8]) -> Bool:
+    """Open must raise and leave the buffer as it was."""
+    var snap = bad.copy()
+    try:
+        a.open(iv, aad, bad)
+        return False
+    except:
+        return same(bad, snap)
+
+
+def aead_case[A: Aead](a: A, iv: List[UInt8], aad: List[UInt8], msg: List[UInt8], ct: List[UInt8], tag: List[UInt8], valid: Bool) raises -> Bool:
+    var wire = ct.copy()
+    wire.extend(Span(tag))
+    if not valid:
+        return rejects(a, iv, aad, wire^)
+    var buf = msg.copy()
+    a.seal(iv, aad, buf)
+    if not same(buf, wire):
+        return False
+    a.open(iv, aad, buf)
+    if not same(buf, msg):
+        return False
+    for i in range(len(wire) - 16 if len(msg) > 64 else 0, len(wire)):  # every tag byte (and ct for short rows)
+        var bad = wire.copy()
+        bad[i] ^= 1
+        if not rejects(a, iv, aad, bad^):
+            return False
+    if len(aad) > 0:
+        var bad_aad = aad.copy()
+        bad_aad[len(aad) - 1] ^= 0x80
+        if not rejects(a, iv, bad_aad, wire.copy()):
+            return False
+    var bad_iv = iv.copy()
+    bad_iv[0] ^= 1
+    return rejects(a, bad_iv, aad, wire.copy())
+
+
 def check(f: List[String]) raises -> Bool:
     var kind = f[0]
     var alg = f[1] if len(f) > 1 else String("")
@@ -76,6 +116,23 @@ def check(f: List[String]) raises -> Bool:
         var seed = unhex(f[4])
         var o = prf12[Sha256](sec, lab, seed, Int(f[5])) if alg == "256" else prf12[Sha384](sec, lab, seed, Int(f[5]))
         return same(o, unhex(f[6]))
+    elif kind == "aead":
+        var iv = unhex(f[3])
+        var args = (unhex(f[4]), unhex(f[5]), unhex(f[6]), unhex(f[7]), f[8] == "valid")
+        if alg == "gcm":
+            return aead_case(AesGcm(unhex(f[2])), iv, args[0], args[1], args[2], args[3], args[4])
+        raise Error("unknown aead " + alg)
+    elif kind == "aesblk":
+        var b = unhex(f[2])
+        var v = V16(0)
+        for i in range(16):
+            v[i] = b[i]
+        var o = Aes(unhex(f[1])).encrypt_block(v)
+        var w = unhex(f[3])
+        for i in range(16):
+            if o[i] != w[i]:
+                return False
+        return True
     raise Error("unknown kind " + kind)
 
 
