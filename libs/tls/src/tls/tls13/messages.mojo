@@ -27,6 +27,8 @@ comptime X_RSL = 28
 
 comptime G_X25519 = 0x001D
 comptime G_P256 = 0x0017
+comptime G_P384 = 0x0018
+comptime G_X448 = 0x001E
 comptime MAX_CHAIN = 10
 
 

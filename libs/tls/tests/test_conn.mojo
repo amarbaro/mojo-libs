@@ -1,7 +1,7 @@
-# Gate: our client against our server (no recorded bytes). 3 cipher suites x 2 key exchanges (with and without HRR),
+# Gate: our client against our server (no recorded bytes). 3 cipher suites x 4 key exchanges (x25519, HRR to P-256, P-384, x448), direct P-384 and x448 shares,
 # data both ways, KeyUpdate both ways, automatic KeyUpdate at the key limit, record_size_limit, ALPN, SNI, byte-wise
 # feeding, every alert the handshake can raise, and fuzzing of both state machines.
-from tls.asym import x25519_base
+from tls.asym import x25519_base, x448_base, p384_public
 from tls.tls13.client import Client13, default_hello
 from tls.tls13.conn import *
 from tls.tls13.keysched import traffic_key, traffic_iv
@@ -123,6 +123,35 @@ def pump[V: Verifier, S: Signer](mut c: Client13[V], mut s: Server13[S], var wir
     return r^
 
 
+def direct_shares(mut t: T) raises:
+    """The client sends the share of secp384r1 or x448 at once (no HRR): both sides derive the same keys and finish."""
+    for g in range(2):
+        var group = G_P384 if g == 0 else G_X448
+        var h = hello()
+        h.exts[find(h.exts, X_KEYSHARE)] = x_keyshares([(group, p384_public(fill(48, 0x24)) if g == 0 else x448_base(fill(56, 0x25)))])
+        var c = client(h)
+        c.q_priv = fill(48, 0x24)
+        c.y_priv = fill(56, 0x25)
+        var s = server(0x1301, [G_X25519, G_P256, G_P384, G_X448])
+        var r = pump(c, s, c.start())
+        var tag = ("secp384r1" if g == 0 else "x448") + " direct share: "
+        t.ok(tag + "both sides done (" + r.cerr + r.serr + ")", r.cdone and r.sdone and r.cerr == "" and r.serr == "" and c.group == group and s.group == group)
+        var wire = c.write(pattern(100, 4))
+        t.ok(tag + "data flows", s.feed(Span(wire)).data == pattern(100, 4))
+    # a share of the right group but the wrong length, or a point not on the curve, is illegal_parameter
+    for g in range(3):
+        var group = [G_P384, G_X448, G_P384][g]
+        var bad = p384_public(fill(48, 0x24)) if g == 2 else fill(10, 0x01)
+        if g == 2:
+            bad[len(bad) - 1] ^= 1
+        var h = hello()
+        h.exts[find(h.exts, X_KEYSHARE)] = x_keyshares([(group, bad^)])
+        var c = client(h)
+        var s = server(0x1301, [G_X25519, G_P256, G_P384, G_X448])
+        var r = pump(c, s, c.start())
+        t.ok("bad " + String(group) + " share " + String(g) + " is refused: " + r.serr, "illegal_parameter" in r.serr and not r.sdone)
+
+
 def matrix(mut t: T) raises:
     var names = List[String]()
     names.append("TLS_AES_128_GCM_SHA256")
@@ -130,17 +159,21 @@ def matrix(mut t: T) raises:
     names.append("TLS_CHACHA20_POLY1305_SHA256")
     var suites = [0x1301, 0x1302, 0x1303]
     for si in range(3):
-        for hrr in range(2):
-            var groups: List[Int] = [G_P256]
-            if hrr == 0:
-                groups = [G_X25519, G_P256]
-            var tag = names[si] + (" via HRR to secp256r1" if hrr == 1 else " x25519") + ": "
+        for hrr in range(4):
+            var groups: List[Int] = [G_X25519, G_P256, G_P384, G_X448]
+            var want = G_X25519
+            var gname = " x25519"
+            if hrr > 0:
+                want = [G_P256, G_P384, G_X448][hrr - 1]
+                groups = [want]
+                gname = [" via HRR to secp256r1", " via HRR to secp384r1", " via HRR to x448"][hrr - 1]
+            var tag = names[si] + gname + ": "
             var s = server(suites[si], groups)
             var h = hello()
             var c = client(h)
             var r = pump(c, s, c.start())
             t.ok(tag + "both sides done, no error (" + r.cerr + r.serr + ")", r.cdone and r.sdone and r.cerr == "" and r.serr == "")
-            t.ok(tag + "suite and group agree", c.c.suite == suites[si] and s.c.suite == suites[si] and c.group == (G_P256 if hrr == 1 else G_X25519) and s.group == c.group)
+            t.ok(tag + "suite and group agree", c.c.suite == suites[si] and s.c.suite == suites[si] and c.group == want and s.group == c.group)
             t.ok(tag + "SNI reached the server", s.sni == "example.com")
             # data both ways, 50000 bytes = 4 records
             var up = pattern(50000, 1)
@@ -428,6 +461,7 @@ def fuzz(mut t: T) raises:
 def main() raises:
     var t = T("conn")
     matrix(t)
+    direct_shares(t)
     options(t)
     alerts(t)
     fuzz(t)

@@ -1,5 +1,6 @@
 # mojo-tls lane 4: TLS 1.3 server state machine, sans-IO. Server13(config, signer): feed(bytes) returns an Out.
 # One instance serves one connection. Randomness (ServerHello random, ephemeral private keys) comes from the config.
+from tls.asym import random_bytes
 from tls.tls13.client import kex_public, kex_shared
 from tls.tls13.conn import *
 from tls.tls13.keysched import KeySchedule, finished_mac, cv_content
@@ -16,17 +17,21 @@ struct ServerConfig(Copyable, Movable):
     var random: List[UInt8]  # ServerHello.random
     var x_priv: List[UInt8]
     var p_priv: List[UInt8]
+    var q_priv: List[UInt8]  # P-384 and x448 private keys: empty = a fresh random key per connection
+    var y_priv: List[UInt8]
     var cookie: List[UInt8]  # sent in a HelloRetryRequest when not empty, must come back unchanged
     var ee_exts: List[Ext]  # extra EncryptedExtensions, sent first
     var rsl: Int  # our record_size_limit, offered when the client offered one; 0 = none
 
     def __init__(out self, random: List[UInt8], x_priv: List[UInt8], p_priv: List[UInt8]):
         self.suites = [0x1301, 0x1303, 0x1302]
-        self.groups = [G_X25519, G_P256]
+        self.groups = [G_X25519, G_P256, G_P384, G_X448]
         self.alpn = List[String]()
         self.random = random.copy()
         self.x_priv = x_priv.copy()
         self.p_priv = p_priv.copy()
+        self.q_priv = List[UInt8]()
+        self.y_priv = List[UInt8]()
         self.cookie = List[UInt8]()
         self.ee_exts = List[Ext]()
         self.rsl = 0
@@ -195,10 +200,14 @@ struct Server13[S: Signer](Movable):
             if self.cfg.rsl > 0:
                 self.c.rx_limit = self.cfg.rsl - 1
         self.group = group
-        var dhe = kex_shared(group, self.cfg.x_priv, self.cfg.p_priv, kx)
+        if len(self.cfg.q_priv) == 0:
+            self.cfg.q_priv = random_bytes(48)
+        if len(self.cfg.y_priv) == 0:
+            self.cfg.y_priv = random_bytes(56)
+        var dhe = kex_shared(group, self.cfg.x_priv, self.cfg.p_priv, self.cfg.q_priv, self.cfg.y_priv, kx)
         self.c.add(m)
         var e = List[Ext]()
-        e.append(x_keyshare_server(group, kex_public(group, self.cfg.x_priv, self.cfg.p_priv)))
+        e.append(x_keyshare_server(group, kex_public(group, self.cfg.x_priv, self.cfg.p_priv, self.cfg.q_priv, self.cfg.y_priv)))
         e.append(x_versions_server(0x0304))
         var shm = Hello(True, self.cfg.random, ch.sid, [suite], e^).encode()
         self.c.add(shm)

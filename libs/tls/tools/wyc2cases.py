@@ -23,9 +23,14 @@ for g in load("x25519_test.json")["testGroups"]:
     for t in g["tests"]:
         lines.append(f"x25519|{t['tcId']}|{t['result']}|{t['private']}|{t['public']}|{t['shared']}")
 
-for g in load("ecdh_secp256r1_ecpoint_test.json")["testGroups"]:
+for g in load("x448_test.json")["testGroups"]:
     for t in g["tests"]:
-        lines.append(f"ecdh|{t['tcId']}|{t['result']}|{be(t['private'], 32)}|{t['public']}|{t['shared']}")
+        lines.append(f"x448|{t['tcId']}|{t['result']}|{t['private']}|{t['public']}|{t['shared']}")
+
+for kind, name, n in (("ecdh", "ecdh_secp256r1_ecpoint_test.json", 32), ("ecdh384", "ecdh_secp384r1_ecpoint_test.json", 48)):
+    for g in load(name)["testGroups"]:
+        for t in g["tests"]:
+            lines.append(f"{kind}|{t['tcId']}|{t['result']}|{be(t['private'], n)}|{t['public']}|{t['shared']}")
 
 for name, bits in (("ecdsa_secp256r1_sha256_test.json", 256), ("ecdsa_secp384r1_sha384_test.json", 384)):
     for g in load(name)["testGroups"]:

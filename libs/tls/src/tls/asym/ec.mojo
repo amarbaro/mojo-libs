@@ -398,3 +398,17 @@ def p256_verify(pub: Span[UInt8, _], hash: Span[UInt8, _], der_sig: Span[UInt8, 
 
 def p384_verify(pub: Span[UInt8, _], hash: Span[UInt8, _], der_sig: Span[UInt8, _]) -> Bool:
     return ecdsa_verify(pub, hash, der_sig, p384())
+
+
+def p384_public(d: Span[UInt8, _]) raises -> List[UInt8]:
+    """Uncompressed public point of the 48-byte private scalar `d` (ephemeral ECDH, secp384r1)."""
+    var c = p384()
+    if len(d) != 48 or not in_range(from_be[6](d), c.o):
+        raise Error("tls: p384 private key out of range")
+    return pub_bytes(from_be[6](d), c)
+
+
+def p384_ecdh(d: Span[UInt8, _], peer: Span[UInt8, _]) raises -> List[UInt8]:
+    if len(d) != 48:
+        raise Error("tls: p384 private key out of range")
+    return ecdh(from_be[6](d), peer, p384())

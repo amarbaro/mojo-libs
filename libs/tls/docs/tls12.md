@@ -42,7 +42,7 @@ ClientHello. `TlsServer[C](cfg, port, host).step(handler)` is one loop pass; `ru
 | `random` | `random_bytes` (lane 2) |
 | `hash(sha384, data)` | `sha256` / `sha384` (lane 1) |
 | `prf(sha384, secret, label, seed, n)` | `prf12[H]` (lane 1); label is prepended to the seed |
-| `keygen(group)`, `ecdh(group, sec, peer)` | `x25519_base` + `x25519`; `P256Key.generate/public_bytes/ecdh`; P-384 ECDH if lane 2 adds it |
+| `keygen(group)`, `ecdh(group, sec, peer)` | `x25519_base` + `x25519`; `P256Key.generate/public_bytes/ecdh`; `p384_public` + `p384_ecdh` (secp384r1, wave 3) |
 | `sign(kind, key_der, scheme, msg)` | `P256Key.sign_sha256` (needs P-384 and the DER key parsed per call or cached by lane 3), `RsaPrivate.sign_pss` and PKCS#1 v1.5 for 0x0401 |
 | `verify(chain, host, scheme, msg, sig)` | `verify_chain` (lane 3) then `p256_verify` / `p384_verify` / `RsaPublic.verify_pss/pkcs1` with the leaf key |
 | `seal`, `open` | `AesGcm(key)`, `ChaCha20Poly1305(key)` in place on `buf[start:]`; the 8-byte GCM explicit nonce and the tag layout are already handled by `Conn` |

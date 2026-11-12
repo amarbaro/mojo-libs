@@ -67,6 +67,17 @@ def main() raises:
         _ = x25519(k, base)
         t.append(Float64(perf_counter_ns() - t0))
     good = report("x25519 scalar", t, cls) and good
+    # X448: scalar all-zero (clamps to two set bits) vs random
+    var base4 = x448_base(random_bytes(56))
+    var zero4 = List[UInt8](length=56, fill=0)
+    cls = classes(n)
+    t = List[Float64]()
+    for i in range(n):
+        var k = zero4.copy() if cls[i] == 0 else random_bytes(56)
+        var t0 = perf_counter_ns()
+        _ = x448(k, base4)
+        t.append(Float64(perf_counter_ns() - t0))
+    good = report("x448 scalar", t, cls) and good
     # P-256 scalar mult (ECDH core): scalar 1 vs random
     var peer = P256Key.generate().public_bytes()
     cls = classes(n)

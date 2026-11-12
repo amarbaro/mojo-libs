@@ -67,3 +67,11 @@ Lane x509 wave 2 (2026-11-12).
   script's random sample of 40 cases happened to pick it -> a harness timeout must exceed the slowest peer (now 330 s), and every tlsfuzzer cell
   runs all cases (`-n 0`), never the default random sample of 40.
 - Chromium matrix cells failed with net::ERR_NETWORK_CHANGED when other sessions' docker containers added veth interfaces mid-run (2026-11-12, 2 of 162 cells; rerun of ^chromium/ 16/16 twice) -> a browser cell that fails with ERR_NETWORK_CHANGED is retried once before it counts as FAIL; report the retry.
+
+## Wave 3 (3c groups)
+
+- `ServerConfig.__init__` does not raise, `random_bytes` does -> a field that needs fresh randomness stays empty in the
+  constructor and `Server13` fills it where it already raises (no signature change for the callers in `src/tls/net`).
+- The Wycheproof x448 "invalid" cases (57-byte public key) failed because the harness only accepted a raise for
+  "acceptable" results -> a raise is the right answer for every `invalid` case; the harness says so.
+- `tests/gate_tls13.sh` is mode 644: a chain that runs it directly dies with rc 126 and looks like a gate failure -> start gates with `bash tests/<gate>.sh`.

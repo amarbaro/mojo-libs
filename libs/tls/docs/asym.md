@@ -7,15 +7,16 @@ UInt128) serves X25519 (N=4, p = 2^255-19), P-256 (N=4), P-384 (N=6) and RSA (N=
 | File | What |
 |---|---|
 | `bn.mojo` | limb ops, `Modulus[N]`, CIOS `mont_mul` (unrolled up to 32 limbs), `pow_ct` (fixed 4-bit windows, table read by full scan), `eq_mask` |
-| `x25519.mojo` | RFC 7748 ladder; raises on an all-zero result (RFC 8446 7.4.2) |
-| `ec.mojo` | P-256/P-384: complete a=-3 formulas (Renes-Costello-Batina), windowed constant-time scalar mult, ECDH with full peer validation, ECDSA sign (RFC 6979, HMAC-SHA-256, no low-s) and verify (strict DER), `P256Key` |
+| `x25519.mojo` | RFC 7748 ladder, generic over the field size (`ladder[N]`); raises on an all-zero result (RFC 8446 7.4.2) |
+| `x448.mojo` | X448 (RFC 7748): the same ladder over 2^448 - 2^224 - 1, a24 = 39081, 56-byte inputs |
+| `ec.mojo` | P-256/P-384: complete a=-3 formulas (Renes-Costello-Batina), windowed constant-time scalar mult, ECDH with full peer validation, ECDSA sign (RFC 6979, HMAC-SHA-256, no low-s) and verify (strict DER), `P256Key`, `p384_public(d)` / `p384_ecdh(d, peer)` for ephemeral secp384r1 keys |
 | `rsa.mojo` | `RsaPublic.verify_pkcs1/verify_pss` (full EM re-encode compare, PSS salt = hash length), `RsaPrivate.sign_pss/sign_pkcs1` (CRT, exponent blinding, post-sign fault check) |
 | `random.mojo` | `random_bytes(n)` through `getrandom(2)`, short read or error raises, no fallback |
 | `sha2.mojo` | interim SHA-256/384/512 + HMAC (RFC 6979 and MGF1 need them). Lane 1 owns these: at integration replace the file by imports from `tls.sym` |
 
 ## Interface as built (differences from `docs/api.md` in bold)
 
-- `x25519(scalar32, point32) raises -> List[UInt8]`, `x25519_base(scalar32) raises`. **Both raise `tls: x25519 low-order point` when the result is all zero.**
+- `x25519(scalar32, point32) raises -> List[UInt8]`, `x25519_base(scalar32) raises`. **Both raise `tls: low-order point` when the result is all zero.** `x448(scalar56, point56)`, `x448_base(scalar56)` likewise.
 - `P256Key(d32) raises` (**new**: load a stored key), `P256Key.generate() raises`, `public_bytes()`, `ecdh(peer) raises -> shared32`, `sign_sha256(hash32) raises -> DER`, **`zeroize()`**.
 - `p256_verify(pub65, hash, der) -> Bool`, `p384_verify(pub97, hash, der) -> Bool`: **never raise**; malformed input is `False`. A hash longer than the curve size is truncated to its leftmost bytes (FIPS 186-5).
 - `RsaPublic(n_be, e_be) raises` (**moduli of exactly 2048, 3072 or 4096 bits, e odd in [3, 2^32)**), `verify_pkcs1(hash_alg, hash, sig) -> Bool`, `verify_pss(hash_alg, hash, sig) -> Bool`. **`hash_alg` is the Int 256, 384 or 512.**

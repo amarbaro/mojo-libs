@@ -1,7 +1,7 @@
 # mojo-tls lane 4: TLS 1.3 client state machine, sans-IO (RFC 8446 4, 4.1.4 HelloRetryRequest, 4.6 post-handshake).
 # Client13(hello, host, x25519_private, p256_private, verifier): start() returns the ClientHello record, feed(bytes)
 # returns an Out. Randomness is given by the caller (the hello holds the random, the private keys are arguments).
-from tls.asym import x25519, x25519_base, P256Key
+from tls.asym import x25519, x25519_base, x448, x448_base, P256Key, p384_public, p384_ecdh, random_bytes
 from tls.tls13.conn import *
 from tls.tls13.keysched import hash_of, finished_mac, cv_content
 from tls.tls13.messages import *
@@ -10,21 +10,32 @@ from tls.tls13.verify import Verifier
 from tls.tls13.wire import Rd, bad, ct_equal, wipe, str_of, is_ip
 
 
-def kex_public(group: Int, xp: List[UInt8], pp: List[UInt8]) raises -> List[UInt8]:
+def kex_public(group: Int, xp: List[UInt8], pp: List[UInt8], qp: List[UInt8], yp: List[UInt8]) raises -> List[UInt8]:
+    """Public share of our private key for `group`: xp x25519, pp P-256, qp P-384, yp x448."""
     if group == G_X25519:
         return x25519_base(xp)
     if group == G_P256:
         return P256Key(pp).public_bytes()
+    if group == G_P384:
+        return p384_public(qp)
+    if group == G_X448:
+        return x448_base(yp)
     raise bad("internal_error", "key exchange group")
 
 
-def kex_shared(group: Int, xp: List[UInt8], pp: List[UInt8], peer: List[UInt8]) raises -> List[UInt8]:
+def kex_shared(
+    group: Int, xp: List[UInt8], pp: List[UInt8], qp: List[UInt8], yp: List[UInt8], peer: List[UInt8]
+) raises -> List[UInt8]:
     """The (EC)DHE secret; a malformed or low-order peer share is illegal_parameter."""
     try:
         if group == G_X25519:
             return x25519(xp, peer)
         if group == G_P256:
             return P256Key(pp).ecdh(peer)
+        if group == G_P384:
+            return p384_ecdh(qp, peer)
+        if group == G_X448:
+            return x448(yp, peer)
     except e:
         raise bad("illegal_parameter", "invalid key share")
     raise bad("illegal_parameter", "unsupported key share group")
@@ -43,12 +54,12 @@ def pad_hello(mut h: Hello) raises:
 def default_hello(
     host: String, random: List[UInt8], sid: List[UInt8], x_pub: List[UInt8], alpn: List[String]
 ) raises -> Hello:
-    """ClientHello offering TLS 1.3 only, x25519 share, secp256r1 on request (HRR), the three TLS 1.3 suites."""
+    """ClientHello offering TLS 1.3 only, x25519 share, secp256r1, secp384r1 and x448 on request (HRR), the three TLS 1.3 suites."""
     var e = List[Ext]()
     if host.byte_length() > 0 and not is_ip(host):
         e.append(x_sni(host))
     e.append(x_versions_client([0x0304]))
-    e.append(x_u16s(X_GROUPS, [G_X25519, G_P256]))
+    e.append(x_u16s(X_GROUPS, [G_X25519, G_P256, G_P384, G_X448]))
     e.append(x_u16s(X_SIGALGS, [0x0403, 0x0503, 0x0804, 0x0805, 0x0806, 0x0401, 0x0501]))
     e.append(x_keyshares([(G_X25519, x_pub.copy())]))
     if len(alpn) > 0:
@@ -72,6 +83,8 @@ struct Client13[V: Verifier](Movable):
     var ch: Hello
     var x_priv: List[UInt8]
     var p_priv: List[UInt8]
+    var q_priv: List[UInt8]  # P-384 and x448 keys, used only after a HelloRetryRequest
+    var y_priv: List[UInt8]
     var hrr_done: Bool
     var hrr_suite: Int
     var th_cert: List[UInt8]
@@ -92,6 +105,8 @@ struct Client13[V: Verifier](Movable):
         self.ch = ch.copy()
         self.x_priv = x_priv.copy()
         self.p_priv = p_priv.copy()
+        self.q_priv = random_bytes(48)
+        self.y_priv = random_bytes(56)
         self.hrr_done = False
         self.hrr_suite = 0
         self.th_cert = List[UInt8]()
@@ -184,7 +199,7 @@ struct Client13[V: Verifier](Movable):
         if share[0] not in shared_groups(self.ch):
             raise bad("illegal_parameter", "server chose a group we sent no share for")
         self.group = share[0]
-        var dhe = kex_shared(share[0], self.x_priv, self.p_priv, share[1])
+        var dhe = kex_shared(share[0], self.x_priv, self.p_priv, self.q_priv, self.y_priv, share[1])
         self.c.add(m)
         self.c.at_boundary()
         var th = self.c.th()
@@ -206,7 +221,7 @@ struct Client13[V: Verifier](Movable):
             r.done()
             if g not in p_u16s(self.ch.exts[find(self.ch.exts, X_GROUPS)].d) or g in shared_groups(self.ch):
                 raise bad("illegal_parameter", "HelloRetryRequest group")
-            ch2.exts[find(ch2.exts, X_KEYSHARE)] = x_keyshares([(g, kex_public(g, self.x_priv, self.p_priv))])
+            ch2.exts[find(ch2.exts, X_KEYSHARE)] = x_keyshares([(g, kex_public(g, self.x_priv, self.p_priv, self.q_priv, self.y_priv))])
             changed = True
         var ci = find(sh.exts, X_COOKIE)
         if ci >= 0:
