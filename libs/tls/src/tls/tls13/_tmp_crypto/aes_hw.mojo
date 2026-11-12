@@ -90,9 +90,9 @@ def _encrypt_block(k: _RoundKeys, block: V16) -> V16:
     else:
         var s = block
         for r in range(k.nr - 1):
-            s = llvm_intrinsic["llvm.aarch64.tls.tls13._tmp_crypto.aese", V16, has_side_effect=False](s, k.rk[r])
-            s = llvm_intrinsic["llvm.aarch64.tls.tls13._tmp_crypto.aesmc", V16, has_side_effect=False](s)
-        s = llvm_intrinsic["llvm.aarch64.tls.tls13._tmp_crypto.aese", V16, has_side_effect=False](s, k.rk[k.nr - 1])
+            s = llvm_intrinsic["llvm.aarch64.crypto.aese", V16, has_side_effect=False](s, k.rk[r])
+            s = llvm_intrinsic["llvm.aarch64.crypto.aesmc", V16, has_side_effect=False](s)
+        s = llvm_intrinsic["llvm.aarch64.crypto.aese", V16, has_side_effect=False](s, k.rk[k.nr - 1])
         return s ^ k.rk[k.nr]
 
 
@@ -118,11 +118,11 @@ def _enc8_rounds[NR: Int](rk: Array[V16, 15], mut b: Array[V16, 8]):
     else:
         comptime for r in range(NR - 1):
             comptime for i in range(8):
-                b[i] = llvm_intrinsic["llvm.aarch64.tls.tls13._tmp_crypto.aesmc", V16, has_side_effect=False](
-                    llvm_intrinsic["llvm.aarch64.tls.tls13._tmp_crypto.aese", V16, has_side_effect=False](b[i], rk[r])
+                b[i] = llvm_intrinsic["llvm.aarch64.crypto.aesmc", V16, has_side_effect=False](
+                    llvm_intrinsic["llvm.aarch64.crypto.aese", V16, has_side_effect=False](b[i], rk[r])
                 )
         comptime for i in range(8):
-            b[i] = llvm_intrinsic["llvm.aarch64.tls.tls13._tmp_crypto.aese", V16, has_side_effect=False](b[i], rk[NR - 1]) ^ rk[NR]
+            b[i] = llvm_intrinsic["llvm.aarch64.crypto.aese", V16, has_side_effect=False](b[i], rk[NR - 1]) ^ rk[NR]
 
 
 @always_inline
