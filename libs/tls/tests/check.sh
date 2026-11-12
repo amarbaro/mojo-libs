@@ -44,7 +44,7 @@ if [[ "${1:-}" == mutants ]]; then
   mutants=(
     "finished-unchecked|src/tls/tls12/server.mojo|s/if not ct_eq(body, self.cn.finished(\"client finished\")):/if False:/"
     "ems-optional|src/tls/tls12/server.mojo|s/if not ch.ems:/if False:/"
-    "no-sentinel|src/tls/tls12/server.mojo|s/if ch.offers13() and self.cfg\[\].tls13:/if False:/"
+    "no-sentinel|src/tls/tls12/server.mojo|s/if self.cfg\[\].tls13:  # RFC 8446 4.1.3/if False:  # RFC 8446 4.1.3/"
     "record-cap-gone|src/tls/tls12/conn.mojo|s/if n > MAX_REC + (2048 if self.rd.on else 0):/if False:/"
     "read-seq-frozen|src/tls/tls12/conn.mojo|s/self.rd.seq += 1/pass/"
     "alpn-any|src/tls/tls12/server.mojo|s/if self.alpn.byte_length() == 0:/if False:/"

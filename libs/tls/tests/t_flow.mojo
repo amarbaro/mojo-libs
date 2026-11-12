@@ -222,7 +222,7 @@ def main() raises:
     var sp = Sv(cfg)
     sp.feed(cp.cn.take_output())
     var fl2 = sp.cn.take_output()
-    t.check("no sentinel for a 1.2-only client", List[UInt8](Span(fl2)[35:43]) != want)
+    t.check("sentinel for a client whose supported_versions was stripped (audit #1)", List[UInt8](Span(fl2)[35:43]) == want)
     var c12 = started("localhost", [], True)  # a server with no TLS 1.3 engine (cfg.tls13 False) must not claim a downgrade
     var s12 = Sv(make_cfg(False))
     s12.feed(c12.cn.take_output())

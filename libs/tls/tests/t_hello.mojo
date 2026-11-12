@@ -37,7 +37,7 @@ def main() raises:
             for s in ch.suites:
                 grease = grease or (s & 0x0F0F) == 0x0A0A
             t.check("vivaldi: sends GREASE and X25519MLKEM768, we skip both", grease and 0x11EC in ch.groups and choose_group(ch) == G_X25519)
-        # a server answers it: ServerHello parses, suite was offered, sentinel iff the client offered 1.3
+        # a server answers it: ServerHello parses, suite was offered, sentinel always: the server has a 1.3 engine (audit #1)
         var s = Sv(cfg)
         s.feed(raw)
         var fl = s.cn.take_output()
@@ -45,7 +45,7 @@ def main() raises:
         _ = r.take(5)
         var typ = r.u8()
         var sh = parse_server_hello(r.vec24().d.copy())
-        t.check(n + ": ServerHello answers it", typ == H_SH and sh.suite in ch.suites and sh.ems and sh.ri and sentinel(sh.random) == is13)
+        t.check(n + ": ServerHello answers it", typ == H_SH and sh.suite in ch.suites and sh.ems and sh.ri and sentinel(sh.random))
         # fuzz the real hello: flip, replace and truncate bytes; never a crash, never a hang
         var survived = 0
         for it in range(400):

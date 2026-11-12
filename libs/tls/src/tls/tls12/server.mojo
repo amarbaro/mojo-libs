@@ -116,7 +116,7 @@ struct Server12[C: Crypto12](Movable):
                 raise self.cn.fatal(A_NO_ALPN, "no common ALPN protocol")
         self.cn.cr = ch.random.copy()
         self.cn.sr = self.cn.c.random(32)
-        if ch.offers13() and self.cfg[].tls13:  # RFC 8446 4.1.3: only a TLS 1.3 server that picks 1.2 tells the client it was downgraded; a 1.2-only server must stay silent or Firefox and Chrome abort
+        if self.cfg[].tls13:  # RFC 8446 4.1.3: a server with a TLS 1.3 engine that answers with 1.2 sets the sentinel whatever the hello offered (an on-path peer can strip supported_versions); a 1.2-only server must stay silent or Firefox and Chrome abort
             var m = bytes_of("DOWNGRD")
             m.append(1)
             for i in range(8):
