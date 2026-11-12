@@ -109,13 +109,23 @@ def random_cases(out, seed=20261112):
         ctt = ChaCha20Poly1305(k).encrypt(iv, m, a or None)
         rows["chacha"].append(f"aead chacha {H(k)} {H(iv)} {H(a)} {H(m)} {H(ctt[:-16])} {H(ctt[-16:])} valid")
     for _ in range(100):
-        k, nonce, ctr, m = B(32), B(12), r.choice([0, 1, 7, 0xFFFFFFF0, r.getrandbits(32)]), B(rnd_len(r, True))
+        k, nonce, ctr = B(32), B(12), r.choice([0, 1, 7, 0xFFFFFFF0, r.getrandbits(32)])
+        m = B(r.randint(0, 1024) if ctr > 0xFFFF0000 else rnd_len(r, True))  # openssl carries a counter wrap into the nonce word, RFC 8439 does not say: stay below 2^32 blocks
         o = ossl("enc", "-chacha20", "-K", k.hex(), "-iv", (ctr.to_bytes(4, "little") + nonce).hex(), inp=m)
         rows["chacha"].append(f"chacha {H(k)} {H(nonce)} {ctr} {H(m)} {H(o)}")
     for _ in range(300):
         k, m = B(32), B(rnd_len(r))
         o = ossl("mac", "-macopt", f"hexkey:{k.hex()}", "-binary", "POLY1305", inp=m)
         rows["chacha"].append(f"poly {H(k)} {H(m)} {H(o)}")
+    # Poly1305 edge cases: h close to 2^130 - 5, so the final conditional subtraction runs (RFC 8439 A.3 style)
+    ff = b"\xff" * 16
+    for rr in (1, 2, 5, 0xFC):
+        for ss in (bytes(16), ff):
+            for m in (ff, ff * 2, ff * 3, b"\xfd" + ff[1:], b"\x02" + bytes(15), ff + b"\xf0" + ff[1:] + b"\x11" + bytes(15),
+                      ff + b"\xfb" + b"\xfe" * 15 + b"\x01" * 16, bytes([0xfb]) + b"\xfe" * 15, ff[:15], ff[:1]):
+                k = bytes([rr]) + bytes(15) + ss
+                o = ossl("mac", "-macopt", f"hexkey:{(k + bytes(32))[:32].hex()}", "-binary", "POLY1305", inp=m)
+                rows["chacha"].append(f"poly {H((k + bytes(32))[:32])} {H(m)} {H(o)}")
     os.makedirs(out, exist_ok=True)
     for k, v in rows.items():
         open(f"{out}/random-{k}.txt", "w").write("\n".join(v) + "\n")

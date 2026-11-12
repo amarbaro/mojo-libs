@@ -7,6 +7,7 @@ from tls.sym.mac import *
 from tls.sym.aes import Aes, V16
 from tls.sym.aead import Aead
 from tls.sym.gcm import AesGcm
+from tls.sym.chacha import ChaCha20Poly1305, chacha20_xor, poly1305_mac, _words
 
 
 def unhex(s: StringSlice) raises -> List[UInt8]:
@@ -121,7 +122,20 @@ def check(f: List[String]) raises -> Bool:
         var args = (unhex(f[4]), unhex(f[5]), unhex(f[6]), unhex(f[7]), f[8] == "valid")
         if alg == "gcm":
             return aead_case(AesGcm(unhex(f[2])), iv, args[0], args[1], args[2], args[3], args[4])
+        if alg == "chacha":
+            return aead_case(ChaCha20Poly1305(unhex(f[2])), iv, args[0], args[1], args[2], args[3], args[4])
         raise Error("unknown aead " + alg)
+    elif kind == "chacha":
+        var buf = unhex(f[4])
+        chacha20_xor(_words[8](unhex(f[1])), _words[4](unhex(f[2])), UInt32(Int(f[3])), buf.unsafe_ptr(), len(buf))
+        return same(buf, unhex(f[5]))
+    elif kind == "poly":
+        var t = poly1305_mac(unhex(f[1]), unhex(f[2]))
+        var want = unhex(f[3])
+        for i in range(16):
+            if UInt8((t[i // 4] >> UInt32(8 * (i % 4))) & 0xFF) != want[i]:
+                return False
+        return True
     elif kind == "aesblk":
         var b = unhex(f[2])
         var v = V16(0)

@@ -29,7 +29,7 @@ run .work/gate/soft soft
 
 mutant() {  # mutant LINE: name|file|sed expression[|build flags]
   local name file expr flags
-  IFS='|' read -r name file expr flags <<< "$1"
+  IFS='@' read -r name file expr flags <<< "$1"
   local d=.work/gate/m-$name
   rm -rf "$d"; mkdir -p "$d"; cp -r src "$d/src"
   sed -i -E "$expr" "$d/src/$file"
@@ -42,7 +42,7 @@ mutant() {  # mutant LINE: name|file|sed expression[|build flags]
 pids=()
 while IFS= read -r line; do
   [[ -z "$line" || "$line" == \#* ]] && continue
-  mutant "$line" > ".work/gate/m-${line%%|*}.log" 2>&1 &
+  mutant "$line" > ".work/gate/m-${line%%@*}.log" 2>&1 &
   pids+=($!)
   while [ "$(jobs -r | wc -l)" -ge 8 ]; do sleep 0.5; done
 done < "${MUTANTS:-tests/mutants.txt}"
