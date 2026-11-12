@@ -20,6 +20,9 @@ comptime SIG_PSS_SHA256 = 9
 comptime SIG_PSS_SHA384 = 10
 comptime SIG_PSS_SHA512 = 11
 
+comptime MAX_SAN_NAMES = 1024  # dNSName + iPAddress entries in one SAN; bounds the name constraint work
+comptime MAX_NC_SUBTREES = 256  # permitted + excluded subtrees in one nameConstraints
+
 comptime KU_DIGITAL_SIGNATURE = 1
 comptime KU_KEY_CERT_SIGN = 32
 
@@ -77,6 +80,20 @@ struct Certificate(Copyable, Movable):
     var has_perm_ip: Bool
     var nc_unsup: Int  # bit t set when a name constraint of unsupported type t is present
     var unknown_critical: Bool
+    var bc_crit: Bool
+    var has_ski: Bool
+    var ski_crit: Bool
+    var ski: List[UInt8]
+    var has_aki: Bool
+    var aki_crit: Bool
+    var aki_kid: List[UInt8]  # empty: no keyIdentifier
+    var aki_extra: Bool  # authorityCertIssuer or authorityCertSerialNumber present
+    var has_san: Bool
+    var san_crit: Bool
+    var has_nc: Bool
+    var nc_crit: Bool
+    var pc_noncrit: Bool  # policyConstraints present and not critical
+    var aia_crit: Bool
 
     def __init__(out self, var raw: List[UInt8]):
         self.raw = raw^
@@ -116,6 +133,20 @@ struct Certificate(Copyable, Movable):
         self.has_perm_ip = False
         self.nc_unsup = 0
         self.unknown_critical = False
+        self.bc_crit = False
+        self.has_ski = False
+        self.ski_crit = False
+        self.ski = List[UInt8]()
+        self.has_aki = False
+        self.aki_crit = False
+        self.aki_kid = List[UInt8]()
+        self.aki_extra = False
+        self.has_san = False
+        self.san_crit = False
+        self.has_nc = False
+        self.nc_crit = False
+        self.pc_noncrit = False
+        self.aia_crit = False
 
     @staticmethod
     def parse(var der: List[UInt8]) raises -> Certificate:
@@ -140,6 +171,11 @@ struct Certificate(Copyable, Movable):
 
     def signature(self) -> Bytes:
         return self._at(self.sig_off, self.sig_len)
+
+    def serial_ok(self) -> Bool:
+        """RFC 5280 4.1.2.2: positive, non-zero, at most 20 octets."""
+        var s = self.serial()
+        return s[0] < 0x80 and not (len(s) == 1 and s[0] == 0) and len(s) <= 20
 
     def self_issued(self) -> Bool:
         return same(self.subject(), self.issuer())
@@ -284,6 +320,7 @@ struct Certificate(Copyable, Movable):
             e.end()
             if hex_is(o, "551d13"):
                 self._bc(v)
+                self.bc_crit = crit
             elif hex_is(o, "551d0f"):
                 var d = Der(v)
                 var kb = d.bits()
@@ -305,8 +342,27 @@ struct Certificate(Copyable, Movable):
                         self.eku_server = True
             elif hex_is(o, "551d11"):
                 self._san(v)
+                self.has_san = True
+                self.san_crit = crit
             elif hex_is(o, "551d1e"):
                 self._nc(v)
+                self.has_nc = True
+                self.nc_crit = crit
+            elif hex_is(o, "551d0e"):
+                var d = Der(v)
+                self.ski = copy_of(d.next(0x04))
+                d.end()
+                self.has_ski = True
+                self.ski_crit = crit
+            elif hex_is(o, "551d23"):
+                self._aki(v)
+                self.has_aki = True
+                self.aki_crit = crit
+            elif hex_is(o, "2b06010505070101"):
+                self._aia(v)
+                self.aia_crit = crit
+            elif hex_is(o, "551d24") and not crit:
+                self.pc_noncrit = True
             elif crit and not (
                 hex_is(o, "551d0e")
                 or hex_is(o, "551d23")
@@ -331,6 +387,31 @@ struct Certificate(Copyable, Movable):
             self.path_len = s.small_int()
         s.end()
 
+    def _aki(mut self, v: Bytes) raises:
+        var d = Der(v)
+        var s = d.seq()
+        d.end()
+        if s.peek() == 0x80:
+            self.aki_kid = copy_of(s.next(0x80))
+            if len(self.aki_kid) == 0:
+                raise Error("tls: x509: empty authority key identifier")
+        while not s.done():
+            _ = s.next()
+            self.aki_extra = True
+
+    def _aia(self, v: Bytes) raises:
+        """AuthorityInfoAccessSyntax: a non-empty SEQUENCE of {OID, GeneralName}, strict DER."""
+        var d = Der(v)
+        var s = d.seq()
+        d.end()
+        if s.done():
+            raise Error("tls: x509: empty authority information access")
+        while not s.done():
+            var a = s.seq()
+            _ = a.oid()
+            _ = a.next()
+            a.end()
+
     def _san(mut self, v: Bytes) raises:
         var d = Der(v)
         var s = d.seq()
@@ -347,6 +428,8 @@ struct Certificate(Copyable, Movable):
                 if len(n) != 4 and len(n) != 16:
                     raise Error("tls: x509: bad san ip")
                 self.ips.append(copy_of(n))
+            if len(self.dns) + len(self.ips) > MAX_SAN_NAMES:
+                raise Error("tls: x509: too many subject alternative names")
 
     def _nc(mut self, v: Bytes) raises:
         var d = Der(v)
@@ -354,6 +437,7 @@ struct Certificate(Copyable, Movable):
         d.end()
         if s.done():
             raise Error("tls: x509: empty name constraints")
+        var subtrees = 0
         while not s.done():
             var excl = s.peek() == 0xA1
             if not excl and s.peek() != 0xA0:
@@ -365,6 +449,11 @@ struct Certificate(Copyable, Movable):
                 var g = l.seq()
                 var base = g.next()
                 var t = g.tag
+                subtrees += 1
+                if subtrees > MAX_NC_SUBTREES:
+                    raise Error("tls: x509: too many name constraint subtrees")
+                if t == 0x82 and len(base) > 0 and base[0] == 46:
+                    raise Error("tls: x509: dns name constraint with a leading period")
                 if not g.done():
                     raise Error("tls: x509: name constraint min/max")
                 if t == 0x82:

@@ -1,57 +1,7 @@
-bettertls::pathbuilding::tc61
-bettertls::pathbuilding::tc62
-bettertls::pathbuilding::tc63
-bettertls::pathbuilding::tc64
-bettertls::pathbuilding::tc65
-bettertls::pathbuilding::tc66
-bettertls::pathbuilding::tc67
-bettertls::pathbuilding::tc68
-pathlen::validation-ignores-pathlen-in-leaf
-pathological::nc-dos-1
-pathological::nc-dos-2
-rfc5280::aki::critical-aki
-rfc5280::aki::cross-signed-root-missing-aki
-rfc5280::aki::intermediate-missing-aki
-rfc5280::aki::leaf-missing-aki
-rfc5280::ca-as-leaf
-rfc5280::ee-critical-aia-invalid
-rfc5280::nc::invalid-dnsname-leading-period
-rfc5280::nc::not-allowed-in-ee-critical
-rfc5280::nc::not-allowed-in-ee-noncritical
-rfc5280::nc::permitted-dns-match-noncritical
-rfc5280::pc::ica-noncritical-pc
-rfc5280::root-missing-basic-constraints
-rfc5280::root-non-critical-basic-constraints
-rfc5280::san::noncritical-with-empty-subject
-rfc5280::san::underscore-dns
-rfc5280::serial::negative
-rfc5280::serial::too-long
-rfc5280::serial::zero
-rfc5280::ski::critical-ski
-rfc5280::ski::intermediate-missing-ski
-rfc5280::ski::root-missing-ski
-rfc5280::unknown-critical-extension-root
-rfc9881::ml-dsa-44
-rfc9881::ml-dsa-65
-rfc9881::ml-dsa-87
-webpki::aki::root-with-aki-all-fields
-webpki::aki::root-with-aki-authoritycertissuer
-webpki::aki::root-with-aki-authoritycertserialnumber
-webpki::aki::root-with-aki-missing-keyidentifier
-webpki::aki::root-with-aki-ski-mismatch
-webpki::cn::case-mismatch
-webpki::cn::ipv4-hex-mismatch
-webpki::cn::ipv4-leading-zeros-mismatch
-webpki::cn::ipv6-non-rfc5952-mismatch
-webpki::cn::ipv6-uncompressed-mismatch
-webpki::cn::ipv6-uppercase-mismatch
-webpki::cn::not-in-san
-webpki::cn::punycode-not-in-san
-webpki::cn::utf8-vs-punycode-mismatch
-webpki::eku::ee-without-eku
-webpki::forbidden-rsa-key-not-divisible-by-8-in-leaf
-webpki::forbidden-rsa-not-divisible-by-8-in-root
-webpki::malformed-aia
-webpki::san::public-suffix-multi-label-wildcard-san
-webpki::san::public-suffix-private-namespace-wildcard-san
-webpki::san::san-critical-with-nonempty-subject
+!webpki::cn::*	policy: CN ignored per RFC 9525, no hostname-matching effect (the SAN decides; tests/data bad_cn_victim proves a CN never matches)
+webpki::nc::permitted-dns-match-noncritical	conflicts with rfc5280::nc::permitted-dns-match-noncritical (invalid); non-critical name constraints are refused
+rfc5280::eku::ee-without-eku	conflicts with webpki::eku::ee-without-eku (invalid); a leaf without extendedKeyUsage is refused
+rfc5280::ca-as-leaf	conflicts with webpki::ca-as-leaf (invalid); a CA certificate in leaf position is refused
+pathlen::validation-ignores-pathlen-in-leaf	its leaf is a CA certificate: refused, see rfc5280::ca-as-leaf
+cve::cve-2024-0567	its anchor has no AKI and a different issuer, same as invalid rfc5280::aki::cross-signed-root-missing-aki; cannot be both
+rfc9881::ml-dsa-*	ML-DSA keys: no ML-DSA verifier in the stack (docs/plan.md: P-256, P-384, RSA)

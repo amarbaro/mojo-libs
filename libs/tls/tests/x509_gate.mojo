@@ -8,7 +8,7 @@ from tls.x509.cert import Certificate, KEY_RSA, KEY_P256
 from tls.x509.key import load_private_key, PrivateKey, _parse, wipe
 from tls.sym import sha256
 from tls.asym import P256Key, RsaPrivate
-from tls.x509.chain import verify_chain, load_roots_pem, load_system_roots, host_matches, parse_ip
+from tls.x509.chain import anchor_rules, verify_chain, load_roots_pem, load_system_roots, host_matches, parse_ip
 
 comptime HEX = "0123456789abcdef"
 
@@ -208,6 +208,10 @@ def _b64_bad(s: String) -> Bool:
 
 
 def unit(mut t: Tally) raises:
+    # host_matches alone (the leaf rules already refuse these SANs): *.com is not a wildcard, a partial label is not either
+    var wild = load_certs("ec_wild.pem", "tests/data/")[0].copy()
+    t.check("host_matches *.com refused", not host_matches(wild, view("foo.com".as_bytes())), "matched")
+    t.check("host_matches *.wild.example.com", host_matches(wild, view("x.wild.example.com".as_bytes())), "no match")
     # DER strictness: each malformed encoding must be rejected
     t.check("der non-minimal length 81 05", _raises_der("308105020100" + "0000", 0), "accepted")
     t.check("der long length 82 0001", _raises_der("30820001ff", 0), "accepted")
@@ -417,14 +421,14 @@ def chain_mode(manifest: String, mut t: Tally) raises:
         if len(f) < 6:
             continue
         var name = String(f[0])
-        var certs = load_certs(String(f[5]), "tests/data/")
-        var roots = load_certs(String(f[4]), "tests/data/")
         var host = String(f[3])
         if host == "-":
             host = String()
         var verdict = String("ok")
         var why = String()
-        try:
+        try:  # a certificate the parser refuses (resource caps) is a rejected chain
+            var certs = load_certs(String(f[5]), "tests/data/")
+            var roots = load_certs(String(f[4]), "tests/data/")
             verify_chain(certs, host, Int(atol(String(f[2]))), roots)
         except e:
             verdict = "fail"
@@ -730,6 +734,28 @@ def limbo_mode(path: String, mut t: Tally) raises:
     t.check("limbo ran", True)
 
 
+def roots_mode(path: String, mut t: Tally) raises:
+    """Every certificate of the bundle must pass the trust-anchor profile; prints the ones that do not."""
+    var dropped = 0
+    var raw = read_file(path)
+    var roots = load_roots_pem(view(raw), dropped)
+    var bad = 0
+    for ref r in roots:
+        try:
+            anchor_rules(r, 0)
+        except e:
+            bad += 1
+            var cn = String()
+            var sj = r.subject()
+            for i in range(len(sj)):
+                if sj[i] >= 32 and sj[i] < 127:
+                    cn += chr(Int(sj[i]))
+            print("ROOT", String(e), "|", cn)
+    print("roots:", len(roots), "parsed,", dropped, "dropped,", bad, "fail the anchor profile")
+    t.check("roots audited", dropped == 0)
+    _ = len(raw)
+
+
 def main() raises:
     var a = argv()
     var mode = String(a[1])
@@ -741,6 +767,8 @@ def main() raises:
         fuzz_chain("rsa_leaf.pem", "rsa_inter.pem", "rsa_root.pem", "rsa.example.com", Int(atol(String(a[2]))), t)
     elif mode == "limbo":
         limbo_mode(String(a[2]), t)
+    elif mode == "roots":
+        roots_mode(String(a[2]), t)
     elif mode == "bench":
         bench(t)
     elif mode == "bundle":

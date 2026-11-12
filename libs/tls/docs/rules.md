@@ -44,3 +44,13 @@ Lane 4 (TLS 1.3), 2026-11-12. Other lanes append their own lines; concatenate on
 - Mojo 1.2: `raise` after assigning a field of a field in a raising `__init__` fails to compile ("destroyed out of the
   middle"): do the raising work in `start()`. `ref p = self.tab[fd]` is invalidated by any `mut self` call: index again.
   `List + List` needs implicit copies: use `cat(...)`. `Int(String, base=16)` does not exist: decode nibbles.
+
+Lane x509 wave 2 (2026-11-12).
+
+- A build that failed left the old binary in place and the next run reported old results -> every build script deletes the binary first and fails when it is missing (`tests/lim.sh`).
+- `cmd1; commit` committed after a failed gate stage -> commit only after the check in the same `&&` chain, read the PASS lines first.
+- A limbo case can contradict another (`conflicts_with`, and unmarked pairs such as the CN cases) -> an invalid chain accepted is never pinned except the one policy class the orchestrator named; the valid twin is pinned with the reason.
+- A mutant survived because a second rule rejected the same fixture first (ca_check_removed, wildcard_tld, leaf_ca_ok) -> a fixture must violate exactly one rule; a survivor is a test gap or an equivalent mutant (delete the code), never ignored.
+- A fixture leaf signed by the wrong root made a cap test pass for the wrong reason -> check each negative case by flipping the one thing it tests (the mutant of the cap).
+- `view(read_file(p))` freed the bytes while the view was alive (22 roots "dropped") -> bind the buffer to a variable that outlives the view.
+- Real roots break pedantic rules (serial 0 in GoDaddy and Hellenic, no SKI in TWCA Global Root CA) -> audit the system bundle (`gate_x509.sh roots`) before turning a profile rule on for anchors.

@@ -22,7 +22,7 @@ issue() {
     rsa) openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out $out.key 2>/dev/null ;;
     rsa1024) openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:1024 -out $out.key 2>/dev/null ;;
   esac
-  openssl req -new -key $out.key -subj "/CN=$cn" -out $out.csr
+  openssl req -new -key $out.key -subj "$([ "$cn" = - ] && echo / || echo "/CN=$cn")" -out $out.csr
   if [ "$signer" = self ]; then
     openssl x509 -req -in $out.csr -signkey $out.key -days $days -extfile <(printf '%b' "$exts") -out $out.pem "$@" 2>/dev/null
   else
@@ -65,14 +65,39 @@ issue ec_dnsonly "d" ec_inter ec "$SRV$(san DNS:192.0.2.7)"
 cs bad_ip_vs_dns_san fail $NOW 192.0.2.7 ec_root.pem ec_dnsonly.pem,ec_inter.pem
 # wildcard
 issue ec_wild "w" ec_inter ec "$SRV$(san 'DNS:*.wild.example.com,DNS:*.com,DNS:f*.example.org,DNS:x.*.example.net')"
-cs ok_wild ok $NOW x.wild.example.com ec_root.pem ec_wild.pem,ec_inter.pem
+issue ec_wild_ok "w" ec_inter ec "$SRV$(san DNS:*.wild.example.com)"
+cs ok_wild ok $NOW x.wild.example.com ec_root.pem ec_wild_ok.pem,ec_inter.pem
 cs bad_wild_apex fail $NOW wild.example.com ec_root.pem ec_wild.pem,ec_inter.pem
 cs bad_wild_two_labels fail $NOW a.b.wild.example.com ec_root.pem ec_wild.pem,ec_inter.pem
 cs bad_wild_tld fail $NOW foo.com ec_root.pem ec_wild.pem,ec_inter.pem
 cs bad_wild_partial fail $NOW fa.example.org ec_root.pem ec_wild.pem,ec_inter.pem
 div bad_wild_partial "openssl accepts partial-label wildcards"
 cs bad_wild_middle fail $NOW x.y.example.net ec_root.pem ec_wild.pem,ec_inter.pem
+# resource caps: 256 name constraint subtrees, 1024 SAN names (cert.mojo MAX_NC_SUBTREES, MAX_SAN_NAMES)
+subtrees() { local n=$1 o=permitted\;DNS:good.example i; for ((i = 1; i < n; i++)); do o+=,permitted\;DNS:d$i.example; done; printf '%s' "$o"; }
+names() { local n=$1 o=DNS:n0.good.example i; for ((i = 1; i < n; i++)); do o+=,DNS:n$i.good.example; done; printf '%s' "$o"; }
+issue caps_root256 "Caps256" ec_root ec "$CA"'nameConstraints=critical,'"$(subtrees 256)"'\n'
+issue caps_root257 "Caps257" ec_root ec "$CA"'nameConstraints=critical,'"$(subtrees 257)"'\n'
+issue caps_leaf1024 "l" caps_root256 ec "$SRV$(san "$(names 1024)")"
+issue caps_leaf1025 "l" caps_root256 ec "$SRV$(san "$(names 1025)")"
+cs ok_caps_at_limit ok $NOW n1023.good.example ec_root.pem caps_leaf1024.pem,caps_root256.pem
+issue caps_leaf257 "l" caps_root257 ec "$SRV$(san DNS:n0.good.example)"
+cs bad_nc_257_subtrees fail $NOW n0.good.example ec_root.pem caps_leaf257.pem,caps_root257.pem
+div bad_nc_257_subtrees "openssl has no cap on name constraint subtrees; we refuse more than 256 (DoS bound, limbo pathological::nc-dos)"
+cs bad_san_1025_names fail $NOW n0.good.example ec_root.pem caps_leaf1025.pem,caps_root256.pem
+div bad_san_1025_names "openssl has no cap on SAN entries; we refuse more than 1024 (DoS bound, limbo pathological::nc-dos)"
+# a CA certificate in leaf position (all leaf extensions otherwise fine), and a malformed SAN in an intermediate under constraints
+issue ec_leaf_isca "ca" ec_inter ec "basicConstraints=critical,CA:TRUE\nkeyUsage=critical,digitalSignature,keyCertSign\nextendedKeyUsage=serverAuth\n$(san DNS:leafca.example.com)"
+cs bad_leaf_is_ca fail $NOW leafca.example.com ec_root.pem ec_leaf_isca.pem,ec_inter.pem
+div bad_leaf_is_ca "openssl does not refuse a CA certificate in leaf position; CA/B BR profile (limbo webpki::ca-as-leaf) does"
+issue ec_inter_nosubj - ec_root ec "$CA"
+issue ec_leaf_nosubj "l" ec_inter_nosubj ec "$SRV$(san DNS:nosubj.example.com)"
+cs bad_ca_empty_subject fail $NOW nosubj.example.com ec_root.pem ec_leaf_nosubj.pem,ec_inter_nosubj.pem
+div bad_ca_empty_subject "openssl accepts an intermediate with an empty subject name"
 # CN only
+issue ec_cn_victim "victim.example" ec_inter ec "$SRV$(san DNS:other.example)"
+cs bad_cn_victim fail $NOW victim.example ec_root.pem ec_cn_victim.pem,ec_inter.pem
+cs ok_cn_victim_san ok $NOW other.example ec_root.pem ec_cn_victim.pem,ec_inter.pem
 issue ec_cnonly "cn.example.com" ec_inter ec "$SRV"
 cs bad_cn_only fail $NOW cn.example.com ec_root.pem ec_cnonly.pem,ec_inter.pem
 div bad_cn_only "openssl falls back to the subject CN when there is no SAN; RFC 9525 forbids it"
@@ -95,7 +120,7 @@ issue ec_leaf_p1c "lp1c" ec_inter_p1c ec "$SRV$(san DNS:p1c.example.com)"
 cs ok_pathlen1 ok $NOW p1.example.com ec_root.pem ec_leaf_p1.pem,ec_inter_p1b.pem,ec_inter_p1.pem
 cs bad_pathlen1_exceeded fail $NOW p1c.example.com ec_root.pem ec_leaf_p1c.pem,ec_inter_p1c.pem,ec_inter_p1b.pem,ec_inter_p1.pem
 cs ok_out_of_order ok $NOW p1.example.com ec_root.pem ec_leaf_p1.pem,ec_inter_p1.pem,ec_inter_p1b.pem
-issue ec_ca_false "Inoca" ec_root ec 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,keyCertSign\n'
+issue ec_ca_false "Inoca" ec_root ec 'basicConstraints=critical,CA:FALSE\n'
 issue ec_leaf4 "l4" ec_ca_false ec "$SRV$(san DNS:noca.example.com)"
 cs bad_inter_not_ca fail $NOW noca.example.com ec_root.pem ec_leaf4.pem,ec_ca_false.pem
 issue ec_noca_noku "Inoku" ec_root ec 'basicConstraints=CA:FALSE\n'
@@ -113,7 +138,8 @@ issue ec_leaf_anyeku "a" ec_inter ec "basicConstraints=CA:FALSE\nkeyUsage=critic
 cs ok_eku_any ok $NOW any.example.com ec_root.pem ec_leaf_anyeku.pem,ec_inter.pem
 div ok_eku_any "openssl treats a leaf with only anyExtendedKeyUsage as unsuitable for sslserver; Go and Chromium accept it"
 issue ec_leaf_noeku "n" ec_inter ec "basicConstraints=CA:FALSE\n$(san DNS:noeku.example.com)"
-cs ok_no_eku_no_ku ok $NOW noeku.example.com ec_root.pem ec_leaf_noeku.pem,ec_inter.pem
+cs bad_no_eku fail $NOW noeku.example.com ec_root.pem ec_leaf_noeku.pem,ec_inter.pem
+div bad_no_eku "openssl accepts a leaf without extendedKeyUsage; CA/B BR 7.1.2.7.6 requires one (limbo webpki::eku::ee-without-eku)"
 issue ec_leaf_ku "k" ec_inter ec "basicConstraints=CA:FALSE\nkeyUsage=critical,keyEncipherment\n$(san DNS:ku.example.com)"
 cs bad_ku_no_signature fail $NOW ku.example.com ec_root.pem ec_leaf_ku.pem,ec_inter.pem
 div bad_ku_no_signature "openssl -purpose sslserver accepts keyEncipherment (RSA key transport); our suites cannot use it"
@@ -125,14 +151,14 @@ cs bad_unknown_critical fail $NOW crit.example.com ec_root.pem ec_leaf_crit.pem,
 issue ec_leaf_ncrit "c" ec_inter ec "$SRV$(san DNS:ncrit.example.com)"'1.2.3.4=ASN1:UTF8String:x\n'
 cs ok_unknown_noncritical ok $NOW ncrit.example.com ec_root.pem ec_leaf_ncrit.pem,ec_inter.pem
 # name constraints
-issue nc_dns "NC dns" ec_root ec "$CA"'nameConstraints=critical,permitted;DNS:.good.example\n'
+issue nc_dns "NC dns" ec_root ec "$CA"'nameConstraints=critical,permitted;DNS:good.example\n'
 issue nc_dns_leaf_ok "g" nc_dns ec "$SRV$(san DNS:www.good.example)"
 issue nc_dns_leaf_bad "b" nc_dns ec "$SRV$(san DNS:www.bad.example)"
 issue nc_dns_leaf_mixed "m" nc_dns ec "$SRV$(san DNS:www.good.example,DNS:www.bad.example)"
 cs ok_nc_dns_permitted ok $NOW www.good.example ec_root.pem nc_dns_leaf_ok.pem,nc_dns.pem
 cs bad_nc_dns_not_permitted fail $NOW www.bad.example ec_root.pem nc_dns_leaf_bad.pem,nc_dns.pem
 cs bad_nc_dns_mixed fail $NOW www.good.example ec_root.pem nc_dns_leaf_mixed.pem,nc_dns.pem
-issue nc_dnsx "NC dnsx" ec_root ec "$CA"'nameConstraints=permitted;DNS:good.example,excluded;DNS:sub.good.example\n'
+issue nc_dnsx "NC dnsx" ec_root ec "$CA"'nameConstraints=critical,permitted;DNS:good.example,excluded;DNS:sub.good.example\n'
 issue nc_dnsx_apex "a" nc_dnsx ec "$SRV$(san DNS:good.example)"
 issue nc_dnsx_sub "s" nc_dnsx ec "$SRV$(san DNS:x.sub.good.example)"
 issue nc_dnsx_oth "o" nc_dnsx ec "$SRV$(san DNS:x.other.good.example)"
@@ -173,16 +199,16 @@ cs ok_p384_signs_p256_leaf ok $NOW p384b.example.com ec384_root.pem ec384_leaf_p
 issue ss_leaf "ss" self ec "$SRV$(san DNS:ss.example.com)"
 cs ok_selfsigned_trusted ok $NOW ss.example.com ss_leaf.pem ss_leaf.pem
 cs bad_selfsigned_untrusted fail $NOW ss.example.com ec_root.pem ss_leaf.pem
-# chain length cap
+# chain length cap (MAX_CHAIN = 40)
 prev=ec_root
-for i in 1 2 3 4 5 6 7 8 9 10; do issue ec_c$i "C$i" $prev ec "$CA"; prev=ec_c$i; done
-issue ec_lc9 "l" ec_c9 ec "$SRV$(san DNS:long.example.com)"
-issue ec_lc10 "l" ec_c10 ec "$SRV$(san DNS:long.example.com)"
-c9=$(for i in 9 8 7 6 5 4 3 2 1; do printf 'ec_c%s.pem,' $i; done)
-c10=$(for i in 10 9 8 7 6 5 4 3 2 1; do printf 'ec_c%s.pem,' $i; done)
-cs ok_chain_10 ok $NOW long.example.com ec_root.pem "ec_lc9.pem,${c9%,}"
-cs bad_chain_11 fail $NOW long.example.com ec_root.pem "ec_lc10.pem,${c10%,}"
-div bad_chain_11 "openssl's default depth is 100; we cap chains at 10 certificates"
+for i in $(seq 1 40); do issue ec_c$i "C$i" $prev ec "$CA"; prev=ec_c$i; done
+issue ec_lc39 "l" ec_c39 ec "$SRV$(san DNS:long.example.com)"
+issue ec_lc40 "l" ec_c40 ec "$SRV$(san DNS:long.example.com)"
+c39=$(for i in $(seq 39 -1 1); do printf 'ec_c%s.pem,' $i; done)
+c40=$(for i in $(seq 40 -1 1); do printf 'ec_c%s.pem,' $i; done)
+cs ok_chain_40 ok $NOW long.example.com ec_root.pem "ec_lc39.pem,${c39%,}"
+cs bad_chain_41 fail $NOW long.example.com ec_root.pem "ec_lc40.pem,${c40%,}"
+div bad_chain_41 "openssl's default depth is 100; we cap chains at 40 certificates"
 # self-issued intermediates (RFC 5280 6.1.4 l and 6.1.3 name constraints): subject == issuer, different key
 issue ec_p1_si "Ip1" ec_inter_p1 ec "$CA"
 issue ec_p1_si_b "Ip1si-b" ec_p1_si ec "$CA"
@@ -191,6 +217,10 @@ cs ok_selfissued_not_counted ok $NOW si.example.com ec_root.pem ec_leaf_si.pem,e
 issue nc_dns_si "NC dns" nc_dns ec "$CA$(san DNS:evil.example)"
 issue nc_dns_si_leaf "x" nc_dns_si ec "$SRV$(san DNS:www.good.example)"
 cs ok_nc_skips_selfissued_intermediate ok $NOW www.good.example ec_root.pem nc_dns_si_leaf.pem,nc_dns_si.pem,nc_dns.pem
+issue nc_dns_mal "NC mal" nc_dns ec "$CA$(san DNS:.good.example)"
+issue nc_dns_mal_leaf "x" nc_dns_mal ec "$SRV$(san DNS:www.good.example)"
+cs bad_nc_malformed_inter_san fail $NOW www.good.example ec_root.pem nc_dns_mal_leaf.pem,nc_dns_mal.pem,nc_dns.pem
+div bad_nc_malformed_inter_san "openssl accepts a leading-dot dNSName SAN that satisfies the constraint textually"
 # wildcard SAN against excluded subtrees (CVE-2025-61727 class)
 issue nc_wild_x "NC wildx" ec_root ec "$CA"'nameConstraints=critical,permitted;DNS:example.net,excluded;DNS:bar.example.net\n'
 issue nc_wild_p "NC wildp" ec_root ec "$CA"'nameConstraints=critical,permitted;DNS:example.net\n'
