@@ -303,6 +303,9 @@ def p_sni(d: List[UInt8]) raises -> String:
         if t == 0:
             if len(name) == 0:
                 raise bad("illegal_parameter", "empty host name")
+            for i in range(len(name)):  # host names compare case-insensitively (RFC 6066 3): keep them lower case, like tls12
+                if name[i] >= 65 and name[i] <= 90:
+                    name[i] += 32
             return str_of(name)
     return String()
 

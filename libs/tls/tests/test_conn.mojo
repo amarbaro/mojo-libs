@@ -733,6 +733,17 @@ def sh_ext_rules(mut t: T) raises:
             t.ok("ServerHello with an extension we never offered: unsupported_extension (" + e + ")", "unsupported_extension" in e)
 
 
+def sni_case(mut t: T) raises:
+    """server_name is case-insensitive (RFC 6066 3, RFC 4343): the server reports and binds it lower case, as the TLS 1.2 path
+    does (audit #14)."""
+    var h = default_hello("Host.Example.Com", fill(32, 0x99), fill(0, 0x31), x25519_base(fill(32, 0x42)), List[String]())
+    var s = server(0x1301, [G_X25519])
+    var c = client(h, "Host.Example.Com")
+    var r = pump(c, s, c.start())
+    t.ok("mixed-case SNI: handshake completes (" + r.cerr + r.serr + ")", r.cdone and r.sdone)
+    t.ok("mixed-case SNI reaches the server lower case (" + s.sni + ")", s.sni == "host.example.com")
+
+
 def main() raises:
     var t = T("conn")
     matrix(t)
@@ -741,6 +752,7 @@ def main() raises:
     early_data(t)
     ee_rules(t)
     sh_ext_rules(t)
+    sni_case(t)
     client_auth(t)
     options(t)
     alerts(t)
