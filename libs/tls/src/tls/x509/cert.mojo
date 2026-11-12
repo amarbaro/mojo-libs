@@ -77,6 +77,20 @@ struct Certificate(Copyable, Movable):
     var has_perm_ip: Bool
     var nc_unsup: Int  # bit t set when a name constraint of unsupported type t is present
     var unknown_critical: Bool
+    var bc_crit: Bool
+    var has_ski: Bool
+    var ski_crit: Bool
+    var ski: List[UInt8]
+    var has_aki: Bool
+    var aki_crit: Bool
+    var aki_kid: List[UInt8]  # empty: no keyIdentifier
+    var aki_extra: Bool  # authorityCertIssuer or authorityCertSerialNumber present
+    var has_san: Bool
+    var san_crit: Bool
+    var has_nc: Bool
+    var nc_crit: Bool
+    var pc_noncrit: Bool  # policyConstraints present and not critical
+    var aia_crit: Bool
 
     def __init__(out self, var raw: List[UInt8]):
         self.raw = raw^
@@ -116,6 +130,20 @@ struct Certificate(Copyable, Movable):
         self.has_perm_ip = False
         self.nc_unsup = 0
         self.unknown_critical = False
+        self.bc_crit = False
+        self.has_ski = False
+        self.ski_crit = False
+        self.ski = List[UInt8]()
+        self.has_aki = False
+        self.aki_crit = False
+        self.aki_kid = List[UInt8]()
+        self.aki_extra = False
+        self.has_san = False
+        self.san_crit = False
+        self.has_nc = False
+        self.nc_crit = False
+        self.pc_noncrit = False
+        self.aia_crit = False
 
     @staticmethod
     def parse(var der: List[UInt8]) raises -> Certificate:
@@ -289,6 +317,7 @@ struct Certificate(Copyable, Movable):
             e.end()
             if hex_is(o, "551d13"):
                 self._bc(v)
+                self.bc_crit = crit
             elif hex_is(o, "551d0f"):
                 var d = Der(v)
                 var kb = d.bits()
@@ -310,8 +339,27 @@ struct Certificate(Copyable, Movable):
                         self.eku_server = True
             elif hex_is(o, "551d11"):
                 self._san(v)
+                self.has_san = True
+                self.san_crit = crit
             elif hex_is(o, "551d1e"):
                 self._nc(v)
+                self.has_nc = True
+                self.nc_crit = crit
+            elif hex_is(o, "551d0e"):
+                var d = Der(v)
+                self.ski = copy_of(d.next(0x04))
+                d.end()
+                self.has_ski = True
+                self.ski_crit = crit
+            elif hex_is(o, "551d23"):
+                self._aki(v)
+                self.has_aki = True
+                self.aki_crit = crit
+            elif hex_is(o, "2b06010505070101"):
+                self._aia(v)
+                self.aia_crit = crit
+            elif hex_is(o, "551d24") and not crit:
+                self.pc_noncrit = True
             elif crit and not (
                 hex_is(o, "551d0e")
                 or hex_is(o, "551d23")
@@ -335,6 +383,36 @@ struct Certificate(Copyable, Movable):
         if s.peek() == 0x02:
             self.path_len = s.small_int()
         s.end()
+
+    def _aki(mut self, v: Bytes) raises:
+        var d = Der(v)
+        var s = d.seq()
+        d.end()
+        if s.peek() == 0x80:
+            self.aki_kid = copy_of(s.next(0x80))
+            if len(self.aki_kid) == 0:
+                raise Error("tls: x509: empty authority key identifier")
+        while not s.done():
+            _ = s.next()
+            self.aki_extra = True
+
+    def _aia(self, v: Bytes) raises:
+        """AuthorityInfoAccessSyntax: a non-empty SEQUENCE of {OID, GeneralName}; a URI is ASCII."""
+        var d = Der(v)
+        var s = d.seq()
+        d.end()
+        if s.done():
+            raise Error("tls: x509: empty authority information access")
+        while not s.done():
+            var a = s.seq()
+            _ = a.oid()
+            var n = a.next()
+            a.end()
+            if (a.tag & 0xC0) != 0x80:
+                raise Error("tls: x509: bad access location")
+            for i in range(len(n)):
+                if a.tag == 0x86 and n[i] >= 0x80:
+                    raise Error("tls: x509: access location URI is not ASCII")
 
     def _san(mut self, v: Bytes) raises:
         var d = Der(v)

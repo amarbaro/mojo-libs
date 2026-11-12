@@ -261,6 +261,12 @@ def _ca_rules(c: Certificate, below: Int, anchor: Bool) raises:
         raise Error("tls: x509: CA extended key usage excludes serverAuth")
 
 
+def _profile(c: Certificate) raises:
+    """RFC 5280 extension profile of any certificate on the path, anchor included."""
+    if c.aia_crit:
+        raise Error("tls: x509: authority information access must not be critical")
+
+
 def _leaf_rules(leaf: Certificate) raises:
     """End-entity rules; they apply to chain[0] even when it is itself the trust anchor."""
     if not leaf.serial_ok():
@@ -276,10 +282,12 @@ def _leaf_rules(leaf: Certificate) raises:
 def _check_path(chain: List[Certificate], below: List[Int], root: Certificate, now: Int) raises:
     """`below` indexes chain: leaf first, then intermediates up to the one the root signed (empty: the leaf is the root)."""
     var k = len(below)
+    _profile(root)
     _leaf_rules(chain[0])
     var nsi = 0  # intermediates seen so far that are not self-issued (RFC 5280 6.1.4 l)
     for p in range(k):
         ref c = chain[below[p]]
+        _profile(c)
         _valid_at(c, now)
         if p > 0 and not c.serial_ok():
             raise Error("tls: x509: serial number must be positive, non-zero and at most 20 octets")

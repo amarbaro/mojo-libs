@@ -14,7 +14,6 @@ rfc5280::aki::cross-signed-root-missing-aki
 rfc5280::aki::intermediate-missing-aki
 rfc5280::aki::leaf-missing-aki
 rfc5280::ca-as-leaf
-rfc5280::ee-critical-aia-invalid
 rfc5280::nc::invalid-dnsname-leading-period
 rfc5280::nc::not-allowed-in-ee-critical
 rfc5280::nc::not-allowed-in-ee-noncritical
@@ -47,7 +46,6 @@ webpki::cn::punycode-not-in-san
 webpki::cn::utf8-vs-punycode-mismatch
 webpki::eku::ee-without-eku
 webpki::forbidden-rsa-key-not-divisible-by-8-in-leaf
-webpki::malformed-aia
 webpki::san::public-suffix-multi-label-wildcard-san
 webpki::san::public-suffix-private-namespace-wildcard-san
 webpki::san::san-critical-with-nonempty-subject
