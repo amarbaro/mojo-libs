@@ -228,6 +228,32 @@ def main() raises:
     s12.feed(c12.cn.take_output())
     t.check("no sentinel from a TLS 1.2-only server", List[UInt8](Span(s12.cn.take_output())[35:43]) != want)
 
+    # sequence numbers never wrap (RFC 5246 6.1; a wrap reuses the AEAD nonce): the last usable number is 2^64-2 (audit #2)
+    for sx in [0xC02B, 0xCCA8]:
+        var cq = started("rsa.test" if sx == 0xCCA8 else "localhost", [], False, [sx])
+        var sq_ = Sv(cfg)
+        pump(cq, sq_)
+        cq.cn.wr.seq = UInt64.MAX - 1
+        cq.cn.write_app(bytes_of("last"))
+        t.check("write seq: 2^64-2 still seals " + hex(sx), cq.cn.wr.seq == UInt64.MAX and len(cq.cn.take_output()) > 0)
+        var wrapped = False
+        try:
+            cq.cn.write_app(bytes_of("wrap"))
+        except:
+            wrapped = cq.cn.alert == A_INTERNAL
+        t.check("write seq: refuses to wrap " + hex(sx), wrapped and cq.cn.wr.seq == UInt64.MAX and len(cq.cn.take_output()) == 0)
+        var cr = started("rsa.test" if sx == 0xCCA8 else "localhost", [], False, [sx])
+        var sr_ = Sv(cfg)
+        pump(cr, sr_)
+        cr.cn.write_app(bytes_of("data"))
+        sr_.cn.rd.seq = UInt64.MAX
+        var rwrapped = False
+        try:
+            sr_.feed(cr.cn.take_output())
+        except:
+            rwrapped = sr_.cn.alert == A_INTERNAL
+        t.check("read seq: refuses to wrap " + hex(sx), rwrapped and sr_.cn.rd.seq == UInt64.MAX)
+
     # ClientHello errors: the alert is the contract
     expect(t, "good hello accepted", cfg, rec(22, mk_ch()), -9)
     expect(t, "GREASE everywhere accepted", cfg, rec(22, mk_ch(cs=[0x0A0A, 0xC02B], groups=[0x2A2A, 0x001D], sigalgs=[0x0A0A, 0x0403], versions=[0x3A3A, 0x0304, 0x0303], extra=bl(0x1A, 0x1A, 0, 1, 0))), -9)

@@ -120,6 +120,8 @@ struct Conn[C: Crypto12](Movable):
     def write_rec(mut self, typ: Int, data: List[UInt8]) raises:
         var off = 0
         while True:
+            if self.wr.on and self.wr.seq == UInt64.MAX:  # RFC 5246 6.1: a wrap would reuse the AEAD nonce
+                raise self.fatal(A_INTERNAL, "write sequence number exhausted")
             var n = min(MAX_REC, len(data) - off)
             var h = len(self.out)
             self.out.append(UInt8(typ))
@@ -236,6 +238,8 @@ struct Conn[C: Crypto12](Movable):
             var s = self.inp + 5
             var e = s + n
             if self.rd.on:
+                if self.rd.seq == UInt64.MAX:
+                    raise self.fatal(A_INTERNAL, "read sequence number exhausted")
                 var ex = 8 if self.rd.aead < 2 else 0
                 if n < ex + 16:
                     raise self.fatal(A_BAD_MAC, "record too short")
