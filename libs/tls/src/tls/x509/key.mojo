@@ -8,18 +8,13 @@ from tls.x509.cert import Certificate, KEY_RSA, KEY_P256
 from tls.x509.der import Der, Bytes, view, copy_of, same, hex_is
 from tls.x509.pem import pem_spans, b64_decode
 from tls.x509.sigs import rsa_bits, MIN_RSA_BITS
-from tls.x509.shim.bigint import BigInt, bigint_from_bytes, bigint_mul, bigint_mod, bigint_sub, bigint_cmp, bigint_one
-from tls.x509.shim.rsa import _rsa_raw
-import tls.x509.shim.ec_ct as ct
+from tls.sym import sha256
+from tls.asym import P256Key, RsaPrivate, rsa_d_ok
 
 
 def wipe(mut l: List[UInt8]):
     if len(l) > 0:
         _ = external_call["explicit_bzero", Int](l.unsafe_ptr(), len(l))
-
-
-def _wipe_big(mut b: BigInt):
-    _ = external_call["explicit_bzero", Int](b.limbs.unsafe_ptr(), len(b.limbs) * 4)
 
 
 struct PrivateKey(Movable):
@@ -58,49 +53,16 @@ struct PrivateKey(Movable):
 
 
 def _rsa_ok(k: PrivateKey) -> Bool:
-    var n = bigint_from_bytes(k.pub)
-    var e = bigint_from_bytes(k.e)
-    var p = bigint_from_bytes(k.p)
-    var q = bigint_from_bytes(k.q)
-    var d = bigint_from_bytes(k.d)
-    var dp = bigint_from_bytes(k.dp)
-    var dq = bigint_from_bytes(k.dq)
-    var qi = bigint_from_bytes(k.qinv)
-    var one = bigint_one()
-    var pq = BigInt()
-    var r1 = BigInt()
-    var r2 = BigInt()
-    var r3 = BigInt()
-    var ok = bigint_cmp(p, one) > 0 and bigint_cmp(q, one) > 0 and bigint_cmp(d, n) < 0 and (k.e[len(k.e) - 1] & 1) == 1
-    if ok:
-        pq = bigint_mul(p, q)
-        r1 = bigint_mod(d, bigint_sub(p, one))
-        r2 = bigint_mod(d, bigint_sub(q, one))
-        r3 = bigint_mod(bigint_mul(qi, q), p)
-        ok = bigint_cmp(pq, n) == 0 and bigint_cmp(r1, dp) == 0 and bigint_cmp(r2, dq) == 0 and bigint_cmp(r3, one) == 0
-    if ok:
-        # sign then verify: m^d^e == m ties d, e and n together
-        try:
-            var m = List[UInt8](length=len(k.pub), fill=0)
-            m[len(m) - 3] = 1
-            m[len(m) - 1] = 1
-            var s = _rsa_raw(m, k.pub, k.d, len(k.pub))
-            var back = _rsa_raw(s, k.pub, k.e, len(k.pub))
-            ok = same(back, m)
-            wipe(s)
-        except:
-            ok = False
-    _wipe_big(d)
-    _wipe_big(dp)
-    _wipe_big(dq)
-    _wipe_big(qi)
-    _wipe_big(p)
-    _wipe_big(q)
-    _wipe_big(pq)
-    _wipe_big(r1)
-    _wipe_big(r2)
-    _wipe_big(r3)
-    return ok
+    """A CRT signature verifies under (n, e) and 2^(de) == 2: ties every field of the key together."""
+    try:
+        if not rsa_d_ok(k.pub, k.e, k.d):
+            return False
+        var r = RsaPrivate(k.pub, k.e, k.p, k.q, k.dp, k.dq, k.qinv)
+        var h = sha256("mojo-tls key check".as_bytes())
+        var ok = r.pk.verify_pkcs1(256, h, r.sign_pkcs1(256, h))
+        return ok
+    except:
+        return False
 
 
 def _rsa(mut s: Der) raises -> PrivateKey:
@@ -149,10 +111,12 @@ def _ec(mut s: Der, var curve: List[UInt8]) raises -> PrivateKey:
     k.d = List[UInt8](length=32 - len(raw), fill=0)
     k.d.extend(raw.copy())
     wipe(raw)
-    var c = ct.p256_curve()
-    if len(k.d) != 32:  # the range check is ct.public_key's (constant time)
+    try:
+        var pk = P256Key(k.d)
+        k.pub = pk.public_bytes()
+        pk.zeroize()
+    except:
         raise Error("tls: key: invalid key")
-    k.pub = ct.public_key(k.d, c)
     if len(given) > 0 and not same(given, k.pub):
         raise Error("tls: key: invalid key")
     return k^

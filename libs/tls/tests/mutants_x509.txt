@@ -22,12 +22,12 @@ host_case_sensitive | tls/x509/chain.mojo | s/b\[i\] \+ 32 if b\[i\] >= 65 and b
 trusted_leaf_needs_ca | tls/x509/chain.mojo | s/    if k > 0:\n        _ca_rules\(root, nsi, True\)/    _ca_rules(root, nsi, True)/ | chain
 key_pub_mismatch_ignored | tls/x509/key.mojo | s/if len\(given\) > 0 and not same\(given, k.pub\):/if False:/ | keys
 key_rsa_consistency_dropped | tls/x509/key.mojo | s/    if not _rsa_ok\(k\):/    if False:/ | keys
-key_ec_range_dropped | tls/x509/shim/ec_ct.mojo | s/ or not scalar_in_range\(private_key, c.order\):/:/ | keys
+key_ec_range_dropped | tls/asym/ec.mojo | s/ or not in_range\(from_be\[4\]\(d\), c.o\):/:/ | keys
 key_encrypted_header_ignored | tls/x509/key.mojo | s/same\(body\[i : i \+ 10\], "Proc-Type:".as_bytes\(\)\)/False/ | keys
 key_small_rsa_allowed | tls/x509/key.mojo | s/rsa_bits\(k.pub\) < MIN_RSA_BITS/rsa_bits(k.pub) < 512/ | keys
 key_wipe_disabled | tls/x509/key.mojo | s/    if len\(l\) > 0:\n        _ = external_call\["explicit_bzero", Int\]\(l.unsafe_ptr\(\), len\(l\)\)/    if len(l) > 99999999:\n        _ = external_call["explicit_bzero", Int](l.unsafe_ptr(), len(l))/ | keys
 key_matches_always | tls/x509/key.mojo | s/return c.key_kind == self.kind and same\(c.key_a, self.pub\)/return True/ | keys
-key_rsa_sign_check_dropped | tls/x509/key.mojo | s/ok = same\(back, m\)/ok = True/ | keys
+key_rsa_d_check_dropped | tls/x509/key.mojo | s/if not rsa_d_ok\(k.pub, k.e, k.d\):/if False:/ | keys
 selfissued_counted_in_pathlen | tls/x509/chain.mojo | s/            if not c.self_issued\(\):\n                nsi \+= 1/            nsi += 1/ | chain
 nc_applies_to_selfissued | tls/x509/chain.mojo | s/if q == 0 or not chain\[below\[q\]\].self_issued\(\):  # name constraints skip self-issued intermediates/if True:/ | chain
 nc_wildcard_stem_only | tls/x509/chain.mojo | s/ or \(wild and _one_label_below\(lb, stem\)\)// | chain

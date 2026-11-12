@@ -1,11 +1,9 @@
 # Certificate signature verification: picks the hash and padding from the certificate's own algorithm and checks
-# it with the issuer's key. SHA-1 and unknown algorithms are refused. Calls the lane 1-2 primitives; today those
-# are the vendored ones in shim/ (swap the three imports below at integration).
+# it with the issuer's key. SHA-1 and unknown algorithms are refused. Hashes from lane 1, RSA and ECDSA from lane 2.
 from tls.x509.cert import *
 from tls.x509.der import Der, Bytes, view, copy_of
-from tls.x509.shim.hash import sha256, sha384, sha512
-from tls.x509.shim.rsa import rsa_pkcs1_verify, rsa_pss_verify
-import tls.x509.shim.ec_ct as ct
+from tls.sym import sha256, sha384, sha512
+from tls.asym import RsaPublic, p256_verify, p384_verify
 
 comptime MIN_RSA_BITS = 2048
 
@@ -42,21 +40,18 @@ def verify_sig(c: Certificate, issuer: Certificate) raises:
     if not ecdsa:
         if issuer.key_kind != KEY_RSA or rsa_bits(issuer.key_a) < MIN_RSA_BITS:
             raise Error("tls: x509: issuer key is not RSA of at least 2048 bits")
-        if a >= SIG_PSS_SHA256:
-            rsa_pss_verify(issuer.key_a, issuer.key_b, h, sig, c.pss_salt)
-        else:
-            rsa_pkcs1_verify(issuer.key_a, issuer.key_b, h, sig)
+        var pk = RsaPublic(issuer.key_a, issuer.key_b)
+        var bits = 256 + 128 * hid
+        var ok = pk.verify_pss(bits, h, sig, c.pss_salt) if a >= SIG_PSS_SHA256 else pk.verify_pkcs1(bits, h, sig)
+        if not ok:
+            raise Error("tls: x509: bad rsa signature")
         return
-    var sd = Der(view(sig))
-    var s = sd.seq()
-    sd.end()
-    var r = copy_of(s.int_bytes())
-    var ss = copy_of(s.int_bytes())
-    s.end()
+    var ok: Bool
     if issuer.key_kind == KEY_P256:
-        ct.ecdsa_verify(ct.p256_curve(), issuer.key_a, h, r, ss, "p256")
+        ok = p256_verify(issuer.key_a, h, sig)
     elif issuer.key_kind == KEY_P384:
-        ct.ecdsa_verify(ct.p384_curve(), issuer.key_a, h, r, ss, "p384")
+        ok = p384_verify(issuer.key_a, h, sig)
     else:
         raise Error("tls: x509: issuer key is not P-256 or P-384")
-    _ = len(sig)
+    if not ok:
+        raise Error("tls: x509: bad ecdsa signature")

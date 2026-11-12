@@ -6,9 +6,8 @@ from tls.x509.der import Der, Bytes, view, copy_of, parse_time, same
 from tls.x509.pem import b64_decode, pem_blocks, pem_spans
 from tls.x509.cert import Certificate, KEY_RSA, KEY_P256
 from tls.x509.key import load_private_key, PrivateKey, _parse, wipe
-from tls.x509.shim.p256 import p256_ecdsa_sign
-from tls.x509.shim.hash import sha256
-from tls.x509.shim.rsa import _rsa_raw
+from tls.sym import sha256
+from tls.asym import P256Key, RsaPrivate
 from tls.x509.chain import verify_chain, load_roots_pem, load_system_roots, host_matches, parse_ip
 
 comptime HEX = "0123456789abcdef"
@@ -459,20 +458,10 @@ def sign_with(k: PrivateKey, name: String, dir: String) raises:
     write_file(dir + "/msg.txt", List[UInt8](msg.as_bytes()))
     var h = sha256(List[UInt8](msg.as_bytes()))
     if k.kind == KEY_P256:
-        var rs = p256_ecdsa_sign(k.d, h, sha256(List[UInt8](name.as_bytes())))
-        write_file(dir + "/sig_" + name + ".der", tlv(0x30, cat(der_int(rs[0]), der_int(rs[1]))))
+        write_file(dir + "/sig_" + name + ".der", P256Key(k.d).sign_sha256(h))
     else:
-        var n = len(k.pub)
-        var t = unhex("3031300d060960864801650304020105000420")
-        t.extend(h.copy())
-        var em = List[UInt8]()
-        em.append(0)
-        em.append(1)
-        for _ in range(n - 3 - len(t)):
-            em.append(0xFF)
-        em.append(0)
-        em.extend(t^)
-        write_file(dir + "/sig_" + name + ".bin", _rsa_raw(em, k.pub, k.d, n))
+        var r = RsaPrivate(k.pub, k.e, k.p, k.q, k.dp, k.dq, k.qinv)
+        write_file(dir + "/sig_" + name + ".bin", r.sign_pkcs1(256, h))
 
 
 def drop_and_peek(path: String) raises -> Int:

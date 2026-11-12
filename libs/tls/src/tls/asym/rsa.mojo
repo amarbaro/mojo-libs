@@ -107,11 +107,13 @@ struct RsaPublic(Copyable, Movable):
             diff |= want[i] ^ em[i]
         return diff == 0
 
-    def verify_pss(self, hash_alg: Int, hash: Span[UInt8, _], sig: Span[UInt8, _]) -> Bool:
+    def verify_pss(self, hash_alg: Int, hash: Span[UInt8, _], sig: Span[UInt8, _], salt_len: Int = -1) -> Bool:
+        """salt_len -1 means the hash length (TLS 1.3); certificates name theirs (RFC 4055, default 20)."""
         var em = _pub(self.n, self.e, sig)
         var k = len(self.n)
         var hl = hash_alg // 8
-        if len(em) != k or len(hash) != hl or em[k - 1] != 0xBC or em[0] & 0x80 != 0:
+        var sl = hl if salt_len < 0 else salt_len
+        if len(em) != k or len(hash) != hl or em[k - 1] != 0xBC or em[0] & 0x80 != 0 or k < hl + sl + 2:
             return False
         var dl = k - hl - 1
         var h = List[UInt8](Span(em)[dl : dl + hl])
@@ -120,7 +122,7 @@ struct RsaPublic(Copyable, Movable):
         for i in range(dl):
             db[i] = em[i] ^ mask[i]
         db[0] &= 0x7F
-        var sep = dl - hl - 1  # zeros, then 0x01, then the salt
+        var sep = dl - sl - 1  # zeros, then 0x01, then the salt
         for i in range(sep):
             if db[i] != 0:
                 return False
@@ -271,3 +273,28 @@ struct RsaPrivate(Copyable, Movable):
             self.dq[i] = 0
         for i in range(len(self.qinv)):
             self.qinv[i] = 0
+
+
+def _d_ok[N: Int](n: Span[UInt8, _], e: UInt64, d: Span[UInt8, _]) -> Bool:
+    var md = Modulus[N](from_be[N](n))
+    var m = Fe[N](fill=0)
+    m[0] = 2
+    var s = from_mont(pow_ct(to_mont(m, md), from_be[N](d), md), md)
+    return _pub_op[N](n, e, to_be(s)) == to_be(m)
+
+
+def rsa_d_ok(n: Span[UInt8, _], e: Span[UInt8, _], d: Span[UInt8, _]) raises -> Bool:
+    """(2^d)^e == 2 mod n: the private exponent d belongs to (n, e). Constant time in d."""
+    var nn = _strip(n)
+    var ee = _check_pub(nn, _strip(e))
+    var dd = _strip(d)
+    if len(dd) > len(nn):
+        return False
+    var k = len(nn)
+    if k == 256:
+        return _d_ok[32](nn, ee, dd)
+    if k == 384:
+        return _d_ok[48](nn, ee, dd)
+    if k == 512:
+        return _d_ok[64](nn, ee, dd)
+    return False
