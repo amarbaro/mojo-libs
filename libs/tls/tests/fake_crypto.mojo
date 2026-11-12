@@ -1,7 +1,7 @@
 """Test-only Crypto12: deterministic, symmetric and NOT secure. It lets the protocol logic (framing, ordering, caps,
 alerts, key derivation plumbing, SNI/ALPN, record layer sequence numbers) run end to end without real crypto.
 DH is XOR with a constant, a signature is a hash of key||scheme||msg, a certificate is "cert:" + key."""
-from std.ffi import external_call, c_ssize_t
+from tls.asym import random_bytes
 from tls.tls12.crypto import Crypto12
 from tls.tls12.wire import bl, bytes_of, cat, wipe
 
@@ -24,10 +24,7 @@ struct FakeCrypto(Crypto12):
         pass
 
     def random(self, n: Int) raises -> List[UInt8]:
-        var b = List[UInt8](length=n, fill=0)
-        if Int(external_call["getrandom", c_ssize_t](b.unsafe_ptr(), n, UInt32(0))) != n:
-            raise Error("getrandom failed")
-        return b^
+        return random_bytes(n)
 
     def hash(self, sha384: Bool, data: List[UInt8]) -> List[UInt8]:
         return mix(cat(data, bytes_of("H384" if sha384 else "H256")), 48 if sha384 else 32)
