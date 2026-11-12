@@ -280,7 +280,7 @@ struct Conn[C: Crypto12](Movable):
                 if desc == A_CLOSE:
                     self.peer_closed = True
                     return EV_CLOSE
-                if lvl == 2 or (desc != 100 and desc != 90):
+                if lvl == 2 or (desc != 100 and desc != 90 and desc != 112):  # warnings we ignore: no_renegotiation, user_canceled, unrecognized_name (RFC 6066: servers send it and go on)
                     self.alert = -1
                     raise Error("tls: alert from peer: ", desc)
 
