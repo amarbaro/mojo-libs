@@ -685,12 +685,40 @@ def fuzz(mut t: T) raises:
     t.ok("every proper prefix of a server flight is accepted as 'need more bytes' (" + String(waits) + "/" + String(len(flight)) + ")", waits == len(flight))
 
 
+def ee_rules(mut t: T) raises:
+    """RFC 8446 4.2: an extension we offered but that is not defined for EncryptedExtensions is illegal_parameter (audit #9);
+    server_name, supported_groups (both in RFC 8448's EE) and ALPN are fine."""
+    for typ in [X_KEYSHARE, X_VERSIONS, X_SIGALGS]:
+        var c = client(hello())
+        var why = String()
+        try:
+            c.on_ee(enc_ee([Ext(typ, fill(2, 0))]))
+        except e:
+            why = String(e)
+        t.ok("EncryptedExtensions with the offered extension " + String(typ) + ": illegal_parameter (" + why + ")", "illegal_parameter" in why)
+    var ok = client(hello(["h2"]))
+    var accepted = True
+    try:
+        ok.on_ee(enc_ee([Ext(X_GROUPS, [0, 2, 0, 0x17]), Ext(X_SNI, List[UInt8]()), Ext(X_ALPN, [0, 3, 2, 0x68, 0x32])]))
+    except e:
+        accepted = False
+    t.ok("EncryptedExtensions with supported_groups, server_name and ALPN is accepted", accepted)
+    var unoff = client(hello())
+    var why2 = String()
+    try:
+        unoff.on_ee(enc_ee([Ext(X_ALPN, [0, 3, 2, 0x68, 0x32])]))
+    except e:
+        why2 = String(e)
+    t.ok("EncryptedExtensions with an extension we did not offer stays unsupported_extension (" + why2 + ")", "unsupported_extension" in why2)
+
+
 def main() raises:
     var t = T("conn")
     matrix(t)
     direct_shares(t)
     resumption(t)
     early_data(t)
+    ee_rules(t)
     client_auth(t)
     options(t)
     alerts(t)

@@ -318,6 +318,8 @@ struct Client13[V: Verifier](Movable):
         for e in parse_ee(m):
             if find(self.ch.exts, e.t) < 0:
                 raise bad("unsupported_extension", "EncryptedExtensions carries an extension we did not offer")
+            if e.t != X_SNI and e.t != X_GROUPS and e.t != X_ALPN and e.t != X_EARLY and e.t != X_RSL:  # RFC 8446 4.2: not defined for this message
+                raise bad("illegal_parameter", "extension " + String(e.t) + " in EncryptedExtensions")
             if e.t == X_ALPN:
                 var p = p_alpn(e.d)
                 if len(p) != 1 or p[0] not in p_alpn(self.ch.exts[find(self.ch.exts, X_ALPN)].d):

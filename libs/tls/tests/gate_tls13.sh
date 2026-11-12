@@ -76,6 +76,7 @@ if [ "${1:-}" = "--mutants" ]; then
   m tests/test_conn.mojo tls/tls13/conn.mojo 's/                if self.skip < used:/                if False:/'
   m tests/test_conn.mojo tls/tls13/conn.mojo 's/var used = max(1, len(rec) - 5)/var used = len(rec) - 5/'
   m tests/test_conn.mojo tls/tls13/client.mojo 's/for j in range(h):/for j in range(h - 1):/'
+  m tests/test_conn.mojo tls/tls13/client.mojo 's/if e.t != X_SNI and e.t != X_GROUPS and e.t != X_ALPN and e.t != X_EARLY and e.t != X_RSL:/if False:/'
   m tests/test_clientauth.mojo tls/tls13/clientauth.mojo 's/ok = p256_verify(leaf.key_a, sha256(signed), sig)/ok = True/'
   m tests/test_clientauth.mojo tls/tls13/clientauth.mojo 's/    if not ok:/    if False:/'
   m tests/test_clientauth.mojo tls/tls13/clientauth.mojo 's/verify_chain(certs, "", now, rs, True)/verify_chain(certs, "", now, rs, False)/'
