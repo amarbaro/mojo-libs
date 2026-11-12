@@ -66,3 +66,4 @@ Lane x509 wave 2 (2026-11-12).
   in about 20 s and expects the decode_error we had already sent, then a close: the reset hit it mid-send and the cell failed, but only when the
   script's random sample of 40 cases happened to pick it -> a harness timeout must exceed the slowest peer (now 330 s), and every tlsfuzzer cell
   runs all cases (`-n 0`), never the default random sample of 40.
+- Chromium matrix cells failed with net::ERR_NETWORK_CHANGED when other sessions' docker containers added veth interfaces mid-run (2026-11-12, 2 of 162 cells; rerun of ^chromium/ 16/16 twice) -> a browser cell that fails with ERR_NETWORK_CHANGED is retried once before it counts as FAIL; report the retry.
