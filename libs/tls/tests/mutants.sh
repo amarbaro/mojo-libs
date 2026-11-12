@@ -19,9 +19,12 @@ import os,sys
 p=os.environ["F"]; s=open(p).read(); a=os.environ["FROM"]
 if s.count(a)!=1: sys.exit("mutant %s: pattern found %d times"%(p,s.count(a)))
 open(p,"w").write(s.replace(a,os.environ["TO"]))' || { echo "INVALID $id: pattern"; return 0; }
-  SRC="$d/src" tools/mb.sh "tests/$runner.mojo" "$d/bin" >"$d/build.txt" 2>&1 || { echo "INVALID $id ($file): does not build"; return 0; }
-  # shellcheck disable=SC2086
-  if timeout 280 "$d/bin" $args >"$d/run.txt" 2>&1; then echo "SURVIVED $id ($file: $from)"; else echo "KILLED $id ($file): $(grep -m1 -E '^(FAIL|PASS)' "$d/run.txt" || echo exit)"; fi
+  local main=tests/$runner.mojo; [ "$runner" != oracle ] || main=tests/tool.mojo
+  SRC="$d/src" tools/mb.sh "$main" "$d/bin" >"$d/build.txt" 2>&1 || { echo "INVALID $id ($file): does not build"; return 0; }
+  local cmd=("$d/bin" $args)
+  if [ "$runner" = oracle ]; then mkdir -p "$d/oracle"; cp .work/oracle/rsa*.pem "$d/oracle/" 2>/dev/null || true
+    cmd=(env T="$d/bin" ORACLE_DIR="$d/oracle" ORACLE_N=2 tests/oracle.sh); fi
+  if timeout 280 "${cmd[@]}" >"$d/run.txt" 2>&1; then echo "SURVIVED $id ($file: $from)"; else echo "KILLED $id ($file): $(grep -m1 -E '^FAIL' "$d/run.txt" || echo 'exit non-zero')"; fi
 }
 export -f one
 printf '%s\n' "${ids[@]}" | xargs -P 8 -I{} bash -c 'one {}' | sort -V | tee .work/mutants-out.txt
