@@ -89,3 +89,4 @@ Lane x509 wave 2 (2026-11-12).
 - The matrix echo hook kept state per fd and a reused fd inherited it, so "GET /" was echoed and a probe failed one run in four -> never key per-connection state on an fd without clearing it when the connection ends; decide per chunk.
 - `tests/mutants_x509.txt` is applied with perl: a `(` in a pattern is a group, write `\(`; gate_tls13.sh and check.sh use sed with paths under `src/` (`tls/tls13/...`): a mutant that names a missing file prints "FAIL mutant: ..." with no reason line.
 - Two gate chains started at once share `.work/mut` and corrupt each other's logs -> one chain at a time, check `ps` before launching.
+- A pointer laundered through Int() does not keep its List alive: Mojo drops a List at its last use and the free was ordered before the memcpy (RecordReader UAF, 2026-11-12) -> memcpy only from a Span, or use the owner again after the call; rr_grow runs under heaptide in gate_tls13.
