@@ -158,7 +158,7 @@ def main() raises:
         var pid = external_call["fork", Int32]()
         if pid == 0:
             aio.close(lfd)
-            _ = external_call["alarm", UInt32](UInt32(20))
+            _ = external_call["alarm", UInt32](UInt32(330))  # tlsfuzzer test-tls13-finished sends 16 MiB of Finished (about 20 s) and waits up to 300 s for our alert
             _ = external_call["fcntl", Int32](c, Int32(4), Int32(0))  # blocking
             try:
                 handle(Int(c), shared, mode)
