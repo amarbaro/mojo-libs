@@ -26,6 +26,8 @@ for t in "${tests[@]}"; do
   if build "$t" src && r="$(runt "$t" "$W/$t")"; then echo "PASS $t: $r"; else bad "$t" "see output above"; fi
 done
 
+if r="$(tests/net.sh 2>&1)"; then echo "PASS net.sh: $(echo "$r" | grep -E '^INFO' | cut -c1-200)"; else echo "$r" | grep -E "^FAIL"; bad net.sh "see output above"; fi
+
 if [[ "${1:-}" == mutants ]]; then
   # name | file | sed expression | test that must go red
   mutants=(
@@ -41,7 +43,24 @@ if [[ "${1:-}" == mutants ]]; then
     "unknown-ext-fatal|src/tls/tls12/msg.mojo|s/d.p = len(d.d)  # unknown or GREASE: skipped/raise Error(\"tls: unknown extension\")/"
     "aad-seq-zero|src/tls/tls12/conn.mojo|s/self.aad\[i\] = b$/self.aad[i] = 0/"
   )
+  netmutants=(
+    "net-timer-off|src/tls/net/server.mojo|s/self.loop.after(self.cfg\[\].handshake_ms, tok)/pass/"
+    "net-never-arm-out|src/tls/net/server.mojo|s/var want_out = queued > 0/var want_out = False/"
+    "net-fd-leak|src/tls/net/server.mojo|s/^        aio.close(Int32(fd))$/        pass/"
+    "net-error-keeps-open|src/tls/net/server.mojo|s/p.closing = True  # the engine queued the alert/pass/"
+  )
   pids=()
+  for m in "${netmutants[@]}"; do
+    IFS='|' read -r name file expr <<<"$m"
+    (
+      d="$W/mut-$name"; rm -rf "$d"; mkdir -p "$d"; cp -r src "$d/src"
+      sed -i "$expr" "$d/$file"
+      if cmp -s "$file" "$d/$file"; then echo "FAIL mutant $name: sed changed nothing"; exit 0; fi
+      if out="$(SRC="$d/src" OUT="$d/out" tests/net.sh 2>&1)"; then echo "FAIL mutant $name: net.sh still passes"
+      else echo "PASS mutant $name killed by: $(echo "$out" | grep -m1 -E '^FAIL')"; fi
+    ) >"$W/mut-$name.out" 2>&1 &
+    pids+=($!)
+  done
   for m in "${mutants[@]}"; do
     IFS='|' read -r name file expr <<<"$m"
     (
@@ -60,6 +79,6 @@ if [[ "${1:-}" == mutants ]]; then
     pids+=($!)
   done
   for p in "${pids[@]}"; do wait "$p" || true; done
-  for m in "${mutants[@]}"; do IFS='|' read -r name _ <<<"$m"; cat "$W/mut-$name.out"; grep -q "^FAIL" "$W/mut-$name.out" && fail=1; done
+  for m in "${mutants[@]}" "${netmutants[@]}"; do IFS='|' read -r name _ <<<"$m"; cat "$W/mut-$name.out"; grep -q "^FAIL" "$W/mut-$name.out" && fail=1; done
 fi
 [[ "$fail" -eq 0 ]] && echo "PASS gate" || { echo "FAIL gate: see above"; exit 1; }
