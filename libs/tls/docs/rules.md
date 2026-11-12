@@ -77,3 +77,8 @@ Lane x509 wave 2 (2026-11-12).
 - The Wycheproof x448 "invalid" cases (57-byte public key) failed because the harness only accepted a raise for
   "acceptable" results -> a raise is the right answer for every `invalid` case; the harness says so.
 - `tests/gate_tls13.sh` is mode 644: a chain that runs it directly dies with rc 126 and looks like a gate failure -> start gates with `bash tests/<gate>.sh`.
+- A tlsfuzzer echo script (`test-tls13-lengths`) hung against the HTTP-only matrix server and looked like a ticket bug -> `msrv` echoes a stream that does not start with "GET"; read what a script needs from its server before reading a timeout as ours.
+- A probe run alone skips the script's "sanity" probe -> check a failing probe by running it with `sanity`, or the whole script.
+- `pkill -f <pattern>` inside the same bash command kills its own wrapper shell -> keep the PID from `$!` or `ps | awk` and `kill` it.
+- The plan said a forged binder falls back to a full handshake; RFC 8446 4.2.11 says abort -> the RFC wins where the plan only paraphrases it: unknown, expired or mismatched tickets fall back, a bad binder on a ticket that opens is `decrypt_error`.
+- `test-tls13-lengths` is 16384 probes (about 280 s in one process, the cell budget) -> four cells of 4096 named probes, so every case still runs.

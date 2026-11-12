@@ -5,7 +5,9 @@ from tls.asym import x25519, x25519_base, x448, x448_base, P256Key, p384_public,
 from tls.tls13.conn import *
 from tls.tls13.keysched import hash_of, finished_mac, cv_content
 from tls.tls13.messages import *
+from tls.tls13.keysched import KeySchedule, suite_hash_len
 from tls.tls13.record import seal_all, HS, MAX_PLAIN
+from tls.tls13.ticket import Session, resumption_psk, binder_of, truncated_hash
 from tls.tls13.verify import Verifier
 from tls.tls13.wire import Rd, bad, ct_equal, wipe, str_of, is_ip
 
@@ -48,7 +50,8 @@ def pad_hello(mut h: Hello) raises:
         _ = h.exts.pop(i)
     var n = len(h.encode())
     if n >= 256 and n <= 507:
-        h.exts.append(Ext(X_PADDING, List[UInt8](length=512 - n - 4, fill=0)))
+        var at = find(h.exts, X_PSK)  # pre_shared_key stays the last extension
+        h.exts.insert(at if at >= 0 else len(h.exts), Ext(X_PADDING, List[UInt8](length=512 - n - 4, fill=0)))
 
 
 def default_hello(
@@ -67,6 +70,18 @@ def default_hello(
     var h = Hello(False, random, sid, [0x1301, 0x1303, 0x1302], e^)
     pad_hello(h)
     return h^
+
+
+def bind_hello(mut ch: Hello, transcript: List[UInt8], psk: List[UInt8]) raises:
+    """Fill in the PSK binder of `ch` over the transcript so far (RFC 8446 4.2.11.2)."""
+    var i = find(ch.exts, X_PSK)
+    if i < 0:
+        return
+    var h = len(psk)
+    var b = binder_of(h, psk, truncated_hash(h, transcript, ch.encode(), 3 + h))
+    var d = len(ch.exts[i].d)
+    for j in range(h):
+        ch.exts[i].d[d - h + j] = b[j]
 
 
 def shared_groups(h: Hello) raises -> List[Int]:
@@ -93,6 +108,9 @@ struct Client13[V: Verifier](Movable):
     var got_cr: Bool
     var alpn: String  # protocol the server selected, empty if none
     var group: Int  # group of the key exchange that was used
+    var sess: Session  # ticket offered by offer(), valid while resumed is set or an offer is outstanding
+    var offered: Bool
+    var resumed: Bool  # the server accepted the PSK: no certificate flight
 
     def __init__(
         out self, ch: Hello, host: String, x_priv: List[UInt8], p_priv: List[UInt8], var v: Self.V
@@ -115,9 +133,33 @@ struct Client13[V: Verifier](Movable):
         self.got_cr = False
         self.alpn = String()
         self.group = 0
+        self.sess = Session(0, List[UInt8](), List[UInt8](), 0, 0, 0)
+        self.offered = False
+        self.resumed = False
+
+    def offer(mut self, s: Session, now_ms: Int) raises:
+        """Offer `s` (from session()) in the ClientHello, before start(): psk_dhe_ke with one identity (RFC 8446 4.2.11)."""
+        if s.suite not in self.ch.suites:
+            raise bad("internal_error", "session suite is not offered in the ClientHello")
+        self.sess = s.copy()
+        self.offered = True
+        var age = (now_ms - s.at_ms + s.age_add) & 0xFFFFFFFF
+        var i = find(self.ch.exts, X_PSK)
+        if i >= 0:
+            _ = self.ch.exts.pop(i)
+        if find(self.ch.exts, X_PSK_MODES) < 0:
+            self.ch.exts.append(x_psk_modes())
+        self.ch.exts.append(x_psk_client(s.ticket, age, len(s.psk)))
+        pad_hello(self.ch)
+
+    def session(self, i: Int, now_ms: Int) raises -> Session:
+        """The i-th NewSessionTicket this connection received, as a Session; `now_ms` stamps its arrival."""
+        var t = self.c.tickets[i].copy()
+        return Session(self.c.suite, resumption_psk(self.c.h, self.c.res_master, t.nonce), t.ticket, t.age_add, t.lifetime, now_ms)
 
     def start(mut self) raises -> List[UInt8]:
         """The first flight: the ClientHello record."""
+        bind_hello(self.ch, self.c.transcript, self.sess.psk)
         var m = self.ch.encode()
         self.c.add(m)
         var o = List[UInt8]()
@@ -184,7 +226,7 @@ struct Client13[V: Verifier](Movable):
         if p_version_server(sh.exts[vi].d) != 0x0304:
             raise bad("illegal_parameter", "selected version")
         for e in sh.exts:
-            if e.t != X_KEYSHARE and e.t != X_VERSIONS and not (sh.is_hrr() and e.t == X_COOKIE):
+            if e.t != X_KEYSHARE and e.t != X_VERSIONS and not (e.t == X_PSK and self.offered and not sh.is_hrr()) and not (sh.is_hrr() and e.t == X_COOKIE):
                 raise bad("unsupported_extension", "extension " + String(e.t) + " in ServerHello")
         if self.hrr_done and suite != self.hrr_suite:
             raise bad("illegal_parameter", "cipher suite changed after HelloRetryRequest")
@@ -195,6 +237,15 @@ struct Client13[V: Verifier](Movable):
         var ki = find(sh.exts, X_KEYSHARE)
         if ki < 0:
             raise bad("missing_extension", "ServerHello without key_share")
+        var pi = find(sh.exts, X_PSK)
+        if pi >= 0:
+            var pr = Rd(sh.exts[pi].d.copy())
+            if pr.u16() != 0 or pr.left() != 0:
+                raise bad("illegal_parameter", "selected PSK identity")
+            if suite_hash_len(suite) != len(self.sess.psk):
+                raise bad("illegal_parameter", "PSK hash does not match the cipher suite")
+            self.resumed = True
+            self.c.ks = KeySchedule(self.c.h, self.sess.psk)
         var share = p_keyshare_server(sh.exts[ki].d)
         if share[0] not in shared_groups(self.ch):
             raise bad("illegal_parameter", "server chose a group we sent no share for")
@@ -213,6 +264,9 @@ struct Client13[V: Verifier](Movable):
         if self.hrr_done:
             raise bad("unexpected_message", "second HelloRetryRequest")
         var ch2 = self.ch.copy()
+        var ei = find(ch2.exts, X_EARLY)
+        if ei >= 0:
+            _ = ch2.exts.pop(ei)  # RFC 8446 4.1.2: the second ClientHello drops early_data
         var changed = False
         var ki = find(sh.exts, X_KEYSHARE)
         if ki >= 0:
@@ -234,6 +288,7 @@ struct Client13[V: Verifier](Movable):
         pad_hello(ch2)
         self.c.transcript = hs_msg(H_MSGHASH, hash_of(self.c.h, self.c.transcript))
         self.c.add(m)
+        bind_hello(ch2, self.c.transcript, self.sess.psk)
         var m2 = ch2.encode()
         self.c.add(m2)
         if len(ch2.sid) > 0:
@@ -255,7 +310,7 @@ struct Client13[V: Verifier](Movable):
             elif e.t == X_RSL:
                 self.c.tx.limit = min(MAX_PLAIN, p_rsl(e.d) - 1)
         self.c.add(m)
-        self.c.state = S_WAIT_CERT
+        self.c.state = S_WAIT_FIN if self.resumed else S_WAIT_CERT
 
     def on_cert(mut self, m: List[UInt8]) raises:
         var c = parse_cert(m)

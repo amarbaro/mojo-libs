@@ -8,6 +8,7 @@ from tls.tls13.keysched import traffic_key, traffic_iv
 from tls.tls13.messages import *
 from tls.tls13.record import Cipher, seal_all, HS, APP, ALERT
 from tls.tls13.server import Server13, ServerConfig
+from tls.tls13.ticket import Session
 from tls.tls13.verify import Verifier, Signer
 from chk import T
 from rec import RecSigner, RecVerifier, Refuse
@@ -150,6 +151,140 @@ def direct_shares(mut t: T) raises:
         var s = server(0x1301, [G_X25519, G_P256, G_P384, G_X448])
         var r = pump(c, s, c.start())
         t.ok("bad " + String(group) + " share " + String(g) + " is refused: " + r.serr, "illegal_parameter" in r.serr and not r.sdone)
+
+
+def attempt(
+    sess: Session, keys: List[List[UInt8]], now_s: Int, now_ms: Int, suite: Int = 0x1301, tamper: Bool = False,
+    sni: String = "example.com", alpn: String = "", mode: Int = 1, last: Bool = True,
+) raises -> Tuple[Bool, Bool, Bool, String]:
+    """One resumption attempt of `sess`: (both done, server resumed, client resumed, server error)."""
+    var s = server(suite, [G_X25519], [alpn] if alpn.byte_length() > 0 else List[String]())
+    s.cfg.ticket_keys = keys.copy()
+    s.cfg.now = now_s
+    var h = default_hello(sni, fill(32, 0x99), fill(0, 0x31), x25519_base(fill(32, 0x42)), [alpn] if alpn.byte_length() > 0 else List[String]())
+    var c = client(h, sni)
+    c.offer(sess, now_ms)
+    c.ch.exts[find(c.ch.exts, X_PSK_MODES)].d = [UInt8(1), UInt8(mode)]
+    if not last:
+        c.ch.exts.append(Ext(0xFAFA, List[UInt8]()))
+    var first = c.start()
+    if tamper:
+        first[len(first) - 1] ^= 1
+    var r = pump(c, s, first^)
+    return (r.cdone and r.sdone, s.resumed, c.resumed, r.serr)
+
+
+def resumption(mut t: T) raises:
+    """Tickets and PSK resumption (RFC 8446 4.6.1, 4.2.11): accept, rotate, and every reason to fall back or abort."""
+    var key = fill(32, 0x61)
+    var key2 = fill(32, 0x62)
+    var s0 = server(0x1301, [G_X25519])
+    s0.cfg.ticket_keys = [key.copy()]
+    s0.cfg.now = 1000000
+    var c0 = client(hello())
+    var r0 = pump(c0, s0, c0.start())
+    t.ok("full handshake with ticket keys: done, one ticket received, not resumed", r0.cdone and r0.sdone and len(c0.c.tickets) == 1 and r0.cev.count(EV_TICKET) == 1 and not s0.resumed and not c0.resumed)
+    var sess = c0.session(0, 5000000)
+    var ms = 5000000 + 60000
+    var ok = attempt(sess, [key.copy()], 1000060, ms)
+    t.ok("resumption: both done, both sides resumed (" + ok[3] + ")", ok[0] and ok[1] and ok[2])
+    t.ok("resumption after a key rotation (old key still listed)", attempt(sess, [key2.copy(), key.copy()], 1000060, ms)[1])
+    t.ok("unknown ticket key: full handshake, no error", attempt(sess, [key2.copy()], 1000060, ms)[0] and not attempt(sess, [key2.copy()], 1000060, ms)[1])
+    t.ok("no ticket keys on the server: full handshake", attempt(sess, List[List[UInt8]](), 1000060, ms)[0] and not attempt(sess, List[List[UInt8]](), 1000060, ms)[1])
+    var ex = attempt(sess, [key.copy()], 1000000 + 86400 + 1, ms)
+    t.ok("expired ticket: full handshake", ex[0] and not ex[1] and not ex[2])
+    var fut = attempt(sess, [key.copy()], 999000, ms)
+    t.ok("ticket from the future: full handshake", fut[0] and not fut[1])
+    var old = attempt(sess, [key.copy()], 1000060, 5000000 + (86400 + 10) * 1000)
+    t.ok("client age beyond the lifetime: full handshake", old[0] and not old[1])
+    var sm = attempt(sess, [key.copy()], 1000060, ms, 0x1303)
+    t.ok("other cipher suite: full handshake", sm[0] and not sm[1])
+    var sn = attempt(sess, [key.copy()], 1000060, ms, 0x1301, False, "other.test")
+    t.ok("other SNI: full handshake", sn[0] and not sn[1])
+    var al = attempt(sess, [key.copy()], 1000060, ms, 0x1301, False, "example.com", "h2")
+    t.ok("other ALPN: full handshake", al[0] and not al[1])
+    var pk = attempt(sess, [key.copy()], 1000060, ms, 0x1301, False, "example.com", "", 0)
+    t.ok("psk_ke only: full handshake", pk[0] and not pk[1])
+    var fb = attempt(sess, [key.copy()], 1000060, ms, 0x1301, True)
+    t.ok("forged binder aborts with decrypt_error (" + fb[3] + ")", not fb[0] and "decrypt_error" in fb[3])
+    var forged = sess.copy()
+    forged.ticket[len(forged.ticket) - 1] ^= 1
+    var fg = attempt(forged, [key.copy()], 1000060, ms)
+    t.ok("forged ticket (AEAD tag): full handshake", fg[0] and not fg[1])
+    var nl = attempt(sess, [key.copy()], 1000060, ms, 0x1301, False, "example.com", "", 1, False)
+    t.ok("pre_shared_key not last: illegal_parameter (" + nl[3] + ")", not nl[0] and "illegal_parameter" in nl[3])
+    # chain: the resumed connection issues a ticket of its own, which resumes again; data flows both ways
+    var s1 = server(0x1301, [G_X25519])
+    s1.cfg.ticket_keys = [key.copy()]
+    s1.cfg.now = 1000060
+    var c1 = client(hello())
+    c1.offer(sess, ms)
+    var r1 = pump(c1, s1, c1.start())
+    t.ok("resumed connection issues a new ticket", r1.cdone and s1.resumed and len(c1.c.tickets) == 1)
+    var up = pattern(5000, 3)
+    t.ok("data flows after resumption", s1.feed(Span(c1.write(up))).data == up and c1.feed(Span(s1.write(pattern(40, 2)))).data == pattern(40, 2))
+    var again = attempt(c1.session(0, ms), [key.copy()], 1000120, ms + 60000)
+    t.ok("second resumption from the resumed connection's ticket", again[1] and again[2])
+
+
+def early_data(mut t: T) raises:
+    """0-RTT is refused (RFC 8446 4.2.10): early data sealed under a key we never had is skipped, up to a budget; without
+    the early_data extension, or beyond the budget, an undecryptable record is bad_record_mac."""
+    var junk = List[UInt8]()
+    junk.extend([UInt8(23), 3, 3, 0x40, 0x00])
+    junk.extend(pattern(0x4000, 7))
+    for k in range(3):
+        var h = hello()
+        if k < 2:
+            h.exts.append(Ext(X_EARLY, List[UInt8]()))
+        var s = server(0x1301, [G_X25519])
+        var c = client(h)
+        var first = c.start()
+        var n = 1 if k < 2 else 1
+        if k == 1:
+            n = 6  # 6 x 16384 bytes is over the 65536-byte budget
+        for _ in range(n):
+            first.extend(Span(junk))
+        var r = pump(c, s, first^)
+        if k == 0:
+            t.ok("early_data offered, one junk record after the ClientHello: skipped, handshake completes (" + r.serr + ")", r.cdone and r.sdone and r.serr == "")
+        elif k == 1:
+            t.ok("early_data offered, 6 junk records: over the budget, bad_record_mac (" + r.serr + ")", not r.sdone and "bad_record_mac" in r.serr)
+        else:
+            t.ok("no early_data extension, junk record: bad_record_mac (" + r.serr + ")", not r.sdone and "bad_record_mac" in r.serr)
+    var cz = client(hello())
+    var sz = server(0x1301, [G_X25519])
+    var wz = cz.start()
+    wz.extend([UInt8(23), 3, 3, 0, 0])
+    var rz = pump(cz, sz, wz^)
+    t.ok("a zero-length application_data record after the ClientHello is refused, no early_data budget (" + rz.serr + ")", not rz.sdone and "bad_record_mac" in rz.serr)
+    var s0 = server(0x1301, [G_X25519])
+    var o0 = s0.feed(Span(junk))
+    t.ok("plaintext application data before any ClientHello is unexpected_message (" + o0.error + ")", "unexpected_message" in o0.error)
+    # junk sent after a ClientHello that gets a HelloRetryRequest arrives in plaintext (no handshake keys yet): skipped too
+    var sh = server(0x1301, [G_P256])
+    var hh = hello()
+    hh.exts.append(Ext(X_EARLY, List[UInt8]()))
+    var ch = client(hh)
+    var wire = ch.start()
+    wire.extend(Span(junk))
+    var rh = pump(ch, sh, wire^)
+    t.ok("early_data with a HelloRetryRequest: junk before the second ClientHello is skipped (" + rh.serr + ")", rh.cdone and rh.sdone and rh.serr == "" and sh.group == G_P256)
+    # early_data in the second ClientHello is illegal_parameter (RFC 8446 4.2.10)
+    var s2 = server(0x1301, [G_P256])
+    var h2 = hello()
+    h2.exts.append(Ext(X_EARLY, List[UInt8]()))
+    var c2 = client(h2)
+    var o1 = s2.feed(Span(c2.start()))
+    var hrr = c2.feed(Span(o1.send))
+    t.ok("our client drops early_data from the second ClientHello", find(c2.ch.exts, X_EARLY) < 0 and len(hrr.send) > 0)
+    var bad2 = c2.ch.copy()
+    bad2.exts.append(Ext(X_EARLY, List[UInt8]()))
+    var bm = bad2.encode()
+    var brec: List[UInt8] = [UInt8(22), 3, 3, UInt8(len(bm) >> 8), UInt8(len(bm) & 255)]
+    brec.extend(Span(bm))
+    var o2 = s2.feed(Span(brec))
+    t.ok("early_data kept in the second ClientHello is refused with illegal_parameter (" + o2.error + ")", "illegal_parameter" in o2.error)
 
 
 def matrix(mut t: T) raises:
@@ -462,6 +597,8 @@ def main() raises:
     var t = T("conn")
     matrix(t)
     direct_shares(t)
+    resumption(t)
+    early_data(t)
     options(t)
     alerts(t)
     fuzz(t)

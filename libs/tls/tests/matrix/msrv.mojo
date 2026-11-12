@@ -31,6 +31,10 @@ struct Reply(TlsHandler):
     def handle(mut self, fd: Int, info: ConnInfo, data: List[UInt8], mut reply: List[UInt8]) raises -> Bool:
         var b = self.req.pop(fd, List[UInt8]())
         b.extend(Span(data))
+        if len(b) >= 3 and not (b[0] == 71 and b[1] == 69 and b[2] == 84):
+            reply.extend(Span(data))  # not an HTTP request ("GET"): echo it (tlsfuzzer test-tls13-lengths)
+            self.req[fd] = List[UInt8](Span(b)[:3])
+            return False
         if not has_end(b):
             self.req[fd] = b^
             return False

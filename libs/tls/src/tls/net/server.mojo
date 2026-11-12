@@ -117,6 +117,8 @@ struct TlsServer[C: Crypto12](Movable):
     var stopped: Bool
 
     def __init__(out self, var cfg: TlsConfig, port: Int = 0, host: String = "127.0.0.1", tls13: Bool = True) raises:
+        if tls13 and len(cfg.ticket_keys) == 0:
+            cfg.ticket_keys = [Self.C().random(32)]  # one key per server start: tickets survive connections, not restarts
         cfg.tls13 = tls13  # also tells Server12 to send the DOWNGRD sentinel to a 1.3-capable client (RFC 8446 4.1.3)
         self.cfg = ArcPointer(cfg^)
         self.loop = aio.Loop(1024)
@@ -238,6 +240,7 @@ struct TlsServer[C: Crypto12](Movable):
                     var rng = Self.C()
                     var sc = ServerConfig(rng.random(32), rng.random(32), rng.random(32))
                     sc.alpn = self.cfg[].alpn.copy()
+                    sc.ticket_keys = self.cfg[].ticket_keys.copy()
                     p.e13.append(Server13[CSign[Self.C]](sc^, CSign[Self.C](e.kind, e.key, e.chain.copy())))
                     p.ver = 13
                 else:

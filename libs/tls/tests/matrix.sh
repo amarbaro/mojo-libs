@@ -224,6 +224,18 @@ for kind in p256 rsa; do
     cell "ours/$ver/$kind/sni-select" mcli_check "$ver" on alt.test "${PORT[$kind,both,on]}" "mojo-tls-ok ver=$ver sni=alt.test alpn=http/1.1"
   done
 done
+resume13() { # KIND: s_client saves the session (-sess_out), a second connection offers it (-sess_in) and must say "Reused"
+  local port=${PORT[$1,both,on]} f="$W/sess-$1.pem" a o
+  a=(-connect "127.0.0.1:$port" -CAfile "$CERTS/ca.pem" -tls1_3 -servername localhost -verify_hostname localhost -brief); rm -f "$f"
+  o=$({ printf 'GET / HTTP/1.0\r\n\r\n'; sleep 1.5; } | timeout 20 openssl s_client "${a[@]}" -sess_out "$f" 2>&1 | tr -d '\r' || true)
+  [[ -s $f ]] || { echo "FAIL no session saved (no NewSessionTicket): $(head -c 200 <<< "$o" | tr '\n' ' ')"; return; }
+  o=$({ printf 'GET / HTTP/1.0\r\n\r\n'; sleep 1.5; } | timeout 20 openssl s_client "${a[@]/-brief/-ign_eof}" -sess_in "$f" 2>&1 | tr -d '\r' || true)
+  grep -q '^Reused, TLSv1.3' <<< "$o" || { echo "FAIL the second connection was a full handshake: $(grep -m1 -E '^(New|Reused)' <<< "$o")"; return; }
+  grep -q 'Verification: OK\|Verify return code: 0' <<< "$o" || { echo "FAIL resumed handshake: $(head -c 200 <<< "$o" | tr '\n' ' ')"; return; }
+  grep -q 'mojo-tls-ok ver=13' <<< "$o" || { echo "FAIL reply after resumption"; return; }
+  echo PASS
+}
+for kind in p256 rsa; do cell "sc/13/$kind/resume" resume13 "$kind"; done
 cell neg/tls13-client-vs-tls12-server refused "${PORT[p256,12,on]}" -tls1_3
 cell neg/tls12-client-vs-tls13-server refused "${PORT[p256,13,on]}" -tls1_2
 cell neg/alpn-mismatch-13 refused "${PORT[p256,both,on]}" -tls1_3 -alpn nope
@@ -236,16 +248,19 @@ TF13=(test-tls13-conversation test-tls13-finished test-tls13-hrr test-tls13-keyu
       test-tls13-signature-algorithms test-tls13-zero-length-data test-tls13-version-negotiation test-tls13-invalid-ciphers
       test-tls13-record-padding test-tls13-lengths test-tls13-unrecognised-groups test-tls13-serverhello-random test-tls13-ccs
       test-tls13-finished-plaintext test-tls13-unencrypted-alert test-tls13-zero-content-type test-tls13-record-layer-limits
-      test-tls13-ecdsa-in-certificate-verify)
+      test-tls13-ecdsa-in-certificate-verify test-tls13-session-resumption test-tls13-count-tickets test-tls13-0rtt-garbage)
 TF12=(test-conversation test-extended-master-secret-extension test-record-layer-fragmentation test-invalid-content-type
       test-message-skipping test-truncating-of-finished test-downgrade-protection test-serverhello-random test-alpn-negotiation)
 skip_ts() { echo "SKIP $*"; }
 skip12() { echo "SKIP the script's own sanity handshake sends no extended_master_secret and mostly CBC/RSA-kex suites; our server refuses both by policy (docs/tls12.md), so it cannot reach its tests. TLS 1.2 is covered by sc/12, ours/12, browsers and the t_flow policy tests"; }
 for s in "${TF13[@]}"; do
   case $s in
-    test-tls13-lengths) cell "tlsfuzzer/$s" skip_ts "every case waits for a NewSessionTicket (it times out); we send no tickets (docs/plan.md: tickets later)";;
     test-tls13-ecdsa-in-certificate-verify) cell "tlsfuzzer/$s" skip_ts "needs client certificates (out of scope)";;
     test-tls13-version-negotiation) cell "tlsfuzzer/$s" skip_ts "197 of 202 cases fall back to a TLS 1.2 handshake without extended_master_secret, which our policy refuses (docs/tls12.md)";;
+    test-tls13-lengths)  # 16384 lengths (about 280 s in one process): four cells of 4096, every case runs
+      for q in 0 1 2 3; do mapfile -t names < <(seq $((q * 4096 + 1)) $((q * 4096 + 4096)) | sed 's/^/length: /')
+        cell "tlsfuzzer/$s/part$q" tlsfuzzer "$s" "${PORT[rsa,both,on]}" -n 0 "${names[@]}"; done;;
+    test-tls13-count-tickets) cell "tlsfuzzer/$s" tlsfuzzer "$s" "${PORT[rsa,both,on]}" -t 1;;  # we send exactly one NewSessionTicket per connection
     *) cell "tlsfuzzer/$s" tlsfuzzer "$s" "${PORT[rsa,both,on]}";;
   esac
 done

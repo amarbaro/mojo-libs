@@ -52,6 +52,19 @@ if [ "${1:-}" = "--mutants" ]; then
   m tests/test_conn.mojo tls/tls13/conn.mojo 's/self.install_rx(next_secret(self.h, self.rx_secret))/self.install_rx(next_secret(self.h, self.tx_secret))/'
   m tests/test_conn.mojo tls/tls13/client.mojo 's/return p384_ecdh(qp, peer)/return p384_ecdh(yp, peer)/'
   m tests/test_conn.mojo tls/tls13/client.mojo 's/return x448(yp, peer)/return x448(qp, peer)/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/if not ct_equal(binder_of(self.c.h, st.psk, th), p\[1\]\[i\]):/if False:/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/if now < st.issued or now - st.issued > st.lifetime or age_ms > st.lifetime \* 1000:/if False:/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/ or age_ms > st.lifetime \* 1000:/:/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/if now < st.issued or /if /'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/if st.suite != self.c.suite or st.alpn != self.alpn or st.sni != self.sni:/if False:/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/ or 1 not in p_psk_modes(ch.exts\[mi\].d)/ or False/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/if pi != len(ch.exts) - 1:/if False:/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/self.c.skip = 65536/self.c.skip = 0/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/if e.t == X_EARLY:/if e.t == -1:/'
+  m tests/test_conn.mojo tls/tls13/conn.mojo 's/if self.state != S_WAIT_FIN or self.skip < max(1, len(rec) - 5):/if False:/'
+  m tests/test_conn.mojo tls/tls13/conn.mojo 's/                if self.skip < max(1, len(rec) - 5):/                if False:/'
+  m tests/test_conn.mojo tls/tls13/conn.mojo 's/self.skip < max(1, len(rec) - 5):/self.skip < len(rec) - 5:/'
+  m tests/test_conn.mojo tls/tls13/client.mojo 's/for j in range(h):/for j in range(h - 1):/'
   bash tests/mutant_interop.sh tls/tls13/keysched.mojo 's/"traffic upd"/"traffic upx"/' || { echo "FAIL mutant: interop traffic upd"; bad=1; }
 fi
 

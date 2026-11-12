@@ -19,6 +19,7 @@ comptime X_SIGALGS = 13
 comptime X_ALPN = 16
 comptime X_PADDING = 21
 comptime X_PSK = 41
+comptime X_EARLY = 42
 comptime X_VERSIONS = 43
 comptime X_COOKIE = 44
 comptime X_PSK_MODES = 45
@@ -239,6 +240,56 @@ def x_rsl(v: Int) -> Ext:
 
 def x_psk_modes() -> Ext:
     return Ext(X_PSK_MODES, [UInt8(1), UInt8(1)])
+
+
+def x_psk_client(identity: List[UInt8], age: Int, binder_len: Int) -> Ext:
+    """pre_shared_key of a ClientHello with one identity; the binder is zeros until the caller fills in the last bytes."""
+    var ids = List[UInt8]()
+    putb(ids, vec16(identity))
+    put32(ids, age)
+    var e = vec16(ids)
+    putb(e, vec16(vec8(List[UInt8](length=binder_len, fill=0))))
+    return Ext(X_PSK, e^)
+
+
+def x_psk_server(selected: Int) -> Ext:
+    var e = List[UInt8]()
+    put16(e, selected)
+    return Ext(X_PSK, e^)
+
+
+def p_psk_modes(d: List[UInt8]) raises -> List[Int]:
+    var r = Rd(d.copy())
+    var l = r.sub8()
+    r.done()
+    var o = List[Int]()
+    while l.left() > 0:
+        o.append(l.u8())
+    return o^
+
+
+def p_psk_client(d: List[UInt8]) raises -> Tuple[List[Tuple[List[UInt8], Int]], List[List[UInt8]], Int]:
+    """Client pre_shared_key: (identities with obfuscated age, binders, byte length of the binders vector with its u16 length)."""
+    var r = Rd(d.copy())
+    var ids = r.sub16()
+    var bs = r.sub16()
+    r.done()
+    if ids.left() < 7 or bs.left() < 33:
+        raise bad("decode_error", "pre_shared_key lists too short")
+    var bl = bs.left() + 2
+    var idl = List[Tuple[List[UInt8], Int]]()
+    while ids.left() > 0:
+        var id = ids.sub16().rest()
+        if len(id) == 0:
+            raise bad("decode_error", "empty PSK identity")
+        idl.append((id^, ids.u32()))
+    var bl2 = List[List[UInt8]]()
+    while bs.left() > 0:
+        var b = bs.sub8().rest()
+        if len(b) < 32:
+            raise bad("decode_error", "PSK binder shorter than 32")
+        bl2.append(b^)
+    return (idl^, bl2^, bl)
 
 
 def p_sni(d: List[UInt8]) raises -> String:
