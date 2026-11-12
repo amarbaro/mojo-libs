@@ -7,7 +7,7 @@ from tls.tls13.keysched import hash_of, finished_mac, cv_content
 from tls.tls13.messages import *
 from tls.tls13.record import seal_all, HS, MAX_PLAIN
 from tls.tls13.verify import Verifier
-from tls.tls13.wire import Rd, bad, ct_equal, wipe, str_of
+from tls.tls13.wire import Rd, bad, ct_equal, wipe, str_of, is_ip
 
 
 def kex_public(group: Int, xp: List[UInt8], pp: List[UInt8]) raises -> List[UInt8]:
@@ -45,7 +45,7 @@ def default_hello(
 ) raises -> Hello:
     """ClientHello offering TLS 1.3 only, x25519 share, secp256r1 on request (HRR), the three TLS 1.3 suites."""
     var e = List[Ext]()
-    if host.byte_length() > 0:
+    if host.byte_length() > 0 and not is_ip(host):
         e.append(x_sni(host))
     e.append(x_versions_client([0x0304]))
     e.append(x_u16s(X_GROUPS, [G_X25519, G_P256]))

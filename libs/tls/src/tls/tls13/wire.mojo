@@ -84,6 +84,16 @@ def vec24(b: List[UInt8]) -> List[UInt8]:
     return o^
 
 
+def is_ip(host: String) -> Bool:
+    """An IPv4 or IPv6 literal: RFC 6066 3 forbids it in server_name."""
+    var dots = True
+    for c in host.as_bytes():
+        if c == 58:
+            return True
+        dots = dots and (c == 46 or (c >= 48 and c <= 57))
+    return dots and host.byte_length() > 0
+
+
 def bytes_of(s: String) -> List[UInt8]:
     var o = List[UInt8](capacity=s.byte_length())
     for b in s.as_bytes():

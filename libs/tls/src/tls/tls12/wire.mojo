@@ -81,6 +81,16 @@ def str_of(b: List[UInt8]) -> String:
     return String(unsafe_from_utf8=b)
 
 
+def is_ip(host: String) -> Bool:
+    """An IPv4 or IPv6 literal: RFC 6066 3 forbids it in server_name."""
+    var dots = True
+    for c in host.as_bytes():
+        if c == 58:
+            return True
+        dots = dots and (c == 46 or (c >= 48 and c <= 57))
+    return dots and host.byte_length() > 0
+
+
 def pre8(b: List[UInt8]) -> List[UInt8]:
     var o = List[UInt8]()
     o.append(UInt8(len(b)))
