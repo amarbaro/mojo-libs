@@ -28,3 +28,10 @@ Facts for README: matrix pass=176 skip=11 fail=0; gate_tls13 43 mutants killed; 
 - rattler-build 0.76.1 OK: .work/pub/rb/linux-64/mojo-tls-0.1.0-*.conda (1.67 MiB), recipe test (examples compile against the package) "all tests passed". Not uploaded.
 - clean-publish scan clean, gitleaks clean after .gitleaks.toml (3410714); notes ~/Brain/mojo-tls/republish/2026-11-12-scan.md with the export command.
 - WAITING on driver DONE (src fix + gates + matrix, commit of the dup edits). Then: perf.md + profiling pass, rules.md, CHANGELOG + v0.1.0 note + tag, scripts/ci.sh run, export.
+
+## DONE 2026-11-12 (third session, after driver DONE 1b016b2)
+- Profiling pass: docs/perf.md section "Profiling pass v0.1.0" (record open 2280 -> 5390 MB/s AES-128-GCM, cycles -26%, heaptide 0 leaks, wavewait N/A). Rule line in docs/rules.md.
+- scripts/ci.sh: PASS 6/6 gates at 2b92173 only with CT_CPU=7: with CT_CPU=5 or 13 the dudect P-256 scalar-mult row failed 3 tries (|t| 5 to 22 in the 80% crop) while other agents ran on the SMT sibling. ci.sh also had a bug (gate_tls13.sh not executable) now run through bash. Receipts .work/pub/ci{2,3,4,5}.out.
+- rattler-build OK (1.67 MiB), gitleaks clean, v0.1.0 note + CHANGELOG, tag v0.1.0 (local, annotated) on 26752c6.
+- Export: ~/Projects/mojo/mojo-tls-export-2026-11-12, 4.8 MB, one branch master, tag v0.1.0, 102 commits, publish-purge PASS, no home path / lanes / plan references. Swap commands are in .work/pub/export.log; the owner pushes.
+- Public write-up of the use-after-free: docs/heap-grow.md.
