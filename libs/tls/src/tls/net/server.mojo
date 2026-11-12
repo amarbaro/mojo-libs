@@ -256,11 +256,14 @@ struct TlsServer[C: Crypto12](Movable):
                     self.handshakes += 1
                 if len(o.data) > 0:
                     var reply = List[UInt8]()
-                    var stop = h.handle(fd, ConnInfo(13, p.e13[0].sni, p.e13[0].alpn), o.data, reply)
-                    if len(reply) > 0:
-                        p.out.extend(Span(p.e13[0].write(reply)))
-                    if stop:
-                        p.out.extend(Span(p.e13[0].close()))
+                    try:  # a handler or a write on a connection the peer just closed must end that connection, never the server
+                        var stop = h.handle(fd, ConnInfo(13, p.e13[0].sni, p.e13[0].alpn), o.data, reply)
+                        if len(reply) > 0 and not o.has(EV_CLOSE):
+                            p.out.extend(Span(p.e13[0].write(reply)))
+                        if stop:
+                            p.out.extend(Span(p.e13[0].close()))
+                            p.closing = True
+                    except:
                         p.closing = True
                 if o.has(EV_CLOSE) and not p.closing:
                     p.out.extend(Span(p.e13[0].close()))
