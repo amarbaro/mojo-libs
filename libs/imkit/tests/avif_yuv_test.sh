@@ -8,7 +8,7 @@ timeout 600 "$M" build -I src tests/avif_yuv_test.mojo -o $W/test 2> $W/build.lo
 fails=0
 for f in $F/*.avif $F/*.obu; do
   b=$(basename "$f"); ref=$W/$b.y4m
-  if [ ! -f "$ref" ]; then
+  if [ ! -f "$ref" ] || [ "$f" -nt "$ref" ]; then  # a regenerated fixture needs a fresh reference
     case $f in *.obu) timeout 60 dav1d -q -i "$f" -o "$ref" ;; *) timeout 60 avifdec "$f" "$ref" > /dev/null ;; esac || { echo "FAIL reference: $b"; fails=$((fails + 1)); continue; }
   fi
   if timeout 60 $W/test "$f" "$ref" > $W/$b.out 2>&1; then echo "ok   $b"; else echo "FAIL $b: $(grep -E 'plane|FAIL|rror' $W/$b.out | tr '\n' ' ' | cut -c1-200)"; fails=$((fails + 1)); fi

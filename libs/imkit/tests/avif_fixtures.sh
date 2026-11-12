@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Extra fixtures for the tile-parse gates, each made for one bitstream property, which the script then checks in ffmpeg's
-# trace_headers (a fixture is checked for the property it exists for): tiles.avif = 2x2 tiles, big.avif = full-size screenshot
+# trace_headers (a fixture is checked for the property it exists for): tiles.avif = 2x2 tiles, big.avif = full-size screenshot,
+# area.avif = a frame over the maximum tile area
 # with default tools, seg.obu = raw key frame OBUs from aomenc with segmentation (aq-mode 1; avifenc's all-intra mode never
 # enables it). delta_lf_present = 1 was not reachable from avifenc or aomenc, so that path has no fixture.
 # The older six (a10 a420 a444 alpha lossless mono .avif) are kept as they are.
@@ -12,6 +13,10 @@ small=$F/src-320.png
 [ -f $small ] || timeout 30 magick $src -resize 320x180! $small
 timeout 120 avifenc -q 60 -s 6 --tilecolslog2 1 --tilerowslog2 1 $src -o $F/tiles.avif > /dev/null || { echo "FAIL avifenc: tiles"; exit 1; }
 timeout 120 avifenc -q 60 -s 6 $src -o $F/big.avif > /dev/null || { echo "FAIL avifenc: big"; exit 1; }
+# area.avif: 4096 x 2560 is over MAX_TILE_AREA (4096 x 2304), so minLog2Tiles > 0 and the encoder picks 4 x 4 uniform
+# tiles: the only fixture where minLog2TileRows depends on TileColsLog2.
+[ -f $F/area.png ] || timeout 60 magick $src -resize 4096x2560! $F/area.png
+timeout 300 avifenc -q 60 -s 6 -j 8 $F/area.png -o $F/area.avif > /dev/null || { echo "FAIL avifenc: area"; exit 1; }
 timeout 30 ffmpeg -v error -y -i $small -pix_fmt yuv420p $F/src-320.y4m
 timeout 120 aomenc --limit=1 --kf-max-dist=0 --end-usage=q --cq-level=30 --cpu-used=6 --aq-mode=1 --deltaq-mode=0 \
   -o $F/seg.ivf $F/src-320.y4m > /dev/null 2>&1 || { echo "FAIL aomenc: seg"; exit 1; }

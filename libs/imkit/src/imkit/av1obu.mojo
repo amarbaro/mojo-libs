@@ -615,7 +615,7 @@ def parse_tile_info(mut b: Bits, seq: SequenceHeader, width: Int, height: Int) r
             cols += 1
             start += tile_width_sb
         ti.cols = cols
-        var min_log2_rows = max(min_log2_tiles - tile_log2(sb_cols, tile_width_sb), 0)
+        var min_log2_rows = max(min_log2_tiles - ti.cols_log2, 0)
         ti.rows_log2 = min_log2_rows
         while ti.rows_log2 < max_log2_rows:
             if b.f(1) == 0:
