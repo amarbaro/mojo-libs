@@ -25,7 +25,7 @@ for t in keysched record codec flight conn clientauth; do
   fi
 done
 
-# RecordReader buffer compaction (use-after-free fixed 2026-11-12, docs/lanes/FINDING-heap-grow.md): natively the freed
+# RecordReader buffer compaction (use-after-free fixed 2026-11-12, docs/heap-grow.md): natively the freed
 # block stays readable, so the bug only shows when free unmaps it. heaptide's preload does that; skipped (not passed) without it.
 if build rr_grow tests/rr_grow.mojo; then
   "$B/rr_grow" > "$G/rr_grow.out" 2>&1 && echo "PASS rr_grow native" || fail rr_grow "native, see $G/rr_grow.out"

@@ -81,7 +81,7 @@ One NewSessionTicket follows the client Finished, also after a resumption. Only 
 Server, `pick_psk`: a ticket is used only if it opens, its suite, ALPN and SNI equal this handshake's, it is not expired
 or from the future, and the client's obfuscated age agrees (age at most the lifetime); anything else is a full handshake
 and never an error. A ticket that opens but whose binder (4.2.11.2, constant time) is wrong aborts with `decrypt_error`
-(the RFC says abort; docs/plan-wave3.md said fall back). `pre_shared_key` must be the last extension, `psk_key_exchange_modes`
+(the RFC says abort; an earlier plan said fall back). `pre_shared_key` must be the last extension, `psk_key_exchange_modes`
 must be present. A resumption sends no Certificate and no CertificateVerify.
 
 0-RTT is refused: `early_data` is ignored, and the records the client sealed under early keys are skipped (up to 64 KiB,

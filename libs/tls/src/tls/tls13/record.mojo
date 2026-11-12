@@ -188,7 +188,7 @@ struct RecordReader(Movable):
             self.pos = 0
         elif self.pos > 65536:
             # The Span borrows the old buffer until the copy exists. A pointer laundered through Int() did not:
-            # Mojo freed the old buffer before the memcpy read it (use-after-free, docs/lanes/FINDING-heap-grow.md).
+            # Mojo freed the old buffer before the memcpy read it (use-after-free, docs/heap-grow.md).
             self.buf = dup(Span(self.buf)[self.pos:])
             self.pos = 0
         return True
