@@ -50,3 +50,6 @@ Lane 4 (TLS 1.3), 2026-11-12. Other lanes append their own lines; concatenate on
 - Two lane 1 mutants (gcm-noncelen, aes-keylen) were "killed" by SIGILL from a bounds trap, not by a check -> a mutant runner
   counts only a printed `FAIL` line and exit < 128 as a kill; code clamps its loops so a missed policy check cannot read out of bounds.
 - Duplicate lines in tests/mutants_sym.txt ran the same mutant twice in one directory and garbled the log -> mutant names are unique.
+- `playwright install chromium` deleted the older chromium, headless-shell and ffmpeg builds from the shared `~/.cache/ms-playwright`
+  (it prunes builds "unused" by its own version) -> never run `playwright install` against the shared cache; set
+  `PLAYWRIGHT_BROWSERS_PATH=<repo>/.work/...` first, or reuse an installed build read-only.
