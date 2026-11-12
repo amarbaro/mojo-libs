@@ -1,5 +1,5 @@
 # Gate: key schedule against RFC 8448 sections 3 (x25519, AES-128-GCM) and 5 (HRR trace), SHA-256 chain.
-# SHA-384 and KeyUpdate are printed here and compared with `openssl kdf` by tests/gate.sh.
+# SHA-384 and KeyUpdate are printed here and compared with `openssl kdf` by tests/gate_tls13.sh.
 from tls.tls13.keysched import KeySchedule, traffic_key, traffic_iv, finished_mac, next_secret, expand_label
 from chk import Vec, T, hexs
 
@@ -43,7 +43,7 @@ def main() raises:
     var shs = v.get(sec, "\"tls13 s hs traffic\"", "expanded")
     var fkey = v.get(sec, "{server}  calculate finished", "expanded")
     t.eq("RFC8448 s3 finished_key", expand_label(32, shs, "finished", List[UInt8](), 32), fkey)
-    # SHA-384 chain and KeyUpdate, for the openssl oracle in tests/gate.sh
+    # SHA-384 chain and KeyUpdate, for the openssl oracle in tests/gate_tls13.sh
     var ks = KeySchedule(48)
     ks.to_handshake(List[UInt8](length=48, fill=0x11))
     print("SHA384-HS " + hexs(ks.secret))

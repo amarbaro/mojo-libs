@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Lane 4 gate (TLS 1.3 record layer, codecs, key schedule, client and server state machines).
-# usage: tests/gate.sh [--mutants]      run from anywhere; output is kept in .work/gate/
+# usage: tests/gate_tls13.sh [--mutants]      run from anywhere; output is kept in .work/gate/
 # Builds each test (timeout 300), runs it, runs the openssl oracles and the interop matrix, optionally the mutants.
 set -euo pipefail
 cd "$(dirname "$0")/.."

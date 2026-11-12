@@ -1,6 +1,6 @@
 # Gate: client and server state machines reproduce RFC 8448 byte for byte. Section 3 (1-RTT, x25519, AES-128-GCM),
 # section 5 (HelloRetryRequest to secp256r1, cookie, padding) and section 7 (compatibility mode: session id, CCS). Each side is run against the other side's recorded
-# bytes: the output must equal the trace. CertificateVerify content is printed for the openssl oracle (tests/gate.sh).
+# bytes: the output must equal the trace. CertificateVerify content is printed for the openssl oracle (tests/gate_tls13.sh).
 from tls.tls13.client import Client13
 from tls.tls13.conn import *
 from tls.tls13.keysched import hash_of

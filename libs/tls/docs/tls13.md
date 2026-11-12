@@ -1,7 +1,7 @@
 # TLS 1.3 (lane 4): `src/tls/tls13/`
 
 Sans-IO TLS 1.3 client and server: bytes in, bytes and events out, no sockets. 1500 lines of code by `mokei`
-(`src/tls/tls13/*.mojo` without `_tmp_crypto/`). Gate: `tests/gate.sh [--mutants]`.
+(`src/tls/tls13/*.mojo` without `_tmp_crypto/`). Gate: `tests/gate_tls13.sh [--mutants]`.
 
 ## Files
 
