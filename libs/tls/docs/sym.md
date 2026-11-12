@@ -1,15 +1,16 @@
 # Lane 1: symmetric crypto (`src/tls/sym/`)
 
-Status: gate passes (`tests/sym_gate.sh`, 49 mutants killed). Import everything with `from tls.sym import ...`.
+Status: gate passes (`tests/sym_gate.sh`, 53 mutants killed). Import everything with `from tls.sym import ...`.
 
 | File | Lines | Content |
 |---|---|---|
 | `sha2.mojo` | 158 | `Sha2[dt, ol]` generic body: `Sha256`, `Sha384`, `Sha512` (streaming `update`/`digest`), `sha256()` etc., trait `Hash` |
 | `mac.mojo` | 85 | `hmac[H]`, `hkdf_extract[H]`, `hkdf_expand[H]`, `hkdf_expand_label[H]`, `prf12[H]`, `wipe` |
 | `aes.mojo` | 107 | `Aes(key)`: key schedule, `encrypt_block`, `encrypt8`; AES-NI path or constant-time software path |
-| `gcm.mojo` | ~170 | `AesGcm(key)`: GHASH on PCLMUL (or ctmul64), CTR fused with GHASH on seal |
-| `chacha.mojo` | ~215 | `chacha20_xor`, `Poly1305` (radix 2^44), `poly1305_mac`, `ChaCha20Poly1305(key)` |
-| `aead.mojo` | 12 | trait `Aead`: `seal(nonce, aad, mut buf)` appends the tag; `open(nonce, aad, mut buf) raises` verifies then decrypts in place, drops the tag |
+| `gcm.mojo` | 194 | `AesGcm(key)`: GHASH on PCLMUL (or ctmul64), CTR fused with GHASH on seal |
+| `chacha.mojo` | 239 | `chacha20_xor`, `Poly1305` (radix 2^44), `poly1305_mac`, `ChaCha20Poly1305(key)` |
+| `__init__.mojo` | 7 | re-exports the API |
+| `aead.mojo` | 16 | trait `Aead`: `seal(nonce, aad, mut buf)` appends the tag; `open(nonce, aad, mut buf) raises` verifies then decrypts in place, drops the tag; `wipe()` |
 
 ## Behaviour that callers rely on
 

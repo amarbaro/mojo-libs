@@ -138,6 +138,7 @@ struct Poly1305:
             for i in range(n % 16):
                 t[i] = p[unsafe_offset=n - n % 16 + i]
             self.blocks(t.unsafe_ptr(), 16, 1 << 40)
+            _ = t[0]  # keep the block alive until blocks() has read it
 
     def tag(self) -> SIMD[U32, 4]:
         """Fully carry, subtract p when h >= p (mask select, no branch), add the pad mod 2^128."""
@@ -186,6 +187,7 @@ def poly1305_mac(key: Span[UInt8, _], msg: Span[UInt8, _]) -> SIMD[U32, 4]:
             t[i] = p[unsafe_offset=n - n % 16 + i]
         t[n % 16] = 1
         st.blocks(t.unsafe_ptr(), 16, 0)
+        _ = t[0]
     return st.tag()
 
 
@@ -197,6 +199,9 @@ struct ChaCha20Poly1305(Aead, Copyable, Movable):
             raise Error("tls: chacha20 key must be 32 bytes")
         self.key = _words[8](key)
 
+    def wipe(mut self):
+        self.key = SIMD[U32, 8](0)
+
     def _tag(self, nonce: SIMD[U32, 4], aad: Span[UInt8, _], ct: Pointer[UInt8, _], n: Int) -> SIMD[U32, 4]:
         var ks = Array[UInt32, 16](fill=0)
         _keystream[1](self.key, nonce, 0, ks.unsafe_ptr())  # block 0: its first 32 bytes are the one-time Poly1305 key
@@ -206,6 +211,7 @@ struct ChaCha20Poly1305(Aead, Copyable, Movable):
         var lens = Array[UInt64, 2](fill=UInt64(len(aad)))
         lens[1] = UInt64(n)
         st.blocks(lens.unsafe_ptr().unsafe_bitcast[UInt8](), 16, 1 << 40)
+        _ = lens[0]
         return st.tag()
 
     def _nonce(self, nonce: Span[UInt8, _], n: Int) raises -> SIMD[U32, 4]:

@@ -48,3 +48,11 @@ poly-r2@tls/sym/chacha.mojo@s/self.r\[2\] = \(k\[1\] >> 24\) & 0x00FFFFFFC0F/sel
 gcm-fusetail@tls/sym/gcm.mojo@s/n - done\)$/n - done - 1)/
 gcm-xy@tls/sym/gcm.mojo@s/x \^= y$/pass/
 poly-tail-carry@tls/sym/chacha.mojo@s/h2 \+= h1 >> 44$/h2 += 0/
+poly-r2@tls/sym/chacha.mojo@s/self.r\[2\] = \(k\[1\] >> 24\) & 0x00FFFFFFC0F/self.r[2] = (k[1] >> 24) \& 0x00FFFFFFC0E/
+gcm-fusetail@tls/sym/gcm.mojo@s/n - done\)$/n - done - 1)/
+gcm-xy@tls/sym/gcm.mojo@s/x \^= y$/pass/
+poly-tail-carry@tls/sym/chacha.mojo@s/h2 \+= h1 >> 44$/h2 += 0/
+gcm-noncelen@tls/sym/gcm.mojo@s/len\(nonce\) != 12 or n < 0 or/n < 0 or/
+chacha-noncelen@tls/sym/chacha.mojo@s/len\(nonce\) != 12 or n < 0 or/n < 0 or/
+chacha-keylen@tls/sym/chacha.mojo@s/if len\(key\) != 32:/if len(key) > 99:/
+aes-keylen@tls/sym/aes.mojo@s/if len\(key\) != 16 and len\(key\) != 32:/if len(key) > 99:/

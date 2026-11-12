@@ -80,6 +80,23 @@ def aead_case[A: Aead](a: A, iv: List[UInt8], aad: List[UInt8], msg: List[UInt8]
     return rejects(a, bad_iv, aad, wire.copy())
 
 
+def bad_args[A: Aead](a: A) -> Bool:
+    """Short buffers and wrong nonce lengths must raise, never crash."""
+    var aad = List[UInt8](length=3, fill=1)
+    for n in range(16):
+        if not rejects(a, List[UInt8](length=12, fill=0), aad, List[UInt8](length=n, fill=5)):
+            return False
+    for n in [0, 11, 13, 16]:
+        var buf = List[UInt8](length=20, fill=5)
+        try:
+            a.seal(List[UInt8](length=n, fill=0), aad, buf)
+            return False
+        except:
+            if len(buf) != 20:
+                return False
+    return True
+
+
 def check(f: List[String]) raises -> Bool:
     var kind = f[0]
     var alg = f[1] if len(f) > 1 else String("")
@@ -133,6 +150,20 @@ def check(f: List[String]) raises -> Bool:
             if UInt8((t[i // 4] >> UInt32(8 * (i % 4))) & 0xFF) != want[i]:
                 return False
         return True
+    elif kind == "badargs":
+        var ok = True
+        for n in [0, 15, 17, 24, 31, 33]:  # key sizes outside the lane: AES-192 included
+            try:
+                _ = AesGcm(List[UInt8](length=n, fill=1))
+                ok = False
+            except:
+                pass
+        try:
+            _ = ChaCha20Poly1305(List[UInt8](length=31, fill=1))
+            ok = False
+        except:
+            pass
+        return ok and bad_args(AesGcm(List[UInt8](length=16, fill=1))) and bad_args(ChaCha20Poly1305(List[UInt8](length=32, fill=1)))
     elif kind == "aesblk":
         var b = unhex(f[2])
         var v = V16(0)

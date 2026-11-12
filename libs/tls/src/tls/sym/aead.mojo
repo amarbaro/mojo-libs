@@ -10,3 +10,7 @@ trait Aead:
         """Check the tag (constant time) before touching the data, then decrypt in place and drop the tag.
         On a bad tag raise and leave buf unchanged."""
         ...
+
+    def wipe(mut self):
+        """Zero the key material (best effort)."""
+        ...
