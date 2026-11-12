@@ -151,6 +151,8 @@ struct Conn(Movable):
             return True
         var body = List[UInt8]()
         if self.rx.on:
+            if typ != APP:
+                raise bad("unexpected_message", "unprotected record after the keys were installed")
             var r = self.rx.open(rec)
             typ = r[0]
             body = r[1].copy()
@@ -173,6 +175,7 @@ struct Conn(Movable):
                     self.wclosed = True
                     self.send_alert(1, 0, out.send)
                 self.state = S_CLOSED
+                self.wipe()
             elif body[1] != 90:  # user_canceled is ignored; every other alert is fatal in TLS 1.3
                 raise bad("peer_alert", alert_name(Int(body[1])))
         elif typ == HS:

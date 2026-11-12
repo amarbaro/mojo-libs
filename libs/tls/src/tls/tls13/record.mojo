@@ -107,8 +107,10 @@ struct Cipher(Movable):
     def open(mut self, rec: List[UInt8]) raises -> Tuple[Int, List[UInt8]]:
         """Decrypt a protected record (header included): (inner content type, content). Raises bad_record_mac."""
         var n = len(rec) - 5 - 16
-        if n < 1 or n + 16 > MAX_CIPHER:
-            raise bad("record_overflow" if n > 1 else "decode_error", "protected record length")
+        if n + 16 > MAX_CIPHER:
+            raise bad("record_overflow", "protected record longer than 2^14+256")
+        if n < 1:
+            raise bad("bad_record_mac", "protected record shorter than the tag")
         if self.seq == UInt64.MAX:
             raise bad("internal_error", "sequence number exhausted")
         var pt = List[UInt8](length=n, fill=0)
