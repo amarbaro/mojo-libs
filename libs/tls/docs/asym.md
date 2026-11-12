@@ -32,7 +32,7 @@ UInt128) serves X25519 (N=4, p = 2^255-19), P-256 (N=4), P-384 (N=6) and RSA (N=
 
 ## Gate
 
-`tests/gate.sh` (needs `.work/wycheproof`, a shallow clone of C2SP/wycheproof, and openssl): Wycheproof via `tools/wyc2cases.py` + `tests/vectors.mojo`, RFC KATs `tests/kat.mojo`, parser fuzz `tests/fuzz.mojo`, openssl cross-checks `tests/oracle.sh` (`tests/tool.mojo` is the CLI under test), timing `tests/ct.mojo`, mutants `tests/mutants.sh` (`tests/mutants.txt`). Speed: `tests/bench.mojo`.
+`tests/gate_asym.sh` (needs `.work/wycheproof`, a shallow clone of C2SP/wycheproof, and openssl): Wycheproof via `tools/wyc2cases.py` + `tests/vectors.mojo`, RFC KATs `tests/kat.mojo`, parser fuzz `tests/fuzz.mojo`, openssl cross-checks `tests/oracle.sh` (`tests/tool.mojo` is the CLI under test), timing `tests/ct.mojo`, mutants `tests/mutants_asym.sh` (`tests/mutants_asym.txt`). Speed: `tests/bench.mojo`.
 
 ## Speed (best of 8 runs of `tools/bench-min.sh` on a loaded 7800X3D, microseconds; openssl 3.6 `speed`, one thread, same box)
 

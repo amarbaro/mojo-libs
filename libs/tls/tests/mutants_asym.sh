@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Mutation gate: every line of tests/mutants.txt ("file<TAB>from<TAB>to<TAB>runner<TAB>args...") edits one line of a copy of src/ and the named
+# Mutation gate: every line of tests/mutants_asym.txt ("file<TAB>from<TAB>to<TAB>runner<TAB>args...") edits one line of a copy of src/ and the named
 # test binary must then FAIL (non-zero exit). A mutant that does not build is reported INVALID, one that survives is a gate failure.
-# usage: tests/mutants.sh [id ...]   (ids are 1-based line numbers; default all, 8 at a time)
+# usage: tests/mutants_asym.sh [id ...]   (ids are 1-based line numbers; default all, 8 at a time)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p .work/mut
-list=tests/mutants.txt
+list=tests/mutants_asym.txt
 ids=("$@"); [ ${#ids[@]} -gt 0 ] || ids=($(seq 1 "$(grep -c . $list)"))
 
 one() {
   local id=$1 line file from to runner args
-  line=$(sed -n "${id}p" tests/mutants.txt)
+  line=$(sed -n "${id}p" tests/mutants_asym.txt)
   IFS=$'\t' read -r file from to runner args <<<"$line"
   local d=.work/mut/$id
   rm -rf "$d"; mkdir -p "$d"; cp -r src "$d/src"

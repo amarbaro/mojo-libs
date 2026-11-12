@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Lane 2 gate (src/tls/asym): Wycheproof vectors, RFC/known-answer + round-trip checks, openssl cross-checks, mutants.
-# usage: tests/gate.sh [wycheproof-dir]   (default .work/wycheproof, a shallow clone of github.com/C2SP/wycheproof)
+# usage: tests/gate_asym.sh [wycheproof-dir]   (default .work/wycheproof, a shallow clone of github.com/C2SP/wycheproof)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 wyc=${1:-.work/wycheproof}
@@ -22,5 +22,5 @@ if [ -x .work/ct ] && [ -f .work/oracle/rsa2048.pem ]; then
   # shellcheck disable=SC2086
   for try in 1 2 3; do taskset -c "${CT_CPU:-5}" .work/ct "${CT_N:-20000}" $parts && break; [ $try = 3 ] && fail ct "timing leak suspected in 3 tries"; echo "ct: try $try failed, retrying"; done
 fi
-tests/mutants.sh || fail mutants "survivor"
+tests/mutants_asym.sh || fail mutants "survivor"
 echo "PASS gate"
