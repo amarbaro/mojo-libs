@@ -20,6 +20,9 @@ comptime SIG_PSS_SHA256 = 9
 comptime SIG_PSS_SHA384 = 10
 comptime SIG_PSS_SHA512 = 11
 
+comptime MAX_SAN_NAMES = 1024  # dNSName + iPAddress entries in one SAN; bounds the name constraint work
+comptime MAX_NC_SUBTREES = 256  # permitted + excluded subtrees in one nameConstraints
+
 comptime KU_DIGITAL_SIGNATURE = 1
 comptime KU_KEY_CERT_SIGN = 32
 
@@ -430,6 +433,8 @@ struct Certificate(Copyable, Movable):
                 if len(n) != 4 and len(n) != 16:
                     raise Error("tls: x509: bad san ip")
                 self.ips.append(copy_of(n))
+            if len(self.dns) + len(self.ips) > MAX_SAN_NAMES:
+                raise Error("tls: x509: too many subject alternative names")
 
     def _nc(mut self, v: Bytes) raises:
         var d = Der(v)
@@ -437,6 +442,7 @@ struct Certificate(Copyable, Movable):
         d.end()
         if s.done():
             raise Error("tls: x509: empty name constraints")
+        var subtrees = 0
         while not s.done():
             var excl = s.peek() == 0xA1
             if not excl and s.peek() != 0xA0:
@@ -448,6 +454,11 @@ struct Certificate(Copyable, Movable):
                 var g = l.seq()
                 var base = g.next()
                 var t = g.tag
+                subtrees += 1
+                if subtrees > MAX_NC_SUBTREES:
+                    raise Error("tls: x509: too many name constraint subtrees")
+                if t == 0x82 and len(base) > 0 and base[0] == 46:
+                    raise Error("tls: x509: dns name constraint with a leading period")
                 if not g.done():
                     raise Error("tls: x509: name constraint min/max")
                 if t == 0x82:

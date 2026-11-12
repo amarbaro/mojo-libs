@@ -268,6 +268,10 @@ def _profile(c: Certificate, anchor: Bool) raises:
         raise Error("tls: x509: unknown critical extension")
     if c.aia_crit:
         raise Error("tls: x509: authority information access must not be critical")
+    if c.has_nc and not c.nc_crit:
+        raise Error("tls: x509: name constraints must be critical")
+    if c.pc_noncrit:
+        raise Error("tls: x509: policy constraints must be critical")
     if c.ski_crit or c.aki_crit:
         raise Error("tls: x509: subject and authority key identifiers must not be critical")
     if (anchor or (c.has_bc and c.is_ca)) and not c.has_ski:
@@ -282,6 +286,8 @@ def _leaf_rules(leaf: Certificate) raises:
     """End-entity rules; they apply to chain[0] even when it is itself the trust anchor."""
     if not leaf.serial_ok():
         raise Error("tls: x509: serial number must be positive, non-zero and at most 20 octets")
+    if leaf.has_nc and not (leaf.has_bc and leaf.is_ca):
+        raise Error("tls: x509: name constraints in an end-entity certificate")
     if leaf.has_eku and not leaf.eku_server:
         raise Error("tls: x509: leaf extended key usage excludes serverAuth")
     if leaf.has_ku and (leaf.ku & KU_DIGITAL_SIGNATURE) == 0:

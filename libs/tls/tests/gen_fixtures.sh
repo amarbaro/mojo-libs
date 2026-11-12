@@ -125,14 +125,14 @@ cs bad_unknown_critical fail $NOW crit.example.com ec_root.pem ec_leaf_crit.pem,
 issue ec_leaf_ncrit "c" ec_inter ec "$SRV$(san DNS:ncrit.example.com)"'1.2.3.4=ASN1:UTF8String:x\n'
 cs ok_unknown_noncritical ok $NOW ncrit.example.com ec_root.pem ec_leaf_ncrit.pem,ec_inter.pem
 # name constraints
-issue nc_dns "NC dns" ec_root ec "$CA"'nameConstraints=critical,permitted;DNS:.good.example\n'
+issue nc_dns "NC dns" ec_root ec "$CA"'nameConstraints=critical,permitted;DNS:good.example\n'
 issue nc_dns_leaf_ok "g" nc_dns ec "$SRV$(san DNS:www.good.example)"
 issue nc_dns_leaf_bad "b" nc_dns ec "$SRV$(san DNS:www.bad.example)"
 issue nc_dns_leaf_mixed "m" nc_dns ec "$SRV$(san DNS:www.good.example,DNS:www.bad.example)"
 cs ok_nc_dns_permitted ok $NOW www.good.example ec_root.pem nc_dns_leaf_ok.pem,nc_dns.pem
 cs bad_nc_dns_not_permitted fail $NOW www.bad.example ec_root.pem nc_dns_leaf_bad.pem,nc_dns.pem
 cs bad_nc_dns_mixed fail $NOW www.good.example ec_root.pem nc_dns_leaf_mixed.pem,nc_dns.pem
-issue nc_dnsx "NC dnsx" ec_root ec "$CA"'nameConstraints=permitted;DNS:good.example,excluded;DNS:sub.good.example\n'
+issue nc_dnsx "NC dnsx" ec_root ec "$CA"'nameConstraints=critical,permitted;DNS:good.example,excluded;DNS:sub.good.example\n'
 issue nc_dnsx_apex "a" nc_dnsx ec "$SRV$(san DNS:good.example)"
 issue nc_dnsx_sub "s" nc_dnsx ec "$SRV$(san DNS:x.sub.good.example)"
 issue nc_dnsx_oth "o" nc_dnsx ec "$SRV$(san DNS:x.other.good.example)"
