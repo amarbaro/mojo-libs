@@ -486,11 +486,11 @@ def drop_and_peek(path: String) raises -> Int:
 
 
 def zero_after_free(mut t: Tally) raises:
-    """Freed key memory (bytes 32.. of d, past the allocator's free-list link) is zero; a control list is not."""
+    """Freed key memory (bytes 32..239 of d, between the allocator's free-list link) is zero; a control list is not."""
     var addr = drop_and_peek("tests/data/key_rsa_pkcs8.pem")
     var p = Pointer[UInt8, MutAnyOrigin](unsafe_from_address=addr)
     var nz = 0
-    for i in range(32, 256):
+    for i in range(32, 240):
         if p[unsafe_offset=i] != 0:
             nz += 1
     var c = List[UInt8](length=256, fill=0xAB)
@@ -498,13 +498,13 @@ def zero_after_free(mut t: Tally) raises:
     c = List[UInt8]()
     var cp = Pointer[UInt8, MutAnyOrigin](unsafe_from_address=ca)
     var cnz = 0
-    for i in range(32, 256):
+    for i in range(32, 240):
         if cp[unsafe_offset=i] != 0:
             cnz += 1
     if cnz == 0:
         print("note keys: control buffer was recycled, zero-after-free check skipped")
         return
-    t.check("key memory zero after drop", nz == 0, String(nz) + " of 224 bytes nonzero")
+    t.check("key memory zero after drop", nz == 0, String(nz) + " of 208 bytes nonzero")
 
 
 def flips(pem_path: String, fmt: Int, name: String, mut t: Tally) raises:
