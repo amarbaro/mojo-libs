@@ -160,8 +160,13 @@ def main() raises:
     cfg0[].alpn = List[String]()  # no ALPN configured: a client that offers it still gets a handshake, no protocol selected
     var c0 = started("localhost", ["h2", "http/1.1"])
     var s0 = Sv(cfg0)
-    pump(c0, s0)
-    t.check("server without ALPN ignores the extension", c0.cn.established and s0.cn.established and c0.negotiated == "" and s0.alpn == "")
+    var ok0 = False
+    try:
+        pump(c0, s0)
+        ok0 = c0.cn.established and s0.cn.established and c0.negotiated == "" and s0.alpn == ""
+    except:
+        pass
+    t.check("server without ALPN ignores the extension", ok0)
     var cb = started("localhost", ["spdy/3"])
     var sb = Sv(cfg)
     try:
