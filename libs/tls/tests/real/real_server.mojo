@@ -4,7 +4,7 @@ the body mojo-tls-ok, then closes. PEM files are decoded here (lane 3 owns the r
 from std.sys import argv
 from tls.tls12.realcrypto import RealCrypto
 from tls.net.config import TlsConfig, CertEntry
-from tls.net.server import TlsServer, TlsHandler
+from tls.net.server import TlsServer, TlsHandler, ConnInfo
 from tls.tls12.crypto import K_P256
 from tls.tls12.wire import bytes_of
 
@@ -49,7 +49,7 @@ struct Hello(TlsHandler):
     def __init__(out self):
         pass
 
-    def handle(mut self, fd: Int, data: List[UInt8], mut reply: List[UInt8]) raises -> Bool:
+    def handle(mut self, fd: Int, info: ConnInfo, data: List[UInt8], mut reply: List[UInt8]) raises -> Bool:
         reply.extend(bytes_of("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 12\r\nConnection: close\r\n\r\nmojo-tls-ok\n"))
         return True
 

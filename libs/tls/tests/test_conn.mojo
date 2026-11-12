@@ -1,13 +1,14 @@
-# Gate: our client against our server (no recorded bytes). 3 cipher suites x 2 key exchanges (with and without HRR),
+# Gate: our client against our server (no recorded bytes). 3 cipher suites x 4 key exchanges (x25519, HRR to P-256, P-384, x448), direct P-384 and x448 shares,
 # data both ways, KeyUpdate both ways, automatic KeyUpdate at the key limit, record_size_limit, ALPN, SNI, byte-wise
 # feeding, every alert the handshake can raise, and fuzzing of both state machines.
-from tls.asym import x25519_base
+from tls.asym import x25519_base, x448_base, p384_public
 from tls.tls13.client import Client13, default_hello
 from tls.tls13.conn import *
 from tls.tls13.keysched import traffic_key, traffic_iv
 from tls.tls13.messages import *
 from tls.tls13.record import Cipher, seal_all, HS, APP, ALERT
 from tls.tls13.server import Server13, ServerConfig
+from tls.tls13.ticket import Session
 from tls.tls13.verify import Verifier, Signer
 from chk import T
 from rec import RecSigner, RecVerifier, Refuse
@@ -123,6 +124,241 @@ def pump[V: Verifier, S: Signer](mut c: Client13[V], mut s: Server13[S], var wir
     return r^
 
 
+def direct_shares(mut t: T) raises:
+    """The client sends the share of secp384r1 or x448 at once (no HRR): both sides derive the same keys and finish."""
+    for g in range(2):
+        var group = G_P384 if g == 0 else G_X448
+        var h = hello()
+        h.exts[find(h.exts, X_KEYSHARE)] = x_keyshares([(group, p384_public(fill(48, 0x24)) if g == 0 else x448_base(fill(56, 0x25)))])
+        var c = client(h)
+        c.q_priv = fill(48, 0x24)
+        c.y_priv = fill(56, 0x25)
+        var s = server(0x1301, [G_X25519, G_P256, G_P384, G_X448])
+        var r = pump(c, s, c.start())
+        var tag = ("secp384r1" if g == 0 else "x448") + " direct share: "
+        t.ok(tag + "both sides done (" + r.cerr + r.serr + ")", r.cdone and r.sdone and r.cerr == "" and r.serr == "" and c.group == group and s.group == group)
+        var wire = c.write(pattern(100, 4))
+        t.ok(tag + "data flows", s.feed(Span(wire)).data == pattern(100, 4))
+    # a share of the right group but the wrong length, or a point not on the curve, is illegal_parameter
+    for g in range(3):
+        var group = [G_P384, G_X448, G_P384][g]
+        var bad = p384_public(fill(48, 0x24)) if g == 2 else fill(10, 0x01)
+        if g == 2:
+            bad[len(bad) - 1] ^= 1
+        var h = hello()
+        h.exts[find(h.exts, X_KEYSHARE)] = x_keyshares([(group, bad^)])
+        var c = client(h)
+        var s = server(0x1301, [G_X25519, G_P256, G_P384, G_X448])
+        var r = pump(c, s, c.start())
+        t.ok("bad " + String(group) + " share " + String(g) + " is refused: " + r.serr, "illegal_parameter" in r.serr and not r.sdone)
+
+
+def attempt(
+    sess: Session, keys: List[List[UInt8]], now_s: Int, now_ms: Int, suite: Int = 0x1301, tamper: Bool = False,
+    sni: String = "example.com", alpn: String = "", mode: Int = 1, last: Bool = True,
+) raises -> Tuple[Bool, Bool, Bool, String]:
+    """One resumption attempt of `sess`: (both done, server resumed, client resumed, server error)."""
+    var s = server(suite, [G_X25519], [alpn] if alpn.byte_length() > 0 else List[String]())
+    s.cfg.ticket_keys = keys.copy()
+    s.cfg.now = now_s
+    var h = default_hello(sni, fill(32, 0x99), fill(0, 0x31), x25519_base(fill(32, 0x42)), [alpn] if alpn.byte_length() > 0 else List[String]())
+    var c = client(h, sni)
+    c.offer(sess, now_ms)
+    c.ch.exts[find(c.ch.exts, X_PSK_MODES)].d = [UInt8(1), UInt8(mode)]
+    if not last:
+        c.ch.exts.append(Ext(0xFAFA, List[UInt8]()))
+    var first = c.start()
+    if tamper:
+        first[len(first) - 1] ^= 1
+    var r = pump(c, s, first^)
+    return (r.cdone and r.sdone, s.resumed, c.resumed, r.serr)
+
+
+def resumption(mut t: T) raises:
+    """Tickets and PSK resumption (RFC 8446 4.6.1, 4.2.11): accept, rotate, and every reason to fall back or abort."""
+    var key = fill(32, 0x61)
+    var key2 = fill(32, 0x62)
+    var s0 = server(0x1301, [G_X25519])
+    s0.cfg.ticket_keys = [key.copy()]
+    s0.cfg.now = 1000000
+    var c0 = client(hello())
+    var r0 = pump(c0, s0, c0.start())
+    t.ok("full handshake with ticket keys: done, one ticket received, not resumed", r0.cdone and r0.sdone and len(c0.c.tickets) == 1 and r0.cev.count(EV_TICKET) == 1 and not s0.resumed and not c0.resumed)
+    var sess = c0.session(0, 5000000)
+    var ms = 5000000 + 60000
+    var ok = attempt(sess, [key.copy()], 1000060, ms)
+    t.ok("resumption: both done, both sides resumed (" + ok[3] + ")", ok[0] and ok[1] and ok[2])
+    t.ok("resumption after a key rotation (old key still listed)", attempt(sess, [key2.copy(), key.copy()], 1000060, ms)[1])
+    t.ok("unknown ticket key: full handshake, no error", attempt(sess, [key2.copy()], 1000060, ms)[0] and not attempt(sess, [key2.copy()], 1000060, ms)[1])
+    t.ok("no ticket keys on the server: full handshake", attempt(sess, List[List[UInt8]](), 1000060, ms)[0] and not attempt(sess, List[List[UInt8]](), 1000060, ms)[1])
+    var ex = attempt(sess, [key.copy()], 1000000 + 86400 + 1, ms)
+    t.ok("expired ticket: full handshake", ex[0] and not ex[1] and not ex[2])
+    var fut = attempt(sess, [key.copy()], 999000, ms)
+    t.ok("ticket from the future: full handshake", fut[0] and not fut[1])
+    var old = attempt(sess, [key.copy()], 1000060, 5000000 + (86400 + 10) * 1000)
+    t.ok("client age beyond the lifetime: full handshake", old[0] and not old[1])
+    var sm = attempt(sess, [key.copy()], 1000060, ms, 0x1303)
+    t.ok("other cipher suite: full handshake", sm[0] and not sm[1])
+    var sn = attempt(sess, [key.copy()], 1000060, ms, 0x1301, False, "other.test")
+    t.ok("other SNI: full handshake", sn[0] and not sn[1])
+    var al = attempt(sess, [key.copy()], 1000060, ms, 0x1301, False, "example.com", "h2")
+    t.ok("other ALPN: full handshake", al[0] and not al[1])
+    var pk = attempt(sess, [key.copy()], 1000060, ms, 0x1301, False, "example.com", "", 0)
+    t.ok("psk_ke only: full handshake", pk[0] and not pk[1])
+    var fb = attempt(sess, [key.copy()], 1000060, ms, 0x1301, True)
+    t.ok("forged binder aborts with decrypt_error (" + fb[3] + ")", not fb[0] and "decrypt_error" in fb[3])
+    var forged = sess.copy()
+    forged.ticket[len(forged.ticket) - 1] ^= 1
+    var fg = attempt(forged, [key.copy()], 1000060, ms)
+    t.ok("forged ticket (AEAD tag): full handshake", fg[0] and not fg[1])
+    var nl = attempt(sess, [key.copy()], 1000060, ms, 0x1301, False, "example.com", "", 1, False)
+    t.ok("pre_shared_key not last: illegal_parameter (" + nl[3] + ")", not nl[0] and "illegal_parameter" in nl[3])
+    # chain: the resumed connection issues a ticket of its own, which resumes again; data flows both ways
+    var s1 = server(0x1301, [G_X25519])
+    s1.cfg.ticket_keys = [key.copy()]
+    s1.cfg.now = 1000060
+    var c1 = client(hello())
+    c1.offer(sess, ms)
+    var r1 = pump(c1, s1, c1.start())
+    t.ok("resumed connection issues a new ticket", r1.cdone and s1.resumed and len(c1.c.tickets) == 1)
+    var up = pattern(5000, 3)
+    t.ok("data flows after resumption", s1.feed(Span(c1.write(up))).data == up and c1.feed(Span(s1.write(pattern(40, 2)))).data == pattern(40, 2))
+    var again = attempt(c1.session(0, ms), [key.copy()], 1000120, ms + 60000)
+    t.ok("second resumption from the resumed connection's ticket", again[1] and again[2])
+
+
+def rd(path: String) raises -> List[UInt8]:
+    with open(path, "r") as f:
+        return f.read_bytes()
+
+
+def cauth(name: String, key_of: String = "", roots_of: String = "ca", request: Bool = True) raises -> Tuple[Bool, String, List[UInt8], Int]:
+    """A handshake with client certificate `name` (empty: none) whose key is the one of `key_of` (empty: its own), against a
+    server that requires one signed by `roots_of`. (both done, server error, certificate the server saw, tickets the client got)."""
+    var dir = String(".work/gate/certs/")
+    var s = server(0x1301, [G_X25519])
+    s.cfg.require_client_cert = request
+    s.cfg.client_roots = [rd(dir + roots_of + ".der")]
+    s.cfg.ticket_keys = [fill(32, 0x61)]
+    var c = client(hello())
+    if name.byte_length() > 0:
+        var chain = List[List[UInt8]]()
+        chain.append(rd(dir + name + ".crt.der"))
+        c.set_client_cert(chain, rd(dir + (key_of if key_of.byte_length() > 0 else name) + ".key.der"))
+    var r = pump(c, s, c.start())
+    return (r.cdone and r.sdone, r.serr, s.client_cert.copy(), len(c.c.tickets))
+
+
+def client_auth(mut t: T) raises:
+    """Client certificates (RFC 8446 4.3.2, 4.4.2, 4.4.3) with our own client and server and real certificates."""
+    var dir = String(".work/gate/certs/")
+    for name in ["cli-p256", "cli-rsa"]:
+        var r = cauth(name)
+        t.ok(name + ": accepted, the server saw the certificate, no ticket (" + r[1] + ")", r[0] and r[1] == "" and r[2] == rd(dir + name + ".crt.der") and r[3] == 0)
+    var none = cauth("")
+    t.ok("no certificate: certificate_required, handshake not done (" + none[1] + ")", not none[0] and "certificate_required" in none[1])
+    var evil = cauth("cli-evil")
+    t.ok("a certificate of another CA: bad_certificate (" + evil[1] + ")", not evil[0] and "bad_certificate" in evil[1])
+    var eku = cauth("cli-serverauth")
+    t.ok("a serverAuth-only certificate: bad_certificate (" + eku[1] + ")", not eku[0] and "bad_certificate" in eku[1])
+    var other = cauth("cli-p256", "cli-evil")
+    t.ok("a signature from another key: decrypt_error (" + other[1] + ")", not other[0] and "decrypt_error" in other[1])
+    var kind = cauth("cli-p256", "cli-rsa")
+    t.ok("an RSA signature for a P-256 certificate: illegal_parameter (" + kind[1] + ")", not kind[0] and "illegal_parameter" in kind[1])
+    var trust = cauth("cli-evil", "", "evil-ca")
+    t.ok("the same certificate under its own root is accepted", trust[0] and trust[1] == "")
+    # a scheme the server did not ask for (rsa_pkcs1_sha256 is not allowed in a TLS 1.3 CertificateVerify)
+    var sf = server(0x1301, [G_X25519])
+    sf.cfg.require_client_cert = True
+    sf.cfg.client_roots = [rd(dir + "ca.der")]
+    var cf = client(hello())
+    var rsa_chain = List[List[UInt8]]()
+    rsa_chain.append(rd(dir + "cli-rsa.crt.der"))
+    cf.set_client_cert(rsa_chain, rd(dir + "cli-rsa.key.der"))
+    cf.force_scheme = 0x0401
+    var rf = pump(cf, sf, cf.start())
+    t.ok("a CertificateVerify scheme the server did not ask for: illegal_parameter (" + rf.serr + ")", not rf.sdone and "illegal_parameter" in rf.serr)
+    # a ticket must not stand in for client authentication: a client offering one still gets the CertificateRequest
+    var s0 = server(0x1301, [G_X25519])
+    s0.cfg.ticket_keys = [fill(32, 0x61)]  # the real clock on both servers: the certificates are checked against it
+    var c0 = client(hello())
+    _ = pump(c0, s0, c0.start())
+    var sess = c0.session(0, 5000000)
+    var sr = server(0x1301, [G_X25519])
+    sr.cfg.ticket_keys = [fill(32, 0x61)]
+    sr.cfg.require_client_cert = True
+    sr.cfg.client_roots = [rd(dir + "ca.der")]
+    var cr = client(hello())
+    var ec_chain = List[List[UInt8]]()
+    ec_chain.append(rd(dir + "cli-p256.crt.der"))
+    cr.set_client_cert(ec_chain, rd(dir + "cli-p256.key.der"))
+    cr.offer(sess, 5060000)
+    var rr = pump(cr, sr, cr.start())
+    t.ok("a client offering a ticket to a client-auth server is not resumed and authenticates (" + rr.serr + ")", rr.cdone and rr.sdone and not sr.resumed and sr.client_cert == rd(dir + "cli-p256.crt.der"))
+    var off = cauth("cli-p256", "", "ca", False)
+    t.ok("no CertificateRequest: the client does not volunteer a certificate, tickets are issued", off[0] and len(off[2]) == 0 and off[3] == 1)
+
+
+def early_data(mut t: T) raises:
+    """0-RTT is refused (RFC 8446 4.2.10): early data sealed under a key we never had is skipped, up to a budget; without
+    the early_data extension, or beyond the budget, an undecryptable record is bad_record_mac."""
+    var junk = List[UInt8]()
+    junk.extend([UInt8(23), 3, 3, 0x40, 0x00])
+    junk.extend(pattern(0x4000, 7))
+    for k in range(3):
+        var h = hello()
+        if k < 2:
+            h.exts.append(Ext(X_EARLY, List[UInt8]()))
+        var s = server(0x1301, [G_X25519])
+        var c = client(h)
+        var first = c.start()
+        var n = 1 if k < 2 else 1
+        if k == 1:
+            n = 6  # 6 x 16384 bytes is over the 65536-byte budget
+        for _ in range(n):
+            first.extend(Span(junk))
+        var r = pump(c, s, first^)
+        if k == 0:
+            t.ok("early_data offered, one junk record after the ClientHello: skipped, handshake completes (" + r.serr + ")", r.cdone and r.sdone and r.serr == "")
+        elif k == 1:
+            t.ok("early_data offered, 6 junk records: over the budget, bad_record_mac (" + r.serr + ")", not r.sdone and "bad_record_mac" in r.serr)
+        else:
+            t.ok("no early_data extension, junk record: bad_record_mac (" + r.serr + ")", not r.sdone and "bad_record_mac" in r.serr)
+    var cz = client(hello())
+    var sz = server(0x1301, [G_X25519])
+    var wz = cz.start()
+    wz.extend([UInt8(23), 3, 3, 0, 0])
+    var rz = pump(cz, sz, wz^)
+    t.ok("a zero-length application_data record after the ClientHello is refused, no early_data budget (" + rz.serr + ")", not rz.sdone and "bad_record_mac" in rz.serr)
+    var s0 = server(0x1301, [G_X25519])
+    var o0 = s0.feed(Span(junk))
+    t.ok("plaintext application data before any ClientHello is unexpected_message (" + o0.error + ")", "unexpected_message" in o0.error)
+    # junk sent after a ClientHello that gets a HelloRetryRequest arrives in plaintext (no handshake keys yet): skipped too
+    var sh = server(0x1301, [G_P256])
+    var hh = hello()
+    hh.exts.append(Ext(X_EARLY, List[UInt8]()))
+    var ch = client(hh)
+    var wire = ch.start()
+    wire.extend(Span(junk))
+    var rh = pump(ch, sh, wire^)
+    t.ok("early_data with a HelloRetryRequest: junk before the second ClientHello is skipped (" + rh.serr + ")", rh.cdone and rh.sdone and rh.serr == "" and sh.group == G_P256)
+    # early_data in the second ClientHello is illegal_parameter (RFC 8446 4.2.10)
+    var s2 = server(0x1301, [G_P256])
+    var h2 = hello()
+    h2.exts.append(Ext(X_EARLY, List[UInt8]()))
+    var c2 = client(h2)
+    var o1 = s2.feed(Span(c2.start()))
+    var hrr = c2.feed(Span(o1.send))
+    t.ok("our client drops early_data from the second ClientHello", find(c2.ch.exts, X_EARLY) < 0 and len(hrr.send) > 0)
+    var bad2 = c2.ch.copy()
+    bad2.exts.append(Ext(X_EARLY, List[UInt8]()))
+    var bm = bad2.encode()
+    var brec: List[UInt8] = [UInt8(22), 3, 3, UInt8(len(bm) >> 8), UInt8(len(bm) & 255)]
+    brec.extend(Span(bm))
+    var o2 = s2.feed(Span(brec))
+    t.ok("early_data kept in the second ClientHello is refused with illegal_parameter (" + o2.error + ")", "illegal_parameter" in o2.error)
+
+
 def matrix(mut t: T) raises:
     var names = List[String]()
     names.append("TLS_AES_128_GCM_SHA256")
@@ -130,17 +366,21 @@ def matrix(mut t: T) raises:
     names.append("TLS_CHACHA20_POLY1305_SHA256")
     var suites = [0x1301, 0x1302, 0x1303]
     for si in range(3):
-        for hrr in range(2):
-            var groups: List[Int] = [G_P256]
-            if hrr == 0:
-                groups = [G_X25519, G_P256]
-            var tag = names[si] + (" via HRR to secp256r1" if hrr == 1 else " x25519") + ": "
+        for hrr in range(4):
+            var groups: List[Int] = [G_X25519, G_P256, G_P384, G_X448]
+            var want = G_X25519
+            var gname = " x25519"
+            if hrr > 0:
+                want = [G_P256, G_P384, G_X448][hrr - 1]
+                groups = [want]
+                gname = [" via HRR to secp256r1", " via HRR to secp384r1", " via HRR to x448"][hrr - 1]
+            var tag = names[si] + gname + ": "
             var s = server(suites[si], groups)
             var h = hello()
             var c = client(h)
             var r = pump(c, s, c.start())
             t.ok(tag + "both sides done, no error (" + r.cerr + r.serr + ")", r.cdone and r.sdone and r.cerr == "" and r.serr == "")
-            t.ok(tag + "suite and group agree", c.c.suite == suites[si] and s.c.suite == suites[si] and c.group == (G_P256 if hrr == 1 else G_X25519) and s.group == c.group)
+            t.ok(tag + "suite and group agree", c.c.suite == suites[si] and s.c.suite == suites[si] and c.group == want and s.group == c.group)
             t.ok(tag + "SNI reached the server", s.sni == "example.com")
             # data both ways, 50000 bytes = 4 records
             var up = pattern(50000, 1)
@@ -428,6 +668,10 @@ def fuzz(mut t: T) raises:
 def main() raises:
     var t = T("conn")
     matrix(t)
+    direct_shares(t)
+    resumption(t)
+    early_data(t)
+    client_auth(t)
     options(t)
     alerts(t)
     fuzz(t)

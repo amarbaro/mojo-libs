@@ -4,7 +4,7 @@ RSA (rsa_pss_rsae_sha256/384, rsa_pkcs1_sha256/384). aead: 0 AES-128-GCM, 1 AES-
 from std.ffi import external_call
 from tls.tls12.crypto import Crypto12, K_P256, K_RSA
 from tls.sym import Sha256, Sha384, sha256, sha384, prf12, AesGcm, ChaCha20Poly1305
-from tls.asym import x25519, x25519_base, P256Key, p256_verify, RsaPublic, RsaPrivate, random_bytes
+from tls.asym import x25519, x25519_base, P256Key, p384_public, p384_ecdh, p256_verify, RsaPublic, RsaPrivate, random_bytes
 from tls.x509.cert import Certificate, KEY_P256, KEY_RSA
 from std.os import getenv
 from tls.x509.chain import verify_chain, load_system_roots, load_roots_pem
@@ -13,6 +13,7 @@ from tls.x509.der import view
 
 comptime X25519 = 0x001D
 comptime SECP256R1 = 0x0017
+comptime SECP384R1 = 0x0018
 
 
 def _hash_of(scheme: Int) raises -> Int:
@@ -63,6 +64,9 @@ struct RealCrypto(Crypto12):
             return (k.copy(), x25519_base(k))
         if group == SECP256R1:
             return (k.copy(), P256Key(k).public_bytes())
+        if group == SECP384R1:
+            var q = random_bytes(48)
+            return (q.copy(), p384_public(q))
         raise Error("tls: key exchange group not supported")
 
     def ecdh(self, group: Int, secret: List[UInt8], peer: List[UInt8]) raises -> List[UInt8]:
@@ -70,6 +74,8 @@ struct RealCrypto(Crypto12):
             return x25519(secret, peer)
         if group == SECP256R1:
             return P256Key(secret).ecdh(peer)
+        if group == SECP384R1:
+            return p384_ecdh(secret, peer)
         raise Error("tls: key exchange group not supported")
 
     def sign(self, kind: Int, key_der: List[UInt8], scheme: Int, msg: List[UInt8]) raises -> List[UInt8]:

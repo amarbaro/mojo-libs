@@ -69,6 +69,7 @@ struct Conn(Movable):
     var wclosed: Bool
     var rx_limit: Int  # largest content a record may carry, from our record_size_limit
     var key_limit: UInt64  # records per sending key before we send KeyUpdate
+    var skip: Int  # bytes of undecryptable early data we may still skip (RFC 8446 4.2.10, 0-RTT refused)
 
     def __init__(out self, client: Bool):
         self.client = client
@@ -93,6 +94,7 @@ struct Conn(Movable):
         self.wclosed = False
         self.rx_limit = MAX_PLAIN
         self.key_limit = UInt64(1) << 24  # RFC 8446 5.5: AES-GCM allows 2^24.5 records
+        self.skip = 0
 
     def set_suite(mut self, suite: Int) raises:
         _ = suite_key_len(suite)
@@ -153,14 +155,25 @@ struct Conn(Movable):
         if self.rx.on:
             if typ != APP:
                 raise bad("unexpected_message", "unprotected record after the keys were installed")
-            var r = self.rx.open(rec)
+            var r: Tuple[Int, List[UInt8]]
+            try:
+                r = self.rx.open(rec)
+            except e:
+                if self.state != S_WAIT_FIN or self.skip < max(1, len(rec) - 5):
+                    raise e
+                self.skip -= len(rec) - 5  # early data we refused: it was sealed under a key we never had
+                return True
+            self.skip = 0  # a record that opens ends the early data
             typ = r[0]
             body = r[1].copy()
             if len(body) > self.rx_limit:
                 raise bad("record_overflow", "record longer than our record_size_limit")
         else:
             if typ == APP:
-                raise bad("unexpected_message", "unprotected application data")
+                if self.skip < max(1, len(rec) - 5):
+                    raise bad("unexpected_message", "unprotected application data")
+                self.skip -= len(rec) - 5  # early data sent before a HelloRetryRequest
+                return True
             if len(rec) - 5 > MAX_PLAIN:
                 raise bad("record_overflow", "record longer than 2^14")
             body = List[UInt8](Span(rec)[5:])

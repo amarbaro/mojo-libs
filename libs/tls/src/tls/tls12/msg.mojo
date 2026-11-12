@@ -13,6 +13,7 @@ comptime H_CERT = 11
 comptime H_SKE = 12
 comptime H_CREQ = 13
 comptime H_SHD = 14
+comptime H_CV = 15
 comptime H_CKE = 16
 comptime H_FIN = 20
 comptime A_CLOSE = 0
@@ -288,6 +289,45 @@ def parse_cke(body: List[UInt8]) raises -> List[UInt8]:
     if r.left() != 0 or len(pub) == 0:
         raise Error("tls: bad client key exchange")
     return pub^
+
+
+def build_creq(schemes: List[Int]) -> List[UInt8]:
+    """CertificateRequest (RFC 5246 7.4.4): rsa_sign and ecdsa_sign, our signature schemes, no CA list."""
+    var b = List[UInt8]()
+    put(b, pre8([UInt8(1), 64]))
+    put(b, pre16(_list16(schemes)))
+    p16(b, 0)
+    return hs(H_CREQ, b)
+
+
+def parse_creq(body: List[UInt8]) raises -> List[Int]:
+    """The signature schemes of a CertificateRequest."""
+    var r = Rd(body.copy())
+    _ = r.vec8()
+    var l = r.vec16()
+    _ = r.vec16()
+    if r.left() != 0 or l.left() == 0 or l.left() % 2 != 0:
+        raise Error("tls: bad certificate request")
+    var o = List[Int]()
+    while l.left() > 0:
+        o.append(l.u16())
+    return o^
+
+
+def build_cv(scheme: Int, sig: List[UInt8]) -> List[UInt8]:
+    var b = List[UInt8]()
+    p16(b, scheme)
+    put(b, pre16(sig))
+    return hs(H_CV, b)
+
+
+def parse_cv(body: List[UInt8]) raises -> Tuple[Int, List[UInt8]]:
+    var r = Rd(body.copy())
+    var s = r.u16()
+    var sig = r.vec16().d.copy()
+    if r.left() != 0 or len(sig) == 0:
+        raise Error("tls: bad certificate verify")
+    return (s, sig^)
 
 
 # ---- client side ----

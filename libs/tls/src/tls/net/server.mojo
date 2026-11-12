@@ -117,6 +117,8 @@ struct TlsServer[C: Crypto12](Movable):
     var stopped: Bool
 
     def __init__(out self, var cfg: TlsConfig, port: Int = 0, host: String = "127.0.0.1", tls13: Bool = True) raises:
+        if tls13 and len(cfg.ticket_keys) == 0:
+            cfg.ticket_keys = [Self.C().random(32)]  # one key per server start: tickets survive connections, not restarts
         cfg.tls13 = tls13  # also tells Server12 to send the DOWNGRD sentinel to a 1.3-capable client (RFC 8446 4.1.3)
         self.cfg = ArcPointer(cfg^)
         self.loop = aio.Loop(1024)
@@ -238,6 +240,9 @@ struct TlsServer[C: Crypto12](Movable):
                     var rng = Self.C()
                     var sc = ServerConfig(rng.random(32), rng.random(32), rng.random(32))
                     sc.alpn = self.cfg[].alpn.copy()
+                    sc.ticket_keys = self.cfg[].ticket_keys.copy()
+                    sc.client_roots = self.cfg[].client_roots.copy()
+                    sc.require_client_cert = self.cfg[].require_client_cert
                     p.e13.append(Server13[CSign[Self.C]](sc^, CSign[Self.C](e.kind, e.key, e.chain.copy())))
                     p.ver = 13
                 else:
@@ -256,11 +261,14 @@ struct TlsServer[C: Crypto12](Movable):
                     self.handshakes += 1
                 if len(o.data) > 0:
                     var reply = List[UInt8]()
-                    var stop = h.handle(fd, ConnInfo(13, p.e13[0].sni, p.e13[0].alpn), o.data, reply)
-                    if len(reply) > 0:
-                        p.out.extend(Span(p.e13[0].write(reply)))
-                    if stop:
-                        p.out.extend(Span(p.e13[0].close()))
+                    try:  # a handler or a write on a connection the peer just closed must end that connection, never the server
+                        var stop = h.handle(fd, ConnInfo(13, p.e13[0].sni, p.e13[0].alpn), o.data, reply)
+                        if len(reply) > 0 and not o.has(EV_CLOSE):
+                            p.out.extend(Span(p.e13[0].write(reply)))
+                        if stop:
+                            p.out.extend(Span(p.e13[0].close()))
+                            p.closing = True
+                    except:
                         p.closing = True
                 if o.has(EV_CLOSE) and not p.closing:
                     p.out.extend(Span(p.e13[0].close()))

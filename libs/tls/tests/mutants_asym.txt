@@ -15,3 +15,7 @@ rsa.mojo	pm1[0] -= 1	pm1[0] -= 0	kat
 bn.mojo	for _ in range(4):	for _ in range(3):	kat
 ec.mojo	r = point_add(r, sel, c.b, c.f)	r = point_add(r, sel, c.b, c.f) if nib != 0 else r.copy()	ct	6000
 rsa.mojo	if len(s) != len(n):	if False:	fuzz	.work/vectors.txt
+x448.mojo	k[55] |= 128	k[55] |= 0	vectors	.work/vectors.txt x448
+x448.mojo	k[0] &= 252	k[0] &= 255	vectors	.work/vectors.txt x448
+x448.mojo	m[3] = 0xFFFFFFFEFFFFFFFF	m[3] = 0xFFFFFFFFFFFFFFFF	kat
+ec.mojo	if len(d) != 48 or not in_range(from_be[6](d), c.o):	if len(d) != 48:	kat

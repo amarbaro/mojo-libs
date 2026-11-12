@@ -16,28 +16,21 @@ def _le(b: Span[UInt8, _]) -> List[UInt8]:
     return out^
 
 
-def x25519(scalar: Span[UInt8, _], point: Span[UInt8, _]) raises -> List[UInt8]:
-    """Scalar mult of the u-coordinate `point` (32 bytes LE, bit 255 ignored). Raises on an all-zero
-    result (low-order input), as RFC 8446 section 7.4.2 requires of TLS."""
-    if len(scalar) != 32 or len(point) != 32:
-        raise Error("tls: x25519 needs 32-byte inputs")
-    var k = List[UInt8](scalar)
-    k[0] &= 248
-    k[31] &= 127
-    k[31] |= 64
-    var ub = _le(point)
-    ub[0] &= 127
-    var md = _field()
-    var x1 = reduce_once(from_be[4](ub), 0, md)  # u < 2^255 < 2p
+def ladder[N: Int](
+    var k: List[UInt8], bits: Int, point: Span[UInt8, _], md: Modulus[N], a24v: UInt64
+) raises -> List[UInt8]:
+    """RFC 7748 section 5 ladder over `md` (k already clamped, `bits` ladder steps, u little endian, 8N bytes).
+    Raises on an all-zero result (low-order input), as RFC 8446 section 7.4.2 requires of TLS."""
+    var x1 = reduce_once(from_be[N](_le(point)), 0, md)  # u < 2^(64N) < 2p
     x1 = to_mont(x1, md)
     var one = mont_one(md)
-    var a24 = to_mont(small[4](121665), md)
+    var a24 = to_mont(small[N](a24v), md)
     var x2 = one.copy()
-    var z2 = zero[4]()
+    var z2 = zero[N]()
     var x3 = x1.copy()
     var z3 = one.copy()
     var swap: UInt64 = 0
-    for t in range(254, -1, -1):
+    for t in range(bits - 1, -1, -1):
         var kt = UInt64((k[t >> 3] >> UInt8(t & 7)) & 1)
         swap ^= kt
         cswap(x2, x3, swap)
@@ -63,13 +56,26 @@ def x25519(scalar: Span[UInt8, _], point: Span[UInt8, _]) raises -> List[UInt8]:
     var r = from_mont(mont_mul(x2, mont_inv(z2, md), md), md)
     var out = _le(to_be(r))
     var acc: UInt8 = 0
-    for i in range(32):
+    for i in range(8 * N):
         acc |= out[i]
-    for i in range(32):
+    for i in range(len(k)):
         k[i] = 0
     if acc == 0:
-        raise Error("tls: x25519 low-order point")
+        raise Error("tls: low-order point")
     return out^
+
+
+def x25519(scalar: Span[UInt8, _], point: Span[UInt8, _]) raises -> List[UInt8]:
+    """Scalar mult of the u-coordinate `point` (32 bytes LE, bit 255 ignored)."""
+    if len(scalar) != 32 or len(point) != 32:
+        raise Error("tls: x25519 needs 32-byte inputs")
+    var k = List[UInt8](scalar)
+    k[0] &= 248
+    k[31] &= 127
+    k[31] |= 64
+    var u = List[UInt8](point)
+    u[31] &= 127
+    return ladder(k^, 255, u, _field(), 121665)
 
 
 def x25519_base(scalar: Span[UInt8, _]) raises -> List[UInt8]:

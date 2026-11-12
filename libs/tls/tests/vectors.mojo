@@ -2,7 +2,7 @@
 # Prints "PASS <kind> n/n" or "FAIL <kind> tc<id>: <reason>" per failed case; exits non-zero on any failure.
 from std.sys import argv
 from tls.asym import *
-from tls.asym.ec import unhex, ecdh, p256, valid_pub, from_be
+from tls.asym.ec import unhex, ecdh, p256, p384, valid_pub, from_be
 
 
 def strip0(b: List[UInt8]) -> List[UInt8]:
@@ -25,18 +25,18 @@ def run_case(kind: String, f: List[String]) -> String:
     var res = f[0]
     var ok = False
     var raised = False
-    if kind == "x25519":
+    if kind == "x25519" or kind == "x448":
         var got = List[UInt8]()
         try:
-            got = x25519(unhex(f[1]), unhex(f[2]))
+            got = x25519(unhex(f[1]), unhex(f[2])) if kind == "x25519" else x448(unhex(f[1]), unhex(f[2]))
         except:
             raised = True
         # a raise is the TLS-level answer for a low-order input (all-zero secret); only "acceptable" may do that
-        ok = (not raised and hexs(got) == f[3]) or (raised and res != "valid" and f[3] == "00" * 32)
-    elif kind == "ecdh":
+        ok = (not raised and hexs(got) == f[3]) or (raised and res == "invalid") or (raised and res != "valid" and f[3] == "00" * (32 if kind == "x25519" else 56))
+    elif kind == "ecdh" or kind == "ecdh384":
         var got = List[UInt8]()
         try:
-            got = ecdh(from_be[4](unhex(f[1])), unhex(f[2]), p256())
+            got = ecdh(from_be[4](unhex(f[1])), unhex(f[2]), p256()) if kind == "ecdh" else ecdh(from_be[6](unhex(f[1])), unhex(f[2]), p384())
         except:
             raised = True
         ok = (res == "invalid" and raised) or (res != "invalid" and not raised and hexs(got) == f[3]) or (res == "acceptable" and raised)

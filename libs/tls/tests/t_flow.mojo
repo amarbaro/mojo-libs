@@ -8,6 +8,35 @@ from fake_crypto import mix
 from tls.tls12.wire import bl, bytes_of, str_of, cat, put
 
 
+def rd(path: String) raises -> List[UInt8]:
+    with open(path, "r") as f:
+        return f.read_bytes()
+
+
+def cauth12(mut t: T, name: String, key_of: String, roots_of: String, want_alert: Int, label: String) raises:
+    """TLS 1.2 client certificate: `name` (empty: none) signed with the key of `key_of`, a server that trusts `roots_of`;
+    want_alert -9 = the handshake completes and the server saw the certificate."""
+    var dir = String(".work/gate/certs/")
+    var cfg = make_cfg()
+    cfg[].require_client_cert = True
+    cfg[].client_roots.append(rd(dir + roots_of + ".der"))
+    var c = started("localhost", ["http/1.1"], False, [0xC02B])
+    if name.byte_length() > 0:
+        var chain = List[List[UInt8]]()
+        chain.append(rd(dir + name + ".crt.der"))
+        c.set_client_cert(chain, rd(dir + (key_of if key_of.byte_length() > 0 else name) + ".key.der"))
+    var s = Sv(cfg)
+    var why = String()
+    try:
+        pump(c, s)
+    except e:
+        why = String(e)
+    if want_alert == -9:
+        t.check(label, c.cn.established and s.cn.established and name.byte_length() > 0 and s.client_cert == rd(dir + name + ".crt.der"), "established " + String(s.cn.established) + " " + why)
+    else:
+        t.check(label, not s.cn.established and s.cn.alert == want_alert, "alert " + String(s.cn.alert) + " (" + why + "), want " + String(want_alert))
+
+
 def srv_alert(cfg: ArcPointer[TlsConfig], data: List[UInt8], mut why: String) -> Int:
     """Feed data to a fresh server: the alert it queued, or -9 when it accepted the bytes."""
     var s = Sv(cfg)
@@ -350,5 +379,12 @@ def main() raises:
             except:
                 pass
         fuzz_ok += 1
+    cauth12(t, "cli-p256", "", "ca", -9, "TLS 1.2 client certificate P-256: accepted, the server saw it")
+    cauth12(t, "cli-rsa", "", "ca", -9, "TLS 1.2 client certificate RSA: accepted")
+    cauth12(t, "", "", "ca", 40, "TLS 1.2 no client certificate: handshake_failure")
+    cauth12(t, "cli-evil", "", "ca", 42, "TLS 1.2 certificate of another CA: bad_certificate")
+    cauth12(t, "cli-serverauth", "", "ca", 42, "TLS 1.2 serverAuth-only certificate: bad_certificate")
+    cauth12(t, "cli-p256", "cli-evil", "ca", 51, "TLS 1.2 signature of another key: decrypt_error")
+    cauth12(t, "cli-p256", "cli-rsa", "ca", 47, "TLS 1.2 RSA signature for a P-256 certificate: illegal_parameter")
     t.check("fuzz: 3000 mutated flights, no crash", fuzz_ok == 3000)
     t.done()

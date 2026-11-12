@@ -21,13 +21,13 @@ Chrome, Edge, Firefox, Safari (2024+), curl, Python ssl, Go, OpenSSL s_client al
 | Item | TLS 1.3 | TLS 1.2 (fallback for old clients) |
 |---|---|---|
 | Cipher suites | TLS_AES_128_GCM_SHA256 (mandatory), TLS_AES_256_GCM_SHA384, TLS_CHACHA20_POLY1305_SHA256 | ECDHE_ECDSA/RSA_WITH_AES_128_GCM_SHA256, _AES_256_GCM_SHA384, _CHACHA20_POLY1305_SHA256 |
-| Key exchange | x25519, secp256r1; HelloRetryRequest when the client offered neither key share | same groups |
+| Key exchange | x25519, secp256r1, secp384r1, x448 (server order x25519 > P-256 > P-384 > x448); HelloRetryRequest when the client offered none of the key shares | x25519, secp256r1, secp384r1 |
 | Server certificate keys | ECDSA P-256 (preferred, fast), RSA 2048+ (rsa_pss_rsae_sha256 signatures) | ECDSA P-256, RSA (PKCS#1 v1.5 + PSS) |
 | Extensions | SNI, ALPN (http/1.1, h2 name only), supported_versions, key_share, signature_algorithms, psk_key_exchange_modes (tickets later), record_size_limit | SNI, ALPN, extended_master_secret, renegotiation_info (refuse renegotiation), ec_point_formats |
 
 Out: TLS 1.0/1.1 (browsers removed them in 2020), CBC suites, RSA key exchange, static DH, renegotiation,
 compression, 0-RTT. Later, separate pieces: X25519MLKEM768 hybrid (Chrome/Firefox default now, clients fall back
-to x25519 without it), session tickets, client certificates, OCSP stapling.
+to x25519 without it), OCSP stapling. Client certificates: wave 3b, done. Session tickets and psk_dhe_ke resumption: wave 3a, done.
 
 ## Pieces, lines, gates
 

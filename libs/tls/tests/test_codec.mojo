@@ -2,6 +2,7 @@
 # are checked; malformed input (every truncation, flipped bytes, bad lengths, duplicates, caps) raises and never crashes.
 from tls.tls13.messages import *
 from tls.tls13.wire import Rd, alert_of
+from tls.tls13.ticket import TicketState, seal_ticket, open_ticket
 from chk import Vec, T, hexd
 
 
@@ -226,8 +227,57 @@ def reader_bounds(mut t: T) raises:
     t.ok("an empty u16 list is a decode_error, a one-entry list parses", empty and one)
 
 
+def psk_and_ticket(mut t: T) raises:
+    """pre_shared_key and tickets: a round trip, every truncation and every flipped bit of a ticket raises, nothing crashes."""
+    var ext = x_psk_client([UInt8(1), 2, 3, 4, 5, 6, 7, 8], 0xDEADBEEF, 32)
+    var p = p_psk_client(ext.d)
+    t.ok("pre_shared_key: one identity, age, one 32-byte binder, binders vector 35 bytes", len(p[0]) == 1 and p[0][0][1] == 0xDEADBEEF and len(p[0][0][0]) == 8 and len(p[1]) == 1 and len(p[1][0]) == 32 and p[2] == 35)
+    var cuts = 0
+    for n in range(len(ext.d)):
+        try:
+            _ = p_psk_client(List[UInt8](Span(ext.d)[0:n]))
+        except:
+            cuts += 1
+        var f = ext.d.copy()
+        f[n] ^= 0xFF
+        try:
+            _ = p_psk_client(f)
+        except:
+            pass  # a flipped value byte may still parse: it must only never crash
+    t.ok("pre_shared_key: all " + String(len(ext.d)) + " truncations raise", cuts == len(ext.d))
+    var key = List[UInt8](length=32, fill=9)
+    var st = TicketState(1000, 86400, 77, 0x1301, List[UInt8](length=32, fill=5), "h2", "example.com")
+    var blob = seal_ticket(key, st)
+    var got = open_ticket([key.copy()], blob)
+    t.ok("ticket: seals and opens with every field intact", got.issued == 1000 and got.lifetime == 86400 and got.age_add == 77 and got.suite == 0x1301 and got.psk == st.psk and got.alpn == "h2" and got.sni == "example.com")
+    var bad_cuts = 0
+    for n in range(len(blob)):
+        try:
+            _ = open_ticket([key.copy()], List[UInt8](Span(blob)[0:n]))
+        except:
+            bad_cuts += 1
+    t.ok("ticket: all " + String(len(blob)) + " truncations raise", bad_cuts == len(blob))
+    var bad_bits = 0
+    for n in range(len(blob)):
+        for bit in range(8):
+            var f = blob.copy()
+            f[n] ^= UInt8(1 << bit)
+            try:
+                _ = open_ticket([key.copy()], f)
+            except:
+                bad_bits += 1
+    t.ok("ticket: every one of " + String(8 * len(blob)) + " flipped bits raises (key name or AEAD tag)", bad_bits == 8 * len(blob))
+    var raised = False
+    try:
+        _ = open_ticket([List[UInt8](length=32, fill=1)], blob)
+    except:
+        raised = True
+    t.ok("ticket: another key does not open it", raised)
+
+
 def main() raises:
     var t = T("codec")
+    psk_and_ticket(t)
     reader_bounds(t)
     var v = Vec()
     reenc(t, v, 3, "construct a ClientHello", "ClientHello", 0, 1, "ClientHello")

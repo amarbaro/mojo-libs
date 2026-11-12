@@ -69,3 +69,23 @@ Lane x509 wave 2 (2026-11-12).
 - Chromium matrix cells failed with net::ERR_NETWORK_CHANGED when other sessions' docker containers added veth interfaces mid-run (2026-11-12, 2 of 162 cells; rerun of ^chromium/ 16/16 twice) -> a browser cell that fails with ERR_NETWORK_CHANGED is retried once before it counts as FAIL; report the retry.
 - New first-record parsing in TlsServer sliced first[9:need] for a record shorter than 9 bytes: one tiny record from any client crashed the server, found only by the matrix (2026-11-12) -> new parser code on a network path gets a short-input regression client (tests/net.sh 'tiny') before the matrix.
 - TlsServer closed the socket with the peer's input unread after a fatal alert: the kernel reset the connection and tlsfuzzer lost our decode_error (2026-11-12) -> after our last record the server half-closes and drains (idle limit per read, byte cap), never a bare close.
+
+## Wave 3 (3c groups)
+
+- `ServerConfig.__init__` does not raise, `random_bytes` does -> a field that needs fresh randomness stays empty in the
+  constructor and `Server13` fills it where it already raises (no signature change for the callers in `src/tls/net`).
+- The Wycheproof x448 "invalid" cases (57-byte public key) failed because the harness only accepted a raise for
+  "acceptable" results -> a raise is the right answer for every `invalid` case; the harness says so.
+- `tests/gate_tls13.sh` is mode 644: a chain that runs it directly dies with rc 126 and looks like a gate failure -> start gates with `bash tests/<gate>.sh`.
+- A tlsfuzzer echo script (`test-tls13-lengths`) hung against the HTTP-only matrix server and looked like a ticket bug -> `msrv` echoes a stream that does not start with "GET"; read what a script needs from its server before reading a timeout as ours.
+- A probe run alone skips the script's "sanity" probe -> check a failing probe by running it with `sanity`, or the whole script.
+- `pkill -f <pattern>` inside the same bash command kills its own wrapper shell -> keep the PID from `$!` or `ps | awk` and `kill` it.
+- The plan said a forged binder falls back to a full handshake; RFC 8446 4.2.11 says abort -> the RFC wins where the plan only paraphrases it: unknown, expired or mismatched tickets fall back, a bad binder on a ticket that opens is `decrypt_error`.
+- `test-tls13-lengths` is 16384 probes (about 280 s in one process, the cell budget) -> four cells of 4096 named probes, so every case still runs.
+- tlsfuzzer `check sigalgs in cert request` answers a CertificateRequest with an empty Certificate and expects the handshake to go on; a server that requires the certificate fails it by design -> expected-fail with that reason, optional client authentication is not implemented.
+- A client-auth server may not resume or issue tickets: a ticket carries no client identity, so a resumed session would skip the authentication -> `pick_psk` ignores PSKs and `send_ticket` is off while `require_client_cert` is set.
+- The TLS 1.2 CertificateVerify signs the messages BEFORE it, but the transcript buffer already holds the received CertificateVerify -> cut `4 + len(body)` bytes off the end before verifying.
+- tlsfuzzer scripts name their expectations about the server (client-auth, sigalgs offered via `-s`, tickets via `-t`): read the script's option list before judging a probe, and pass what our server really does.
+- The matrix echo hook kept state per fd and a reused fd inherited it, so "GET /" was echoed and a probe failed one run in four -> never key per-connection state on an fd without clearing it when the connection ends; decide per chunk.
+- `tests/mutants_x509.txt` is applied with perl: a `(` in a pattern is a group, write `\(`; gate_tls13.sh and check.sh use sed with paths under `src/` (`tls/tls13/...`): a mutant that names a missing file prints "FAIL mutant: ..." with no reason line.
+- Two gate chains started at once share `.work/mut` and corrupt each other's logs -> one chain at a time, check `ps` before launching.

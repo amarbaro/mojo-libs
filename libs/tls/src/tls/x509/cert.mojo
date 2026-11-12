@@ -69,6 +69,7 @@ struct Certificate(Copyable, Movable):
     var ku: Int  # bit i of the RFC 5280 KeyUsage BIT STRING is bit i here
     var has_eku: Bool
     var eku_server: Bool  # serverAuth or anyExtendedKeyUsage
+    var eku_client: Bool  # clientAuth or anyExtendedKeyUsage
     var dns: List[List[UInt8]]
     var ips: List[List[UInt8]]
     var san_types: Int  # bit t set when a GeneralName of type t is present
@@ -122,6 +123,7 @@ struct Certificate(Copyable, Movable):
         self.ku = 0
         self.has_eku = False
         self.eku_server = False
+        self.eku_client = False
         self.dns = List[List[UInt8]]()
         self.ips = List[List[UInt8]]()
         self.san_types = 0
@@ -340,6 +342,8 @@ struct Certificate(Copyable, Movable):
                     var k = l.oid()
                     if hex_is(k, "2b06010505070301") or hex_is(k, "551d2500"):
                         self.eku_server = True
+                    if hex_is(k, "2b06010505070302") or hex_is(k, "551d2500"):
+                        self.eku_client = True
             elif hex_is(o, "551d11"):
                 self._san(v)
                 self.has_san = True

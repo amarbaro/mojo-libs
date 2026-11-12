@@ -70,10 +70,47 @@ RSA-PSS) plus lane 3 key loading. Replacing `_tmp_crypto`: the call sites are `k
 - `Record` is `Cipher` + `RecordReader`; the AEAD is pointer based and in place (`seal_into`), not `seal(nonce, aad, mut pt)`.
 - `feed` returns `Out` (send, data, events, error) instead of a tuple.
 
+## Session tickets and resumption (wave 3a)
+
+`tls13/ticket.mojo`. The server keeps no state: a ticket is `key_name(16) | nonce(12) | ChaCha20-Poly1305(state) | tag(16)`
+with `state` = issue time, lifetime, age_add, suite, resumption PSK, ALPN, SNI (AAD = key_name). `ServerConfig.ticket_keys`
+(32 bytes each; the first seals, all open, so a rotation is "prepend a key"), `ticket_lifetime` (86400 s), `now` (unix
+seconds, 0 = read the clock). `TlsConfig.ticket_keys` feeds it; `TlsServer` makes one key at start when the list is empty.
+One NewSessionTicket follows the client Finished, also after a resumption. Only `psk_dhe_ke` (a key share is always used).
+
+Server, `pick_psk`: a ticket is used only if it opens, its suite, ALPN and SNI equal this handshake's, it is not expired
+or from the future, and the client's obfuscated age agrees (age at most the lifetime); anything else is a full handshake
+and never an error. A ticket that opens but whose binder (4.2.11.2, constant time) is wrong aborts with `decrypt_error`
+(the RFC says abort; docs/plan-wave3.md said fall back). `pre_shared_key` must be the last extension, `psk_key_exchange_modes`
+must be present. A resumption sends no Certificate and no CertificateVerify.
+
+0-RTT is refused: `early_data` is ignored, and the records the client sealed under early keys are skipped (up to 64 KiB,
+`Conn.skip`) until a record opens; `early_data` in the second ClientHello is `illegal_parameter`.
+
+Client: `c.session(i, now_ms)` turns the i-th received ticket into a `Session`; `c.offer(session, now_ms)` before `start()`
+adds psk_key_exchange_modes and `pre_shared_key` (binder filled in `start()` and again after a HelloRetryRequest).
+`c.resumed` tells whether the server accepted it.
+
+## Client certificates (wave 3b)
+
+Server: `ServerConfig.require_client_cert` + `client_roots` (DER trust anchors; `TlsConfig` has the same two fields and passes them
+to both engines). TLS 1.3: a CertificateRequest (empty context, schemes ecdsa_secp256r1_sha256, ecdsa_secp384r1_sha384,
+rsa_pss_rsae_sha256/384) follows EncryptedExtensions; the client Certificate must be non-empty (`certificate_required` 116
+otherwise), its chain valid for clientAuth against `client_roots` (`bad_certificate`), the CertificateVerify scheme one we asked
+for and the signature valid over the transcript with the client context string (`decrypt_error`; `illegal_parameter` when the
+scheme does not fit the key); the client Finished then covers the whole transcript. `Server13.client_cert` / `Server12.client_cert`
+hold the DER of the authenticated certificate. With client authentication on there are no tickets and no resumption (a ticket
+would carry no identity). The check is `tls13/clientauth.mojo` `verify_client`; it is also what Server12 calls.
+TLS 1.2: CertificateRequest (rsa_sign, ecdsa_sign, schemes above plus rsa_pkcs1_sha256/384) after the ServerKeyExchange; an empty
+Certificate is `handshake_failure`, a bad chain `bad_certificate`, a bad CertificateVerify (signature over the messages up to the
+ClientKeyExchange) `decrypt_error`.
+Client: `Client13.set_client_cert(chain, key_der)` / `Client12.set_client_cert(...)`: when the server asks and a scheme of the key is
+in its list the certificate and a CertificateVerify are sent, else an empty Certificate (what a client without certificate does).
+Not done: optional client authentication (ask, accept an empty answer), certificate_authorities filtering, post-handshake auth.
+
 ## Open items
 
-tlsfuzzer is not installed here (not run). PSK/resumption, 0-RTT, client certificates (client answers a
-CertificateRequest with an empty Certificate), ML-KEM hybrid share (an incoming 1216-byte share is skipped), a
+tlsfuzzer is not installed here (not run). 0-RTT, optional client authentication, post-handshake authentication, ML-KEM hybrid share (an incoming 1216-byte share is skipped), a
 TLS 1.2 fallback decision (lane 5: a ServerHello without `supported_versions` gives `protocol_version`).
 Speed is in `tests/bench_tls13.mojo`; the ported ChaCha20 (2.2 GB/s against openssl 4.8) and x25519 (163 us against 33 us)
 are lane 1-2 work.
