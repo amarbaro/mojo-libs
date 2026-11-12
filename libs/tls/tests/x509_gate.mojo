@@ -4,10 +4,10 @@ from std.sys import argv, exit
 from std.time import perf_counter_ns
 from tls.x509.der import Der, Bytes, view, copy_of, parse_time, same
 from tls.x509.pem import b64_decode, pem_blocks, pem_spans
-from tls.x509.cert import Certificate, KEY_RSA, KEY_P256
+from tls.x509.cert import Certificate, KEY_RSA, KEY_P256, KEY_P384
 from tls.x509.key import load_private_key, PrivateKey, _parse, wipe
-from tls.sym import sha256
-from tls.asym import P256Key, RsaPrivate
+from tls.sym import sha256, sha384
+from tls.asym import P256Key, RsaPrivate, p384_sign
 from tls.x509.chain import anchor_rules, verify_chain, load_roots_pem, load_system_roots, host_matches, parse_ip
 
 comptime HEX = "0123456789abcdef"
@@ -457,12 +457,14 @@ def der_int(b: List[UInt8]) -> List[UInt8]:
 
 
 def sign_with(k: PrivateKey, name: String, dir: String) raises:
-    """Sign a fixed message the way a TLS server would (ECDSA-SHA256 or RSA PKCS#1 v1.5 SHA-256); openssl verifies the file."""
+    """Sign a fixed message the way a TLS server would (ECDSA-SHA256, ECDSA P-384 with SHA-384, or RSA PKCS#1 v1.5 SHA-256); openssl verifies the file."""
     var msg = String("mojo-tls lane 3 private key test")
     write_file(dir + "/msg.txt", List[UInt8](msg.as_bytes()))
     var h = sha256(List[UInt8](msg.as_bytes()))
     if k.kind == KEY_P256:
         write_file(dir + "/sig_" + name + ".der", P256Key(k.d).sign_sha256(h))
+    elif k.kind == KEY_P384:
+        write_file(dir + "/sig_" + name + ".der", p384_sign(k.d, sha384(List[UInt8](msg.as_bytes()))))
     else:
         var r = RsaPrivate(k.pub, k.e, k.p, k.q, k.dp, k.dq, k.qinv)
         write_file(dir + "/sig_" + name + ".bin", r.sign_pkcs1(256, h))

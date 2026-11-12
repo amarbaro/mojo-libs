@@ -100,7 +100,12 @@ stage_keys() {
   while read -r name expect file cert; do
     [ "$expect" = ok ] || continue
     local want got
-    if grep -q "^key $name kind 2 " $k/out.txt; then
+    local dg=sha256
+    if grep -q "^key $name kind 3 " $k/out.txt; then
+      dg=sha384
+      want=$(openssl pkey -in $d/$file -pubout -outform DER | tail -c 97 | od -An -tx1 -v | tr -d ' \n')
+      got=$(grep "^key $name kind 3 " $k/out.txt | sed 's/.* pub \([0-9a-f]*\) .*/\1/')
+    elif grep -q "^key $name kind 2 " $k/out.txt; then
       want=$(openssl pkey -in $d/$file -pubout -outform DER | tail -c 65 | od -An -tx1 -v | tr -d ' \n')
       got=$(grep "^key $name kind 2 " $k/out.txt | sed 's/.* pub \([0-9a-f]*\) .*/\1/')
     else
@@ -111,10 +116,10 @@ stage_keys() {
     openssl pkey -in $d/$file -pubout -out $k/pub_$name.pem
     local sig=$k/sig_$name.der
     [ -f $sig ] || sig=$k/sig_$name.bin
-    openssl dgst -sha256 -verify $k/pub_$name.pem -signature $sig $k/msg.txt > /dev/null || fail keys "$name: openssl rejects our signature"
+    openssl dgst -$dg -verify $k/pub_$name.pem -signature $sig $k/msg.txt > /dev/null || fail keys "$name: openssl rejects our signature"
     good=$((good + 1))
   done < $d/key_cases.txt
-  echo "PASS keys: $good keys (P-256 PKCS#8/SEC1, RSA 2048/3072 PKCS#8/PKCS#1) load with openssl's public key bytes and our signatures verify under openssl; encrypted, P-384, Ed25519, RSA-1024 refused; $(grep -c 'all refused' $k/out.txt) encodings survive every single-byte corruption test"
+  echo "PASS keys: $good keys (P-256 PKCS#8/SEC1, P-384 PKCS#8, RSA 2048/3072 PKCS#8/PKCS#1) load with openssl's public key bytes and our signatures verify under openssl; encrypted, Ed25519, RSA-1024 refused; $(grep -c 'all refused' $k/out.txt) encodings survive every single-byte corruption test"
 }
 
 stage_bench() {
