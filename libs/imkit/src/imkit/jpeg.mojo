@@ -598,12 +598,14 @@ struct Jpeg(Movable):
         var r1 = k.poff + oy * pw
         if k.h * 2 == self.hm and k.dw > 2 and (k.v == self.vm or tall):  # h2v1 and h2v2
             var wa, wb, be, bo = (3, 1, 8, 7) if tall else (4, 0, 4, 8)
+            var prev = wa * Int(self.pl[r0]) + wb * Int(self.pl[r1])
+            var cur = prev
             for i in range(k.dw):
-                var cur = wa * Int(self.pl[r0 + i]) + wb * Int(self.pl[r1 + i])
-                var lo = cur if i == 0 else wa * Int(self.pl[r0 + i - 1]) + wb * Int(self.pl[r1 + i - 1])
                 var hi = cur if i == k.dw - 1 else wa * Int(self.pl[r0 + i + 1]) + wb * Int(self.pl[r1 + i + 1])
-                o[2 * i] = UInt8((3 * cur + lo + be) >> 4)
+                o[2 * i] = UInt8((3 * cur + prev + be) >> 4)
                 o[2 * i + 1] = UInt8((3 * cur + hi + bo) >> 4)
+                prev = cur
+                cur = hi
         elif k.h == self.hm and tall:  # h1v2
             for x in range(self.w):
                 o[x] = UInt8((3 * Int(self.pl[r0 + x]) + Int(self.pl[r1 + x]) + (1 if y % 2 == 0 else 2)) >> 2)
@@ -611,6 +613,40 @@ struct Jpeg(Movable):
             r0 = k.poff + (y * k.v // self.vm) * pw
             for x in range(self.w):
                 o[x] = self.pl[r0 + x * k.h // self.hm]
+
+    def rgb(self) -> List[UInt8]:
+        """Same values as pixels(), packed R, G, B; the colour-model branch is hoisted out of the pixel loop."""
+        var px = List[UInt8](unsafe_uninit_length=self.w * self.h * 3)
+        var a = List[UInt8](length=self.w + 2, fill=0)
+        var b = List[UInt8](length=self.w + 2, fill=0)
+        var c = List[UInt8](length=self.w + 2, fill=0)
+        var grey = len(self.comps) == 1
+        var rgb = not grey and (self.adobe == 0 or (self.adobe < 0 and not self.jfif and self.comps[0].id == 0x52 and self.comps[1].id == 0x47 and self.comps[2].id == 0x42))
+        for y in range(self.h):
+            var q = y * self.w * 3
+            self.up(0, y, a)
+            if grey:
+                for x in range(self.w):
+                    px[q + 3 * x] = a[x]
+                    px[q + 3 * x + 1] = a[x]
+                    px[q + 3 * x + 2] = a[x]
+                continue
+            self.up(1, y, b)
+            self.up(2, y, c)
+            if rgb:
+                for x in range(self.w):
+                    px[q + 3 * x] = a[x]
+                    px[q + 3 * x + 1] = b[x]
+                    px[q + 3 * x + 2] = c[x]
+                continue
+            for x in range(self.w):
+                var l = Int32(a[x])
+                var cb = Int32(b[x]) - 128
+                var cr = Int32(c[x]) - 128
+                px[q + 3 * x] = UInt8(clamp8(Int(l + ((91881 * cr + 32768) >> 16))))
+                px[q + 3 * x + 1] = UInt8(clamp8(Int(l + ((-22554 * cb - 46802 * cr + 32768) >> 16))))
+                px[q + 3 * x + 2] = UInt8(clamp8(Int(l + ((116130 * cb + 32768) >> 16))))
+        return px^
 
     def pixels(self) -> List[UInt32]:
         var px = List[UInt32](length=self.w * self.h, fill=0)
@@ -635,6 +671,17 @@ struct Jpeg(Movable):
                     bl += (116130 * cb + 32768) >> 16
                 px[y * self.w + x] = UInt32(clamp8(r)) | UInt32(clamp8(g)) << 8 | UInt32(clamp8(bl)) << 16 | 0xFF000000
         return px^
+
+
+def jpeg_decode_rgb(d: Span[UInt8, _], mut px: List[UInt8], max_pixels: Int = MAXPX) raises -> Tuple[Int, Int]:
+    """As jpeg_decode, but the pixels go to `px` as packed RGB, 3 bytes per pixel (no alpha): 3/4 of the bytes and
+    no repack for callers that want RGB rows. Returns (width, height)."""
+    var j = Jpeg(d)
+    j.maxpx = max_pixels
+    j.parse()
+    j.idct()
+    px = j.rgb()
+    return (j.w, j.h)
 
 
 def jpeg_decode(d: Span[UInt8, _], max_pixels: Int = MAXPX) raises -> Tuple[Int, Int, List[UInt32]]:

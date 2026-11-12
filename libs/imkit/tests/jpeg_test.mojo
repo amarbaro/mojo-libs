@@ -5,7 +5,7 @@ from std.os import getenv, listdir
 from std.sys import argv
 from std.time import perf_counter_ns
 from imkit.assets import MAXPX as PNG_MAXPX
-from imkit.jpeg import MAXPX, jpeg_decode
+from imkit.jpeg import MAXPX, jpeg_decode, jpeg_decode_rgb
 
 
 def load(path: String) raises -> List[UInt8]:
@@ -42,6 +42,12 @@ def check(dir: String) raises:
                 sum += dv
             if Int(v >> 24) != Int(gold[4 * i + 3]):
                 worst = 999
+        var rgb = List[UInt8]()
+        _ = jpeg_decode_rgb(Span(load(dir + "/" + n)), rgb)
+        for i in range(len(gold) // 4):  # the RGB path must equal pixels() byte for byte
+            for ch in range(3):
+                if Int(rgb[3 * i + ch]) != Int((pic[2][i] >> UInt32(8 * ch)) & 255):
+                    worst = 998
         var mean = Float64(sum) / Float64(3 * len(gold) // 4)
         var ok = worst <= tol and mean <= tmean
         print("PASS" if ok else "FAIL", n, String(pic[0]) + "x" + String(pic[1]), "max", worst, "mean", mean)
