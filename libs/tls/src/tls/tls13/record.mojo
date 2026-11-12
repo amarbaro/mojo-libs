@@ -2,6 +2,7 @@
 # output buffer on send; a received record is decrypted into one new buffer, the inner type and padding are stripped.
 from std.ffi import external_call
 from tls.sym import AesGcm, ChaCha20Poly1305
+from tls.sym.aead import dup
 from tls.tls13.keysched import CHACHA20_POLY1305_SHA256, suite_key_len
 from tls.tls13.wire import bad
 
@@ -99,9 +100,11 @@ struct Cipher(Movable):
         if self.seq == UInt64.MAX or inner + 16 > MAX_CIPHER:
             raise bad("internal_error", "sequence number or padding exhausted")
         var hdr: List[UInt8] = [UInt8(APP), 3, 3, UInt8((inner + 16) >> 8), UInt8((inner + 16) & 0xFF)]
-        var body = List[UInt8](length=inner, fill=0)  # padding bytes stay zero
+        var body = List[UInt8](unsafe_uninit_length=inner)  # no memset of the whole record: only the tail is written
         _cp(Int(body.unsafe_ptr()), Int(data.unsafe_ptr()) + start, n)
         body[n] = UInt8(ctype)
+        for i in range(n + 1, inner):
+            body[i] = 0  # padding
         self._nonce()
         if self.suite == CHACHA20_POLY1305_SHA256:
             self.cc[0].seal(self.nonce, hdr, body)
@@ -120,8 +123,8 @@ struct Cipher(Movable):
             raise bad("bad_record_mac", "protected record shorter than the tag")
         if self.seq == UInt64.MAX:
             raise bad("internal_error", "sequence number exhausted")
-        var pt = List[UInt8](Span(rec)[5:])
-        var hdr = List[UInt8](Span(rec)[:5])
+        var pt = dup(Span(rec)[5:])
+        var hdr = dup(Span(rec)[:5])
         self._nonce()
         try:
             if self.suite == CHACHA20_POLY1305_SHA256:
@@ -184,8 +187,8 @@ struct RecordReader(Movable):
             self.buf.clear()
             self.pos = 0
         elif self.pos > 65536:
-            var rest = List[UInt8](length=len(self.buf) - self.pos, fill=0)
-            _cp(Int(rest.unsafe_ptr()), Int(self.buf.unsafe_ptr()) + self.pos, len(rest))
-            self.buf = rest^
+            # The Span borrows the old buffer until the copy exists. A pointer laundered through Int() did not:
+            # Mojo freed the old buffer before the memcpy read it (use-after-free, docs/lanes/FINDING-heap-grow.md).
+            self.buf = dup(Span(self.buf)[self.pos:])
             self.pos = 0
         return True

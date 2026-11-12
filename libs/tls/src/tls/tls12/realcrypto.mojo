@@ -3,6 +3,7 @@ parsing and chain validation (client side, against the system roots, or the PEM 
 RSA (rsa_pss_rsae_sha256/384, rsa_pkcs1_sha256/384). aead: 0 AES-128-GCM, 1 AES-256-GCM, 2 ChaCha20-Poly1305."""
 from std.ffi import external_call
 from tls.tls12.crypto import Crypto12, K_P256, K_RSA
+from tls.sym.aead import dup
 from tls.sym import Sha256, Sha384, sha256, sha384, prf12, AesGcm, ChaCha20Poly1305
 from tls.asym import x25519, x25519_base, P256Key, p384_public, p384_ecdh, p256_verify, RsaPublic, RsaPrivate, random_bytes
 from tls.x509.cert import Certificate, KEY_P256, KEY_RSA
@@ -113,7 +114,7 @@ struct RealCrypto(Crypto12):
             raise Error("tls: ServerKeyExchange signature")
 
     def seal(self, aead: Int, key: List[UInt8], nonce: List[UInt8], aad: List[UInt8], mut buf: List[UInt8], start: Int) raises:
-        var body = List[UInt8](Span(buf)[start:])
+        var body = dup(Span(buf)[start:])
         if aead == 2:
             ChaCha20Poly1305(key).seal(nonce, aad, body)
         else:
@@ -122,10 +123,11 @@ struct RealCrypto(Crypto12):
         buf.extend(Span(body))
 
     def open(self, aead: Int, key: List[UInt8], nonce: List[UInt8], aad: List[UInt8], mut buf: List[UInt8], start: Int, end: Int) raises:
-        var body = List[UInt8](Span(buf)[start:end])
+        var body = dup(Span(buf)[start:end])
         if aead == 2:
             ChaCha20Poly1305(key).open(nonce, aad, body)
         else:
             AesGcm(key).open(nonce, aad, body)
-        for i in range(len(body)):
-            buf[start + i] = body[i]
+        if len(body) > 0:
+            _ = external_call["memcpy", Int](Int(buf.unsafe_ptr()) + start, Int(body.unsafe_ptr()), len(body))
+        _ = body^  # keeps body alive past the memcpy: an Int() pointer does not (use-after-free class, FINDING-heap-grow.md)

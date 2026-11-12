@@ -25,6 +25,16 @@ for t in keysched record codec flight conn clientauth; do
   fi
 done
 
+# RecordReader buffer compaction (use-after-free fixed 2026-11-12, docs/lanes/FINDING-heap-grow.md): natively the freed
+# block stays readable, so the bug only shows when free unmaps it. heaptide's preload does that; skipped (not passed) without it.
+if build rr_grow tests/rr_grow.mojo; then
+  "$B/rr_grow" > "$G/rr_grow.out" 2>&1 && echo "PASS rr_grow native" || fail rr_grow "native, see $G/rr_grow.out"
+  HT=${HEAPTIDE:-$HOME/Projects/tools/heaptide/heaptide}
+  if [ -x "$HT" ]; then
+    "$HT" run --out "$G/ht-rr" -- "$B/rr_grow" > "$G/rr_grow-heaptide.out" 2>&1 && echo "PASS rr_grow heaptide" || fail rr_grow "under heaptide (freed buffer read?), see $G/rr_grow-heaptide.out"
+  else echo "SKIP rr_grow heaptide: no heaptide at $HT"; fi
+fi
+
 [ -s "$G/test_keysched.out" ] && bash tests/oracle_keysched.sh "$G/test_keysched.out" || fail "oracle keysched" "openssl kdf disagrees"
 [ -s "$G/test_flight.out" ] && bash tests/oracle_cv.sh "$G/test_flight.out" || fail "oracle certificate_verify" "openssl rejects the signature"
 

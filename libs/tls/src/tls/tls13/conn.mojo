@@ -1,5 +1,6 @@
 # mojo-tls lane 4: the part of a TLS 1.3 connection that client and server share: record in/out, handshake
 # reassembly, transcript, alerts, KeyUpdate, application data, key limit. Sans-IO: bytes in, an Out of bytes/events out.
+from tls.sym.aead import dup
 from tls.tls13.record import Cipher, RecordReader, seal_all, CCS, ALERT, HS, APP, MAX_PLAIN
 from tls.tls13.keysched import KeySchedule, traffic_key, traffic_iv, next_secret, hash_of, suite_hash_len, suite_key_len
 from tls.tls13.messages import Ticket, enc_ku, hs_body, parse_nst, H_KU, H_NST
@@ -176,7 +177,7 @@ struct Conn(Movable):
                 return True
             if len(rec) - 5 > MAX_PLAIN:
                 raise bad("record_overflow", "record longer than 2^14")
-            body = List[UInt8](Span(rec)[5:])
+            body = dup(Span(rec)[5:])
         if typ == ALERT:
             if len(self.hs) > 0:
                 raise bad("unexpected_message", "alert inside a handshake message")
@@ -249,7 +250,7 @@ struct Conn(Movable):
         self.install_tx(next_secret(self.h, self.tx_secret))
 
     def send_app(mut self, data: List[UInt8]) raises -> List[UInt8]:
-        var o = List[UInt8](capacity=len(data) + 64)
+        var o = List[UInt8](capacity=len(data) + 64 + (len(data) // self.tx.limit + 1) * 22)  # every record adds a header, a type byte and a tag
         if self.state != S_OPEN or self.wclosed:
             raise bad("internal_error", "connection not open for writing")
         var i = 0
