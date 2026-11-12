@@ -144,5 +144,6 @@ struct Server12[C: Crypto12](Movable):
         self.cn.enable(False)
         self.cn.send_hs(hs(H_FIN, self.cn.finished("server finished")))
         wipe(self.cn.keys)
+        wipe(self.cn.master)
         self.cn.established = True
         self.st = 4

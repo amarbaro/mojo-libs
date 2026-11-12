@@ -77,6 +77,7 @@ struct Client12[C: Crypto12](Movable):
                 if not ct_eq(self.cn.ev_body, self.cn.finished("server finished")):
                     raise self.cn.fatal(A_DECRYPT, "bad Finished")
                 wipe(self.cn.keys)
+                wipe(self.cn.master)
                 self.cn.established = True
                 self.st = 6
             else:
