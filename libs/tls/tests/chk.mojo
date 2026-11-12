@@ -31,6 +31,13 @@ def hexs(b: List[UInt8]) -> String:
     return s^
 
 
+def u64(s: String) -> UInt64:
+    var v: UInt64 = 0
+    for c in s.as_bytes():
+        v = v * 10 + UInt64(Int(c) - 48)
+    return v
+
+
 struct Vec(Movable):
     var rows: List[String]
 
