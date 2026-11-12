@@ -76,7 +76,7 @@ def chacha20_xor[o: MutOrigin](key: SIMD[U32, 8], nonce: SIMD[U32, 4], ctr: UInt
 
 def _words[n: Int](s: Span[UInt8, _]) -> SIMD[U32, n]:
     var w = SIMD[U32, n](0)
-    for i in range(len(s) // 4):
+    for i in range(min(len(s) // 4, n)):
         w[i] = UInt32(s[4 * i]) | (UInt32(s[4 * i + 1]) << 8) | (UInt32(s[4 * i + 2]) << 16) | (UInt32(s[4 * i + 3]) << 24)
     return w
 

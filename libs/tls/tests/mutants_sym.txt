@@ -12,7 +12,7 @@ hkdf-label@tls/sym/mac.mojo@s/"tls13 "/"tls12 "/
 prf-seed@tls/sym/mac.mojo@s/var a = hmac\[H\]\(secret, ls\)/var a = hmac[H](secret, seed)/
 aes-affine@tls/sym/aes.mojo@s/\^ 0x63$/^ 0x62/
 aes-xt@tls/sym/aes.mojo@s/\* 0x1B\)/* 0x1C)/
-aes-rounds@tls/sym/aes.mojo@s/6 \+ len\(key\) \/\/ 4/5 + len(key) \/\/ 4/
+aes-rounds@tls/sym/aes.mojo@s/6 \+ 4 \* nk/5 + 4 * nk/
 aes-rcon@tls/sym/aes.mojo@s/rcon = _xt\(V16\(rcon\)\)\[0\]/rcon = rcon + 1/
 aes-sbox-soft@tls/sym/aes.mojo@s/var x31 = _mul\(_mul\(x15, x15\), x\)/var x31 = _mul(_mul(x15, x15), x3)/@-D TLS_SOFT_AES=true
 aes-mixcol-soft@tls/sym/aes.mojo@s/v = _xt\(v \^ r1\) \^ r1/v = _xt(v ^ r1) ^ v/@-D TLS_SOFT_AES=true
@@ -44,10 +44,6 @@ poly-tailbyte@tls/sym/chacha.mojo@s/t\[n % 16\] = 1/t[n % 16] = 2/
 poly-aeadpad@tls/sym/chacha.mojo@s/self.blocks\(t.unsafe_ptr\(\), 16, 1 << 40\)/self.blocks(t.unsafe_ptr(), 16, 0)/
 poly-lens@tls/sym/chacha.mojo@s/lens\[1\] = UInt64\(n\)/lens[1] = UInt64(n + 1)/
 chacha-notag@tls/sym/chacha.mojo@s/raise Error\("tls: bad record mac"\)/return/
-poly-r2@tls/sym/chacha.mojo@s/self.r\[2\] = \(k\[1\] >> 24\) & 0x00FFFFFFC0F/self.r[2] = (k[1] >> 24) \& 0x00FFFFFFC0E/
-gcm-fusetail@tls/sym/gcm.mojo@s/n - done\)$/n - done - 1)/
-gcm-xy@tls/sym/gcm.mojo@s/x \^= y$/pass/
-poly-tail-carry@tls/sym/chacha.mojo@s/h2 \+= h1 >> 44$/h2 += 0/
 poly-r2@tls/sym/chacha.mojo@s/self.r\[2\] = \(k\[1\] >> 24\) & 0x00FFFFFFC0F/self.r[2] = (k[1] >> 24) \& 0x00FFFFFFC0E/
 gcm-fusetail@tls/sym/gcm.mojo@s/n - done\)$/n - done - 1)/
 gcm-xy@tls/sym/gcm.mojo@s/x \^= y$/pass/

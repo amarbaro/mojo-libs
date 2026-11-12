@@ -44,3 +44,9 @@ Lane 4 (TLS 1.3), 2026-11-12. Other lanes append their own lines; concatenate on
 - Mojo 1.2: `raise` after assigning a field of a field in a raising `__init__` fails to compile ("destroyed out of the
   middle"): do the raising work in `start()`. `ref p = self.tab[fd]` is invalidated by any `mut self` call: index again.
   `List + List` needs implicit copies: use `cat(...)`. `Int(String, base=16)` does not exist: decode nibbles.
+
+## Lane matrix (wave 2)
+
+- Two lane 1 mutants (gcm-noncelen, aes-keylen) were "killed" by SIGILL from a bounds trap, not by a check -> a mutant runner
+  counts only a printed `FAIL` line and exit < 128 as a kill; code clamps its loops so a missed policy check cannot read out of bounds.
+- Duplicate lines in tests/mutants_sym.txt ran the same mutant twice in one directory and garbled the log -> mutant names are unique.
