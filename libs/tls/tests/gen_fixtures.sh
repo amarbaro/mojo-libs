@@ -22,7 +22,7 @@ issue() {
     rsa) openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out $out.key 2>/dev/null ;;
     rsa1024) openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:1024 -out $out.key 2>/dev/null ;;
   esac
-  openssl req -new -key $out.key -subj "/CN=$cn" -out $out.csr
+  openssl req -new -key $out.key -subj "$([ "$cn" = - ] && echo / || echo "/CN=$cn")" -out $out.csr
   if [ "$signer" = self ]; then
     openssl x509 -req -in $out.csr -signkey $out.key -days $days -extfile <(printf '%b' "$exts") -out $out.pem "$@" 2>/dev/null
   else
@@ -81,9 +81,19 @@ issue caps_root257 "Caps257" ec_root ec "$CA"'nameConstraints=critical,'"$(subtr
 issue caps_leaf1024 "l" caps_root256 ec "$SRV$(san "$(names 1024)")"
 issue caps_leaf1025 "l" caps_root256 ec "$SRV$(san "$(names 1025)")"
 cs ok_caps_at_limit ok $NOW n1023.good.example ec_root.pem caps_leaf1024.pem,caps_root256.pem
-cs bad_nc_257_subtrees fail $NOW n0.good.example ec_root.pem caps_leaf1024.pem,caps_root257.pem
+issue caps_leaf257 "l" caps_root257 ec "$SRV$(san DNS:n0.good.example)"
+cs bad_nc_257_subtrees fail $NOW n0.good.example ec_root.pem caps_leaf257.pem,caps_root257.pem
+div bad_nc_257_subtrees "openssl has no cap on name constraint subtrees; we refuse more than 256 (DoS bound, limbo pathological::nc-dos)"
 cs bad_san_1025_names fail $NOW n0.good.example ec_root.pem caps_leaf1025.pem,caps_root256.pem
 div bad_san_1025_names "openssl has no cap on SAN entries; we refuse more than 1024 (DoS bound, limbo pathological::nc-dos)"
+# a CA certificate in leaf position (all leaf extensions otherwise fine), and a malformed SAN in an intermediate under constraints
+issue ec_leaf_isca "ca" ec_inter ec "basicConstraints=critical,CA:TRUE\nkeyUsage=critical,digitalSignature,keyCertSign\nextendedKeyUsage=serverAuth\n$(san DNS:leafca.example.com)"
+cs bad_leaf_is_ca fail $NOW leafca.example.com ec_root.pem ec_leaf_isca.pem,ec_inter.pem
+div bad_leaf_is_ca "openssl does not refuse a CA certificate in leaf position; CA/B BR profile (limbo webpki::ca-as-leaf) does"
+issue ec_inter_nosubj - ec_root ec "$CA"
+issue ec_leaf_nosubj "l" ec_inter_nosubj ec "$SRV$(san DNS:nosubj.example.com)"
+cs bad_ca_empty_subject fail $NOW nosubj.example.com ec_root.pem ec_leaf_nosubj.pem,ec_inter_nosubj.pem
+div bad_ca_empty_subject "openssl accepts an intermediate with an empty subject name"
 # CN only
 issue ec_cn_victim "victim.example" ec_inter ec "$SRV$(san DNS:other.example)"
 cs bad_cn_victim fail $NOW victim.example ec_root.pem ec_cn_victim.pem,ec_inter.pem
@@ -207,6 +217,10 @@ cs ok_selfissued_not_counted ok $NOW si.example.com ec_root.pem ec_leaf_si.pem,e
 issue nc_dns_si "NC dns" nc_dns ec "$CA$(san DNS:evil.example)"
 issue nc_dns_si_leaf "x" nc_dns_si ec "$SRV$(san DNS:www.good.example)"
 cs ok_nc_skips_selfissued_intermediate ok $NOW www.good.example ec_root.pem nc_dns_si_leaf.pem,nc_dns_si.pem,nc_dns.pem
+issue nc_dns_mal "NC mal" nc_dns ec "$CA$(san DNS:.good.example)"
+issue nc_dns_mal_leaf "x" nc_dns_mal ec "$SRV$(san DNS:www.good.example)"
+cs bad_nc_malformed_inter_san fail $NOW www.good.example ec_root.pem nc_dns_mal_leaf.pem,nc_dns_mal.pem,nc_dns.pem
+div bad_nc_malformed_inter_san "openssl accepts a leading-dot dNSName SAN that satisfies the constraint textually"
 # wildcard SAN against excluded subtrees (CVE-2025-61727 class)
 issue nc_wild_x "NC wildx" ec_root ec "$CA"'nameConstraints=critical,permitted;DNS:example.net,excluded;DNS:bar.example.net\n'
 issue nc_wild_p "NC wildp" ec_root ec "$CA"'nameConstraints=critical,permitted;DNS:example.net\n'

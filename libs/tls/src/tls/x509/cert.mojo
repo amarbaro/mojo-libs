@@ -400,7 +400,7 @@ struct Certificate(Copyable, Movable):
             self.aki_extra = True
 
     def _aia(self, v: Bytes) raises:
-        """AuthorityInfoAccessSyntax: a non-empty SEQUENCE of {OID, GeneralName}; a URI is ASCII."""
+        """AuthorityInfoAccessSyntax: a non-empty SEQUENCE of {OID, GeneralName}, strict DER."""
         var d = Der(v)
         var s = d.seq()
         d.end()
@@ -409,13 +409,8 @@ struct Certificate(Copyable, Movable):
         while not s.done():
             var a = s.seq()
             _ = a.oid()
-            var n = a.next()
+            _ = a.next()
             a.end()
-            if (a.tag & 0xC0) != 0x80:
-                raise Error("tls: x509: bad access location")
-            for i in range(len(n)):
-                if a.tag == 0x86 and n[i] >= 0x80:
-                    raise Error("tls: x509: access location URI is not ASCII")
 
     def _san(mut self, v: Bytes) raises:
         var d = Der(v)

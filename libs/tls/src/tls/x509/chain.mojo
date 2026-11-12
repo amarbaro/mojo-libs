@@ -332,7 +332,7 @@ def _leaf_rules(leaf: Certificate) raises:
         raise Error("tls: x509: end-entity certificate with basicConstraints cA")
     if leaf.has_nc:
         raise Error("tls: x509: name constraints in an end-entity certificate")
-    if not leaf.has_eku or not leaf.eku_server:
+    if not leaf.eku_server:  # false without an EKU too
         raise Error("tls: x509: leaf needs an extended key usage that includes serverAuth")
     if leaf.has_ku and (leaf.ku & KU_DIGITAL_SIGNATURE) == 0:
         raise Error("tls: x509: leaf key usage lacks digitalSignature")
