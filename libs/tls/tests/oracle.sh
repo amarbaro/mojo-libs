@@ -81,6 +81,7 @@ for bits in 2048 3072 4096; do
       [ "$($T rsa-verify-pss $alg "$h" "$n" "$e" "$(hexb < $O/o.bin)")" = 1 ] || goodo=0
       openssl pkeyutl -sign -inkey $O/rsa$bits.pem -in $O/h.bin -out $O/o.bin -pkeyopt digest:sha$alg -pkeyopt rsa_padding_mode:pkcs1
       [ "$($T rsa-verify-pkcs1 $alg "$h" "$n" "$e" "$(hexb < $O/o.bin)")" = 1 ] || goodo=0
+      [ "$($T rsa-sign-pkcs1 $alg "$h" "$n" "$e" "$p" "$q" "$dp" "$dq" "$qi")" = "$(hexb < $O/o.bin)" ] || good=0  # deterministic: byte equal to openssl
       [ "$($T rsa-verify-pkcs1 $alg "$(flip "$h")" "$n" "$e" "$(hexb < $O/o.bin)")" = 0 ] || goodo=0
     done
   done

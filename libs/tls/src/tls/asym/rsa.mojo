@@ -21,6 +21,19 @@ def _digest_info(alg: Int) -> List[UInt8]:
     return t^
 
 
+def _pkcs1_em(alg: Int, hash: Span[UInt8, _], k: Int) -> List[UInt8]:
+    """EMSA-PKCS1-v1_5: 00 01 FF..FF 00 DigestInfo hash, k bytes."""
+    var t = _digest_info(alg)
+    t.extend(hash)
+    var em = List[UInt8](length=k, fill=0xFF)
+    em[0] = 0
+    em[1] = 1
+    em[k - len(t) - 1] = 0
+    for i in range(len(t)):
+        em[k - len(t) + i] = t[i]
+    return em^
+
+
 def _mgf1(alg: Int, seed: Span[UInt8, _], n: Int) -> List[UInt8]:
     var out = List[UInt8]()
     var ctr = 0
@@ -88,14 +101,7 @@ struct RsaPublic(Copyable, Movable):
         var k = len(self.n)
         if len(em) != k or len(hash) != hash_alg // 8:
             return False
-        var t = _digest_info(hash_alg)
-        t.extend(hash)
-        var want = List[UInt8](length=k, fill=0xFF)  # 00 01 FF..FF 00 T, compared in full
-        want[0] = 0
-        want[1] = 1
-        want[k - len(t) - 1] = 0
-        for i in range(len(t)):
-            want[k - len(t) + i] = t[i]
+        var want = _pkcs1_em(hash_alg, hash, k)  # compared in full, never parsed
         var diff: UInt8 = 0
         for i in range(k):
             diff |= want[i] ^ em[i]
@@ -238,6 +244,16 @@ struct RsaPrivate(Copyable, Movable):
         em[0] &= 0x7F
         em.extend(Span(h))
         em.append(0xBC)
+        return self._sign(em)
+
+    def sign_pkcs1(self, hash_alg: Int, hash: Span[UInt8, _]) raises -> List[UInt8]:
+        """RSASSA-PKCS1-v1_5, for TLS 1.2 peers that do not offer PSS (deterministic)."""
+        if len(hash) != hash_alg // 8:
+            raise Error("tls: bad hash length")
+        return self._sign(_pkcs1_em(hash_alg, hash, len(self.pk.n)))
+
+    def _sign(self, em: Span[UInt8, _]) raises -> List[UInt8]:
+        var k = len(self.pk.n)
         if k == 256:
             return _sign_crt[16](self.pk.n, self.pk.e, self.p, self.q, self.dp, self.dq, self.qinv, em)
         if k == 384:

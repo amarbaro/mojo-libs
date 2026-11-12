@@ -2,7 +2,7 @@
 #   x25519 <scalar> <u> | x25519-base <scalar> | p256-pub <d> | p256-ecdh <d> <pub> | p256-sign <d> <hash>
 #   p256-verify <pub> <hash> <sig> | p384-verify <pub> <hash> <sig>
 #   rsa-sign-pss <alg> <hash> <n> <e> <p> <q> <dp> <dq> <qinv> | rsa-verify-pss <alg> <hash> <n> <e> <sig>
-#   rsa-verify-pkcs1 <alg> <hash> <n> <e> <sig> | rand <n>
+#   rsa-sign-pkcs1 <same args as rsa-sign-pss> | rsa-verify-pkcs1 <alg> <hash> <n> <e> <sig> | rand <n>
 from std.sys import argv
 from tls.asym import *
 from tls.asym.ec import unhex
@@ -38,6 +38,9 @@ def main() raises:
     elif c == "rsa-sign-pss":
         var k = RsaPrivate(unhex(a[4]), unhex(a[5]), unhex(a[6]), unhex(a[7]), unhex(a[8]), unhex(a[9]), unhex(a[10]))
         print(hexs(k.sign_pss(Int(a[2]), unhex(a[3]))))
+    elif c == "rsa-sign-pkcs1":
+        var k = RsaPrivate(unhex(a[4]), unhex(a[5]), unhex(a[6]), unhex(a[7]), unhex(a[8]), unhex(a[9]), unhex(a[10]))
+        print(hexs(k.sign_pkcs1(Int(a[2]), unhex(a[3]))))
     elif c == "rsa-verify-pss":
         print(1 if RsaPublic(unhex(a[4]), unhex(a[5])).verify_pss(Int(a[2]), unhex(a[3]), unhex(a[6])) else 0)
     elif c == "rsa-verify-pkcs1":
