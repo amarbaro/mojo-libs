@@ -261,10 +261,18 @@ def _ca_rules(c: Certificate, below: Int, anchor: Bool) raises:
         raise Error("tls: x509: CA extended key usage excludes serverAuth")
 
 
-def _profile(c: Certificate) raises:
-    """RFC 5280 extension profile of any certificate on the path, anchor included."""
+def _profile(c: Certificate, anchor: Bool) raises:
+    """RFC 5280 extension profile of any certificate on the path. `anchor`: c is the trust anchor above the chain."""
     if c.aia_crit:
         raise Error("tls: x509: authority information access must not be critical")
+    if c.ski_crit or c.aki_crit:
+        raise Error("tls: x509: subject and authority key identifiers must not be critical")
+    if (anchor or (c.has_bc and c.is_ca)) and not c.has_ski:
+        raise Error("tls: x509: CA certificate without subject key identifier")
+    if not c.self_issued() and len(c.aki_kid) == 0:
+        raise Error("tls: x509: certificate without authority key identifier")
+    if anchor and c.self_issued() and c.has_aki and (len(c.aki_kid) == 0 or c.aki_extra or not same(c.aki_kid, c.ski)):
+        raise Error("tls: x509: root authority key identifier must be the subject key identifier alone")
 
 
 def _leaf_rules(leaf: Certificate) raises:
@@ -282,12 +290,12 @@ def _leaf_rules(leaf: Certificate) raises:
 def _check_path(chain: List[Certificate], below: List[Int], root: Certificate, now: Int) raises:
     """`below` indexes chain: leaf first, then intermediates up to the one the root signed (empty: the leaf is the root)."""
     var k = len(below)
-    _profile(root)
+    _profile(root, k > 0)
     _leaf_rules(chain[0])
     var nsi = 0  # intermediates seen so far that are not self-issued (RFC 5280 6.1.4 l)
     for p in range(k):
         ref c = chain[below[p]]
-        _profile(c)
+        _profile(c, False)
         _valid_at(c, now)
         if p > 0 and not c.serial_ok():
             raise Error("tls: x509: serial number must be positive, non-zero and at most 20 octets")
