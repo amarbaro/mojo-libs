@@ -115,7 +115,7 @@ tlsfuzzer() { # SCRIPT PORT [args]
   local s=$1 port=$2; shift 2
   [[ -f $T/tlsfuzzer/scripts/$s.py && -x $T/venv/bin/python ]] || { echo "SKIP tlsfuzzer not installed under .work/tools"; return; }
   local xf=() n; while IFS=$'\t' read -r sc n mode _; do [[ $sc == "$s" ]] && xf+=("-$mode" "$n"); done < <(grep -v '^#' tests/matrix/tf_xfail.txt)
-  local o rc=0; o=$(PYTHONPATH=$T/tlsfuzzer timeout 280 "$T/venv/bin/python" "$T/tlsfuzzer/scripts/$s.py" -h 127.0.0.1 -p "$port" "${xf[@]}" "$@" 2>&1) || rc=$?
+  local o rc=0; o=$(PYTHONPATH=$T/tlsfuzzer timeout 280 "$T/venv/bin/python" "$T/tlsfuzzer/scripts/$s.py" -h 127.0.0.1 -p "$port" -n 0 "${xf[@]}" "$@" 2>&1) || rc=$?
   echo "$o" > "$W/tf-$s.out"
   [[ $rc == 0 ]] && echo PASS || echo "FAIL rc=$rc $(grep -E '^(TOTAL|PASS|FAIL|XFAIL|XPASS|SKIP):' <<< "$o" | tr '\n' ' ') see .work/matrix/tf-$s.out"
 }

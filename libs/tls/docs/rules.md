@@ -62,3 +62,7 @@ Lane x509 wave 2 (2026-11-12).
 - `playwright install chromium` deleted the older chromium, headless-shell and ffmpeg builds from the shared `~/.cache/ms-playwright`
   (it prunes builds "unused" by its own version) -> never run `playwright install` against the shared cache; set
   `PLAYWRIGHT_BROWSERS_PATH=<repo>/.work/...` first, or reuse an installed build read-only.
+- `tests/matrix/msrv.mojo` killed every connection after 20 s (alarm); tlsfuzzer test-tls13-finished 'pad_right 16777183' sends a 16 MiB Finished
+  in about 20 s and expects the decode_error we had already sent, then a close: the reset hit it mid-send and the cell failed, but only when the
+  script's random sample of 40 cases happened to pick it -> a harness timeout must exceed the slowest peer (now 330 s), and every tlsfuzzer cell
+  runs all cases (`-n 0`), never the default random sample of 40.
