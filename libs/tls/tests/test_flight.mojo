@@ -1,5 +1,5 @@
-# Gate: client and server state machines reproduce RFC 8448 byte for byte. Section 3 (1-RTT, x25519, AES-128-GCM)
-# and section 5 (HelloRetryRequest to secp256r1, cookie, padding). Each side is run against the other side's recorded
+# Gate: client and server state machines reproduce RFC 8448 byte for byte. Section 3 (1-RTT, x25519, AES-128-GCM),
+# section 5 (HelloRetryRequest to secp256r1, cookie, padding) and section 7 (compatibility mode: session id, CCS). Each side is run against the other side's recorded
 # bytes: the output must equal the trace. CertificateVerify content is printed for the openssl oracle (tests/gate.sh).
 from tls.tls13.client import Client13
 from tls.tls13.conn import *
@@ -31,6 +31,8 @@ struct Trace(Movable):
     var sh_rec: List[UInt8]
     var flight_rec: List[UInt8]
     var cfin_rec: List[UInt8]
+    var scc: List[UInt8]  # server ChangeCipherSpec record (compatibility mode, section 7)
+    var ccc: List[UInt8]  # client ChangeCipherSpec record
     var ch: Hello
     var sh: Hello
     var content: List[UInt8]  # what the server signs
@@ -57,6 +59,8 @@ struct Trace(Movable):
         self.flight_rec = v.get(sec, sr, "complete record", 2 if hrr else 1)
         var ch1 = v.get(sec, "construct a ClientHello", "ClientHello", 0)
         var ch2 = v.get(sec, "construct a ClientHello", "ClientHello", 1) if hrr else List[UInt8]()
+        self.scc = v.get(sec, "{server}  send change_cipher_spec", "complete record") if sec == 7 else List[UInt8]()
+        self.ccc = v.get(sec, "{client}  send change_cipher_spec", "complete record") if sec == 7 else List[UInt8]()
         self.ch = parse_hello(ch1, False)
         var shm = v.get(sec, "construct a ServerHello", "ServerHello", 1 if hrr else 0)
         self.sh = parse_hello(shm, True)
@@ -104,8 +108,8 @@ def server_side(mut t: T, v: Vec, tr: Trace) raises:
         t.eq(tag + "HelloRetryRequest record", out.send, tr.hrr_rec)
         out = srv.feed(Span(tr.ch2_rec))
     t.ok(tag + "no error (" + out.error + ")", out.error == "")
-    t.eq(tag + "ServerHello + encrypted flight records", out.send, cat(tr.sh_rec, tr.flight_rec))
-    var fin = srv.feed(Span(tr.cfin_rec))
+    t.eq(tag + "ServerHello" + (" + CCS" if tr.sec == 7 else "") + " + encrypted flight records", out.send, cat(cat(tr.sh_rec, tr.scc), tr.flight_rec))
+    var fin = srv.feed(Span(cat(tr.ccc, tr.cfin_rec)))
     t.ok(tag + "client Finished verifies, handshake done", fin.has(EV_DONE) and fin.error == "")
     t.ok(tag + "state is open, group and SNI recorded", srv.c.state == S_OPEN and srv.group == (G_P256 if tr.sec == 5 else G_X25519) and srv.sni == "server")
     if tr.sec == 3:
@@ -128,10 +132,10 @@ def client_side(mut t: T, v: Vec, tr: Trace) raises:
     if tr.sec == 5:
         out = cli.feed(Span(tr.hrr_rec))
         t.eq(tag + "second ClientHello record (P-256 share, cookie, padding to 512)", out.send, tr.ch2_rec)
-    out = cli.feed(Span(cat(tr.sh_rec, tr.flight_rec)))
+    out = cli.feed(Span(cat(cat(tr.sh_rec, tr.scc), tr.flight_rec)))
     t.ok(tag + "no error (" + out.error + ")", out.error == "")
     t.ok(tag + "handshake done, certificate verified once", out.has(EV_DONE) and cli.v.calls == 1)
-    t.eq(tag + "client Finished record", out.send, tr.cfin_rec)
+    t.eq(tag + "client" + (" CCS +" if tr.sec == 7 else "") + " Finished record", out.send, cat(tr.ccc, tr.cfin_rec))
     if tr.sec == 3:
         t.eq(tag + "application_data record (seq 0)", cli.write(v.get(3, "{client}  send application_data", "payload")), v.get(3, "{client}  send application_data", "complete record"))
         var nst = cli.feed(Span(v.get(3, "{server}  send handshake record", "complete record", 2)))
@@ -194,7 +198,7 @@ def negatives(mut t: T, v: Vec) raises:
 def main() raises:
     var t = T("flight")
     var v = Vec()
-    for sec in [3, 5]:
+    for sec in [3, 5, 7]:
         var tr = Trace(v, sec)
         server_side(t, v, tr)
         client_side(t, v, tr)
