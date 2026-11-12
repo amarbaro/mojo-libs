@@ -120,6 +120,11 @@ def main() raises:
                 s.append(1)
             runs += 1
             acc += 1 if rsa_ok(pss, pk, rh, s) else 0
+        for z in [1, 44]:  # the valid signature behind zero bytes: same number, wrong length (RFC 8017 8.2.2 step 1)
+            var s = List[UInt8](length=z, fill=0)
+            s.extend(Span(rs))
+            runs += 1
+            acc += 1 if rsa_ok(pss, pk, rh, s) else 0
         for _ in range(200):
             runs += 1
             acc += 1 if rsa_ok(pss, pk, rh, random_bytes(256)) else 0

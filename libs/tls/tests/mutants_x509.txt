@@ -39,7 +39,7 @@ nc_empty_ext_ok | tls/x509/cert.mojo | s/        if s.done\(\):\n            rai
 root_ku_without_certsign_ok | tls/x509/chain.mojo | s/if c.has_ku and \(c.ku & KU_KEY_CERT_SIGN\) == 0:/if False:/ | limbo
 serial_unchecked | tls/x509/cert.mojo | s/return s\[0\] < 0x80 and not \(len\(s\) == 1 and s\[0\] == 0\) and len\(s\) <= 20/return True/ | limbo
 aki_not_required | tls/x509/chain.mojo | s/if not c.self_issued\(\) and len\(c.aki_kid\) == 0:/if False:/ | limbo
-ski_not_required | tls/x509/chain.mojo | s/\(anchor or \(c.has_bc and c.is_ca\)\) and not c.has_ski/False/ | limbo
+ski_not_required | tls/x509/chain.mojo | s/not anchor and c.has_bc and c.is_ca and not c.has_ski/False/ | limbo
 key_id_critical_ok | tls/x509/chain.mojo | s/if c.ski_crit or c.aki_crit:/if False:/ | limbo
 root_aki_unchecked | tls/x509/chain.mojo | s/if anchor and c.self_issued\(\) and c.has_aki and/if False and/ | limbo
 anchor_bc_noncritical_ok | tls/x509/chain.mojo | s/if not c.bc_crit:/if False:/ | limbo

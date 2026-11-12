@@ -35,11 +35,17 @@ def small[N: Int](v: UInt64) -> Fe[N]:
 
 
 def from_be[N: Int](b: Span[UInt8, _]) -> Fe[N]:
-    """Big-endian bytes (at most 8N, right-aligned) to limbs."""
+    """Big-endian bytes to limbs, right-aligned. Leading zero bytes beyond 8N are skipped; any other byte beyond 8N
+    gives all-ones (at least every modulus, so callers that compare with a modulus reject it) instead of a write out of bounds.
+    """
     var a = Fe[N](fill=0)
     var n = len(b)
     for i in range(n):
         var k = n - 1 - i
+        if k >= 8 * N:
+            if b[i] != 0:
+                return Fe[N](fill=~UInt64(0))
+            continue
         a[k >> 3] |= UInt64(b[i]) << UInt64(8 * (k & 7))
     return a^
 
