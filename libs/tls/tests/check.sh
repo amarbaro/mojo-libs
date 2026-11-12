@@ -34,9 +34,9 @@ if r="$(tests/interop/hello_probe.sh 2>&1)"; then echo "PASS hello_probe: $(echo
 # real peers against our engines, with the temporary crypto of lane 4 (tests/real); SKIP when that tree is absent
 if bins="$(tests/real/build.sh 2>&1)"; then
   srvbin="$(echo "$bins" | sed -n 1p)"; clbin="$(echo "$bins" | sed -n 2p)"
-  r="$(TLS_SERVER_BIN="$srvbin" TLS_CLIENT_BIN="$clbin" TLS_KINDS=p256 tests/interop/run.sh ours 2>&1 || true)"
+  r="$(TLS_SERVER_BIN="$srvbin" TLS_CLIENT_BIN="$clbin" TLS_KINDS="p256 p384 rsa" tests/interop/run.sh ours 2>&1 || true)"
   echo "$r" | grep -E "^(FAIL|RESULT)" || true
-  if echo "$r" | grep -q "^FAIL"; then bad interop "see FAIL lines above"; else echo "PASS interop: $(echo "$r" | grep '^RESULT')  (ECDSA P-256 only; p384 and rsa wait for wave 2)"; fi
+  if echo "$r" | grep -q "^FAIL"; then bad interop "see FAIL lines above"; else echo "PASS interop: $(echo "$r" | grep '^RESULT')  (P-256, P-384 and RSA keys)"; fi
 else echo "SKIP interop: $(echo "$bins" | head -1)"; fi
 
 if [[ "${1:-}" == mutants ]]; then

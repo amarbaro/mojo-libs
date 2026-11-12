@@ -1,11 +1,13 @@
-"""TLS_SERVER_BIN for tests/interop/run.sh TlsServer over RealCrypto (P-256 and RSA keys).
+"""TLS_SERVER_BIN for tests/interop/run.sh TlsServer over RealCrypto (P-256, P-384 and RSA keys).
 real_server --cert CERT.pem --key KEY.pem [--port N]: prints "LISTENING <port>", answers every request with 200 and
 the body mojo-tls-ok, then closes. PEM files are decoded here (lane 3 owns the real loader)."""
 from std.sys import argv
 from tls.tls12.realcrypto import RealCrypto
 from tls.net.config import TlsConfig, CertEntry
 from tls.net.server import TlsServer, TlsHandler, ConnInfo
-from tls.tls12.crypto import K_P256
+from tls.tls12.crypto import K_P256, K_P384, K_RSA
+from tls.x509.key import load_private_key_der
+from tls.x509.cert import KEY_P384, KEY_RSA
 from tls.tls12.wire import bytes_of
 
 
@@ -71,7 +73,9 @@ def main() raises:
     var cfg = TlsConfig()
     var chain = List[List[UInt8]]()
     chain.append(pem_der(cert))
-    cfg.certs.append(CertEntry(["localhost"], chain^, pem_der(key), K_P256))
+    var der = pem_der(key)
+    var kk = load_private_key_der(der).kind  # the certificate kind follows the key, not a constant
+    cfg.certs.append(CertEntry(["localhost"], chain^, der^, K_P384 if kk == KEY_P384 else (K_RSA if kk == KEY_RSA else K_P256)))
     cfg.alpn = ["http/1.1"]
     var srv = TlsServer[RealCrypto](cfg^, port)
     print("LISTENING", srv.port(), flush=True)

@@ -1,6 +1,6 @@
 # CLI over tls.asym for the openssl cross-checks in tests/oracle.sh. Hex in, hex out; verify prints 1 or 0.
 #   x25519 <scalar> <u> | x25519-base <scalar> | p256-pub <d> | p256-ecdh <d> <pub> | p256-sign <d> <hash>
-#   p256-verify <pub> <hash> <sig> | p384-verify <pub> <hash> <sig>
+#   p256-verify <pub> <hash> <sig> | p384-verify <pub> <hash> <sig> | p384-sign <d> <hash>
 #   rsa-sign-pss <alg> <hash> <n> <e> <p> <q> <dp> <dq> <qinv> | rsa-verify-pss <alg> <hash> <n> <e> <sig>
 #   rsa-sign-pkcs1 <same args as rsa-sign-pss> | rsa-verify-pkcs1 <alg> <hash> <n> <e> <sig> | rand <n>
 from std.sys import argv
@@ -33,6 +33,8 @@ def main() raises:
         print(hexs(P256Key(unhex(a[2])).sign_sha256(unhex(a[3]))))
     elif c == "p256-verify":
         print(1 if p256_verify(unhex(a[2]), unhex(a[3]), unhex(a[4])) else 0)
+    elif c == "p384-sign":
+        print(hexs(p384_sign(unhex(a[2]), unhex(a[3]))))
     elif c == "p384-verify":
         print(1 if p384_verify(unhex(a[2]), unhex(a[3]), unhex(a[4])) else 0)
     elif c == "rsa-sign-pss":

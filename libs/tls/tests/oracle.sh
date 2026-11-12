@@ -50,16 +50,21 @@ ok "p256 pub+ecdh vs openssl x$N" $good "mismatch"
 ok "p256 our signatures verify in openssl x$N" $goodv "openssl rejected"
 ok "p256 openssl signatures verify here, tampered rejected x$N" $goodo "mismatch"
 
-# P-384 verify
-good=1
+# P-384 verify, and our signature verified by openssl (audit #4)
+good=1; goods=1
 for i in $(seq "$N"); do
   openssl ecparam -name secp384r1 -genkey -noout -out $O/k384.pem
   p=$(openssl ec -in $O/k384.pem -pubout -outform DER 2>/dev/null | tail -c 97 | hexb)
   h=$(hexrand 48); echo "$h" | unhexb | openssl pkeyutl -sign -inkey $O/k384.pem -out $O/s384.der
   s=$(hexb < $O/s384.der)
   [ "$($T p384-verify "$p" "$h" "$s")" = 1 ] && [ "$($T p384-verify "$p" "$(flip "$h")" "$s")" = 0 ] || good=0
+  d=$(openssl ec -in $O/k384.pem -outform DER 2>/dev/null | tail -c +9 | head -c 48 | hexb)  # SEC1: 30 81 a4 02 01 01 04 30 <d>
+  echo "$h" | unhexb > $O/h384.bin
+  $T p384-sign "$d" "$h" | unhexb > $O/ours384.der
+  openssl pkeyutl -verify -pubin -inkey <(openssl ec -in $O/k384.pem -pubout 2>/dev/null) -in $O/h384.bin -sigfile $O/ours384.der >/dev/null 2>&1 || goods=0
 done
 ok "p384 openssl signatures verify here, tampered rejected x$N" $good "mismatch"
+ok "p384 our signatures verify in openssl x$N" $goods "openssl rejected"
 
 # RSA: keys cached; PSS sign here -> openssl verify; openssl PSS/PKCS#1 sign -> verify here
 for bits in 2048 3072 4096; do

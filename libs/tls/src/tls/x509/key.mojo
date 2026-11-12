@@ -1,15 +1,15 @@
-# Private key loading: PKCS#8, SEC1 and PKCS#1 from PEM. P-256 and RSA (>= 2048 bits, two primes) only.
+# Private key loading: PKCS#8, SEC1 and PKCS#1 from PEM. P-256, P-384 and RSA (>= 2048 bits, two primes) only.
 # Secret handling: base64 is branchless, every buffer holding key bytes is zeroed on success and failure
 # (explicit_bzero, which the compiler may not drop), the EC scalar is range-checked and multiplied in constant time,
 # errors never carry key bytes. The RSA consistency check uses variable-time bigint code: it runs once at load,
 # offline, with no peer in the loop.
 from std.ffi import external_call
-from tls.x509.cert import Certificate, KEY_RSA, KEY_P256
+from tls.x509.cert import Certificate, KEY_RSA, KEY_P256, KEY_P384
 from tls.x509.der import Der, Bytes, view, copy_of, same, hex_is
 from tls.x509.pem import pem_spans, b64_decode
 from tls.x509.sigs import rsa_bits, MIN_RSA_BITS
 from tls.sym import sha256
-from tls.asym import P256Key, RsaPrivate, rsa_d_ok
+from tls.asym import P256Key, p384_public, RsaPrivate, rsa_d_ok
 
 
 def wipe(mut l: List[UInt8]):
@@ -18,9 +18,9 @@ def wipe(mut l: List[UInt8]):
 
 
 struct PrivateKey(Movable):
-    var kind: Int  # KEY_P256 or KEY_RSA
-    var d: List[UInt8]  # EC scalar (32 bytes) or RSA private exponent
-    var pub: List[UInt8]  # EC: 65-byte point; RSA: modulus
+    var kind: Int  # KEY_P256, KEY_P384 or KEY_RSA
+    var d: List[UInt8]  # EC scalar (32 bytes P-256, 48 bytes P-384) or RSA private exponent
+    var pub: List[UInt8]  # EC: uncompressed point (65 or 97 bytes); RSA: modulus
     var e: List[UInt8]
     var p: List[UInt8]
     var q: List[UInt8]
@@ -104,17 +104,22 @@ def _ec(mut s: Der, var curve: List[UInt8]) raises -> PrivateKey:
             raise Error("tls: key: invalid key")
         w.end()
     s.end()
-    if (len(curve) > 0 and not hex_is(curve, "2a8648ce3d030107")) or len(raw) > 32:
+    var p384 = hex_is(curve, "2b81040022")
+    if (len(curve) > 0 and not p384 and not hex_is(curve, "2a8648ce3d030107")) or len(raw) > (48 if p384 else 32):
         wipe(raw)
-        raise Error("tls: key: unsupported curve (only P-256)")
-    var k = PrivateKey(KEY_P256)
-    k.d = List[UInt8](length=32 - len(raw), fill=0)
+        raise Error("tls: key: unsupported curve (only P-256 and P-384)")
+    var n = 48 if p384 else 32
+    var k = PrivateKey(KEY_P384 if p384 else KEY_P256)
+    k.d = List[UInt8](length=n - len(raw), fill=0)
     k.d.extend(raw.copy())
     wipe(raw)
     try:
-        var pk = P256Key(k.d)
-        k.pub = pk.public_bytes()
-        pk.zeroize()
+        if p384:
+            k.pub = p384_public(k.d)
+        else:
+            var pk = P256Key(k.d)
+            k.pub = pk.public_bytes()
+            pk.zeroize()
     except:
         raise Error("tls: key: invalid key")
     if len(given) > 0 and not same(given, k.pub):

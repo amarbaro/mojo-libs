@@ -14,7 +14,7 @@ All bytes are `List[UInt8]` in, `Span[UInt8, _]` for read-only views. Errors rai
 ## `tls.asym`
 - `x25519(scalar32, point32) -> List[UInt8]`, `x25519_base(scalar32)`
 - `P256Key`: `generate()` (from a CSPRNG), `public_bytes()` (uncompressed), `ecdh(peer_uncompressed) -> shared32`, `sign_sha256(msg_hash32) -> DER signature`
-- `p256_verify(pub, hash, der_sig) -> Bool`, `p384_verify(...)`
+- `p256_verify(pub, hash, der_sig) -> Bool`, `p384_verify(...)`, `p384_sign(d48, hash48) -> der` (RFC 6979 with HMAC-SHA-384)
 - `RsaPublic`: `verify_pkcs1(hash_alg, hash, sig)`, `verify_pss(hash_alg, hash, sig)`; `RsaPrivate`: `sign_pss(hash_alg, hash) -> sig` (CRT + blinding)
 - `random_bytes(n)` from `getrandom(2)`
 

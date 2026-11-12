@@ -133,10 +133,10 @@ run_ours() {
     sk "wave2: ours/server x {s_client,curl,python,vivaldi} x {p256,p384,rsa} x 3 suites + negatives: TLS_SERVER_BIN unset (needs lane 1-3 crypto: ECDHE, PRF, AEAD, ECDSA/RSA sign, PEM keys)"
   else matrix ours; negatives ours; fi
   if [[ -z "${TLS_CLIENT_BIN:-}" || ! -x "${TLS_CLIENT_BIN:-/nonexistent}" ]]; then
-    sk "wave2: ours/client x s_server x 3 suites x {p256,rsa}: TLS_CLIENT_BIN unset (needs lane 1-3 crypto + chain validation)"
+    sk "wave2: ours/client x s_server x 3 suites x {p256,p384,rsa}: TLS_CLIENT_BIN unset (needs lane 1-3 crypto + chain validation)"
   else
     local kind suite out
-    for kind in p256 rsa; do for suite in ${KSUITES[$kind]}; do
+    for kind in p256 p384 rsa; do for suite in ${KSUITES[$kind]}; do
       have_kind ours "$kind" || { sk "ours/client/$kind/$suite: key type not supported by this binary"; continue; }
       start_server peers "$kind" "$suite"
       if out="$(timeout 30 "$TLS_CLIENT_BIN" 127.0.0.1 "$PORT" "$C/ca.pem" 2>&1)" && [[ "$out" == *mojo-tls-ok* ]]; then ok "ours/client/$kind/$suite"

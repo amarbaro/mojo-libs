@@ -247,9 +247,10 @@ def _der_int(v: Span[UInt8, _]) -> List[UInt8]:
 
 
 def ecdsa_sign[N: Int](d: Fe[N], h1: Span[UInt8, _], c: Curve[N]) raises -> List[UInt8]:
-    """Deterministic ECDSA (RFC 6979 section 3.2, HMAC-SHA-256 as the DRBG, so the hash is SHA-256 for P-256).
-    Returns DER. No low-s normalisation: the output equals the RFC vectors."""
-    comptime hl = 32
+    """Deterministic ECDSA (RFC 6979 section 3.2, HMAC with the hash of the curve as the DRBG: SHA-256 for P-256,
+    SHA-384 for P-384). Returns DER. No low-s normalisation: the output equals the RFC vectors."""
+    comptime hbits = 256 if N == 4 else 384
+    comptime hl = hbits // 8
     var e = reduce_once(_hash_int[N](h1), 0, c.o)  # bits2int(h1) mod n, which is also bits2octets
     var x = to_be(d)
     var hb = to_be(e)
@@ -260,15 +261,15 @@ def ecdsa_sign[N: Int](d: Fe[N], h1: Span[UInt8, _], c: Curve[N]) raises -> List
         m.append(UInt8(tag))
         m.extend(Span(x))
         m.extend(Span(hb))
-        kk = hmac(256, kk, m)
-        v = hmac(256, kk, v)
+        kk = hmac(hbits, kk, m)
+        v = hmac(hbits, kk, v)
         wipe(m)
     var dm = to_mont(d, c.o)
     var em = to_mont(e, c.o)
     while True:
         var t = List[UInt8]()
         while len(t) < 8 * N:
-            v = hmac(256, kk, v)
+            v = hmac(hbits, kk, v)
             t.extend(Span(v))
         var k = from_be[N](t[: 8 * N])
         wipe(t)
@@ -292,8 +293,8 @@ def ecdsa_sign[N: Int](d: Fe[N], h1: Span[UInt8, _], c: Curve[N]) raises -> List
                 return out^
         var m = v.copy()
         m.append(0)
-        kk = hmac(256, kk, m)
-        v = hmac(256, kk, v)
+        kk = hmac(hbits, kk, m)
+        v = hmac(hbits, kk, v)
 
 
 def _der_pos_int(s: Span[UInt8, _], mut i: Int, end: Int, mut out: Fe[8]) -> Bool:
@@ -398,6 +399,14 @@ def p256_verify(pub: Span[UInt8, _], hash: Span[UInt8, _], der_sig: Span[UInt8, 
 
 def p384_verify(pub: Span[UInt8, _], hash: Span[UInt8, _], der_sig: Span[UInt8, _]) -> Bool:
     return ecdsa_verify(pub, hash, der_sig, p384())
+
+
+def p384_sign(d: Span[UInt8, _], hash: Span[UInt8, _]) raises -> List[UInt8]:
+    """ECDSA P-384 signature (DER) over a 48-byte SHA-384 digest with the 48-byte private scalar `d`."""
+    var c = p384()
+    if len(d) != 48 or not in_range(from_be[6](d), c.o) or len(hash) != 48:
+        raise Error("tls: p384 sign needs a 48-byte key in range and a 48-byte hash")
+    return ecdsa_sign(from_be[6](d), hash, c)
 
 
 def p384_public(d: Span[UInt8, _]) raises -> List[UInt8]:
