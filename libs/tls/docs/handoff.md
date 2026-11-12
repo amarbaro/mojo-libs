@@ -12,8 +12,8 @@
    on any other disagreement (.work/report-w2-x509.md, docs/x509.md). Open: TWCA Global Root CA refused (no SKI), user call.
 2. (done, merged) Lane 1 gate: aes-keylen / gcm-noncelen print FAIL; runners treat exit >= 124 as a survivor.
 3. (done, merged) `tests/matrix.sh`: 149 PASS, 13 SKIP with reasons, 0 FAIL (report: .work/report-w2-matrix.md).
-4. Promote `tests/matrix/msrv.mojo` (TLS 1.3/1.2 dispatch on one port) into `src/tls/net`: `TlsServer` is TLS 1.2 only.
-5. Lane 2: asym mutant 17 (rsa.mojo length check) dies of SIGILL only (`tests/mutants_asym.sh` prints TRAP).
+4. (done) `TlsServer` serves TLS 1.3 and 1.2 on one port; `tests/matrix/msrv.mojo` runs on it, so the matrix tests the product: pass=149 skip=13 fail=0.
+5. (done, facbc06) asym mutant 17 is killed by a printed FAIL; MUTANT_STRICT=1 gate_asym passes.
 6. NewSessionTicket / resumption (tlsfuzzer lengths, record-layer-limits need it), client certificates, secp384r1/x448 groups in 1.3.
 
 ## How to check
