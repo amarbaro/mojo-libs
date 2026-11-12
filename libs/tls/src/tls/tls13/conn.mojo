@@ -160,9 +160,10 @@ struct Conn(Movable):
             try:
                 r = self.rx.open(rec)
             except e:
-                if self.state != S_WAIT_FIN or self.skip < max(1, len(rec) - 5):
+                var used = max(1, len(rec) - 5)  # an empty record spends one byte: the budget must run out
+                if self.state != S_WAIT_FIN or self.skip < used:
                     raise e
-                self.skip -= len(rec) - 5  # early data we refused: it was sealed under a key we never had
+                self.skip -= used  # early data we refused: it was sealed under a key we never had
                 return True
             self.skip = 0  # a record that opens ends the early data
             typ = r[0]
@@ -171,9 +172,10 @@ struct Conn(Movable):
                 raise bad("record_overflow", "record longer than our record_size_limit")
         else:
             if typ == APP:
-                if self.skip < max(1, len(rec) - 5):
+                var used = max(1, len(rec) - 5)
+                if self.skip < used:
                     raise bad("unexpected_message", "unprotected application data")
-                self.skip -= len(rec) - 5  # early data sent before a HelloRetryRequest
+                self.skip -= used  # early data sent before a HelloRetryRequest
                 return True
             if len(rec) - 5 > MAX_PLAIN:
                 raise bad("record_overflow", "record longer than 2^14")
