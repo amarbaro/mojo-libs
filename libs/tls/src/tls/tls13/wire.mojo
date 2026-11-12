@@ -84,6 +84,16 @@ def vec24(b: List[UInt8]) -> List[UInt8]:
     return o^
 
 
+def is_ip(host: String) -> Bool:
+    """An IPv4 or IPv6 literal: RFC 6066 3 forbids it in server_name."""
+    var dots = True
+    for c in host.as_bytes():
+        if c == 58:
+            return True
+        dots = dots and (c == 46 or (c >= 48 and c <= 57))
+    return dots and host.byte_length() > 0
+
+
 def bytes_of(s: String) -> List[UInt8]:
     var o = List[UInt8](capacity=s.byte_length())
     for b in s.as_bytes():
@@ -126,6 +136,10 @@ struct Rd(Copyable, Movable):
     def left(self) -> Int:
         return len(self.b) - self.p
 
+    def _at(self, i: Int) -> Int:
+        """Byte i, or 0 past the end: a missed need() check then shows as wrong data, never as an out-of-bounds trap."""
+        return Int(self.b[i]) if i < len(self.b) else 0
+
     def need(self, n: Int) raises:
         if n < 0 or n > len(self.b) - self.p:
             raise bad("decode_error", "message too short")
@@ -133,17 +147,17 @@ struct Rd(Copyable, Movable):
     def u8(mut self) raises -> Int:
         self.need(1)
         self.p += 1
-        return Int(self.b[self.p - 1])
+        return self._at(self.p - 1)
 
     def u16(mut self) raises -> Int:
         self.need(2)
         self.p += 2
-        return (Int(self.b[self.p - 2]) << 8) | Int(self.b[self.p - 1])
+        return (self._at(self.p - 2) << 8) | self._at(self.p - 1)
 
     def u24(mut self) raises -> Int:
         self.need(3)
         self.p += 3
-        return (Int(self.b[self.p - 3]) << 16) | (Int(self.b[self.p - 2]) << 8) | Int(self.b[self.p - 1])
+        return (self._at(self.p - 3) << 16) | (self._at(self.p - 2) << 8) | self._at(self.p - 1)
 
     def u32(mut self) raises -> Int:
         var hi = self.u16()
@@ -153,7 +167,7 @@ struct Rd(Copyable, Movable):
         self.need(n)
         var o = List[UInt8](capacity=n)
         for i in range(n):
-            o.append(self.b[self.p + i])
+            o.append(UInt8(self._at(self.p + i)))
         self.p += n
         return o^
 

@@ -1,7 +1,7 @@
 """TLS 1.2 handshake message codecs (RFC 5246 7.4, 7627, 8422, 5746). Parsers are strict and bounds checked:
 trailing bytes, duplicate extensions and bad lengths raise. Unknown suites, groups, extensions and GREASE
 values are skipped, never an error. Builders return whole handshake messages (type, u24 length, body)."""
-from .wire import Rd, bl, p16, p24, put, pre8, pre16, bytes_of, str_of
+from .wire import Rd, bl, p16, p24, put, pre8, pre16, bytes_of, str_of, is_ip
 
 comptime CCS = 20
 comptime ALERT = 21
@@ -305,7 +305,7 @@ def build_client_hello(random: List[UInt8], host: String, alpn: List[String], of
     b.append(1)
     b.append(0)
     var e = List[UInt8]()
-    if host.byte_length() > 0:
+    if host.byte_length() > 0 and not is_ip(host):
         _ext(e, 0x0000, pre16(bl(0) + pre16(bytes_of(host))))
     _ext(e, 0xFF01, pre8(List[UInt8]()))
     _ext(e, 0x0017, List[UInt8]())

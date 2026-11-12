@@ -54,3 +54,11 @@ Lane x509 wave 2 (2026-11-12).
 - A fixture leaf signed by the wrong root made a cap test pass for the wrong reason -> check each negative case by flipping the one thing it tests (the mutant of the cap).
 - `view(read_file(p))` freed the bytes while the view was alive (22 roots "dropped") -> bind the buffer to a variable that outlives the view.
 - Real roots break pedantic rules (serial 0 in GoDaddy and Hellenic, no SKI in TWCA Global Root CA) -> audit the system bundle (`gate_x509.sh roots`) before turning a profile rule on for anchors.
+## Lane matrix (wave 2)
+
+- Two lane 1 mutants (gcm-noncelen, aes-keylen) were "killed" by SIGILL from a bounds trap, not by a check -> a mutant runner
+  counts only a checked error (exit 1, a printed FAIL or a raised Error) as a kill; exit >= 124 (signal, timeout) is a survivor; code clamps its loops so a missed policy check cannot read out of bounds.
+- Duplicate lines in tests/mutants_sym.txt ran the same mutant twice in one directory and garbled the log -> mutant names are unique.
+- `playwright install chromium` deleted the older chromium, headless-shell and ffmpeg builds from the shared `~/.cache/ms-playwright`
+  (it prunes builds "unused" by its own version) -> never run `playwright install` against the shared cache; set
+  `PLAYWRIGHT_BROWSERS_PATH=<repo>/.work/...` first, or reuse an installed build read-only.

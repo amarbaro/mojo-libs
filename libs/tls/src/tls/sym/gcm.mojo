@@ -163,7 +163,7 @@ struct AesGcm(Aead, Copyable, Movable):
         if len(nonce) != 12 or n < 0 or n > 68719476704:  # 12-byte nonce; plaintext at most (2^32 - 2) blocks
             raise Error("tls: gcm bad nonce or length")
         var j0 = V16(0)
-        for i in range(12):
+        for i in range(min(12, len(nonce))):  # clamped: a missed length check cannot read out of bounds
             j0[i] = nonce[i]
         j0[15] = 1
         return j0

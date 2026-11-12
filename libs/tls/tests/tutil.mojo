@@ -19,8 +19,9 @@ def cert_of(key: String) -> List[List[UInt8]]:
     return l^
 
 
-def make_cfg() -> ArcPointer[TlsConfig]:
+def make_cfg(tls13: Bool = True) -> ArcPointer[TlsConfig]:
     var c = TlsConfig()
+    c.tls13 = tls13
     c.certs.append(CertEntry(["localhost"], cert_of("key-p256"), bytes_of("key-p256"), K_P256))
     c.certs.append(CertEntry(["*.example.org"], cert_of("key-p384"), bytes_of("key-p384"), K_P384))
     c.certs.append(CertEntry(["rsa.test"], cert_of("key-rsa"), bytes_of("key-rsa"), K_RSA))

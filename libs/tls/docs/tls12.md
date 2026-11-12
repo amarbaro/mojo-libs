@@ -23,6 +23,11 @@ ChaCha20-Poly1305 suites (0xC02B, 0xCCA9, 0xC02C, 0xC02F, 0xCCA8, 0xC030). A cli
 (no AES hardware), otherwise server order. When the client offered TLS 1.3 the ServerHello random carries the
 `DOWNGRD\x01` sentinel (RFC 8446 4.1.3); `Client12(offer13=True)` rejects it.
 
+Matrix findings (2026-11-12, fixed): the DOWNGRD sentinel is written only when `TlsConfig.tls13` says a TLS 1.3 engine sits behind
+the config (a 1.2-only server must stay silent or Firefox/Chrome abort with alert 47); a server with no ALPN configured ignores a
+client's ALPN offer (RFC 7301); the client ignores a warning `unrecognized_name`; both clients leave an IP literal out of server_name.
+`tests/matrix.sh` runs every cell (openssl both ways, tlsfuzzer, testssl, Firefox, Chromium, Vivaldi) against `tests/matrix/msrv.mojo`.
+
 ## Using it
 
 Sans-IO: `Server12[C](cfg).feed(bytes)`, then send `cn.take_output()` and read `cn.take_app()`; `cn.write_app(data)`,

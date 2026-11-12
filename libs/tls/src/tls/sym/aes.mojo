@@ -66,11 +66,11 @@ struct Aes(Copyable, Movable):
     def __init__(out self, key: Span[UInt8, _]) raises:
         if len(key) != 16 and len(key) != 32:
             raise Error("tls: aes key must be 16 or 32 bytes")
-        var nk = len(key) // 16  # round keys in the key itself
-        self.nr = 6 + len(key) // 4
+        var nk = max(1, min(len(key) // 16, 2))  # round keys in the key itself; clamped so a missed policy check cannot read out of bounds
+        self.nr = 6 + 4 * nk
         self.rk = Array[V16, 15](fill=V16(0))
         for i in range(nk):
-            for j in range(16):
+            for j in range(min(16, len(key) - 16 * i)):
                 self.rk[i][j] = key[16 * i + j]
         var rcon: UInt8 = 1
         for i in range(nk, self.nr + 1):
