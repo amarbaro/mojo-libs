@@ -1,8 +1,8 @@
-"""TLS_CLIENT_BIN for tests/interop/run.sh until wave 2: TlsStream over RealCrypto.
+"""TLS_CLIENT_BIN for tests/interop/run.sh TlsStream over RealCrypto.
 real_client HOST PORT CAFILE: GET /marker.txt, prints the response. The chain is NOT validated (CAFILE is ignored,
 lane 3 does that), only the ServerKeyExchange signature with the leaf key."""
 from std.sys import argv
-from real_crypto import RealCrypto
+from tls.tls12.realcrypto import RealCrypto
 from tls.net.stream import tls_connect
 from tls.tls12.wire import bytes_of, str_of
 

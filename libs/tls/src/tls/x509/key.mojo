@@ -231,3 +231,13 @@ def load_private_key_file(path: String) raises -> PrivateKey:
     except e:
         wipe(raw)
         raise e
+
+
+def load_private_key_der(der: Span[UInt8, _]) raises -> PrivateKey:
+    """A DER private key: PKCS#8, SEC1 (EC PRIVATE KEY) or PKCS#1 (RSA PRIVATE KEY), tried in that order."""
+    for fmt in range(3):
+        try:
+            return _parse(fmt, view(der))
+        except:
+            pass
+    raise Error("tls: key: not a PKCS#8, SEC1 or PKCS#1 private key")

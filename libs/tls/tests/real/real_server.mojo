@@ -1,8 +1,8 @@
-"""TLS_SERVER_BIN for tests/interop/run.sh until wave 2: TlsServer over RealCrypto (ECDSA P-256 only).
+"""TLS_SERVER_BIN for tests/interop/run.sh TlsServer over RealCrypto (P-256 and RSA keys).
 real_server --cert CERT.pem --key KEY.pem [--port N]: prints "LISTENING <port>", answers every request with 200 and
 the body mojo-tls-ok, then closes. PEM files are decoded here (lane 3 owns the real loader)."""
 from std.sys import argv
-from real_crypto import RealCrypto
+from tls.tls12.realcrypto import RealCrypto
 from tls.net.config import TlsConfig, CertEntry
 from tls.net.server import TlsServer, TlsHandler
 from tls.tls12.crypto import K_P256
