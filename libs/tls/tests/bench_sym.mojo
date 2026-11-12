@@ -1,9 +1,7 @@
 """Throughput of the lane 1 AEADs: 16 KiB records sealed in place, one resident process. Run: bench_sym [MS per row]."""
 from std.sys import argv
 from std.time import perf_counter_ns
-from tls.sym.aead import Aead
-from tls.sym.gcm import AesGcm
-from tls.sym.chacha import ChaCha20Poly1305, chacha20_xor, poly1305_mac
+from tls.sym import *
 
 
 def rate[A: Aead](name: String, a: A, ms: Int) raises:
@@ -47,3 +45,20 @@ def main() raises:
             tg ^= poly1305_mac(List[UInt8](length=32, fill=5), buf)
         best = min(best, Int(perf_counter_ns() - t0))
     print("poly1305 16 KiB:", Float64(50 * 16384) / Float64(best), "GB/s", tg[0] & 0)
+    best = Int.MAX
+    t_end = perf_counter_ns() + ms * 1_000_000
+    var d = List[UInt8]()
+    while perf_counter_ns() < t_end:
+        var t0 = perf_counter_ns()
+        for _ in range(50):
+            d = sha256(buf)
+        best = min(best, Int(perf_counter_ns() - t0))
+    print("sha256 16 KiB:", Float64(50 * 16384) / Float64(best), "GB/s", d[0] & 0)
+    best = Int.MAX
+    t_end = perf_counter_ns() + ms * 1_000_000
+    while perf_counter_ns() < t_end:
+        var t0 = perf_counter_ns()
+        for _ in range(50):
+            d = sha512(buf)
+        best = min(best, Int(perf_counter_ns() - t0))
+    print("sha512 16 KiB:", Float64(50 * 16384) / Float64(best), "GB/s", d[0] & 0)

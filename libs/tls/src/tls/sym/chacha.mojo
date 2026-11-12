@@ -10,6 +10,7 @@ from std.memory import bitcast
 from tls.sym.aead import Aead
 
 comptime U32 = DType.uint32
+comptime U128 = Scalar[DType.uint128]
 
 
 @always_inline
@@ -81,116 +82,96 @@ def _words[n: Int](s: Span[UInt8, _]) -> SIMD[U32, n]:
 
 
 struct Poly1305:
-    var h: Array[UInt64, 5]
-    var r: Array[UInt64, 5]
-    var pad: SIMD[U32, 4]
+    """Radix 2^44 (three limbs) with 128-bit products."""
+    var h: Array[UInt64, 3]
+    var r: Array[UInt64, 3]
+    var pad: SIMD[DType.uint64, 2]
 
     def __init__(out self, t: SIMD[U32, 8]):
-        self.pad = SIMD[U32, 4](t[4], t[5], t[6], t[7])
-        self.h = Array[UInt64, 5](fill=0)
-        var r = SIMD[DType.uint64, 4](UInt64(t[0]), UInt64(t[1]), UInt64(t[2]), UInt64(t[3]))
-        self.r = Array[UInt64, 5](fill=0)
-        self.r[0] = r[0] & 0x3FFFFFF
-        self.r[1] = ((r[0] >> 26) | (r[1] << 6)) & 0x3FFFF03
-        self.r[2] = ((r[1] >> 20) | (r[2] << 12)) & 0x3FFC0FF
-        self.r[3] = ((r[2] >> 14) | (r[3] << 18)) & 0x3F03FFF
-        self.r[4] = (r[3] >> 8) & 0x00FFFFF
+        var k = bitcast[DType.uint64, 4](t)
+        self.pad = SIMD[DType.uint64, 2](k[2], k[3])
+        self.h = Array[UInt64, 3](fill=0)
+        self.r = Array[UInt64, 3](fill=0)
+        self.r[0] = k[0] & 0xFFC0FFFFFFF
+        self.r[1] = ((k[0] >> 44) | (k[1] << 20)) & 0xFFFFFC0FFFF
+        self.r[2] = (k[1] >> 24) & 0x00FFFFFFC0F
 
     def blocks(mut self, p: Pointer[UInt8, _], n: Int, hibit: UInt64):
-        """Absorb n bytes (a multiple of 16); hibit is 1 << 24 for a full block, 0 for the 0x01-terminated tail."""
-        var s1 = self.r[1] * 5
-        var s2 = self.r[2] * 5
-        var s3 = self.r[3] * 5
-        var s4 = self.r[4] * 5
-        var h0 = self.h[0]
-        var h1 = self.h[1]
-        var h2 = self.h[2]
-        var h3 = self.h[3]
-        var h4 = self.h[4]
+        """Absorb n bytes (a multiple of 16); hibit is 1 << 40 for a full block, 0 for the 0x01-terminated tail."""
+        comptime M44 = 0xFFFFFFFFFFF
         var r0 = self.r[0]
         var r1 = self.r[1]
         var r2 = self.r[2]
-        var r3 = self.r[3]
-        var r4 = self.r[4]
+        var s1 = r1 * 20
+        var s2 = r2 * 20
+        var h0 = self.h[0]
+        var h1 = self.h[1]
+        var h2 = self.h[2]
         for off in range(0, n, 16):
-            var m = p.unsafe_offset(off).unsafe_bitcast[UInt32]()
-            var t0 = UInt64(m.unsafe_load[width=1, alignment=1]())
-            var t1 = UInt64(m.unsafe_offset(1).unsafe_load[width=1, alignment=1]())
-            var t2 = UInt64(m.unsafe_offset(2).unsafe_load[width=1, alignment=1]())
-            var t3 = UInt64(m.unsafe_offset(3).unsafe_load[width=1, alignment=1]())
-            h0 += t0 & 0x3FFFFFF
-            h1 += ((t0 >> 26) | (t1 << 6)) & 0x3FFFFFF
-            h2 += ((t1 >> 20) | (t2 << 12)) & 0x3FFFFFF
-            h3 += ((t2 >> 14) | (t3 << 18)) & 0x3FFFFFF
-            h4 += (t3 >> 8) | hibit
-            var d0 = h0 * r0 + h1 * s4 + h2 * s3 + h3 * s2 + h4 * s1
-            var d1 = h0 * r1 + h1 * r0 + h2 * s4 + h3 * s3 + h4 * s2
-            var d2 = h0 * r2 + h1 * r1 + h2 * r0 + h3 * s4 + h4 * s3
-            var d3 = h0 * r3 + h1 * r2 + h2 * r1 + h3 * r0 + h4 * s4
-            var d4 = h0 * r4 + h1 * r3 + h2 * r2 + h3 * r1 + h4 * r0
-            d1 += d0 >> 26
-            d2 += d1 >> 26
-            d3 += d2 >> 26
-            d4 += d3 >> 26
-            h0 = (d0 & 0x3FFFFFF) + (d4 >> 26) * 5
-            h1 = d1 & 0x3FFFFFF
-            h2 = d2 & 0x3FFFFFF
-            h3 = d3 & 0x3FFFFFF
-            h4 = d4 & 0x3FFFFFF
-            h1 += h0 >> 26
-            h0 &= 0x3FFFFFF
+            var m = p.unsafe_offset(off).unsafe_bitcast[UInt64]()
+            var t0 = m.unsafe_load[width=1, alignment=1]()
+            var t1 = m.unsafe_offset(1).unsafe_load[width=1, alignment=1]()
+            h0 += t0 & M44
+            h1 += ((t0 >> 44) | (t1 << 20)) & M44
+            h2 += ((t1 >> 24) & 0x3FFFFFFFFFF) | hibit
+            var d0 = U128(h0) * U128(r0) + U128(h1) * U128(s2) + U128(h2) * U128(s1)
+            var d1 = U128(h0) * U128(r1) + U128(h1) * U128(r0) + U128(h2) * U128(s2)
+            var d2 = U128(h0) * U128(r2) + U128(h1) * U128(r1) + U128(h2) * U128(r0)
+            d1 += d0 >> 44
+            d2 += d1 >> 44
+            h0 = UInt64(d0) & M44
+            h1 = UInt64(d1) & M44
+            var c = UInt64(d2 >> 42)
+            h2 = UInt64(d2) & 0x3FFFFFFFFFF
+            h0 += c * 5
+            h1 += h0 >> 44
+            h0 &= M44
         self.h[0] = h0
         self.h[1] = h1
         self.h[2] = h2
-        self.h[3] = h3
-        self.h[4] = h4
 
     def padded(mut self, p: Pointer[UInt8, _], n: Int):
         """AEAD segment: the data, zero padded to a multiple of 16, every block a full block."""
-        self.blocks(p, n - n % 16, 1 << 24)
+        self.blocks(p, n - n % 16, 1 << 40)
         if n % 16 != 0:
             var t = Array[UInt8, 16](fill=0)
             for i in range(n % 16):
                 t[i] = p[unsafe_offset=n - n % 16 + i]
-            self.blocks(t.unsafe_ptr(), 16, 1 << 24)
+            self.blocks(t.unsafe_ptr(), 16, 1 << 40)
 
     def tag(self) -> SIMD[U32, 4]:
         """Fully carry, subtract p when h >= p (mask select, no branch), add the pad mod 2^128."""
+        comptime M44 = 0xFFFFFFFFFFF
+        comptime M42 = 0x3FFFFFFFFFF
         var h0 = self.h[0]
         var h1 = self.h[1]
         var h2 = self.h[2]
-        var h3 = self.h[3]
-        var h4 = self.h[4]
-        h2 += h1 >> 26
-        h1 &= 0x3FFFFFF
-        h3 += h2 >> 26
-        h2 &= 0x3FFFFFF
-        h4 += h3 >> 26
-        h3 &= 0x3FFFFFF
-        h0 += (h4 >> 26) * 5
-        h4 &= 0x3FFFFFF
-        h1 += h0 >> 26
-        h0 &= 0x3FFFFFF
+        for _ in range(2):
+            h1 += h0 >> 44
+            h0 &= M44
+            h2 += h1 >> 44
+            h1 &= M44
+            h0 += (h2 >> 42) * 5
+            h2 &= M42
+        h1 += h0 >> 44
+        h0 &= M44
         var g0 = h0 + 5
-        var g1 = h1 + (g0 >> 26)
-        g0 &= 0x3FFFFFF
-        var g2 = h2 + (g1 >> 26)
-        g1 &= 0x3FFFFFF
-        var g3 = h3 + (g2 >> 26)
-        g2 &= 0x3FFFFFF
-        var g4 = h4 + (g3 >> 26) - (1 << 26)
-        g3 &= 0x3FFFFFF
-        var keep = (g4 >> 63) - 1  # all ones when h >= p (g4 did not underflow)
+        var g1 = h1 + (g0 >> 44)
+        g0 &= M44
+        var g2 = h2 + (g1 >> 44) - (1 << 42)
+        g1 &= M44
+        var keep = (g2 >> 63) - 1  # all ones when h >= p (g2 did not underflow)
         h0 = (h0 & ~keep) | (g0 & keep)
         h1 = (h1 & ~keep) | (g1 & keep)
         h2 = (h2 & ~keep) | (g2 & keep)
-        h3 = (h3 & ~keep) | (g3 & keep)
-        h4 = (h4 & ~keep) | (g4 & keep)
-        var f0 = ((h0 | (h1 << 26)) & 0xFFFFFFFF) + UInt64(self.pad[0])
-        var f1 = (((h1 >> 6) | (h2 << 20)) & 0xFFFFFFFF) + UInt64(self.pad[1]) + (f0 >> 32)
-        var f2 = (((h2 >> 12) | (h3 << 14)) & 0xFFFFFFFF) + UInt64(self.pad[2]) + (f1 >> 32)
-        var f3 = (((h3 >> 18) | (h4 << 8)) & 0xFFFFFFFF) + UInt64(self.pad[3]) + (f2 >> 32)
-        return SIMD[U32, 4](UInt32(f0 & 0xFFFFFFFF), UInt32(f1 & 0xFFFFFFFF), UInt32(f2 & 0xFFFFFFFF), UInt32(f3 & 0xFFFFFFFF))
+        var t0 = self.pad[0]
+        var t1 = self.pad[1]
+        h0 += t0 & M44
+        h1 += (((t0 >> 44) | (t1 << 20)) & M44) + (h0 >> 44)
+        h0 &= M44
+        h2 += ((t1 >> 24) & M42) + (h1 >> 44)
+        h1 &= M44
+        return bitcast[U32, 4](SIMD[DType.uint64, 2](h0 | (h1 << 44), (h1 >> 20) | (h2 << 24)))
 
 
 def poly1305_mac(key: Span[UInt8, _], msg: Span[UInt8, _]) -> SIMD[U32, 4]:
@@ -198,7 +179,7 @@ def poly1305_mac(key: Span[UInt8, _], msg: Span[UInt8, _]) -> SIMD[U32, 4]:
     var st = Poly1305(_words[8](key))
     var n = len(msg)
     var p = msg.unsafe_ptr()
-    st.blocks(p, n - n % 16, 1 << 24)
+    st.blocks(p, n - n % 16, 1 << 40)
     if n % 16 != 0:
         var t = Array[UInt8, 16](fill=0)
         for i in range(n % 16):
@@ -224,7 +205,7 @@ struct ChaCha20Poly1305(Aead, Copyable, Movable):
         st.padded(ct, n)
         var lens = Array[UInt64, 2](fill=UInt64(len(aad)))
         lens[1] = UInt64(n)
-        st.blocks(lens.unsafe_ptr().unsafe_bitcast[UInt8](), 16, 1 << 24)
+        st.blocks(lens.unsafe_ptr().unsafe_bitcast[UInt8](), 16, 1 << 40)
         return st.tag()
 
     def _nonce(self, nonce: Span[UInt8, _], n: Int) raises -> SIMD[U32, 4]:

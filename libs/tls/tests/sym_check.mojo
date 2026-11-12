@@ -2,12 +2,9 @@
 An unknown kind is a failure (a skipped vector is not a pass). See tools/gen_vec.py for the line format."""
 from std.collections import Dict
 from std.sys import argv, exit
-from tls.sym.sha2 import *
-from tls.sym.mac import *
-from tls.sym.aes import Aes, V16
-from tls.sym.aead import Aead
-from tls.sym.gcm import AesGcm
-from tls.sym.chacha import ChaCha20Poly1305, chacha20_xor, poly1305_mac, _words
+from tls.sym import *
+from tls.sym.aes import V16
+from tls.sym.chacha import _words
 
 
 def unhex(s: StringSlice) raises -> List[UInt8]:

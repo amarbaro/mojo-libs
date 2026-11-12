@@ -57,15 +57,16 @@ def _unfield(x: U64x2) -> V16:
 
 @always_inline
 def _acc(mut lo: U64x2, mut hi: U64x2, mut mid: U64x2, x: U64x2, h: U64x2):
-    """Add the unreduced product x*h to the (low, high, middle) accumulators."""
+    """Add the unreduced product x*h to the accumulators (Karatsuba: mid collects (x0^x1)*(h0^h1))."""
     lo ^= _clmul(x[0], h[0])
     hi ^= _clmul(x[1], h[1])
-    mid ^= _clmul(x[0], h[1]) ^ _clmul(x[1], h[0])
+    mid ^= _clmul(x[0] ^ x[1], h[0] ^ h[1])
 
 
 @always_inline
 def _reduce(lo: U64x2, hi: U64x2, mid: U64x2) -> U64x2:
-    var m = U64x2(lo[1] ^ mid[0], hi[0] ^ mid[1]) ^ _clmul(hi[1], 0x87)  # words 1,2 plus w3 * x^192
+    var mm = mid ^ lo ^ hi  # the true middle term
+    var m = U64x2(lo[1] ^ mm[0], hi[0] ^ mm[1]) ^ _clmul(hi[1], 0x87)  # words 1,2 plus w3 * x^192
     var b = _clmul(m[1], 0x87)  # w2 * x^128
     return U64x2(lo[0] ^ b[0], m[0] ^ b[1])
 
@@ -111,38 +112,49 @@ struct AesGcm(Aead, Copyable, Movable):
             y = self._mul(y ^ _field(last), self.hp[0])
             off += 16
 
-    def _ctr[o: MutOrigin](self, j0: V16, p: Pointer[UInt8, o], n: Int):
-        """XOR the keystream for counters 2, 3, ... (J0 is counter 1) into n bytes at p."""
+    def _ctr[o: MutOrigin, enc: Bool](self, j0: V16, p: Pointer[UInt8, o], n: Int, mut y: U64x2):
+        """XOR the keystream for counters 2, 3, ... (J0 is counter 1) into n bytes at p. When encrypting, the
+        ciphertext is absorbed into y in the same pass, so AES and carry-less multiplies overlap."""
         var w = bitcast[DType.uint32, 4](j0)
         var ctr = UInt32(2)
         var off = 0
         var ks = Array[V16, 8](fill=V16(0))
+        while off + 128 <= n:
+            comptime for i in range(8):
+                w[3] = byte_swap(ctr + UInt32(i))
+                ks[i] = bitcast[DType.uint8, 16](w)
+            self.aes.encrypt8(ks)
+            var lo = U64x2(0)
+            var hi = U64x2(0)
+            var mid = U64x2(0)
+            comptime for i in range(8):
+                var q = p.unsafe_offset(off + 16 * i)
+                var c = q.unsafe_load[width=16]() ^ ks[i]
+                q.unsafe_store(0, c)
+                comptime if enc:
+                    var x = _field(c)
+                    comptime if i == 0:
+                        x ^= y
+                    _acc(lo, hi, mid, x, self.hp[7 - i])
+            comptime if enc:
+                y = _reduce(lo, hi, mid)
+            ctr += 8
+            off += 128
+        var done = off
         while off < n:
-            var take = min(128, n - off)
-            if take == 128:
-                comptime for i in range(8):
-                    w[3] = byte_swap(ctr + UInt32(i))
-                    ks[i] = bitcast[DType.uint8, 16](w)
-                self.aes.encrypt8(ks)
-                comptime for i in range(8):
-                    var q = p.unsafe_offset(off + 16 * i)
-                    q.unsafe_store(0, q.unsafe_load[width=16]() ^ ks[i])
-                ctr += 8
-            else:
-                for b in range(0, take, 16):
-                    w[3] = byte_swap(ctr)
-                    ctr += 1
-                    var k = self.aes.encrypt_block(bitcast[DType.uint8, 16](w))
-                    for i in range(min(16, take - b)):
-                        p[unsafe_offset=off + b + i] ^= k[i]
-            off += take
+            w[3] = byte_swap(ctr)
+            ctr += 1
+            var k = self.aes.encrypt_block(bitcast[DType.uint8, 16](w))
+            for i in range(min(16, n - off)):
+                p[unsafe_offset=off + i] ^= k[i]
+            off += 16
+        comptime if enc:
+            self._ghash(y, p.unsafe_offset(done), n - done)
 
-    def _tag(self, j0: V16, aad: Span[UInt8, _], p: Pointer[UInt8, _], n: Int) -> V16:
-        var y = U64x2(0)
-        self._ghash(y, aad.unsafe_ptr(), len(aad))
-        self._ghash(y, p, n)
-        y = self._mul(y ^ _field(bitcast[DType.uint8, 16](U64x2(byte_swap(UInt64(len(aad)) * 8), byte_swap(UInt64(n) * 8)))), self.hp[0])
-        return _unfield(y) ^ self.aes.encrypt_block(j0)
+    def _finish(self, j0: V16, y: U64x2, alen: Int, n: Int) -> V16:
+        """Absorb the length block and mask with E(J0)."""
+        var l = _field(bitcast[DType.uint8, 16](U64x2(byte_swap(UInt64(alen) * 8), byte_swap(UInt64(n) * 8))))
+        return _unfield(self._mul(y ^ l, self.hp[0])) ^ self.aes.encrypt_block(j0)
 
     def _j0(self, nonce: Span[UInt8, _], n: Int) raises -> V16:
         if len(nonce) != 12 or n < 0 or n > 68719476704:  # 12-byte nonce; plaintext at most (2^32 - 2) blocks
@@ -157,8 +169,10 @@ struct AesGcm(Aead, Copyable, Movable):
         var n = len(buf)
         var j0 = self._j0(nonce, n)
         var p = buf.unsafe_ptr()
-        self._ctr(j0, p, n)
-        var t = self._tag(j0, aad, p, n)
+        var y = U64x2(0)
+        self._ghash(y, aad.unsafe_ptr(), len(aad))
+        self._ctr[enc=True](j0, p, n, y)
+        var t = self._finish(j0, y, len(aad), n)
         for i in range(16):
             buf.append(t[i])
 
@@ -166,10 +180,13 @@ struct AesGcm(Aead, Copyable, Movable):
         var n = len(buf) - 16
         var j0 = self._j0(nonce, n)
         var p = buf.unsafe_ptr()
+        var y = U64x2(0)
+        self._ghash(y, aad.unsafe_ptr(), len(aad))
+        self._ghash(y, p, n)
         var given = p.unsafe_offset(n).unsafe_load[width=16]()
-        if (self._tag(j0, aad, p, n) ^ given).reduce_or() != 0:
+        if (self._finish(j0, y, len(aad), n) ^ given).reduce_or() != 0:
             raise Error("tls: bad record mac")
-        self._ctr(j0, p, n)
+        self._ctr[enc=False](j0, p, n, y)
         buf.shrink(n)
 
     def wipe(mut self):

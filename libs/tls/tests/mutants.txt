@@ -18,7 +18,7 @@ aes-sbox-soft@tls/sym/aes.mojo@s/var x31 = _mul\(_mul\(x15, x15\), x\)/var x31 =
 aes-mixcol-soft@tls/sym/aes.mojo@s/v = _xt\(v \^ r1\) \^ r1/v = _xt(v ^ r1) ^ v/@-D TLS_SOFT_AES=true
 aes-shiftrows-soft@tls/sym/aes.mojo@s/shuffle\[0, 5, 10, 15, 4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 6, 11\]/shuffle[0, 5, 10, 15, 4, 9, 14, 3, 8, 13, 2, 7, 12, 1, 11, 6]/@-D TLS_SOFT_AES=true
 gcm-reduce@tls/sym/gcm.mojo@s/_clmul\(hi\[1\], 0x87\)/_clmul(hi[1], 0x86)/
-gcm-mid@tls/sym/gcm.mojo@s/mid \^= _clmul\(x\[0\], h\[1\]\) \^ _clmul\(x\[1\], h\[0\]\)/mid ^= _clmul(x[0], h[1])/
+gcm-mid@tls/sym/gcm.mojo@s/mid \^= _clmul\(x\[0\] \^ x\[1\], h\[0\] \^ h\[1\]\)/mid ^= _clmul(x[0] ^ x[1], h[0])/
 gcm-power@tls/sym/gcm.mojo@s/self.hp\[7 - i\]\)/self.hp[i])/
 gcm-lenblock@tls/sym/gcm.mojo@s/byte_swap\(UInt64\(n\) \* 8\)/byte_swap(UInt64(n) * 4)/
 gcm-aadpad@tls/sym/gcm.mojo@s/range\(min\(16, n - off\)\)/range(min(15, n - off))/
@@ -35,13 +35,16 @@ chacha-diag@tls/sym/chacha.mojo@s/_qr\[W, 3, 4, 9, 14\]/_qr[W, 3, 4, 9, 13]/
 chacha-tailstep@tls/sym/chacha.mojo@s/        c \+= 4$/        c += 3/
 chacha-bulkstep@tls/sym/chacha.mojo@s/        c \+= 16$/        c += 15/
 chacha-aead-ctr@tls/sym/chacha.mojo@s/chacha20_xor\(self.key, nw, 1, p, n\)/chacha20_xor(self.key, nw, 0, p, n)/
-poly-clamp@tls/sym/chacha.mojo@s/0x3FFFF03/0x3FFFF07/
-poly-hibit@tls/sym/chacha.mojo@s/\(t3 >> 8\) [|] hibit/(t3 >> 8)/
-poly-carry@tls/sym/chacha.mojo@s/\(d4 >> 26\) \* 5/(d4 >> 26) * 4/
-poly-select@tls/sym/chacha.mojo@s/var keep = \(g4 >> 63\) - 1/var keep = UInt64(0)/
-poly-pad@tls/sym/chacha.mojo@s/\+ UInt64\(self.pad\[1\]\)/+ UInt64(self.pad[0])/
+poly-clamp@tls/sym/chacha.mojo@s/0xFFFFFC0FFFF/0xFFFFFC0FFFB/
+poly-hibit@tls/sym/chacha.mojo@s/0x3FFFFFFFFFF\) [|] hibit/0x3FFFFFFFFFF)/
+poly-carry@tls/sym/chacha.mojo@s/h0 \+= c \* 5/h0 += c * 4/
+poly-select@tls/sym/chacha.mojo@s/var keep = \(g2 >> 63\) - 1/var keep = UInt64(0)/
+poly-pad@tls/sym/chacha.mojo@s/var t1 = self.pad\[1\]/var t1 = self.pad[0]/
 poly-tailbyte@tls/sym/chacha.mojo@s/t\[n % 16\] = 1/t[n % 16] = 2/
-poly-aeadpad@tls/sym/chacha.mojo@s/self.blocks\(t.unsafe_ptr\(\), 16, 1 << 24\)/self.blocks(t.unsafe_ptr(), 16, 0)/
+poly-aeadpad@tls/sym/chacha.mojo@s/self.blocks\(t.unsafe_ptr\(\), 16, 1 << 40\)/self.blocks(t.unsafe_ptr(), 16, 0)/
 poly-lens@tls/sym/chacha.mojo@s/lens\[1\] = UInt64\(n\)/lens[1] = UInt64(n + 1)/
 chacha-notag@tls/sym/chacha.mojo@s/raise Error\("tls: bad record mac"\)/return/
-
+poly-r2@tls/sym/chacha.mojo@s/self.r\[2\] = \(k\[1\] >> 24\) & 0x00FFFFFFC0F/self.r[2] = (k[1] >> 24) \& 0x00FFFFFFC0E/
+gcm-fusetail@tls/sym/gcm.mojo@s/n - done\)$/n - done - 1)/
+gcm-xy@tls/sym/gcm.mojo@s/x \^= y$/pass/
+poly-tail-carry@tls/sym/chacha.mojo@s/h2 \+= h1 >> 44$/h2 += 0/
