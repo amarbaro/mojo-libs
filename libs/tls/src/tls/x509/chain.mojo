@@ -139,7 +139,7 @@ def host_matches(c: Certificate, host: Bytes) -> Bool:
     var ip = parse_ip(h)
     if len(ip) > 0:
         for ref a in c.ips:
-            if same(view(a), view(ip)):
+            if same(a, ip):
                 return True
         return False
     for i in range(len(h)):
@@ -149,7 +149,7 @@ def host_matches(c: Certificate, host: Bytes) -> Bool:
     var lh = _lower(h)
     for ref p in c.dns:
         var lp = _lower(view(p))
-        if same(view(lp), view(lh)) or _wild_match(lp, lh):
+        if same(lp, lh) or _wild_match(lp, lh):
             return True
     return False
 
@@ -164,7 +164,7 @@ def _dns_under(name: List[UInt8], base: List[UInt8]) -> Bool:
         return True
     if base[0] == 46:
         return _ends_with(n, base)
-    if same(view(n), view(base)):
+    if same(n, base):
         return True
     var dotted = List[UInt8]()
     dotted.append(46)
@@ -265,7 +265,7 @@ def _find(
     for j in range(len(roots)):
         ref r = roots[j]
         var below = path.copy()
-        if same(view(cur.raw), view(r.raw)):
+        if same(cur.raw, r.raw):
             _ = below.pop()
         elif not same(cur.issuer(), r.subject()):
             continue
@@ -311,7 +311,7 @@ def load_roots_pem(text: Bytes, mut dropped: Int) -> List[Certificate]:
     """Parse every CERTIFICATE block; `dropped` counts the blocks that could not be parsed."""
     var roots = List[Certificate]()
     for ref sp in pem_spans(text):
-        if not same(sp[0], view("CERTIFICATE".as_bytes())):
+        if not same(sp[0], "CERTIFICATE".as_bytes()):
             continue
         try:
             roots.append(Certificate.parse(b64_decode(sp[1])))

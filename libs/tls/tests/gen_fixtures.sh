@@ -4,7 +4,8 @@
 # A case whose openssl verdict legitimately differs from ours is listed in tests/data/divergences.txt with the reason.
 set -euo pipefail
 cd "$(dirname "$0")/data"
-rm -f *.pem *.key *.csr *.srl *.der chain_cases.txt divergences.txt
+find . -maxdepth 1 -name '*.pem' ! -name 'live_*' -delete
+rm -f *.key *.csr *.srl *.der chain_cases.txt divergences.txt
 G=$(date +%s)
 NOW=$((G + 3600))
 EC="-algorithm EC -pkeyopt ec_paramgen_curve:P-256"
@@ -227,4 +228,7 @@ openssl genpkey -algorithm ED25519 -out key_ed25519_pkcs8.pem 2>/dev/null
 openssl genpkey $EC -aes-128-cbc -pass pass:x -out key_ec_encrypted.pem 2>/dev/null
 openssl ec -in key_ec_pkcs8.pem -aes128 -passout pass:x -out key_ec_sec1_encrypted.pem 2>/dev/null
 openssl rsa -in key_rsa_pkcs8.pem -traditional -aes128 -passout pass:x -out key_rsa_pkcs1_encrypted.pem 2>/dev/null
+openssl req -new -x509 -key key_ec_pkcs8.pem -subj /CN=key-ec -days 36500 -out cert_key_ec.pem
+openssl req -new -x509 -key key_rsa_pkcs8.pem -subj /CN=key-rsa -days 36500 -out cert_key_rsa.pem
+# key_cases.txt (name expect file cert) is hand-written and kept
 echo "generated at $G (now column = G + 3600)"

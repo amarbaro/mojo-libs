@@ -83,11 +83,43 @@ oracle_cases() {  # manifest; prints "total agree div" to $W/oracle.txt
 
 stage_chain() {
   timeout 120 $BIN chain tests/data/chain_cases.txt || fail chain "synthetic verdicts differ from the expected ones"
+  timeout 300 $BIN fuzzchain 3000 || fail chain "mutated certificates verified or crashed the verifier"
   timeout 120 $BIN chain tests/data/chain_real.txt || fail chain "real-site verdicts differ from the expected ones"
   local t1 a1 d1 t2 a2 d2
   oracle_cases tests/data/chain_cases.txt; read -r t1 a1 d1 < $W/oracle.txt
   oracle_cases tests/data/chain_real.txt; read -r t2 a2 d2 < $W/oracle.txt
   echo "PASS chain: $t1 synthetic + $t2 real-site cases give the expected verdict; $((a1 + a2)) agree with openssl verify -purpose sslserver, $((d1 + d2)) documented divergences"
+}
+
+stage_keys() {
+  local k=$W/keys d=tests/data
+  rm -rf $k && mkdir -p $k
+  timeout 120 $BIN keys $d/key_cases.txt $k > $k/out.txt || { cat $k/out.txt | grep -E '^FAIL' | head -5; fail keys "key loading or corruption checks"; }
+  cat $k/out.txt | grep -E '^keys:|^note' || true
+  local good=0
+  while read -r name expect file cert; do
+    [ "$expect" = ok ] || continue
+    local want got
+    if grep -q "^key $name kind 2 " $k/out.txt; then
+      want=$(openssl pkey -in $d/$file -pubout -outform DER | tail -c 65 | od -An -tx1 -v | tr -d ' \n')
+      got=$(grep "^key $name kind 2 " $k/out.txt | sed 's/.* pub \([0-9a-f]*\) .*/\1/')
+    else
+      want=$(openssl rsa -in $d/$file -noout -modulus | cut -d= -f2 | tr A-Z a-z)
+      got=$(grep "^key $name kind 1 " $k/out.txt | sed 's/.* pub \([0-9a-f]*\) .*/\1/')
+    fi
+    [ "$want" = "$got" ] || fail keys "$name: public key differs from openssl's"
+    openssl pkey -in $d/$file -pubout -out $k/pub_$name.pem
+    local sig=$k/sig_$name.der
+    [ -f $sig ] || sig=$k/sig_$name.bin
+    openssl dgst -sha256 -verify $k/pub_$name.pem -signature $sig $k/msg.txt > /dev/null || fail keys "$name: openssl rejects our signature"
+    good=$((good + 1))
+  done < $d/key_cases.txt
+  echo "PASS keys: $good keys (P-256 PKCS#8/SEC1, RSA 2048/3072 PKCS#8/PKCS#1) load with openssl's public key bytes and our signatures verify under openssl; encrypted, P-384, Ed25519, RSA-1024 refused; $(grep -c 'all refused' $k/out.txt) encodings survive every single-byte corruption test"
+}
+
+stage_bench() {
+  timeout 300 $BIN bench | grep '^bench' || fail bench "bench failed"
+  echo "PASS bench: numbers above (resident process, median of 5 batches)"
 }
 
 build

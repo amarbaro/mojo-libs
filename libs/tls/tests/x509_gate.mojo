@@ -2,9 +2,13 @@
 # Driven by tests/gate.sh, which builds fixtures and oracles with openssl. Prints PASS/FAIL lines, exits 1 on any FAIL.
 from std.sys import argv, exit
 from std.time import perf_counter_ns
-from tls.x509.der import Der, Bytes, view, copy_of, parse_time
+from tls.x509.der import Der, Bytes, view, copy_of, parse_time, same
 from tls.x509.pem import b64_decode, pem_blocks, pem_spans
-from tls.x509.cert import Certificate
+from tls.x509.cert import Certificate, KEY_RSA, KEY_P256
+from tls.x509.key import load_private_key, PrivateKey, _parse, wipe
+from tls.x509.shim.p256 import p256_ecdsa_sign
+from tls.x509.shim.hash import sha256
+from tls.x509.shim.rsa import _rsa_raw
 from tls.x509.chain import verify_chain, load_roots_pem, load_system_roots, host_matches, parse_ip
 
 comptime HEX = "0123456789abcdef"
@@ -431,16 +435,271 @@ def chain_mode(manifest: String, mut t: Tally) raises:
     print("chain: ", n, "cases in", (perf_counter_ns() - t0) // 1000000, "ms")
 
 
+# ---------------------------------------------------------------- keys
+def write_file(path: String, b: List[UInt8]) raises:
+    with open(path, "w") as f:
+        f.write_bytes(b)
+
+
+def der_int(b: List[UInt8]) -> List[UInt8]:
+    var i = 0
+    while i < len(b) - 1 and b[i] == 0:
+        i += 1
+    var o = List[UInt8]()
+    if b[i] >= 0x80:
+        o.append(0)
+    for j in range(i, len(b)):
+        o.append(b[j])
+    return tlv(0x02, o)
+
+
+def sign_with(k: PrivateKey, name: String, dir: String) raises:
+    """Sign a fixed message the way a TLS server would (ECDSA-SHA256 or RSA PKCS#1 v1.5 SHA-256); openssl verifies the file."""
+    var msg = String("mojo-tls lane 3 private key test")
+    write_file(dir + "/msg.txt", List[UInt8](msg.as_bytes()))
+    var h = sha256(List[UInt8](msg.as_bytes()))
+    if k.kind == KEY_P256:
+        var rs = p256_ecdsa_sign(k.d, h, sha256(List[UInt8](name.as_bytes())))
+        write_file(dir + "/sig_" + name + ".der", tlv(0x30, cat(der_int(rs[0]), der_int(rs[1]))))
+    else:
+        var n = len(k.pub)
+        var t = unhex("3031300d060960864801650304020105000420")
+        t.extend(h.copy())
+        var em = List[UInt8]()
+        em.append(0)
+        em.append(1)
+        for _ in range(n - 3 - len(t)):
+            em.append(0xFF)
+        em.append(0)
+        em.extend(t^)
+        write_file(dir + "/sig_" + name + ".bin", _rsa_raw(em, k.pub, k.d, n))
+
+
+def drop_and_peek(path: String) raises -> Int:
+    """Load an RSA key, return the address of its private exponent, let the key die."""
+    var raw = read_file(path)
+    var addr = 0
+    var k = load_private_key(raw)
+    addr = Int(k.d.unsafe_ptr())
+    _ = len(raw)
+    return addr
+
+
+def zero_after_free(mut t: Tally) raises:
+    """Freed key memory (bytes 32.. of d, past the allocator's free-list link) is zero; a control list is not."""
+    var addr = drop_and_peek("tests/data/key_rsa_pkcs8.pem")
+    var p = Pointer[UInt8, MutAnyOrigin](unsafe_from_address=addr)
+    var nz = 0
+    for i in range(32, 256):
+        if p[unsafe_offset=i] != 0:
+            nz += 1
+    var c = List[UInt8](length=256, fill=0xAB)
+    var ca = Int(c.unsafe_ptr())
+    c = List[UInt8]()
+    var cp = Pointer[UInt8, MutAnyOrigin](unsafe_from_address=ca)
+    var cnz = 0
+    for i in range(32, 256):
+        if cp[unsafe_offset=i] != 0:
+            cnz += 1
+    if cnz == 0:
+        print("note keys: control buffer was recycled, zero-after-free check skipped")
+        return
+    t.check("key memory zero after drop", nz == 0, String(nz) + " of 224 bytes nonzero")
+
+
+def flips(pem_path: String, fmt: Int, name: String, mut t: Tally) raises:
+    """Every single-byte corruption of a key encoding must be refused (all fields are cross-checked)."""
+    var raw = read_file(pem_path)
+    var bl = pem_blocks(view(raw))
+    var der = bl[0].der.copy()
+    var accepted = 0
+    for i in range(len(der)):
+        var m = der.copy()
+        m[i] = m[i] ^ 0x5A
+        try:
+            _ = _parse(fmt, view(m))
+            accepted += 1
+        except:
+            pass
+        _ = len(m)
+    t.check(name + " flips", accepted == 0, String(accepted) + " of " + String(len(der)) + " corruptions accepted")
+    print("keys:", name, len(der), "single-byte corruptions, all refused" if accepted == 0 else "SOME ACCEPTED")
+    _ = len(raw)
+
+
+def ec_scalars(mut t: Tally) raises:
+    """SEC1 keys without public half: only scalars in [1, n-1] are keys."""
+    var n = "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551"
+    var cases = List[Tuple[String, Bool]]()
+    cases.append(("0000000000000000000000000000000000000000000000000000000000000000", False))
+    cases.append((n, False))
+    cases.append(("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632552", False))
+    cases.append(("ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff", False))
+    cases.append(("ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632550", True))
+    cases.append(("0000000000000000000000000000000000000000000000000000000000000001", True))
+    for ref c in cases:
+        var der = tlv(0x30, cat(unhex("020101"), tlv(0x04, unhex(c[0]))))
+        var ok = True
+        try:
+            _ = _parse(1, view(der))
+        except:
+            ok = False
+        t.check("ec scalar " + String(c[0].as_bytes()[0]) + String(c[0].as_bytes()[63]), ok == c[1], "accepted" if ok else "refused")
+        _ = len(der)
+
+
+def keys_mode(manifest: String, outdir: String, mut t: Tally) raises:
+    var text = String(unsafe_from_utf8=read_file(manifest))
+    for line in text.split("\n"):
+        var f = line.split(" ")
+        if len(f) < 4:
+            continue
+        var name = String(f[0])
+        var raw = read_file("tests/data/" + String(f[2]))
+        var t0 = perf_counter_ns()
+        try:
+            var k = load_private_key(raw)
+            var us = (perf_counter_ns() - t0) // 1000
+            t.check(name, String(f[1]) == "ok", "loaded but expected a refusal")
+            print("key", name, "kind", k.kind, "pub", hexs(view(k.pub)), "load_us", us)
+            sign_with(k, name, outdir)
+            for cn in ["cert_key_ec.pem", "cert_key_rsa.pem"]:
+                var cf = read_file("tests/data/" + cn)
+                var cb = pem_blocks(view(cf))
+                var c = Certificate.parse(cb[0].der.copy())
+                t.check(name + " vs " + cn, k.matches(c) == (String(f[3]) == cn), "match verdict wrong")
+                _ = len(cf)
+        except e:
+            t.check(name, String(f[1]) == "fail", "refused: " + String(e))
+            print("key", name, "refused:", String(e))
+            t.check(name + " message", String(e).startswith("tls: key: "), String(e))
+            if "_refused" in name:
+                var m = String(e)
+                t.check(name + " says unsupported", "unsupported" in m and ("encrypted" in m) == ("encrypted" in name), m)
+        _ = len(raw)
+    ec_scalars(t)
+    flips("tests/data/key_rsa_pkcs1.pem", 2, "rsa_pkcs1", t)
+    flips("tests/data/key_ec_sec1.pem", 1, "ec_sec1", t)
+    flips("tests/data/key_ec_pkcs8.pem", 8, "ec_pkcs8", t)
+    zero_after_free(t)
+
+
+def fuzz_chain(leaf: String, inter: String, root: String, host: String, rounds: Int, mut t: Tally) raises:
+    """Mutated leaf or intermediate DER must never verify (every byte is covered by a signature or a length) nor crash."""
+    var base = load_certs(leaf + "," + inter, "tests/data/")
+    var roots = load_certs(root, "tests/data/")
+    var now = base[0].not_before + 86400
+    var r = Rng(0xD1B54A32D192ED03)
+    var accepted = 0
+    var parsed = 0
+    for i in range(rounds):
+        var which = i % 2
+        var m = mutate(base[which].raw, r)
+        if same(m, base[which].raw):
+            continue  # the mutation wrote the byte it already had
+        try:
+            var c = Certificate.parse(m^)
+            parsed += 1
+            var chain = List[Certificate]()
+            if which == 0:
+                chain.append(c^)
+                chain.append(base[1].copy())
+            else:
+                chain.append(base[0].copy())
+                chain.append(c^)
+            verify_chain(chain, host, now, roots)
+            accepted += 1
+        except:
+            pass
+    print("fuzz chain:", leaf, rounds, "mutants,", parsed, "parsed,", accepted, "accepted")
+    t.check("fuzz chain " + leaf + " never accepted", accepted == 0, String(accepted) + " mutants verified")
+
+
+def sort(mut l: List[Int]):
+    for i in range(1, len(l)):
+        var j = i
+        while j > 0 and l[j - 1] > l[j]:
+            var x = l[j]
+            l[j] = l[j - 1]
+            l[j - 1] = x
+            j -= 1
+
+
+def bench(mut t: Tally) raises:
+    """Resident-process timings (microseconds per operation, median of 5 batches)."""
+    var raw = read_file("/etc/ssl/certs/ca-certificates.crt")
+    var ders = List[List[UInt8]]()
+    for ref sp in pem_spans(view(raw)):
+        ders.append(b64_decode(sp[1]))
+    var lap = List[Int]()
+    for _ in range(5):
+        var t0 = perf_counter_ns()
+        for _ in range(20):
+            for ref d in ders:
+                _ = Certificate.parse(d.copy())
+        lap.append(Int((perf_counter_ns() - t0) // (20 * len(ders))))
+    sort(lap)
+    print("bench parse_cert_ns", lap[2], "(", len(ders), "system roots, copy of the DER included )")
+    var roots = load_system_roots()
+    var specs = List[String]()
+    specs.append("ec_leaf.pem,ec_inter.pem|ec_root.pem|a.example.com|ec_chain_p256")
+    specs.append("rsa_leaf.pem,rsa_inter.pem|rsa_root.pem|rsa.example.com|rsa2048_chain")
+    specs.append("rsa_leaf_pss32.pem,rsa_inter.pem|rsa_root.pem|pss32.example.com|rsa_pss_leaf_on_rsa_chain")
+    specs.append("ec384_leaf.pem,ec384_inter.pem|ec384_root.pem|p384.example.com|ec_chain_p384")
+    for ref sp in specs:
+        var f = sp.split("|")
+        var chain = load_certs(String(f[0]), "tests/data/")
+        var rt = load_certs(String(f[1]), "tests/data/")
+        var now = chain[0].not_before + 86400
+        var laps = List[Int]()
+        for _ in range(5):
+            var t0 = perf_counter_ns()
+            for _ in range(20):
+                verify_chain(chain, String(f[2]), now, rt)
+            laps.append(Int((perf_counter_ns() - t0) // 20000))
+        sort(laps)
+        print("bench verify_chain_us", laps[2], String(f[3]), "(2 signatures)")
+    var real = load_certs("live_github.com.pem", "tests/data/")
+    var tl = List[Int]()
+    for _ in range(5):
+        var t0 = perf_counter_ns()
+        for _ in range(20):
+            verify_chain(real, "github.com", 1794455136, roots)
+        tl.append(Int((perf_counter_ns() - t0) // 20000))
+    sort(tl)
+    print("bench verify_chain_us", tl[2], "live github.com against", len(roots), "system roots")
+    for nm in ["key_ec_pkcs8.pem", "key_rsa_pkcs8.pem", "key_rsa3072_pkcs8.pem"]:
+        var kr = read_file("tests/data/" + nm)
+        var kl = List[Int]()
+        for _ in range(5):
+            var t0 = perf_counter_ns()
+            for _ in range(5):
+                _ = load_private_key(kr)
+            kl.append(Int((perf_counter_ns() - t0) // 5000))
+        sort(kl)
+        print("bench load_private_key_us", kl[2], nm)
+        _ = len(kr)
+    _ = len(raw)
+    t.check("bench ran", True)
+
+
 def main() raises:
     var a = argv()
     var mode = String(a[1])
     var t = Tally()
     if mode == "unit":
         unit(t)
+    elif mode == "fuzzchain":
+        fuzz_chain("ec_leaf.pem", "ec_inter.pem", "ec_root.pem", "a.example.com", Int(atol(String(a[2]))), t)
+        fuzz_chain("rsa_leaf.pem", "rsa_inter.pem", "rsa_root.pem", "rsa.example.com", Int(atol(String(a[2]))), t)
+    elif mode == "bench":
+        bench(t)
     elif mode == "bundle":
         bundle(String(a[2]), t)
     elif mode == "fuzz":
         fuzz(String(a[2]), Int(atol(String(a[3]))), t)
+    elif mode == "keys":
+        keys_mode(String(a[2]), String(a[3]), t)
     elif mode == "chain":
         chain_mode(String(a[2]), t)
     else:

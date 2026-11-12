@@ -6,6 +6,8 @@ comptime Bytes = Span[UInt8, ImmUntrackedOrigin]
 
 
 def view(s: Span[UInt8, _]) -> Bytes:
+    """Untracked view: the owner must stay alive past the last use of the view (keep a later `_ = len(owner)`).
+    For comparisons pass the owner itself (`same(a, b)`), which borrows it for the call."""
     return rebind[Bytes](s)
 
 
@@ -16,7 +18,7 @@ def copy_of(b: Bytes) -> List[UInt8]:
     return o^
 
 
-def same(a: Bytes, b: Bytes) -> Bool:
+def same(a: Span[UInt8, _], b: Span[UInt8, _]) -> Bool:
     if len(a) != len(b):
         return False
     for i in range(len(a)):
@@ -29,7 +31,7 @@ def _hv(c: UInt8) -> Int:
     return Int(c) - 48 if c < 58 else Int(c) - 87
 
 
-def hex_is(a: Bytes, h: StringLiteral) -> Bool:
+def hex_is(a: Span[UInt8, _], h: StringLiteral) -> Bool:
     """True when `a` equals the bytes spelled by lowercase hex string `h` (OID contents, DigestInfo prefixes)."""
     var hb = h.as_bytes()
     if len(hb) != 2 * len(a):

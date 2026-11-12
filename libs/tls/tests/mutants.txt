@@ -3,7 +3,7 @@ der_minimal_length | tls/x509/der.mojo | s/if l < 0x80:/if l < 0x00:/ | parse
 der_int_minimal | tls/x509/der.mojo | s/\(c\[0\] == 0 and c\[1\] < 0x80\)/(False)/ | parse
 time_pivot | tls/x509/der.mojo | s/y >= 50/y >= 51/ | parse
 validity_swapped | tls/x509/cert.mojo | s/self.not_before = val.time\(\)\n(\s+)self.not_after = val.time\(\)/self.not_after = val.time()\n$1self.not_before = val.time()/ | parse
-duplicate_ext_allowed | tls/x509/cert.mojo | s/if same\(view\(p\), o\):/if False:/ | parse
+duplicate_ext_allowed | tls/x509/cert.mojo | s/if same\(p, o\):/if False:/ | parse
 b64_pad_unchecked | tls/x509/pem.mojo | s/pad != \(4 - r\) % 4/False/ | parse
 ca_check_removed | tls/x509/chain.mojo | s/if not \(c.has_bc and c.is_ca\):/if False:/ | chain
 pathlen_loosened | tls/x509/chain.mojo | s/below > c.path_len:/below > c.path_len + 5:/ | chain
@@ -21,3 +21,11 @@ chain_cap_removed | tls/x509/chain.mojo | s/len\(chain\) > MAX_CHAIN/len(chain) 
 host_case_sensitive | tls/x509/chain.mojo | s/b\[i\] \+ 32 if b\[i\] >= 65 and b\[i\] <= 90 else b\[i\]/b[i]/ | chain
 ku_cert_sign_ignored | tls/x509/chain.mojo | s/\(c.ku & KU_KEY_CERT_SIGN\) == 0/False/ | chain
 trusted_leaf_needs_ca | tls/x509/chain.mojo | s/    if k > 0:\n        _ca_rules\(root, k - 1, True\)/    _ca_rules(root, k - 1, True)/ | chain
+key_pub_mismatch_ignored | tls/x509/key.mojo | s/if len\(given\) > 0 and not same\(given, k.pub\):/if False:/ | keys
+key_rsa_consistency_dropped | tls/x509/key.mojo | s/    if not _rsa_ok\(k\):/    if False:/ | keys
+key_ec_range_dropped | tls/x509/shim/ec_ct.mojo | s/ or not scalar_in_range\(private_key, c.order\):/:/ | keys
+key_encrypted_header_ignored | tls/x509/key.mojo | s/same\(body\[i : i \+ 10\], "Proc-Type:".as_bytes\(\)\)/False/ | keys
+key_small_rsa_allowed | tls/x509/key.mojo | s/rsa_bits\(k.pub\) < MIN_RSA_BITS/rsa_bits(k.pub) < 512/ | keys
+key_wipe_disabled | tls/x509/key.mojo | s/    if len\(l\) > 0:\n        _ = external_call\["explicit_bzero", Int\]\(l.unsafe_ptr\(\), len\(l\)\)/    if len(l) > 99999999:\n        _ = external_call["explicit_bzero", Int](l.unsafe_ptr(), len(l))/ | keys
+key_matches_always | tls/x509/key.mojo | s/return c.key_kind == self.kind and same\(c.key_a, self.pub\)/return True/ | keys
+key_rsa_sign_check_dropped | tls/x509/key.mojo | s/ok = same\(back, m\)/ok = True/ | keys

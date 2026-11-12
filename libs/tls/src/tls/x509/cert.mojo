@@ -274,7 +274,7 @@ struct Certificate(Copyable, Movable):
             var e = xs.seq()
             var o = e.oid()
             for ref p in seen:
-                if same(view(p), o):
+                if same(p, o):
                     raise Error("tls: x509: duplicate extension")
             seen.append(copy_of(o))
             var crit = False
