@@ -36,3 +36,4 @@ leaf_weak_rsa_ok | tls/x509/chain.mojo | s/ or \(leaf.key_kind == KEY_RSA and rs
 nc_malformed_name_ok | tls/x509/chain.mojo | s/if _bad_name\(ln\):/if False:/ | chain
 ca_empty_subject_ok | tls/x509/chain.mojo | s/if len\(c.subject\(\)\) <= 2:/if False:/ | limbo
 nc_empty_ext_ok | tls/x509/cert.mojo | s/        if s.done\(\):\n            raise Error\("tls: x509: empty name constraints"\)/        pass/ | limbo
+root_ku_without_certsign_ok | tls/x509/chain.mojo | s/if c.has_ku and \(c.ku & KU_KEY_CERT_SIGN\) == 0:/if False:/ | limbo

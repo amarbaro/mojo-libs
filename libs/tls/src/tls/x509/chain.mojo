@@ -253,6 +253,8 @@ def _ca_rules(c: Certificate, below: Int, anchor: Bool) raises:
     if c.has_bc or not anchor:
         if not (c.has_bc and c.is_ca):
             raise Error("tls: x509: issuer is not a CA")
+    if c.has_ku and (c.ku & KU_KEY_CERT_SIGN) == 0:
+        raise Error("tls: x509: CA key usage lacks keyCertSign")
     if c.path_len >= 0 and below > c.path_len:
         raise Error("tls: x509: path length constraint exceeded")
     if not anchor and c.has_eku and not c.eku_server:
