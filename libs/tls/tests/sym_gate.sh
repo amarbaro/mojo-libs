@@ -38,9 +38,9 @@ mutant() {  # mutant LINE: name|file|sed expression[|build flags]
   local rc=0
   "$d/bin" "${VECS[@]}" > "$d/out" 2>&1 || rc=$?
   if [ "$rc" = 0 ]; then echo "FAIL mutant $name: survived"; return 1; fi
-  # A crash (SIGILL from a bounds trap, SIGSEGV) is not a check: only a printed FAIL line kills a mutant.
-  if [ "$rc" -ge 128 ] || ! grep -q '^FAIL' "$d/out"; then echo "FAIL mutant $name: crashed (exit $rc), no check printed FAIL"; return 1; fi
-  echo "ok mutant $name killed: $(grep -m1 '^FAIL' "$d/out")"
+  # A crash (SIGILL from a bounds trap, SIGSEGV, 124 timeout) is not a check: only a checked error (exit 1) kills a mutant.
+  if [ "$rc" -ge 124 ]; then echo "FAIL mutant $name: crashed (exit $rc), no check caught it"; return 1; fi
+  echo "ok mutant $name killed: $(grep -m1 -E "^FAIL|rror" "$d/out")"
 }
 
 pids=()

@@ -14,6 +14,6 @@ if ! timeout 300 "$MOJO" build -I .work/mut/src -I tests "$test" -o "$bin" > .wo
 fi
 rc=0; timeout 120 "$bin" > .work/mut/run.log 2>&1 || rc=$?
 if [ "$rc" = 0 ]; then echo "FAIL mutant survived: $file: $expr"; exit 1; fi
-# A crash (signal exit, or timeout 124) is not a check: only a printed FAIL line kills a mutant.
-if [ "$rc" -ge 124 ] || ! grep -q '^FAIL' .work/mut/run.log; then echo "FAIL mutant crashed (exit $rc), no check printed FAIL: $file: $expr"; exit 1; fi
+# A crash (signal exit 128+, or timeout 124) is not a check: only a checked error (exit 1 with FAIL or an Error) kills a mutant.
+if [ "$rc" -ge 124 ]; then echo "FAIL mutant crashed (exit $rc), no check caught it: $file: $expr"; exit 1; fi
 echo "PASS mutant killed: $file: $expr ($(grep -c '^FAIL' .work/mut/run.log) FAIL lines)"

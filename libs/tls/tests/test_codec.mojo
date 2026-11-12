@@ -187,8 +187,41 @@ def roundtrip(mut t: T) raises:
     t.ok("300 random hellos round-trip through the typed builders and parsers (" + String(ok) + "/300)", ok == 300)
 
 
+def reader_bounds(mut t: T) raises:
+    """Every read of one byte more than is left must raise: the exact boundary, for each reader method."""
+    var raised = 0
+    var b: List[UInt8] = [1, 2, 3]
+    for k in range(5):
+        var r = Rd(b.copy())
+        try:
+            _ = r.take(3)
+            if k == 0:
+                _ = r.u8()
+            elif k == 1:
+                _ = r.u16()
+            elif k == 2:
+                _ = r.u24()
+            elif k == 3:
+                _ = r.take(1)
+            else:
+                _ = r.u32()
+        except:
+            raised += 1
+    t.ok("Rd: a read one byte past the end raises (u8, u16, u24, take, u32)", raised == 5)
+    var r2 = Rd(b.copy())
+    var short = False
+    try:
+        _ = r2.take(4)
+    except:
+        short = True
+    var r3 = Rd(b.copy())
+    var exact = len(r3.take(3)) == 3 and r3.left() == 0
+    t.ok("Rd: take(left + 1) raises and take(left) works", short and exact)
+
+
 def main() raises:
     var t = T("codec")
+    reader_bounds(t)
     var v = Vec()
     reenc(t, v, 3, "construct a ClientHello", "ClientHello", 0, 1, "ClientHello")
     reenc(t, v, 3, "construct a ServerHello", "ServerHello", 0, 2, "ServerHello")
