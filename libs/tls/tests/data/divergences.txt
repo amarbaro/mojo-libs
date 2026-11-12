@@ -1,0 +1,15 @@
+ok_trailing_dot openssl does not strip a trailing dot; browsers do
+bad_host_empty openssl verify is given no name to check
+bad_wild_partial openssl accepts partial-label wildcards
+bad_cn_only openssl falls back to the subject CN when there is no SAN; RFC 9525 forbids it
+ok_eku_any openssl treats a leaf with only anyExtendedKeyUsage as unsuitable for sslserver; Go and Chromium accept it
+bad_ku_no_signature openssl -purpose sslserver accepts keyEncipherment (RSA key transport); our suites cannot use it
+bad_sha1_leaf openssl security level decides; we always reject SHA-1 signatures
+bad_chain_11 openssl's default depth is 100; we cap chains at 10 certificates
+bad_nc_wildcard_covers_excluded openssl compares the wildcard SAN literally against the excluded name
+bad_nc_malformed_san openssl accepts a leading-dot dNSName SAN that satisfies the constraint textually
+bad_ca_leaf_without_keycertsign openssl verify does not cross-check keyCertSign against basicConstraints on a leaf
+bad_keycertsign_without_ca openssl verify does not cross-check keyCertSign against basicConstraints on a leaf
+bad_rsa_1024_leaf openssl security level 1 accepts a 1024-bit leaf key; CA/B BR 6.1.5 and browsers do not
+bad_rsa_sha1_inter openssl security level decides; we always reject SHA-1 signatures
+bad_rsa_1024_issuer openssl security level 1 accepts 1024-bit RSA; browsers and CA/B BR 6.1.5 do not

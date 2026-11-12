@@ -1,0 +1,39 @@
+# name | file | perl substitution (applied with -0pi to src/<file>) | stage that must fail
+der_minimal_length | tls/x509/der.mojo | s/if l < 0x80:/if l < 0x00:/ | parse
+der_int_minimal | tls/x509/der.mojo | s/\(c\[0\] == 0 and c\[1\] < 0x80\)/(False)/ | parse
+time_pivot | tls/x509/der.mojo | s/y >= 50/y >= 51/ | parse
+validity_swapped | tls/x509/cert.mojo | s/self.not_before = val.time\(\)\n(\s+)self.not_after = val.time\(\)/self.not_after = val.time()\n$1self.not_before = val.time()/ | parse
+duplicate_ext_allowed | tls/x509/cert.mojo | s/if same\(p, o\):/if False:/ | parse
+b64_pad_unchecked | tls/x509/pem.mojo | s/pad != \(4 - r\) % 4/False/ | parse
+ca_check_removed | tls/x509/chain.mojo | s/if not \(c.has_bc and c.is_ca\):/if False:/ | chain
+pathlen_loosened | tls/x509/chain.mojo | s/below > c.path_len:/below > c.path_len + 5:/ | chain
+expiry_ignored | tls/x509/chain.mojo | s/if now > c.not_after:/if False:/ | chain
+not_yet_valid_ignored | tls/x509/chain.mojo | s/if now < c.not_before:/if False:/ | chain
+sha1_accepted | tls/x509/sigs.mojo | s/raise Error\("tls: x509: sha1 signature refused"\)/return/ | chain
+wildcard_tld | tls/x509/chain.mojo | s/if dots < 1 or/if dots < 0 or/ | chain
+nc_excluded_ignored | tls/x509/chain.mojo | s/if _dns_under\(ln, lb\) or \(wild and _one_label_below\(lb, stem\)\):/if False:/ | chain
+ip_host_matches_dns | tls/x509/chain.mojo | s/if len\(ip\) > 0:/if len(ip) > 99:/ | chain
+leaf_signature_unchecked | tls/x509/chain.mojo | s/range\(k - 1, 0, -1\)/range(k - 1, 1, -1)/ | chain
+leaf_eku_ignored | tls/x509/chain.mojo | s/if leaf.has_eku and not leaf.eku_server:/if False:/ | chain
+pss_salt_assumed | tls/x509/sigs.mojo | s/h, sig, c.pss_salt\)/h, sig, 32)/ | chain
+unknown_critical_ignored | tls/x509/cert.mojo | s/self.unknown_critical = True/self.unknown_critical = False/ | chain
+chain_cap_removed | tls/x509/chain.mojo | s/len\(chain\) > MAX_CHAIN/len(chain) > 99/ | chain
+host_case_sensitive | tls/x509/chain.mojo | s/b\[i\] \+ 32 if b\[i\] >= 65 and b\[i\] <= 90 else b\[i\]/b[i]/ | chain
+trusted_leaf_needs_ca | tls/x509/chain.mojo | s/    if k > 0:\n        _ca_rules\(root, nsi, True\)/    _ca_rules(root, nsi, True)/ | chain
+key_pub_mismatch_ignored | tls/x509/key.mojo | s/if len\(given\) > 0 and not same\(given, k.pub\):/if False:/ | keys
+key_rsa_consistency_dropped | tls/x509/key.mojo | s/    if not _rsa_ok\(k\):/    if False:/ | keys
+key_ec_range_dropped | tls/x509/shim/ec_ct.mojo | s/ or not scalar_in_range\(private_key, c.order\):/:/ | keys
+key_encrypted_header_ignored | tls/x509/key.mojo | s/same\(body\[i : i \+ 10\], "Proc-Type:".as_bytes\(\)\)/False/ | keys
+key_small_rsa_allowed | tls/x509/key.mojo | s/rsa_bits\(k.pub\) < MIN_RSA_BITS/rsa_bits(k.pub) < 512/ | keys
+key_wipe_disabled | tls/x509/key.mojo | s/    if len\(l\) > 0:\n        _ = external_call\["explicit_bzero", Int\]\(l.unsafe_ptr\(\), len\(l\)\)/    if len(l) > 99999999:\n        _ = external_call["explicit_bzero", Int](l.unsafe_ptr(), len(l))/ | keys
+key_matches_always | tls/x509/key.mojo | s/return c.key_kind == self.kind and same\(c.key_a, self.pub\)/return True/ | keys
+key_rsa_sign_check_dropped | tls/x509/key.mojo | s/ok = same\(back, m\)/ok = True/ | keys
+selfissued_counted_in_pathlen | tls/x509/chain.mojo | s/            if not c.self_issued\(\):\n                nsi \+= 1/            nsi += 1/ | chain
+nc_applies_to_selfissued | tls/x509/chain.mojo | s/if q == 0 or not chain\[below\[q\]\].self_issued\(\):  # name constraints skip self-issued intermediates/if True:/ | chain
+nc_wildcard_stem_only | tls/x509/chain.mojo | s/ or \(wild and _one_label_below\(lb, stem\)\)// | chain
+ca_without_keycertsign_ok | tls/x509/chain.mojo | s/if c.has_ku and \(\(c.ku & KU_KEY_CERT_SIGN\) != 0\) != c.is_ca:/if False:/ | chain
+leaf_weak_rsa_ok | tls/x509/chain.mojo | s/ or \(leaf.key_kind == KEY_RSA and rsa_bits\(leaf.key_a\) < MIN_RSA_BITS\)// | chain
+nc_malformed_name_ok | tls/x509/chain.mojo | s/if _bad_name\(ln\):/if False:/ | chain
+ca_empty_subject_ok | tls/x509/chain.mojo | s/if len\(c.subject\(\)\) <= 2:/if False:/ | limbo
+nc_empty_ext_ok | tls/x509/cert.mojo | s/        if s.done\(\):\n            raise Error\("tls: x509: empty name constraints"\)/        pass/ | limbo
+root_ku_without_certsign_ok | tls/x509/chain.mojo | s/if c.has_ku and \(c.ku & KU_KEY_CERT_SIGN\) == 0:/if False:/ | limbo
