@@ -8,7 +8,7 @@ metadata:
 # mojo-tls
 
 TLS 1.3 and 1.2, client and server, with X.509 validation, written in Mojo 1.2: no OpenSSL, no C library. Tested against openssl,
-tlsfuzzer, testssl, Firefox, Chromium and Vivaldi. 0.1.0, not independently audited.
+tlsfuzzer, testssl, Firefox, Chromium and Vivaldi. 0.1.1, internally audited, not independently audited.
 
 ## When to use
 

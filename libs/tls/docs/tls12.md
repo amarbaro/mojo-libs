@@ -43,12 +43,12 @@ ClientHello. `TlsServer[C](cfg, port, host).step(handler)` is one loop pass; `ru
 | `hash(sha384, data)` | `sha256` / `sha384` (lane 1) |
 | `prf(sha384, secret, label, seed, n)` | `prf12[H]` (lane 1); label is prepended to the seed |
 | `keygen(group)`, `ecdh(group, sec, peer)` | `x25519_base` + `x25519`; `P256Key.generate/public_bytes/ecdh`; `p384_public` + `p384_ecdh` (secp384r1, wave 3) |
-| `sign(kind, key_der, scheme, msg)` | `P256Key.sign_sha256` (needs P-384 and the DER key parsed per call or cached by lane 3), `RsaPrivate.sign_pss` and PKCS#1 v1.5 for 0x0401 |
-| `verify(chain, host, scheme, msg, sig)` | `verify_chain` (lane 3) then `p256_verify` / `p384_verify` / `RsaPublic.verify_pss/pkcs1` with the leaf key |
+| `sign(kind, key_der, scheme, msg)` | `P256Key.sign_sha256` (0x0403), `p384_sign` over SHA-384 (0x0503), `RsaPrivate.sign_pss` and PKCS#1 v1.5 for 0x0401; the DER key is parsed per call by `load_private_key_der` |
+| `verify(chain, host, scheme, msg, sig)` | `verify_chain` (lane 3) then `p256_verify` / `p384_verify` / `RsaPublic.verify_pss/pkcs1` with the leaf key; an ECDSA scheme (0x0403 or 0x0503) is checked against the leaf's key type, not a curve (TLS 1.2 binds none) |
 | `seal`, `open` | `AesGcm(key)`, `ChaCha20Poly1305(key)` in place on `buf[start:]`; the 8-byte GCM explicit nonce and the tag layout are already handled by `Conn` |
 
 Needs beyond api.md: P-384 sign and ECDH (a P-384 certificate or group needs them; a P-256-only server does not), RSA
-PKCS#1 v1.5 sign (0x0401 fallback), a `PrivateKey` that can be built once per certificate.
+PKCS#1 v1.5 sign (0x0401 fallback), a `PrivateKey` that can be built once per certificate. All present since v0.1.1.
 
 ## Tests
 

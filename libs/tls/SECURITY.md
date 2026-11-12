@@ -1,7 +1,7 @@
 # Security
 
-mojo-tls implements a security protocol, so a bug here can matter to every program that uses it. 0.1.0 has not had an
-independent audit; the checks it does have are listed in the README.
+mojo-tls implements a security protocol, so a bug here can matter to every program that uses it. 0.1.1 has had an internal
+audit (its findings are fixed or ruled out in the release note) but no independent one; the checks it does have are listed in the README.
 
 ## Report a vulnerability
 
