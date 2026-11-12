@@ -142,6 +142,11 @@ run_ours() {
       if out="$(timeout 30 "$TLS_CLIENT_BIN" 127.0.0.1 "$PORT" "$C/ca.pem" 2>&1)" && [[ "$out" == *mojo-tls-ok* ]]; then ok "ours/client/$kind/$suite"
       else no "ours/client/$kind/$suite" "$(echo "$out" | tail -c 200)"; fi
     done; done
+    if have_kind ours p256; then
+      start_server peers p256 "${KSUITES[p256]%% *}"
+      if out="$(timeout 30 "$TLS_CLIENT_BIN" 127.0.0.1 "$PORT" /etc/ssl/certs/ca-certificates.crt 2>&1)" || [[ "$out" == *mojo-tls-ok* ]]; then no "ours/client/wrong-ca refused" "connected to a chain outside its roots"
+      else ok "ours/client/wrong-ca refused"; fi
+    fi
   fi
 }
 

@@ -1,13 +1,15 @@
 """Crypto12 over lanes 1-3: lane 1 hashes, PRF and AEADs; lane 2 x25519, P-256 and RSA; lane 3 keys, certificate
-parsing and chain validation (client side, against the system roots). Server keys: P-256 (ecdsa_secp256r1_sha256) and
+parsing and chain validation (client side, against the system roots, or the PEM file named by TLS_ROOTS). Server keys: P-256 (ecdsa_secp256r1_sha256) and
 RSA (rsa_pss_rsae_sha256/384, rsa_pkcs1_sha256/384). aead: 0 AES-128-GCM, 1 AES-256-GCM, 2 ChaCha20-Poly1305."""
 from std.ffi import external_call
 from tls.tls12.crypto import Crypto12, K_P256, K_RSA
 from tls.sym import Sha256, Sha384, sha256, sha384, prf12, AesGcm, ChaCha20Poly1305
 from tls.asym import x25519, x25519_base, P256Key, p256_verify, RsaPublic, RsaPrivate, random_bytes
 from tls.x509.cert import Certificate, KEY_P256, KEY_RSA
-from tls.x509.chain import verify_chain, load_system_roots
+from std.os import getenv
+from tls.x509.chain import verify_chain, load_system_roots, load_roots_pem
 from tls.x509.key import load_private_key_der
+from tls.x509.der import view
 
 comptime X25519 = 0x001D
 comptime SECP256R1 = 0x0017
@@ -24,6 +26,22 @@ def _hash_of(scheme: Int) raises -> Int:
 
 def _digest(bits: Int, msg: List[UInt8]) -> List[UInt8]:
     return sha384(msg) if bits == 384 else sha256(msg)
+
+
+def _roots() raises -> List[Certificate]:
+    """TLS_ROOTS=<PEM file> replaces the system bundle (private CAs, tests)."""
+    var p = getenv("TLS_ROOTS")
+    if p.byte_length() == 0:
+        return load_system_roots()
+    var raw: List[UInt8]
+    with open(p, "r") as f:
+        raw = f.read_bytes()
+    var dropped = 0
+    var r = load_roots_pem(view(raw), dropped)
+    _ = len(raw)
+    if len(r) == 0 or dropped > 0:
+        raise Error("tls: TLS_ROOTS has unparseable or no certificates")
+    return r^
 
 
 struct RealCrypto(Crypto12):
@@ -73,7 +91,7 @@ struct RealCrypto(Crypto12):
         var certs = List[Certificate]()
         for c in chain:
             certs.append(Certificate.parse(c.copy()))
-        verify_chain(certs, host, Int(external_call["time", Int64](Int64(0))), load_system_roots())
+        verify_chain(certs, host, Int(external_call["time", Int64](Int64(0))), _roots())
         ref leaf = certs[0]
         var bits = _hash_of(scheme)
         var ok: Bool
