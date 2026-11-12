@@ -43,6 +43,7 @@ if [[ "${1:-}" == mutants ]]; then
     "ri-ignored|src/tls/tls12/server.mojo|s/if ch.ri_bad:/if False:/"
     "ccs-anywhere|src/tls/tls12/server.mojo|s/if self.st != 2:/if False:/"
     "unknown-ext-fatal|src/tls/tls12/msg.mojo|s/d.p = len(d.d)  # unknown or GREASE: skipped/raise Error(\"tls: unknown extension\")/"
+    "chacha-nonce-no-xor|src/tls/tls12/conn.mojo|s/self.nonce\[4 + i\] = self.iv\[4 + i\] ^ b/self.nonce[4 + i] = self.iv[4 + i]/"
     "aad-seq-zero|src/tls/tls12/conn.mojo|s/self.aad\[i\] = b$/self.aad[i] = 0/"
   )
   netmutants=(

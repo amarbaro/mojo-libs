@@ -4,6 +4,7 @@ from std.memory import ArcPointer
 from tutil import *
 from tls.net.config import TlsConfig
 from tls.tls12.msg import *
+from fake_crypto import mix
 from tls.tls12.wire import bl, bytes_of, str_of, cat, put
 
 
@@ -49,6 +50,35 @@ def main() raises:
         roundtrip(t, "suite " + hex(s), "rsa.test" if not suite_ecdsa(s) else "localhost", [s], s)
     roundtrip(t, "client lists ChaCha first: obeyed", "rsa.test", [0xCCA8, 0xC02F], 0xCCA8)
     roundtrip(t, "client lists GCM first: server order", "rsa.test", [0xC02F, 0xCCA8], 0xC02F)
+
+    # record layer bytes, derived from the RFCs here and compared with what the engine put on the wire:
+    # GCM (RFC 5246 6.2.3.3, 5288): nonce = salt(4) + explicit(8) with explicit = seq, sent in the record
+    # ChaCha20 (RFC 7905): nonce = iv(12) xor (0^4 + seq), no explicit part. AAD = seq(8) type version length.
+    for sx in [0xC02B, 0xCCA8]:
+        var cw = started("rsa.test" if sx == 0xCCA8 else "localhost", [], False, [sx])
+        var sw = Sv(cfg)
+        pump(cw, sw)
+        var seq = Int(cw.cn.wr.seq)
+        var sq = List[UInt8]()
+        for i in range(8):
+            sq.append(UInt8((seq >> (56 - 8 * i)) & 255))
+        var iv = cw.cn.wr.iv.copy()
+        var nonce = List[UInt8]()
+        if sx == 0xCCA8:
+            for i in range(12):
+                nonce.append(iv[i] if i < 4 else iv[i] ^ sq[i - 4])
+        else:
+            nonce = cat(iv, sq)
+        var pt = bytes_of("abc")
+        var aad = cat(sq, bl(23, 3, 3, 0, 3))
+        var ks = mix(cat(cw.cn.wr.key, nonce), 3)
+        var ct = List[UInt8]()
+        for i in range(3):
+            ct.append(pt[i] ^ ks[i])
+        var tag = mix(cat(cw.cn.wr.key, nonce, aad, ct), 16)
+        var body = cat(sq, ct, tag) if sx == 0xC02B else cat(ct, tag)
+        cw.cn.write_app(pt)
+        t.check("record bytes " + hex(sx) + ": nonce, AAD, explicit part", cw.cn.take_output() == cat(bl(23, 3, 3, 0, len(body)), body) and seq == 1, "seq " + String(seq))
 
     # fragmentation: one byte per feed
     var c = started("localhost", ["http/1.1"])
