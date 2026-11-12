@@ -712,6 +712,27 @@ def ee_rules(mut t: T) raises:
     t.ok("EncryptedExtensions with an extension we did not offer stays unsupported_extension (" + why2 + ")", "unsupported_extension" in why2)
 
 
+def sh_ext_rules(mut t: T) raises:
+    """RFC 8446 4.2: an extension we offered but that is not defined for ServerHello is illegal_parameter; one we never
+    offered is unsupported_extension (audit #12)."""
+    for k in range(2):
+        var s = server(0x1301, [G_X25519])
+        var c = client(hello())
+        var o = s.feed(Span(c.start()))
+        var n = (Int(o.send[3]) << 8) | Int(o.send[4])
+        var sh = parse_hello(List[UInt8](Span(o.send)[5 : 5 + n]), True)
+        sh.exts.append(Ext(X_SNI if k == 0 else 0x7A7A, List[UInt8]()))  # server_name was offered; 0x7a7a never
+        var m = sh.encode()
+        var rec = List[UInt8]()
+        rec.extend([UInt8(22), 3, 3, UInt8(len(m) >> 8), UInt8(len(m) & 255)])
+        rec.extend(Span(m))
+        var e = c.feed(Span(rec)).error
+        if k == 0:
+            t.ok("ServerHello with an offered but misplaced extension: illegal_parameter (" + e + ")", "illegal_parameter" in e)
+        else:
+            t.ok("ServerHello with an extension we never offered: unsupported_extension (" + e + ")", "unsupported_extension" in e)
+
+
 def main() raises:
     var t = T("conn")
     matrix(t)
@@ -719,6 +740,7 @@ def main() raises:
     resumption(t)
     early_data(t)
     ee_rules(t)
+    sh_ext_rules(t)
     client_auth(t)
     options(t)
     alerts(t)

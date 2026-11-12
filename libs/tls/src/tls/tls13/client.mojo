@@ -243,7 +243,7 @@ struct Client13[V: Verifier](Movable):
             raise bad("illegal_parameter", "selected version")
         for e in sh.exts:
             if e.t != X_KEYSHARE and e.t != X_VERSIONS and not (e.t == X_PSK and self.offered and not sh.is_hrr()) and not (sh.is_hrr() and e.t == X_COOKIE):
-                raise bad("unsupported_extension", "extension " + String(e.t) + " in ServerHello")
+                raise bad("illegal_parameter" if find(self.ch.exts, e.t) >= 0 else "unsupported_extension", "extension " + String(e.t) + " in ServerHello")  # RFC 8446 4.2: offered but not defined here / never offered
         if self.hrr_done and suite != self.hrr_suite:
             raise bad("illegal_parameter", "cipher suite changed after HelloRetryRequest")
         self.c.set_suite(suite)
