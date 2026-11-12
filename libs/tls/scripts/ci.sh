@@ -11,7 +11,7 @@ scripts/deps.sh
 [ -d .work/wycheproof/testvectors_v1 ] || git clone -q --depth 1 https://github.com/C2SP/wycheproof .work/wycheproof \
   || { echo "FAIL setup: clone wycheproof"; exit 1; }
 n=0
-gate() { n=$((n + 1)); echo "== $*"; "$@" || { echo "FAIL $n/6: $*"; exit 1; }; }
+gate() { n=$((n + 1)); echo "== $*"; bash "$@" || { echo "FAIL $n/6: $*"; exit 1; }; }
 gate tests/sym_gate.sh vec
 gate tests/gate_asym.sh
 gate tests/gate_x509.sh
