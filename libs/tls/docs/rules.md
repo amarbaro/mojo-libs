@@ -1,5 +1,6 @@
 # Rules (what broke -> the rule)
 
+- A byte loop `List[UInt8](Span(x))` was 26.5% of all cycles in the record bench and nobody saw it until corewait ran -> before every publish run the profiling pass (memory-optimization, corewait, heaptide, wavewait), measure each change against the previous binary alternating on one pinned core, medians, peak RSS, and keep the table in docs/perf.md; copy bytes with one `memcpy` from a Span.
 - `x = f(Span(x))` with x a List returned a wrong value (TLS PRF A(2) came out as A(1)) -> never assign a call result over the list its Span borrows from: compute into a temp (`var nx = f(a); a = nx^`).
 - SHA-512/384 padding left the 0x80 byte inside the 16-byte length field when the message length was 112..119 mod 128 -> clear the whole block before writing the length, then test every length 0..139 against an oracle.
 - A mutant regex containing `|` split on the mutant file's `|` separator and ran as a different mutant -> the separator is `@`; write a literal `|` as `[|]`.

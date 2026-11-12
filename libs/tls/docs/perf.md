@@ -35,13 +35,13 @@ Hot paths named: record seal and open (AES-GCM and ChaCha20-Poly1305), the hands
 | handshakes per second, 3 suites | 3058 / 2899 / 3106 | 3056 / 2890 / 3106 | unchanged (within noise): handshake cost is x25519 and hashing, not copies |
 | x25519 per second | 16527 | 16537 | unchanged |
 | peak RSS, bench_tls13 | 11720 KB | 11668 KB | unchanged |
-| `send_app` output buffer | `len + 64`: reallocated and copied the whole buffer at record 64 | capacity counts the per-record header, type byte and tag (22 B) | one realloc less per large write; peak live memory of a 1 MiB write is the buffer itself plus one copy |
+| `send_app` output buffer | `len + 64`: reallocated and copied the whole buffer at record 64 | capacity counts the per-record header, type byte and tag (22 B) | one realloc and one whole-buffer copy less per large write (not timed separately) |
 
 Constant-time code was not touched: the copies are in the record layer and the TLS 1.2 AEAD wrapper, not in a primitive. `tests/ct.mojo` and the
 timing gate run inside `tests/gate_asym.sh`; the full gates and matrix (176 PASS, 11 SKIP, 0 FAIL) passed on the committed fix (1b016b2).
 
-Attempts reverted: none. Not done, on purpose: the per-record allocations (seal: header + body; open: copy, header copy, record: 4 to 5 allocations of 5 to 16 KiB per
-record, 3 us per record) cost under 1% of a record; SHA-256 at 0.51 GB/s is software-only (no SHA-NI path) and is the next target for the handshake.
+Attempts reverted: none. Not done, on purpose: the per-record allocations (seal: header + body; open: copy, header copy, record; 5 to 16 KiB each) are small against the
+3 us of AEAD work per record and were not profiled further. SHA-256 at 0.51 GB/s is software-only (no SHA-NI path) and is the next target for the handshake.
 
 ### corewait (CPU stall profile, `tests/bench_tls13.mojo 3000 100`)
 
@@ -65,12 +65,11 @@ No row is stalled on memory (`mem` column 0): the record paths are compute-bound
 | leaks (direct / indirect) | 0 / 0 | 0 / 0 |
 | live at exit | 85,446 B | 85,446 B (flat: no growth) |
 | peak live | 1.47 MB runtime allocation + the 1 MiB application buffers (send buffer 1,050,070 B, reader buffer 1,049,984 B) | same |
-| allocations per record | 4 to 5, all freed straight after (`TEMPORARIES`: 64 per direction per MiB) | |
+| allocation sites per record (HOTSPOTS) | at least 4: seal body, seal header, open copy, record copy; 64 records per MiB each | 1344 per site over 21 handshakes (21 x 64) |
 
 heaptide needed no change to measure mojo-tls. One thing it taught: it found a real use-after-free that every native gate had passed
 (`docs/rules.md`, the `Int()`-laundered pointer rule; fixed in 1b016b2, repro `tests/rr_grow.mojo`, now run natively and under heaptide by `tests/gate_tls13.sh`).
-Mojo's allocator is `TCMallocGlobals::tc_new` (the `KGEN_CompilerRT_AlignedAlloc` call is a jump to it). Natively it serves large blocks from its own arena and never unmaps them
-on `free`; under heaptide the same calls reach glibc, where a freed 256 KiB block is unmapped at once. Allocation counts and live bytes seen by heaptide are the program's
+Mojo's allocator is `TCMallocGlobals::tc_new` (the `KGEN_CompilerRT_AlignedAlloc` call is a jump to it). Natively it mmaps a 1 GiB region at start and a gdb `catch syscall munmap` saw no unmap of a record buffer on `free`; under heaptide the same calls reach glibc, where a freed 256 KiB block is unmapped at once. Allocation counts and live bytes seen by heaptide are the program's
 own; peak RSS and mapping behaviour are glibc's, not the native run's.
 
 ### wavewait
