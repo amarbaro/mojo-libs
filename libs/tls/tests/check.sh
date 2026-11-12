@@ -21,7 +21,7 @@ runt() { # name binary -> runs, echoes the RESULT line
   echo "$out" | grep -E "^RESULT"
 }
 
-tests=(t_flow)
+tests=(t_flow t_hello)
 for t in "${tests[@]}"; do
   if build "$t" src && r="$(runt "$t" "$W/$t")"; then echo "PASS $t: $r"; else bad "$t" "see output above"; fi
 done
@@ -38,6 +38,7 @@ if [[ "${1:-}" == mutants ]]; then
     "msg-cap-gone|src/tls/tls12/conn.mojo|s/if l > MAX_MSG:/if False:/"
     "ri-ignored|src/tls/tls12/server.mojo|s/if ch.ri_bad:/if False:/"
     "ccs-anywhere|src/tls/tls12/server.mojo|s/if self.st != 2:/if False:/"
+    "unknown-ext-fatal|src/tls/tls12/msg.mojo|s/d.p = len(d.d)  # unknown or GREASE: skipped/raise Error(\"tls: unknown extension\")/"
     "aad-seq-zero|src/tls/tls12/conn.mojo|s/self.aad\[i\] = b$/self.aad[i] = 0/"
   )
   pids=()
@@ -47,11 +48,14 @@ if [[ "${1:-}" == mutants ]]; then
       d="$W/mut-$name"; rm -rf "$d"; mkdir -p "$d"; cp -r src "$d/src"
       sed -i "$expr" "$d/$file"
       if cmp -s "$file" "$d/$file"; then echo "FAIL mutant $name: sed changed nothing"; exit 0; fi
-      rm -f "$d/t_flow"
-      if ! timeout 300 "$MOJO" build -I "$d/src" -I "$AIO" -I tests tests/t_flow.mojo -o "$d/t_flow" >"$d/build.log" 2>&1; then
-        echo "FAIL mutant $name: does not build: $(grep -m1 error "$d/build.log")"; exit 0; fi
-      if out="$(timeout 60 "$d/t_flow" 2>&1)"; then echo "FAIL mutant $name: tests still pass"
-      else echo "PASS mutant $name killed by: $(echo "$out" | grep -m1 '^FAIL' || echo "crash: $(echo "$out" | tail -1)")"; fi
+      killed=""
+      for t in "${tests[@]}"; do
+        rm -f "$d/$t"
+        if ! timeout 300 "$MOJO" build -I "$d/src" -I "$AIO" -I tests "tests/$t.mojo" -o "$d/$t" >"$d/build.log" 2>&1; then
+          echo "FAIL mutant $name: does not build: $(grep -m1 error "$d/build.log")"; exit 0; fi
+        if ! out="$(timeout 60 "$d/$t" 2>&1)"; then killed="$t: $(echo "$out" | grep -m1 '^FAIL' || echo "crash: $(echo "$out" | tail -1)")"; break; fi
+      done
+      if [[ -n "$killed" ]]; then echo "PASS mutant $name killed by $killed"; else echo "FAIL mutant $name: tests still pass"; fi
     ) >"$W/mut-$name.out" 2>&1 &
     pids+=($!)
   done
