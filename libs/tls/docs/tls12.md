@@ -13,7 +13,7 @@ Current truth for `src/tls/tls12/` and `src/tls/net/`. Gate: `tests/check.sh` (a
 | `tls12/client.mojo` | `Client12[C]` sans-IO state machine |
 | `tls12/crypto.mojo` | `Crypto12` trait: the only crypto surface lane 5 touches |
 | `net/config.mojo` | `TlsConfig`, `CertEntry`: certificates by SNI (exact, `*.x`, default), ALPN, timeouts, limits |
-| `net/server.mojo` | `TlsServer[C]` on `mojo-aio`, `TlsHandler` trait for plaintext |
+| `net/server.mojo` | `TlsServer[C]` on `mojo-aio`: TLS 1.3 (`Server13`) and 1.2 (`Server12`) on one port, chosen from the first record; `TlsHandler.handle(fd, info: ConnInfo, data, reply)` gets version, SNI, ALPN; after our last record it half-closes and drains (1 s idle, 32 MiB cap) so the peer gets the alert, not a reset |
 | `net/stream.mojo` | `TlsStream[C]` blocking client, `tls_connect`, `tcp_connect` |
 
 Policy (refused with a fatal alert, tested): TLS below 1.2, CBC and RSA key exchange, a client without extended master

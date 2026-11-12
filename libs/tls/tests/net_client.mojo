@@ -96,6 +96,16 @@ def main() raises:
             print("FAIL " + mode + ": server never closed")
             raise Error("fail")
         print("OK " + mode + " closed after " + String(ms) + " ms")
+    elif mode == "tiny":  # a complete first record too short to hold a ClientHello: the server must alert and live on
+        for i in range(n):
+            var fd = tcp_connect("127.0.0.1", port)
+            _ = aio.write(fd, [UInt8(22), 3, 1, 0, 2, 1, 0])
+            var ms = wait_closed(fd, 3000)
+            aio.close(fd)
+            if ms < 0:
+                print("FAIL tiny: server never closed connection " + String(i))
+                raise Error("fail")
+        print("OK tiny " + String(n))
     elif mode == "garbage":
         for i in range(n):
             var fd = tcp_connect("127.0.0.1", port)

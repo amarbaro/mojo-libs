@@ -67,3 +67,5 @@ Lane x509 wave 2 (2026-11-12).
   script's random sample of 40 cases happened to pick it -> a harness timeout must exceed the slowest peer (now 330 s), and every tlsfuzzer cell
   runs all cases (`-n 0`), never the default random sample of 40.
 - Chromium matrix cells failed with net::ERR_NETWORK_CHANGED when other sessions' docker containers added veth interfaces mid-run (2026-11-12, 2 of 162 cells; rerun of ^chromium/ 16/16 twice) -> a browser cell that fails with ERR_NETWORK_CHANGED is retried once before it counts as FAIL; report the retry.
+- New first-record parsing in TlsServer sliced first[9:need] for a record shorter than 9 bytes: one tiny record from any client crashed the server, found only by the matrix (2026-11-12) -> new parser code on a network path gets a short-input regression client (tests/net.sh 'tiny') before the matrix.
+- TlsServer closed the socket with the peer's input unread after a fatal alert: the kernel reset the connection and tlsfuzzer lost our decode_error (2026-11-12) -> after our last record the server half-closes and drains (idle limit per read, byte cap), never a bare close.

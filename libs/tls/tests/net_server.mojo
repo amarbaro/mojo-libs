@@ -5,7 +5,7 @@ from std.os import listdir
 from std.sys import argv
 from fake_crypto import FakeCrypto
 from tls.net.config import TlsConfig, CertEntry
-from tls.net.server import TlsServer, TlsHandler
+from tls.net.server import TlsServer, TlsHandler, ConnInfo
 from tls.tls12.crypto import K_P256
 from tls.tls12.wire import bytes_of
 
@@ -16,7 +16,7 @@ struct Echo(TlsHandler):
     def __init__(out self):
         self.bytes = 0
 
-    def handle(mut self, fd: Int, data: List[UInt8], mut reply: List[UInt8]) raises -> Bool:
+    def handle(mut self, fd: Int, info: ConnInfo, data: List[UInt8], mut reply: List[UInt8]) raises -> Bool:
         self.bytes += len(data)
         reply.extend(data.copy())
         return False
