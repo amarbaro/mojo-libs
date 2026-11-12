@@ -125,7 +125,8 @@ stage_bench() {
 stage_limbo() {
   # x509-limbo. A valid chain rejected must match a line of tests/limbo_known.txt: `<id or glob><TAB><reason>`.
   # An invalid chain accepted is a failure unless a `!<id or glob><TAB><reason>` line pins it, and only the
-  # webpki::cn:: class may be pinned that way (policy: the CN is never read, RFC 9525).
+  # webpki::cn:: class (the CN is never read, RFC 9525) and rfc5280::ski::root-missing-ski (a trust anchor is
+  # path-validation input, RFC 5280 6.1.1 d; user decision 2026-11-12 for TWCA Global Root CA) may be pinned that way.
   local L=.work/limbo
   [ -f $L/cases.txt ] || tools/limbo_fetch.sh > /dev/null 2>&1 || { echo "SKIP limbo: no .work/limbo/cases.txt and tools/limbo_fetch.sh failed (needs network); NOT a pass"; return 0; }
   timeout 300 $BIN limbo $L/cases.txt > $L/out_$$.txt || fail limbo "limbo run crashed"
@@ -136,7 +137,7 @@ stage_limbo() {
     [ -z "$pat" ] && continue
     [ -n "$reason" ] || fail limbo "tests/limbo_known.txt: '$pat' has no reason"
     if [ "${pat:0:1}" = '!' ]; then
-      [[ ${pat:1} == webpki::cn::* ]] || fail limbo "tests/limbo_known.txt: '$pat' pins an invalid chain outside webpki::cn::"
+      [[ ${pat:1} == webpki::cn::* || ${pat:1} == rfc5280::ski::root-missing-ski ]] || fail limbo "tests/limbo_known.txt: '$pat' pins an invalid chain outside the two policy classes (webpki::cn::*, rfc5280::ski::root-missing-ski)"
       apats+=("${pat:1}")
     else
       pats+=("$pat")
@@ -157,7 +158,7 @@ stage_limbo() {
   [ "$unknown" = 0 ] || fail limbo "$unknown disagreements with limbo that tests/limbo_known.txt does not explain (an accepted invalid chain is a security bug)"
   for pat in "${pats[@]}"; do [ -n "${hit[$pat]:-}" ] || echo "note limbo: '$pat' matches no disagreement any more; delete it from tests/limbo_known.txt"; done
   for pat in "${apats[@]}"; do [ -n "${hit[!$pat]:-}" ] || echo "note limbo: '!$pat' matches no disagreement any more; delete it from tests/limbo_known.txt"; done
-  echo "PASS limbo: ${sum#limbo: }; $na invalid accepted (all pinned policy webpki::cn::), $nr valid rejected, explained by $((${#pats[@]} + ${#apats[@]})) lines of tests/limbo_known.txt"
+  echo "PASS limbo: ${sum#limbo: }; $na invalid accepted (all pinned policy: webpki::cn::*, rfc5280::ski::root-missing-ski), $nr valid rejected, explained by $((${#pats[@]} + ${#apats[@]})) lines of tests/limbo_known.txt"
 }
 
 stage_roots() {

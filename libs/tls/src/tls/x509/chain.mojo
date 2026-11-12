@@ -278,7 +278,9 @@ def _profile(c: Certificate, anchor: Bool) raises:
         raise Error("tls: x509: policy constraints must be critical")
     if c.ski_crit or c.aki_crit:
         raise Error("tls: x509: subject and authority key identifiers must not be critical")
-    if (anchor or (c.has_bc and c.is_ca)) and not c.has_ski:
+    # A trust anchor is path-validation input (RFC 5280 6.1.1 d), not a checked certificate: real roots such as
+    # TWCA Global Root CA carry no SKI. Every intermediate CA still needs one.
+    if not anchor and c.has_bc and c.is_ca and not c.has_ski:
         raise Error("tls: x509: CA certificate without subject key identifier")
     if not c.self_issued() and len(c.aki_kid) == 0:
         raise Error("tls: x509: certificate without authority key identifier")
