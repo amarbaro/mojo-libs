@@ -53,13 +53,22 @@ loopback sockets), `interop/hello_probe.sh` (real OpenSSL against our ServerHell
 `peers` mode self-tests the harness against `openssl s_server`; `ours` mode waits for `TLS_SERVER_BIN` / `TLS_CLIENT_BIN`),
 `bench_engine.mojo` (framing cost without crypto).
 
-## Wave 2 checklist (everything below prints SKIP today, never PASS)
+## Real peers today (temporary crypto)
 
-1. `RealCrypto` adapter and an `examples/` server binary honouring the contract in `tests/interop/run.sh` (LISTENING line,
-   `mojo-tls-ok` body, PEM loading from lane 3). Set `TLS_SERVER_BIN`, run `tests/interop/run.sh ours`.
-2. A client binary (`TLS_CLIENT_BIN HOST PORT CAFILE`) for `ours/client x s_server`.
-3. ChaCha20 and AES-GCM record bytes against real AEAD (today only the nonce, AAD and explicit-nonce construction are
-   checked, with the fake tag).
-4. Chromium/Vivaldi page load, curl, Python, s_client matrix with real crypto; `testssl.sh` is not installed.
-5. 10k handshakes/s on 8 cores: needs a multi-threaded accept (share one listener across Loops) and real crypto.
+`tests/real/` puts lane 4's `_tmp_crypto` (Mosaad-M-tls port, MIT) behind `Crypto12` as `RealCrypto` (ECDSA P-256 only,
+no chain validation on the client). `tests/real/build.sh` builds `real_server` / `real_client`; `tests/check.sh` runs
+`tests/interop/run.sh ours` with them: openssl s_client, curl, Python ssl and headless Vivaldi (Chrome 156, TLS 1.2 only,
+AES_128_GCM) against our server, our client against `openssl s_server`, three AEAD suites each, negatives. It needs
+lane 4's tree (`LANE4=`), so it prints SKIP when that is gone. Speed with that crypto: `openssl s_time -new` against
+one `real_server` thread: about 940 full handshakes/s (the engines cost about 10 us of that, see bench_engine).
+
+## Wave 2 checklist (printed as SKIP today, never PASS)
+
+1. `RealCrypto` over lanes 1-3 replaces `tests/real/` (delete it); add P-384 and RSA certificate cells
+   (`TLS_KINDS="p256 p384 rsa"`), the PEM/PKCS#8 loader from lane 3 in the server binary, chain validation in the client.
+2. An `examples/` https server on mojo-bento (the plan row) and a Firefox headless cell (`firefox` is installed).
+3. Bulk throughput through the engine with a real AEAD (only handshakes were timed with real crypto).
+4. `testssl.sh` is not installed: the "only the listed suites" scan is UNVERIFIED.
+5. 10k handshakes/s on 8 cores: multi-threaded accept (one listener shared by one Loop per thread) and faster crypto;
+   today 940/s per thread.
 6. Secret zeroing is a plain store loop; check the generated code keeps it.

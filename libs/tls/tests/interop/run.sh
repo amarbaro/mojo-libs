@@ -81,9 +81,12 @@ p_vivaldi() { # no suite control: Chromium picks; checks the page loads over TLS
 }
 
 # one matrix: server kind x suite x client probe. $1 who.
+have_kind() { [[ "$1" == peers || " ${TLS_KINDS:-p256 p384 rsa} " == *" $2 "* ]]; }
 matrix() {
   local who="$1" kind suite probe out
-  for kind in p256 p384 rsa; do for suite in ${KSUITES[$kind]}; do
+  for kind in p256 p384 rsa; do
+    have_kind "$who" "$kind" || { sk "$who/$kind: key type not supported by this binary (TLS_KINDS=${TLS_KINDS:-})"; continue; }
+    for suite in ${KSUITES[$kind]}; do
     start_server "$who" "$kind" "$suite" || { no "$who/start/$kind/$suite" "server did not start: $(head -c 300 "$W/srv.log")"; continue; }
     for probe in sclient curl python; do
       if out="$(p_$probe "$PORT" "$suite" 2>&1)" && [[ "$out" == "$suite mojo-tls-ok" ]]; then ok "$who/$probe/$kind/$suite"
@@ -93,6 +96,7 @@ matrix() {
   # browser: one cell per key type (suite chosen by the browser)
   if ! command -v vivaldi >/dev/null; then sk "$who/browser: vivaldi not installed"; return; fi
   for kind in p256 rsa; do
+    have_kind "$who" "$kind" || continue
     start_server "$who" "$kind" "ALL" || { no "$who/start/$kind/browser" "server did not start"; continue; }
     if out="$(p_vivaldi "$PORT" 2>&1)"; then ok "$who/vivaldi/$kind"; else no "$who/vivaldi/$kind" "page marker missing: $out"; fi
   done
@@ -133,6 +137,7 @@ run_ours() {
   else
     local kind suite out
     for kind in p256 rsa; do for suite in ${KSUITES[$kind]}; do
+      have_kind ours "$kind" || { sk "ours/client/$kind/$suite: key type not supported by this binary"; continue; }
       start_server peers "$kind" "$suite"
       if out="$(timeout 30 "$TLS_CLIENT_BIN" 127.0.0.1 "$PORT" "$C/ca.pem" 2>&1)" && [[ "$out" == *mojo-tls-ok* ]]; then ok "ours/client/$kind/$suite"
       else no "ours/client/$kind/$suite" "$(echo "$out" | tail -c 200)"; fi
