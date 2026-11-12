@@ -8,7 +8,7 @@ from tls.x509.cert import Certificate, KEY_RSA, KEY_P256
 from tls.x509.key import load_private_key, PrivateKey, _parse, wipe
 from tls.sym import sha256
 from tls.asym import P256Key, RsaPrivate
-from tls.x509.chain import verify_chain, load_roots_pem, load_system_roots, host_matches, parse_ip
+from tls.x509.chain import anchor_rules, verify_chain, load_roots_pem, load_system_roots, host_matches, parse_ip
 
 comptime HEX = "0123456789abcdef"
 
@@ -730,6 +730,28 @@ def limbo_mode(path: String, mut t: Tally) raises:
     t.check("limbo ran", True)
 
 
+def roots_mode(path: String, mut t: Tally) raises:
+    """Every certificate of the bundle must pass the trust-anchor profile; prints the ones that do not."""
+    var dropped = 0
+    var raw = read_file(path)
+    var roots = load_roots_pem(view(raw), dropped)
+    var bad = 0
+    for ref r in roots:
+        try:
+            anchor_rules(r, 0)
+        except e:
+            bad += 1
+            var cn = String()
+            var sj = r.subject()
+            for i in range(len(sj)):
+                if sj[i] >= 32 and sj[i] < 127:
+                    cn += chr(Int(sj[i]))
+            print("ROOT", String(e), "|", cn)
+    print("roots:", len(roots), "parsed,", dropped, "dropped,", bad, "fail the anchor profile")
+    t.check("roots audited", dropped == 0)
+    _ = len(raw)
+
+
 def main() raises:
     var a = argv()
     var mode = String(a[1])
@@ -741,6 +763,8 @@ def main() raises:
         fuzz_chain("rsa_leaf.pem", "rsa_inter.pem", "rsa_root.pem", "rsa.example.com", Int(atol(String(a[2]))), t)
     elif mode == "limbo":
         limbo_mode(String(a[2]), t)
+    elif mode == "roots":
+        roots_mode(String(a[2]), t)
     elif mode == "bench":
         bench(t)
     elif mode == "bundle":

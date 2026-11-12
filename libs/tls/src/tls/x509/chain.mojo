@@ -247,12 +247,13 @@ def _valid_at(c: Certificate, now: Int) raises:
 
 
 def _ca_rules(c: Certificate, below: Int, anchor: Bool) raises:
-    """`below` = intermediates between `c` and the leaf. An anchor without basicConstraints (v1 root) is allowed."""
+    """`below` = intermediates between `c` and the leaf."""
     if len(c.subject()) <= 2:
         raise Error("tls: x509: CA with an empty subject")
-    if c.has_bc or not anchor:
-        if not (c.has_bc and c.is_ca):
-            raise Error("tls: x509: issuer is not a CA")
+    if not (c.has_bc and c.is_ca):
+        raise Error("tls: x509: issuer is not a CA")
+    if not c.bc_crit:
+        raise Error("tls: x509: CA basicConstraints must be critical")
     if c.has_ku and (c.ku & KU_KEY_CERT_SIGN) == 0:
         raise Error("tls: x509: CA key usage lacks keyCertSign")
     if c.path_len >= 0 and below > c.path_len:
@@ -263,6 +264,8 @@ def _ca_rules(c: Certificate, below: Int, anchor: Bool) raises:
 
 def _profile(c: Certificate, anchor: Bool) raises:
     """RFC 5280 extension profile of any certificate on the path. `anchor`: c is the trust anchor above the chain."""
+    if c.unknown_critical:
+        raise Error("tls: x509: unknown critical extension")
     if c.aia_crit:
         raise Error("tls: x509: authority information access must not be critical")
     if c.ski_crit or c.aki_crit:
@@ -287,10 +290,15 @@ def _leaf_rules(leaf: Certificate) raises:
         raise Error("tls: x509: leaf key is not P-256, P-384 or RSA of at least 2048 bits")
 
 
+def anchor_rules(c: Certificate, below: Int) raises:
+    """Profile checks of a trust anchor that signs a chain with `below` intermediates (also run over the system bundle)."""
+    _profile(c, True)
+    _ca_rules(c, below, True)
+
+
 def _check_path(chain: List[Certificate], below: List[Int], root: Certificate, now: Int) raises:
     """`below` indexes chain: leaf first, then intermediates up to the one the root signed (empty: the leaf is the root)."""
     var k = len(below)
-    _profile(root, k > 0)
     _leaf_rules(chain[0])
     var nsi = 0  # intermediates seen so far that are not self-issued (RFC 5280 6.1.4 l)
     for p in range(k):
@@ -299,8 +307,6 @@ def _check_path(chain: List[Certificate], below: List[Int], root: Certificate, n
         _valid_at(c, now)
         if p > 0 and not c.serial_ok():
             raise Error("tls: x509: serial number must be positive, non-zero and at most 20 octets")
-        if c.unknown_critical:
-            raise Error("tls: x509: unknown critical extension")
         if c.has_ku and ((c.ku & KU_KEY_CERT_SIGN) != 0) != c.is_ca:
             raise Error("tls: x509: keyCertSign and basicConstraints cA disagree")
         if p > 0:
@@ -312,7 +318,9 @@ def _check_path(chain: List[Certificate], below: List[Int], root: Certificate, n
                 nsi += 1
     _valid_at(root, now)
     if k > 0:
-        _ca_rules(root, nsi, True)
+        anchor_rules(root, nsi)
+    else:
+        _profile(root, False)
     for q in range(k):
         if q == 0 or not chain[below[q]].self_issued():
             _constrain(root, chain[below[q]])

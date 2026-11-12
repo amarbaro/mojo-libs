@@ -16,11 +16,8 @@ rfc5280::nc::not-allowed-in-ee-critical
 rfc5280::nc::not-allowed-in-ee-noncritical
 rfc5280::nc::permitted-dns-match-noncritical
 rfc5280::pc::ica-noncritical-pc
-rfc5280::root-missing-basic-constraints
-rfc5280::root-non-critical-basic-constraints
 rfc5280::san::noncritical-with-empty-subject
 rfc5280::san::underscore-dns
-rfc5280::unknown-critical-extension-root
 rfc9881::ml-dsa-44
 rfc9881::ml-dsa-65
 rfc9881::ml-dsa-87
