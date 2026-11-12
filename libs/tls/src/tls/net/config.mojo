@@ -1,0 +1,52 @@
+"""TlsConfig: the certificates a server offers (picked by SNI), ALPN protocols, timeouts and size limits."""
+
+
+struct CertEntry(Copyable, Movable):
+    var names: List[String]  # lower case; "*.example.com" matches one extra label
+    var chain: List[List[UInt8]]  # DER certificates, leaf first
+    var key: List[UInt8]  # DER private key (PKCS#8 or SEC1)
+    var kind: Int  # K_P256, K_P384 or K_RSA from tls.tls12.crypto
+
+    def __init__(out self, var names: List[String], var chain: List[List[UInt8]], var key: List[UInt8], kind: Int):
+        self.names = names^
+        self.chain = chain^
+        self.key = key^
+        self.kind = kind
+
+    def matches(self, host: String) -> Bool:
+        for n in self.names:
+            if n == host:
+                return True
+            if n.startswith("*."):
+                var dot = host.find(".")
+                if dot > 0 and String(host[byte = dot :]) == String(n[byte = 1 :]):
+                    return True
+        return False
+
+
+struct TlsConfig(Movable):
+    var certs: List[CertEntry]  # the first entry is the default
+    var alpn: List[String]  # server preference order; empty = no ALPN
+    var handshake_ms: Int  # a connection that has not finished its handshake by then is closed
+    var idle_ms: Int  # an established connection with no traffic for this long is closed
+    var max_conns: Int
+    var max_out: Int  # queued output bytes per connection before reading pauses
+
+    def __init__(out self):
+        self.certs = List[CertEntry]()
+        self.alpn = List[String]()
+        self.handshake_ms = 10000
+        self.idle_ms = 60000
+        self.max_conns = 65536
+        self.max_out = 1 << 20
+
+    def order(self, sni: String) -> List[Int]:
+        """Entries to try, SNI matches first, then the rest in configuration order (default first)."""
+        var o = List[Int]()
+        for i in range(len(self.certs)):
+            if self.certs[i].matches(sni):
+                o.append(i)
+        for i in range(len(self.certs)):
+            if i not in o:
+                o.append(i)
+        return o^
