@@ -193,17 +193,16 @@ The matrix needs browsers, tlsfuzzer, testssl and the `tests/matrix/` fixtures; 
 
 ## Performance
 
-One core pinned, Ryzen 7 7800X3D, median of several runs (`tests/bench*.mojo`; table and method in [docs/perf.md](docs/perf.md)):
+One core pinned (`taskset -c 5`), Ryzen 7 7800X3D, Mojo 1.2.0 (`tests/bench*.mojo`; method, profiling pass and sources of each number in [docs/perf.md](docs/perf.md)):
 
-| Operation | Time |
+| Operation | Result |
 |---|---|
-| x25519 | 70 us |
-| P-256 sign / verify / ECDH | 146 / 187 / 134 us |
-| P-384 verify | 530 us |
-| AES-128-GCM seal | 6.6 GB/s |
-| AES-256-GCM seal | 5.7 GB/s |
-| ChaCha20-Poly1305 seal | 1.76 GB/s |
-| In-memory TLS 1.3 handshakes (both sides) | 3052 per second |
+| x25519 scalar mult | 61 us |
+| P-256 ECDSA sign / verify, ECDH | 147 / 186 / 130 us |
+| P-384 verify | 532 us |
+| AES-128-GCM / AES-256-GCM / ChaCha20-Poly1305 record seal (16 KiB) | 5.1 / 4.4 / 1.6 GB/s |
+| The same, record open | 5.4 / 4.7 / 1.7 GB/s |
+| In-memory TLS 1.3 handshakes, both sides (x25519, fixed signature) | 3055 per second |
 
 ## Security
 
