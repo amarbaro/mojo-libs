@@ -10,9 +10,12 @@
 ## Open, in order
 1. Step 2: lane 3 x509-limbo: 43 invalid chains accepted, 13 valid rejected (tests/limbo_known.txt pins them):
    fix the 44 first (security), then the 13; the gate must fail on any accepted invalid chain.
-2. Lane 1 gate: 2 mutants (gcm-noncelen, aes-keylen) are caught by SIGILL, not a printed FAIL: make them print.
-3. Step 3: test matrix: tlsfuzzer, testssl, Chromium + Firefox headless, TLS 1.3 + 1.2 x P-256 + RSA x SNI/ALPN.
+2. (done, lane matrix) Lane 1 gate: aes-keylen / gcm-noncelen print FAIL; runners treat exit >= 124 as a survivor.
+3. (done, lane matrix) `tests/matrix.sh`: 149 PASS, 13 SKIP with reasons, 0 FAIL (report: .work/report-w2-matrix.md).
+4. Promote `tests/matrix/msrv.mojo` (TLS 1.3/1.2 dispatch on one port) into `src/tls/net`: `TlsServer` is TLS 1.2 only.
+5. Lane 2: asym mutant 17 (rsa.mojo length check) dies of SIGILL only (`tests/mutants_asym.sh` prints TRAP).
+6. NewSessionTicket / resumption (tlsfuzzer lengths, record-layer-limits need it), client certificates, secp384r1/x448 groups in 1.3.
 
 ## How to check
-gates: tests/sym_gate.sh, tests/gate_asym.sh, tests/gate_x509.sh (+ tests/mutants_x509.sh), tests/gate_tls13.sh
+gates: tests/matrix.sh (+ tests/matrix/build.sh), tests/sym_gate.sh, tests/gate_asym.sh, tests/gate_x509.sh (+ tests/mutants_x509.sh), tests/gate_tls13.sh
 --mutants, tests/check.sh mutants. Inputs in .work/{vec,vectors,wycheproof,limbo,certs} (copied from lane worktrees).
