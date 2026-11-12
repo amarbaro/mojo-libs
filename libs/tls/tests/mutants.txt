@@ -1,0 +1,12 @@
+# name|file under src/|sed -E expression. Each must make the gate fail (tests/sym_gate.sh).
+k256-high|tls/sym/sha2.mojo|s/0x7137449123EF65CD/0x7137449223EF65CD/
+k512-low|tls/sym/sha2.mojo|s/0x428A2F98D728AE22/0x428A2F98D728AE23/
+iv384|tls/sym/sha2.mojo|s/0xCBBB9D5DC1059ED8/0xCBBB9D5DC1059ED9/
+sha-pad|tls/sym/sha2.mojo|s/if n \+ 1 > Self.BLOCK - Self.BLOCK \/\/ 8:/if n + 1 >= Self.BLOCK - Self.BLOCK \/\/ 8:/
+sha-rot|tls/sym/sha2.mojo|s/2, 13, 22, 6, 11, 25/2, 13, 23, 6, 11, 25/
+hmac-ipad|tls/sym/mac.mojo|s/k\[i\] \^= 0x36$/k[i] ^= 0x37/
+hmac-longkey|tls/sym/mac.mojo|s/len\(key\) > H.BLOCK/len(key) >= H.BLOCK/
+hkdf-guard|tls/sym/mac.mojo|s/n > 255 \* H.OUT/n > 256 * H.OUT/
+hkdf-counter|tls/sym/mac.mojo|s/m.append\(UInt8\(i\)\)/m.append(UInt8(i + 1))/
+hkdf-label|tls/sym/mac.mojo|s/"tls13 "/"tls12 "/
+prf-seed|tls/sym/mac.mojo|s/var a = hmac\[H\]\(secret, ls\)/var a = hmac[H](secret, seed)/
