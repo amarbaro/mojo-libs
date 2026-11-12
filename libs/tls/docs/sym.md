@@ -36,7 +36,7 @@ Status: gate passes (`tests/sym_gate.sh`, 53 mutants killed). Import everything 
 ## Gate
 
 `tests/sym_gate.sh` builds `tests/sym_check.mojo` twice (hardware, `-D TLS_SOFT_AES=true`), runs every vector line,
-then applies each mutant of `tests/mutants.txt` (sed on a copy of `src/`, optional build flags) and requires the
+then applies each mutant of `tests/mutants_sym.txt` (sed on a copy of `src/`, optional build flags) and requires the
 runner to fail. Vector lines: `tests/vec/` (committed: Wycheproof hmac/hkdf/aes_gcm/chacha20_poly1305 for the
 96-bit-nonce, 128-bit-tag, AES-128/256 groups, FIPS 197, RFC 8448 label, RFC 8439 Poly1305) and `.work/vec/random-*.txt`
 (seeded, made by `tools/gen_vec.py random .work/vec` with openssl and python `cryptography` as oracles).

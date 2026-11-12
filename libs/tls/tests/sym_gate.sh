@@ -1,5 +1,5 @@
 #!/bin/bash
-# Lane 1 gate: official + oracle vectors against src/tls/sym, then every mutant in tests/mutants.txt must make it fail.
+# Lane 1 gate: official + oracle vectors against src/tls/sym, then every mutant in tests/mutants_sym.txt must make it fail.
 #   tests/sym_gate.sh            vectors (hardware and software AES builds) + mutants
 #   tests/sym_gate.sh vec        vectors only
 # Needs python3 + cryptography and openssl (oracles only), and .work/wyche for a refresh of tests/vec.
@@ -45,7 +45,7 @@ while IFS= read -r line; do
   mutant "$line" > ".work/gate/m-${line%%@*}.log" 2>&1 &
   pids+=($!)
   while [ "$(jobs -r | wc -l)" -ge 8 ]; do sleep 0.5; done
-done < "${MUTANTS:-tests/mutants.txt}"
+done < "${MUTANTS:-tests/mutants_sym.txt}"
 bad=0
 for p in "${pids[@]}"; do wait "$p" || bad=1; done
 cat .work/gate/m-*.log
