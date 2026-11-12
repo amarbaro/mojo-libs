@@ -3,6 +3,7 @@ integrity, SNI/ALPN, downgrade sentinel, and every way a hostile peer can break 
 from std.memory import ArcPointer
 from tutil import *
 from tls.net.config import TlsConfig
+from tls.net.server import TlsServer
 from tls.tls12.msg import *
 from fake_crypto import mix
 from tls.tls12.wire import bl, bytes_of, str_of, cat, put
@@ -271,6 +272,15 @@ def main() raises:
             pass
         peak = max(peak, len(gc.inb))
     t.check("input buffer bounded under misaligned reads", peak < 70000, "peak " + String(peak) + " bytes for " + String(len(stream)) + " fed")
+
+    # a server without certificates is a configuration error at start, not an index panic on the first connection (audit #7)
+    var refused_empty = False
+    try:
+        var nocert = TlsServer[FakeCrypto](TlsConfig(), 0)
+        _ = nocert.port()
+    except e:
+        refused_empty = "no certificate" in String(e)
+    t.check("TlsServer refuses an empty certificate list at construction", refused_empty)
 
     # ClientHello errors: the alert is the contract
     expect(t, "good hello accepted", cfg, rec(22, mk_ch()), -9)

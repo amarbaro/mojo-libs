@@ -117,6 +117,8 @@ struct TlsServer[C: Crypto12](Movable):
     var stopped: Bool
 
     def __init__(out self, var cfg: TlsConfig, port: Int = 0, host: String = "127.0.0.1", tls13: Bool = True) raises:
+        if len(cfg.certs) == 0:
+            raise Error("tls: TlsConfig has no certificate (add a CertEntry before starting the server)")  # else the first ClientHello indexes certs[order(sni)[0]] out of range
         if tls13 and len(cfg.ticket_keys) == 0:
             cfg.ticket_keys = [Self.C().random(32)]  # one key per server start: tickets survive connections, not restarts
         cfg.tls13 = tls13  # also tells Server12 to send the DOWNGRD sentinel to a 1.3-capable client (RFC 8446 4.1.3)
