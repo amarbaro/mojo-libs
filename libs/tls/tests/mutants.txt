@@ -1,0 +1,7 @@
+# name | file | perl substitution (applied with -0pi to src/<file>) | stage that must fail
+der_minimal_length | tls/x509/der.mojo | s/if l < 0x80:/if l < 0x00:/ | parse
+der_int_minimal | tls/x509/der.mojo | s/\(c\[0\] == 0 and c\[1\] < 0x80\)/(False)/ | parse
+time_pivot | tls/x509/der.mojo | s/y >= 50/y >= 51/ | parse
+validity_swapped | tls/x509/cert.mojo | s/self.not_before = val.time\(\)\n(\s+)self.not_after = val.time\(\)/self.not_after = val.time()\n$1self.not_before = val.time()/ | parse
+duplicate_ext_allowed | tls/x509/cert.mojo | s/if same\(view\(p\), o\):/if False:/ | parse
+b64_pad_unchecked | tls/x509/pem.mojo | s/pad != \(4 - r\) % 4/False/ | parse

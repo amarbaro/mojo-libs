@@ -1,0 +1,11 @@
+ok_trailing_dot openssl does not strip a trailing dot; browsers do
+bad_host_empty openssl verify is given no name to check
+bad_wild_tld openssl accepts a *.com wildcard; browsers and RFC 6125 6.4.3 do not
+bad_wild_partial openssl accepts partial-label wildcards
+bad_cn_only openssl falls back to the subject CN when there is no SAN; RFC 9525 forbids it
+bad_ku_no_signature openssl -purpose sslserver accepts keyEncipherment (RSA key transport); our suites cannot use it
+bad_nc_unsupported_type_used openssl checks the email name against the constraint; we refuse a name type we cannot check
+bad_sha1_leaf openssl security level decides; we always reject SHA-1 signatures
+bad_chain_11 openssl's default depth is 100; we cap chains at 10 certificates
+bad_rsa_sha1_inter openssl security level decides; we always reject SHA-1 signatures
+bad_rsa_1024_issuer openssl security level 1 accepts 1024-bit RSA; browsers and CA/B BR 6.1.5 do not
