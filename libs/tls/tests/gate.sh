@@ -49,7 +49,7 @@ if [ "${1:-}" = "--mutants" ]; then
   m tests/test_conn.mojo tls/tls13/conn.mojo 's/if self.tx.seq >= self.key_limit:/if False:/'
   m tests/test_conn.mojo tls/tls13/conn.mojo 's/            if typ != APP:/            if False:/'
   m tests/test_conn.mojo tls/tls13/conn.mojo 's/        if len(self.hs) != 0:/        if False:/'
-  m tests/test_conn.mojo tls/tls13/conn.mojo 's/self.install_rx(next_secret(self.h, self.rx_secret))/self.install_rx(self.rx_secret)/'
+  m tests/test_conn.mojo tls/tls13/conn.mojo 's/self.install_rx(next_secret(self.h, self.rx_secret))/self.install_rx(next_secret(self.h, self.tx_secret))/'
   bash tests/mutant_interop.sh tls/tls13/keysched.mojo 's/"traffic upd"/"traffic upx"/' || { echo "FAIL mutant: interop traffic upd"; bad=1; }
 fi
 
