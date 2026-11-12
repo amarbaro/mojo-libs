@@ -7,8 +7,8 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"; cd "$root"
 SRC="${SRC:-src}"; OUT="${OUT:-$root/.work/net}"; mkdir -p "$OUT"
-MOJO="${MOJO:-/home/mario/Projects/mojo/mojo-tls/.venv/bin/mojo}"
-AIO="${AIO:-/home/mario/Projects/mojo/mojo-aio/src}"
+MOJO="${MOJO:-$PWD/.venv/bin/mojo}"
+AIO="${AIO:-$PWD/.work/deps/mojo-aio/src}"
 HS_MS=1500; IDLE_MS=2500; TOTAL=$((200 + 3 + 1 + 1 + 1 + 1 + 20 + 2))  # + 2 tiny first records (a legal 2-byte fragment: the server waits, then times out, and must not crash)
 for b in net_server net_client; do
   rm -f "$OUT/$b"

@@ -3,7 +3,7 @@
 # usage: mutant.sh <tests/test_x.mojo> <file under src/> <sed expression>
 set -euo pipefail
 cd "$(dirname "$0")/.."
-MOJO=${MOJO:-/home/mario/Projects/mojo/mojo-tls/.venv/bin/mojo}
+MOJO=${MOJO:-$PWD/.venv/bin/mojo}
 test="$1"; file="$2"; expr="$3"
 rm -rf .work/mut; mkdir -p .work/mut; cp -r src .work/mut/src
 sed -i "$expr" ".work/mut/src/$file"

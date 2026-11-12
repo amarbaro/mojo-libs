@@ -2,8 +2,8 @@
 # build.sh: build the matrix harness binaries into .work/matrix-bin (msrv, mcli). Prints FAIL <step>: <reason> on error.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$root"
-MOJO="${MOJO:-/home/mario/Projects/mojo/mojo-tls/.venv/bin/mojo}"
-AIO="${AIO:-$HOME/Projects/mojo/mojo-aio/src}"
+MOJO="${MOJO:-$PWD/.venv/bin/mojo}"
+AIO="${AIO:-$PWD/.work/deps/mojo-aio/src}"
 mkdir -p .work/matrix-bin
 for b in ${@:-msrv mcli}; do
   rm -f ".work/matrix-bin/$b"

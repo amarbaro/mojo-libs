@@ -4,7 +4,7 @@
 # usage: mutant_interop.sh <file under src/> <sed expression>
 set -euo pipefail
 cd "$(dirname "$0")/.."
-MOJO=${MOJO:-/home/mario/Projects/mojo/mojo-tls/.venv/bin/mojo}
+MOJO=${MOJO:-$PWD/.venv/bin/mojo}
 file="$1"; expr="$2"
 rm -rf .work/mutI; mkdir -p .work/mutI; cp -r src .work/mutI/src
 sed -i "$expr" ".work/mutI/src/$file"

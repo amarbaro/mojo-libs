@@ -4,7 +4,7 @@
 # Prints PASS/FAIL <stage>: <reason>; exits non-zero on any failure. Artifacts in .work/gate/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-MOJO=${MOJO:-/home/mario/Projects/mojo/mojo-tls/.venv/bin/mojo}
+MOJO=${MOJO:-$PWD/.venv/bin/mojo}
 W=${W:-.work/gate}
 BIN=${BIN:-$W/gate}
 BUNDLE=${BUNDLE:-/etc/ssl/certs/ca-certificates.crt}

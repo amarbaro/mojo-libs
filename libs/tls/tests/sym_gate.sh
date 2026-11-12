@@ -5,7 +5,7 @@
 # Needs python3 + cryptography and openssl (oracles only), and .work/wyche for a refresh of tests/vec.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-MOJO=${MOJO:-/home/mario/Projects/mojo/mojo-tls/.venv/bin/mojo}
+MOJO=${MOJO:-$PWD/.venv/bin/mojo}
 mkdir -p .work/vec .work/gate
 [ -f .work/vec/random-chacha.txt ] || python3 -I tools/gen_vec.py random .work/vec
 VECS=(${SYM_VECS:-tests/vec/*.txt .work/vec/random-*.txt})

@@ -4,5 +4,5 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 src="$1"; out="$2"
 rm -f "$out"
-timeout 300 "${MOJO:-/home/mario/Projects/mojo/mojo-tls/.venv/bin/mojo}" build -I "${SRC:-src}" "$src" -o "$out" 2>&1 | grep -v -E '^(warning|\s+\^|\s*$)' | head -${MB_LINES:-40} || true
+timeout 300 "${MOJO:-$PWD/.venv/bin/mojo}" build -I "${SRC:-src}" "$src" -o "$out" 2>&1 | grep -v -E '^(warning|\s+\^|\s*$)' | head -${MB_LINES:-40} || true
 [ -x "$out" ] || { echo "FAIL build $src: no binary"; exit 1; }

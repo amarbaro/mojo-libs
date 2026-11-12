@@ -4,7 +4,7 @@
 # Builds each test (timeout 300), runs it, runs the openssl oracles and the interop matrix, optionally the mutants.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-MOJO=${MOJO:-/home/mario/Projects/mojo/mojo-tls/.venv/bin/mojo}
+MOJO=${MOJO:-$PWD/.venv/bin/mojo}
 G=.work/gate; B=.work/bin
 mkdir -p "$G" "$B"
 bad=0
