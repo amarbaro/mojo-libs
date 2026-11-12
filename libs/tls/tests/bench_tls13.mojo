@@ -79,7 +79,7 @@ def one_round(suite: Int, n: Int, chain: List[List[UInt8]]) raises -> Int:
     return ok
 
 
-def x25519_rate(n: Int):
+def x25519_rate(n: Int) raises:
     var k = fill(32, 0x42)
     var best = Int.MAX
     for _ in range(5):
@@ -87,7 +87,7 @@ def x25519_rate(n: Int):
         for _ in range(n):
             k = x25519_base(k)
         best = min(best, perf_counter_ns() - t0)
-    print("x25519 (ported, temporary), best of 5: " + String(Int(Float64(n) / (Float64(best) / 1e9))) + " scalar mults per second (" + String(Int(best / n / 1000)) + " us each)")
+    print("x25519, best of 5: " + String(Int(Float64(n) / (Float64(best) / 1e9))) + " scalar mults per second (" + String(Int(best / n / 1000)) + " us each)")
 
 
 def main() raises:
