@@ -78,7 +78,11 @@ def bytes_of(s: String) -> List[UInt8]:
 
 
 def str_of(b: List[UInt8]) -> String:
-    return String(unsafe_from_utf8=b)
+    """Bytes as a String, one code point per byte (Latin-1, like tls13.wire): the peer's bytes are never UTF-8 we checked."""
+    var s = String()
+    for c in b:
+        s += chr(Int(c))
+    return s^
 
 
 def is_ip(host: String) -> Bool:

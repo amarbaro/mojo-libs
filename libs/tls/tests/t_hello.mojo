@@ -19,8 +19,39 @@ def load(name: String) raises -> List[UInt8]:
     return unhex(String(open("tests/vectors/ch_" + name + ".hex", "r").read().strip()))
 
 
+def patch(mut raw: List[UInt8], needle: String, with_b: UInt8) -> Bool:
+    """Overwrite the first occurrence of needle in raw with the byte with_b (same length: every length field stays valid)."""
+    var nb = needle.as_bytes()
+    for i in range(len(raw) - len(nb) + 1):
+        var hit = True
+        for j in range(len(nb)):
+            hit = hit and raw[i + j] == nb[j]
+        if hit:
+            for j in range(len(nb)):
+                raw[i + j] = with_b
+            return True
+    return False
+
+
+def valid_utf8(s: String) -> Bool:
+    try:
+        _ = String(from_utf8=Span(s.as_bytes()))
+        return True
+    except:
+        return False
+
+
+def wire_strings(mut t: T) raises:
+    """Peer-controlled ALPN bytes that are not UTF-8 must still give a valid String (audit #13)."""
+    var raw = build_client_hello(List[UInt8](length=32, fill=1), "hostname", ["protocol"], False, [0xC02B])
+    var ok = patch(raw, "protocol", 0xFF)  # 0xFF never occurs in UTF-8 (the SNI parser already rejects non-hostname bytes)
+    var ch = parse_client_hello(List[UInt8](Span(raw)[4:]))
+    t.check("hostile ALPN bytes parse to a valid UTF-8 string", ok and len(ch.alpn) == 1 and valid_utf8(ch.alpn[0]), "alpn " + String(len(ch.alpn)))
+
+
 def main() raises:
     var t = T()
+    wire_strings(t)
     var cfg = make_cfg()
     var names = ["openssl12", "openssl13", "curl12", "curl13", "python", "vivaldi"]
     var seed = UInt64(0x9E3779B97F4A7C15)

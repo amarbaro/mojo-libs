@@ -49,6 +49,7 @@ if [[ "${1:-}" == mutants ]]; then
     "read-seq-wrap|src/tls/tls12/conn.mojo|s/if self.rd.seq == UInt64.MAX:/if False:/"
     "feed-no-compact|src/tls/tls12/conn.mojo|s/elif self.inp > 65536:/elif False:/"
     "empty-certs-ok|src/tls/net/server.mojo|s/if len(cfg.certs) == 0:/if False:/"
+    "alpn-str-unsafe|src/tls/tls12/wire.mojo|s/        s += chr(Int(c))/        s += String(unsafe_from_utf8=Span([c]))/"
     "record-cap-gone|src/tls/tls12/conn.mojo|s/if n > MAX_REC + (2048 if self.rd.on else 0):/if False:/"
     "read-seq-frozen|src/tls/tls12/conn.mojo|s/self.rd.seq += 1/pass/"
     "alpn-any|src/tls/tls12/server.mojo|s/if self.alpn.byte_length() == 0:/if False:/"
