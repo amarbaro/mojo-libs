@@ -73,6 +73,17 @@ cs bad_wild_tld fail $NOW foo.com ec_root.pem ec_wild.pem,ec_inter.pem
 cs bad_wild_partial fail $NOW fa.example.org ec_root.pem ec_wild.pem,ec_inter.pem
 div bad_wild_partial "openssl accepts partial-label wildcards"
 cs bad_wild_middle fail $NOW x.y.example.net ec_root.pem ec_wild.pem,ec_inter.pem
+# resource caps: 256 name constraint subtrees, 1024 SAN names (cert.mojo MAX_NC_SUBTREES, MAX_SAN_NAMES)
+subtrees() { local n=$1 o=permitted\;DNS:good.example i; for ((i = 1; i < n; i++)); do o+=,permitted\;DNS:d$i.example; done; printf '%s' "$o"; }
+names() { local n=$1 o=DNS:n0.good.example i; for ((i = 1; i < n; i++)); do o+=,DNS:n$i.good.example; done; printf '%s' "$o"; }
+issue caps_root256 "Caps256" ec_root ec "$CA"'nameConstraints=critical,'"$(subtrees 256)"'\n'
+issue caps_root257 "Caps257" ec_root ec "$CA"'nameConstraints=critical,'"$(subtrees 257)"'\n'
+issue caps_leaf1024 "l" caps_root256 ec "$SRV$(san "$(names 1024)")"
+issue caps_leaf1025 "l" caps_root256 ec "$SRV$(san "$(names 1025)")"
+cs ok_caps_at_limit ok $NOW n1023.good.example ec_root.pem caps_leaf1024.pem,caps_root256.pem
+cs bad_nc_257_subtrees fail $NOW n0.good.example ec_root.pem caps_leaf1024.pem,caps_root257.pem
+cs bad_san_1025_names fail $NOW n0.good.example ec_root.pem caps_leaf1025.pem,caps_root256.pem
+div bad_san_1025_names "openssl has no cap on SAN entries; we refuse more than 1024 (DoS bound, limbo pathological::nc-dos)"
 # CN only
 issue ec_cn_victim "victim.example" ec_inter ec "$SRV$(san DNS:other.example)"
 cs bad_cn_victim fail $NOW victim.example ec_root.pem ec_cn_victim.pem,ec_inter.pem

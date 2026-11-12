@@ -417,14 +417,14 @@ def chain_mode(manifest: String, mut t: Tally) raises:
         if len(f) < 6:
             continue
         var name = String(f[0])
-        var certs = load_certs(String(f[5]), "tests/data/")
-        var roots = load_certs(String(f[4]), "tests/data/")
         var host = String(f[3])
         if host == "-":
             host = String()
         var verdict = String("ok")
         var why = String()
-        try:
+        try:  # a certificate the parser refuses (resource caps) is a rejected chain
+            var certs = load_certs(String(f[5]), "tests/data/")
+            var roots = load_certs(String(f[4]), "tests/data/")
             verify_chain(certs, host, Int(atol(String(f[2]))), roots)
         except e:
             verdict = "fail"
