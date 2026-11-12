@@ -44,3 +44,5 @@ test-tls13-session-resumption	use TLS 1.2 ticket in TLS 1.3	x	the script's TLS 1
 test-tls13-session-resumption	sanity - TLS 1.2	x	the script's TLS 1.2 leg sends no extended_master_secret; our server refuses that by policy (docs/tls12.md)
 test-tls13-session-resumption	session resumption - PSK_ONLY	x	psk_ke (no key share) is not supported: resumption is psk_dhe_ke only (docs/tls13.md)
 test-tls13-0rtt-garbage	handshake with invalid 0-RTT and unknown version (downgrade to TLS 1.2)	x	the script's TLS 1.2 leg sends no extended_master_secret; our server refuses that by policy (docs/tls12.md)
+test-tls13-ecdsa-in-certificate-verify	check sigalgs in cert request	x	the probe answers the CertificateRequest with an empty Certificate and expects the handshake to go on (optional client authentication); require_client_cert answers certificate_required (RFC 8446 4.4.2.4)
+test-tls13-certificate-verify	check sigalgs in cert request	x	the probe answers the CertificateRequest with an empty Certificate and expects the handshake to go on (optional client authentication); require_client_cert answers certificate_required (RFC 8446 4.4.2.4)

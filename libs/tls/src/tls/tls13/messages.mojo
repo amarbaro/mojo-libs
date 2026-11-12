@@ -502,6 +502,12 @@ def enc_ku(request: Bool) -> List[UInt8]:
     return hs_msg(H_KU, [UInt8(1 if request else 0)])
 
 
+def enc_cr(ctx: List[UInt8], exts: List[Ext]) raises -> List[UInt8]:
+    var b = vec8(ctx)
+    putb(b, enc_exts(exts))
+    return hs_msg(H_CR, b)
+
+
 def parse_cr(msg: List[UInt8]) raises -> Tuple[List[UInt8], List[Ext]]:
     """CertificateRequest: (context, extensions); signature_algorithms is required."""
     var r = hs_body(msg, H_CR)

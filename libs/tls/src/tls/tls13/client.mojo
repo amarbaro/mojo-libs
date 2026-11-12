@@ -7,6 +7,7 @@ from tls.tls13.keysched import hash_of, finished_mac, cv_content
 from tls.tls13.messages import *
 from tls.tls13.keysched import KeySchedule, suite_hash_len
 from tls.tls13.record import seal_all, HS, MAX_PLAIN
+from tls.tls13.clientauth import key_schemes, sign_with_key
 from tls.tls13.ticket import Session, resumption_psk, binder_of, truncated_hash
 from tls.tls13.verify import Verifier
 from tls.tls13.wire import Rd, bad, ct_equal, wipe, str_of, is_ip
@@ -106,6 +107,10 @@ struct Client13[V: Verifier](Movable):
     var chain: List[List[UInt8]]
     var cr_ctx: List[UInt8]
     var got_cr: Bool
+    var cert_chain: List[List[UInt8]]  # client certificate to present when asked (set_client_cert), DER leaf first
+    var cert_key: List[UInt8]  # its PKCS#8 / SEC1 private key
+    var cr_schemes: List[Int]  # signature schemes the server's CertificateRequest accepts
+    var force_scheme: Int  # test hook: sign the CertificateVerify with this scheme even when the server did not list it
     var alpn: String  # protocol the server selected, empty if none
     var group: Int  # group of the key exchange that was used
     var sess: Session  # ticket offered by offer(), valid while resumed is set or an offer is outstanding
@@ -131,6 +136,10 @@ struct Client13[V: Verifier](Movable):
         self.chain = List[List[UInt8]]()
         self.cr_ctx = List[UInt8]()
         self.got_cr = False
+        self.cert_chain = List[List[UInt8]]()
+        self.cert_key = List[UInt8]()
+        self.cr_schemes = List[Int]()
+        self.force_scheme = 0
         self.alpn = String()
         self.group = 0
         self.sess = Session(0, List[UInt8](), List[UInt8](), 0, 0, 0)
@@ -151,6 +160,12 @@ struct Client13[V: Verifier](Movable):
             self.ch.exts.append(x_psk_modes())
         self.ch.exts.append(x_psk_client(s.ticket, age, len(s.psk)))
         pad_hello(self.ch)
+
+    def set_client_cert(mut self, chain: List[List[UInt8]], key_der: List[UInt8]):
+        """Present `chain` (signed with `key_der`) when the server sends a CertificateRequest; before that or without a
+        matching signature scheme the answer is an empty Certificate."""
+        self.cert_chain = chain.copy()
+        self.cert_key = key_der.copy()
 
     def session(self, i: Int, now_ms: Int) raises -> Session:
         """The i-th NewSessionTicket this connection received, as a Session; `now_ms` stamps its arrival."""
@@ -205,6 +220,7 @@ struct Client13[V: Verifier](Movable):
         elif s == S_WAIT_CERT and Int(m[0]) == H_CR:
             var cr = parse_cr(m)
             self.cr_ctx = cr[0].copy()
+            self.cr_schemes = p_u16s(cr[1][find(cr[1], X_SIGALGS)].d)
             self.got_cr = True
             self.c.add(m)
             self.c.state = S_WAIT_CERT2
@@ -342,10 +358,21 @@ struct Client13[V: Verifier](Movable):
         var sap = self.c.ks.derive("s ap traffic", th_sf)
         self.c.exp_master = self.c.ks.derive("exp master", th_sf)
         var flight = List[UInt8]()
-        if self.got_cr:  # we have no client certificate: answer the request with an empty Certificate
-            var cm = enc_cert(self.cr_ctx, List[List[UInt8]]())
+        if self.got_cr:  # our certificate if a scheme of its key is accepted, else an empty Certificate
+            var scheme = 0
+            if len(self.cert_chain) > 0:
+                for s in key_schemes(self.cert_key):
+                    if scheme == 0 and s in self.cr_schemes:
+                        scheme = s
+            if self.force_scheme != 0 and len(self.cert_chain) > 0:
+                scheme = self.force_scheme
+            var cm = enc_cert(self.cr_ctx, self.cert_chain.copy() if scheme != 0 else List[List[UInt8]]())
             self.c.add(cm)
             flight.extend(Span(cm))
+            if scheme != 0:
+                var cvm = enc_cv(scheme, sign_with_key(self.cert_key, scheme, cv_content(True, self.c.th())))
+                self.c.add(cvm)
+                flight.extend(Span(cvm))
         var fin = enc_fin(finished_mac(h, self.c.chs, self.c.th()))
         self.c.add(fin)
         flight.extend(Span(fin))

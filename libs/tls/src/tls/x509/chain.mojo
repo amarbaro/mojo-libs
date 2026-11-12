@@ -248,7 +248,7 @@ def _valid_at(c: Certificate, now: Int) raises:
         raise Error("tls: x509: certificate has expired")
 
 
-def _ca_rules(c: Certificate, below: Int, anchor: Bool) raises:
+def _ca_rules(c: Certificate, below: Int, anchor: Bool, client: Bool = False) raises:
     """`below` = intermediates between `c` and the leaf."""
     if len(c.subject()) <= 2:
         raise Error("tls: x509: CA with an empty subject")
@@ -262,8 +262,8 @@ def _ca_rules(c: Certificate, below: Int, anchor: Bool) raises:
         raise Error("tls: x509: RSA key size is not a multiple of 8 bits")
     if c.path_len >= 0 and below > c.path_len:
         raise Error("tls: x509: path length constraint exceeded")
-    if not anchor and c.has_eku and not c.eku_server:
-        raise Error("tls: x509: CA extended key usage excludes serverAuth")
+    if not anchor and c.has_eku and not (c.eku_client if client else c.eku_server):
+        raise Error("tls: x509: CA extended key usage excludes " + ("clientAuth" if client else "serverAuth"))
 
 
 def _profile(c: Certificate, anchor: Bool) raises:
@@ -326,7 +326,7 @@ def _san_cn_rules(leaf: Certificate) raises:
             raise Error("tls: x509: wildcard over a public suffix")
 
 
-def _leaf_rules(leaf: Certificate) raises:
+def _leaf_rules(leaf: Certificate, client: Bool = False) raises:
     """End-entity rules; they apply to chain[0] even when it is itself the trust anchor."""
     if not leaf.serial_ok():
         raise Error("tls: x509: serial number must be positive, non-zero and at most 20 octets")
@@ -334,8 +334,8 @@ def _leaf_rules(leaf: Certificate) raises:
         raise Error("tls: x509: end-entity certificate with basicConstraints cA")
     if leaf.has_nc:
         raise Error("tls: x509: name constraints in an end-entity certificate")
-    if not leaf.eku_server:  # false without an EKU too
-        raise Error("tls: x509: leaf needs an extended key usage that includes serverAuth")
+    if not (leaf.eku_client if client else leaf.eku_server):  # false without an EKU too
+        raise Error("tls: x509: leaf needs an extended key usage that includes " + ("clientAuth" if client else "serverAuth"))
     if leaf.has_ku and (leaf.ku & KU_DIGITAL_SIGNATURE) == 0:
         raise Error("tls: x509: leaf key usage lacks digitalSignature")
     _san_cn_rules(leaf)
@@ -349,10 +349,10 @@ def anchor_rules(c: Certificate, below: Int) raises:
     _ca_rules(c, below, True)
 
 
-def _check_path(chain: List[Certificate], below: List[Int], root: Certificate, now: Int) raises:
+def _check_path(chain: List[Certificate], below: List[Int], root: Certificate, now: Int, client: Bool = False) raises:
     """`below` indexes chain: leaf first, then intermediates up to the one the root signed (empty: the leaf is the root)."""
     var k = len(below)
-    _leaf_rules(chain[0])
+    _leaf_rules(chain[0], client)
     var nsi = 0  # intermediates seen so far that are not self-issued (RFC 5280 6.1.4 l)
     for p in range(k):
         ref c = chain[below[p]]
@@ -363,7 +363,7 @@ def _check_path(chain: List[Certificate], below: List[Int], root: Certificate, n
         if c.has_ku and ((c.ku & KU_KEY_CERT_SIGN) != 0) != c.is_ca:
             raise Error("tls: x509: keyCertSign and basicConstraints cA disagree")
         if p > 0:
-            _ca_rules(c, nsi, False)
+            _ca_rules(c, nsi, False, client)
             for q in range(p):
                 if q == 0 or not chain[below[q]].self_issued():  # name constraints skip self-issued intermediates
                     _constrain(c, chain[below[q]])
@@ -391,6 +391,7 @@ def _find(
     mut budget: Int,
     mut steps: Int,
     mut err: String,
+    client: Bool = False,
 ) -> Bool:
     ref cur = chain[path[len(path) - 1]]
     steps -= 1
@@ -409,7 +410,7 @@ def _find(
             return False
         budget -= 1
         try:
-            _check_path(chain, below, r, now)
+            _check_path(chain, below, r, now, client)
             return True
         except e:
             if err.startswith("tls: x509: no path"):
@@ -421,25 +422,26 @@ def _find(
                 seen = True
         if not seen and same(cur.issuer(), chain[i].subject()):
             path.append(i)
-            if _find(chain, roots, path, now, budget, steps, err):
+            if _find(chain, roots, path, now, budget, steps, err, client):
                 return True
             _ = path.pop()
     return False
 
 
-def verify_chain(chain: List[Certificate], host: String, now: Int, roots: List[Certificate]) raises:
+def verify_chain(chain: List[Certificate], host: String, now: Int, roots: List[Certificate], client: Bool = False) raises:
     """Raises unless `chain` (leaf first, at most 40 certificates) leads to one of `roots` and is valid for `host`
-    at `now` (epoch seconds). The peer may add or omit the root and may order the intermediates freely."""
+    at `now` (epoch seconds). The peer may add or omit the root and may order the intermediates freely.
+    `client`: a client certificate chain: clientAuth instead of serverAuth, and no host name (RFC 5280 4.2.1.12)."""
     if len(chain) == 0 or len(chain) > MAX_CHAIN:
         raise Error("tls: x509: bad chain length")
-    if not host_matches(chain[0], view(host.as_bytes())):
+    if not client and not host_matches(chain[0], view(host.as_bytes())):
         raise Error("tls: x509: certificate is not valid for the host name")
     var path = List[Int]()
     path.append(0)
     var budget = MAX_SIG_ATTEMPTS
     var steps = MAX_PATH_STEPS
     var err = String("tls: x509: no path to a trusted root")
-    if not _find(chain, roots, path, now, budget, steps, err):
+    if not _find(chain, roots, path, now, budget, steps, err, client):
         raise Error(err)
 
 

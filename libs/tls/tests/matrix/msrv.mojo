@@ -29,12 +29,15 @@ struct Reply(TlsHandler):
         self.req = Dict[Int, List[UInt8]]()
 
     def handle(mut self, fd: Int, info: ConnInfo, data: List[UInt8], mut reply: List[UInt8]) raises -> Bool:
+        var fresh = fd not in self.req
+        var get = len(data) > 0
+        for i in range(min(3, len(data))):
+            get = get and data[i] == "GET".as_bytes()[i]  # the start of an HTTP request, possibly cut short
+        if fresh and not get:
+            reply.extend(Span(data))  # not an HTTP request ("GET"): echo it (tlsfuzzer test-tls13-lengths); no state kept per fd
+            return False
         var b = self.req.pop(fd, List[UInt8]())
         b.extend(Span(data))
-        if len(b) >= 3 and not (b[0] == 71 and b[1] == 69 and b[2] == 84):
-            reply.extend(Span(data))  # not an HTTP request ("GET"): echo it (tlsfuzzer test-tls13-lengths)
-            self.req[fd] = List[UInt8](Span(b)[:3])
-            return False
         if not has_end(b):
             self.req[fd] = b^
             return False
@@ -60,6 +63,9 @@ def main() raises:
         elif k == "--alpn":
             for p in v.split(","):
                 cfg.alpn.append(String(p))
+        elif k == "--client-ca":
+            cfg.client_roots.append(pem_der(v))
+            cfg.require_client_cert = True
         elif k == "--cert":
             cert = v
         elif k == "--key":

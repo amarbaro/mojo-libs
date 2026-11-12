@@ -227,6 +227,78 @@ def resumption(mut t: T) raises:
     t.ok("second resumption from the resumed connection's ticket", again[1] and again[2])
 
 
+def rd(path: String) raises -> List[UInt8]:
+    with open(path, "r") as f:
+        return f.read_bytes()
+
+
+def cauth(name: String, key_of: String = "", roots_of: String = "ca", request: Bool = True) raises -> Tuple[Bool, String, List[UInt8], Int]:
+    """A handshake with client certificate `name` (empty: none) whose key is the one of `key_of` (empty: its own), against a
+    server that requires one signed by `roots_of`. (both done, server error, certificate the server saw, tickets the client got)."""
+    var dir = String(".work/gate/certs/")
+    var s = server(0x1301, [G_X25519])
+    s.cfg.require_client_cert = request
+    s.cfg.client_roots = [rd(dir + roots_of + ".der")]
+    s.cfg.ticket_keys = [fill(32, 0x61)]
+    var c = client(hello())
+    if name.byte_length() > 0:
+        var chain = List[List[UInt8]]()
+        chain.append(rd(dir + name + ".crt.der"))
+        c.set_client_cert(chain, rd(dir + (key_of if key_of.byte_length() > 0 else name) + ".key.der"))
+    var r = pump(c, s, c.start())
+    return (r.cdone and r.sdone, r.serr, s.client_cert.copy(), len(c.c.tickets))
+
+
+def client_auth(mut t: T) raises:
+    """Client certificates (RFC 8446 4.3.2, 4.4.2, 4.4.3) with our own client and server and real certificates."""
+    var dir = String(".work/gate/certs/")
+    for name in ["cli-p256", "cli-rsa"]:
+        var r = cauth(name)
+        t.ok(name + ": accepted, the server saw the certificate, no ticket (" + r[1] + ")", r[0] and r[1] == "" and r[2] == rd(dir + name + ".crt.der") and r[3] == 0)
+    var none = cauth("")
+    t.ok("no certificate: certificate_required, handshake not done (" + none[1] + ")", not none[0] and "certificate_required" in none[1])
+    var evil = cauth("cli-evil")
+    t.ok("a certificate of another CA: bad_certificate (" + evil[1] + ")", not evil[0] and "bad_certificate" in evil[1])
+    var eku = cauth("cli-serverauth")
+    t.ok("a serverAuth-only certificate: bad_certificate (" + eku[1] + ")", not eku[0] and "bad_certificate" in eku[1])
+    var other = cauth("cli-p256", "cli-evil")
+    t.ok("a signature from another key: decrypt_error (" + other[1] + ")", not other[0] and "decrypt_error" in other[1])
+    var kind = cauth("cli-p256", "cli-rsa")
+    t.ok("an RSA signature for a P-256 certificate: illegal_parameter (" + kind[1] + ")", not kind[0] and "illegal_parameter" in kind[1])
+    var trust = cauth("cli-evil", "", "evil-ca")
+    t.ok("the same certificate under its own root is accepted", trust[0] and trust[1] == "")
+    # a scheme the server did not ask for (rsa_pkcs1_sha256 is not allowed in a TLS 1.3 CertificateVerify)
+    var sf = server(0x1301, [G_X25519])
+    sf.cfg.require_client_cert = True
+    sf.cfg.client_roots = [rd(dir + "ca.der")]
+    var cf = client(hello())
+    var rsa_chain = List[List[UInt8]]()
+    rsa_chain.append(rd(dir + "cli-rsa.crt.der"))
+    cf.set_client_cert(rsa_chain, rd(dir + "cli-rsa.key.der"))
+    cf.force_scheme = 0x0401
+    var rf = pump(cf, sf, cf.start())
+    t.ok("a CertificateVerify scheme the server did not ask for: illegal_parameter (" + rf.serr + ")", not rf.sdone and "illegal_parameter" in rf.serr)
+    # a ticket must not stand in for client authentication: a client offering one still gets the CertificateRequest
+    var s0 = server(0x1301, [G_X25519])
+    s0.cfg.ticket_keys = [fill(32, 0x61)]  # the real clock on both servers: the certificates are checked against it
+    var c0 = client(hello())
+    _ = pump(c0, s0, c0.start())
+    var sess = c0.session(0, 5000000)
+    var sr = server(0x1301, [G_X25519])
+    sr.cfg.ticket_keys = [fill(32, 0x61)]
+    sr.cfg.require_client_cert = True
+    sr.cfg.client_roots = [rd(dir + "ca.der")]
+    var cr = client(hello())
+    var ec_chain = List[List[UInt8]]()
+    ec_chain.append(rd(dir + "cli-p256.crt.der"))
+    cr.set_client_cert(ec_chain, rd(dir + "cli-p256.key.der"))
+    cr.offer(sess, 5060000)
+    var rr = pump(cr, sr, cr.start())
+    t.ok("a client offering a ticket to a client-auth server is not resumed and authenticates (" + rr.serr + ")", rr.cdone and rr.sdone and not sr.resumed and sr.client_cert == rd(dir + "cli-p256.crt.der"))
+    var off = cauth("cli-p256", "", "ca", False)
+    t.ok("no CertificateRequest: the client does not volunteer a certificate, tickets are issued", off[0] and len(off[2]) == 0 and off[3] == 1)
+
+
 def early_data(mut t: T) raises:
     """0-RTT is refused (RFC 8446 4.2.10): early data sealed under a key we never had is skipped, up to a budget; without
     the early_data extension, or beyond the budget, an undecryptable record is bad_record_mac."""
@@ -599,6 +671,7 @@ def main() raises:
     direct_shares(t)
     resumption(t)
     early_data(t)
+    client_auth(t)
     options(t)
     alerts(t)
     fuzz(t)

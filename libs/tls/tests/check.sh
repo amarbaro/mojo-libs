@@ -21,6 +21,7 @@ runt() { # name binary -> runs, echoes the RESULT line
   echo "$out" | grep -E "^RESULT"
 }
 
+bash tests/matrix/gen_certs.sh .work/gate/certs >/dev/null || { echo "FAIL gen_certs: openssl"; exit 1; }  # real client certificates for t_flow
 tests=(t_flow t_hello)
 for t in "${tests[@]}"; do
   if build "$t" src && r="$(runt "$t" "$W/$t")"; then echo "PASS $t: $r"; else bad "$t" "see output above"; fi
@@ -43,7 +44,7 @@ if [[ "${1:-}" == mutants ]]; then
   mutants=(
     "finished-unchecked|src/tls/tls12/server.mojo|s/if not ct_eq(body, self.cn.finished(\"client finished\")):/if False:/"
     "ems-optional|src/tls/tls12/server.mojo|s/if not ch.ems:/if False:/"
-    "no-sentinel|src/tls/tls12/server.mojo|s/if ch.offers13():/if False:/"
+    "no-sentinel|src/tls/tls12/server.mojo|s/if ch.offers13() and self.cfg\[\].tls13:/if False:/"
     "record-cap-gone|src/tls/tls12/conn.mojo|s/if n > MAX_REC + (2048 if self.rd.on else 0):/if False:/"
     "read-seq-frozen|src/tls/tls12/conn.mojo|s/self.rd.seq += 1/pass/"
     "alpn-any|src/tls/tls12/server.mojo|s/if self.alpn.byte_length() == 0:/if False:/"
@@ -53,6 +54,10 @@ if [[ "${1:-}" == mutants ]]; then
     "unknown-ext-fatal|src/tls/tls12/msg.mojo|s/d.p = len(d.d)  # unknown or GREASE: skipped/raise Error(\"tls: unknown extension\")/"
     "chacha-nonce-no-xor|src/tls/tls12/conn.mojo|s/self.nonce\[4 + i\] = self.iv\[4 + i\] ^ b/self.nonce[4 + i] = self.iv[4 + i]/"
     "aad-seq-zero|src/tls/tls12/conn.mojo|s/self.aad\[i\] = b$/self.aad[i] = 0/"
+    "cauth-cv-skipped|src/tls/tls12/server.mojo|s/self.st = 6 if self.cfg\[\].require_client_cert else 2/self.st = 2/"
+    "cauth-empty-cert-ok|src/tls/tls12/server.mojo|s/raise self.cn.fatal(A_HANDSHAKE, \"the client sent no certificate\")/pass/"
+    "cauth-transcript-cut|src/tls/tls12/server.mojo|s/var cut = len(self.cn.tx) - 4 - len(self.cn.ev_body)/var cut = len(self.cn.tx)/"
+    "cauth-roots-ignored|src/tls/tls12/server.mojo|s/self.cfg\[\].client_roots, unix_now()/List[List[UInt8]](), unix_now()/"
   )
   netmutants=(
     "net-timer-off|src/tls/net/server.mojo|s/self.loop.after(self.cfg\[\].handshake_ms, tok)/pass/"

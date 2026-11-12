@@ -17,7 +17,8 @@ build() {  # build <name> <source> : rm the old binary first so a failed build c
   fi
 }
 
-for t in keysched record codec flight conn; do
+bash tests/matrix/gen_certs.sh .work/gate/certs > /dev/null || fail "gen_certs" "openssl"  # real client certificates for test_clientauth and test_conn
+for t in keysched record codec flight conn clientauth; do
   if build "test_$t" "tests/test_$t.mojo"; then
     set +e; timeout 300 "$B/test_$t" > "$G/test_$t.out" 2>&1; rc=$?; set -e
     if [ "$rc" = 0 ]; then echo "PASS test_$t: $(tail -1 "$G/test_$t.out")"; else fail "test_$t" "exit $rc, $(grep -m3 '^FAIL' "$G/test_$t.out" | tr '\n' ';')"; fi
@@ -43,7 +44,7 @@ if [ "${1:-}" = "--mutants" ]; then
   m tests/test_codec.mojo tls/tls13/wire.mojo 's/if n < 0 or n > len(self.b) - self.p:/if n < 0 or n > len(self.b) - self.p + 1:/'
   m tests/test_flight.mojo tls/tls13/messages.mojo 's/^comptime H_MSGHASH = 254/comptime H_MSGHASH = 253/'
   m tests/test_flight.mojo tls/tls13/keysched.mojo 's/server CertificateVerify/server CertificateVerifx/'
-  m tests/test_flight.mojo tls/tls13/server.mojo 's/if not ct_equal(parse_fin(m, h), finished_mac(h, self.c.chs, self.th_sf)):/if False:/'
+  m tests/test_flight.mojo tls/tls13/server.mojo 's/if not ct_equal(parse_fin(m, h), finished_mac(h, self.c.chs, self.c.th())):/if False:/'
   m tests/test_flight.mojo tls/tls13/client.mojo 's/if not ct_equal(parse_fin(m, h), finished_mac(h, self.c.shs, self.c.th())):/if False:/'
   m tests/test_conn.mojo tls/tls13/server.mojo 's/if ci < 0 or not ct_equal(p_cookie(ch.exts\[ci\].d), self.cfg.cookie):/if False:/'
   m tests/test_conn.mojo tls/tls13/conn.mojo 's/if self.tx.seq >= self.key_limit:/if False:/'
@@ -65,6 +66,18 @@ if [ "${1:-}" = "--mutants" ]; then
   m tests/test_conn.mojo tls/tls13/conn.mojo 's/                if self.skip < max(1, len(rec) - 5):/                if False:/'
   m tests/test_conn.mojo tls/tls13/conn.mojo 's/self.skip < max(1, len(rec) - 5):/self.skip < len(rec) - 5:/'
   m tests/test_conn.mojo tls/tls13/client.mojo 's/for j in range(h):/for j in range(h - 1):/'
+  m tests/test_clientauth.mojo tls/tls13/clientauth.mojo 's/ok = p256_verify(leaf.key_a, sha256(signed), sig)/ok = True/'
+  m tests/test_clientauth.mojo tls/tls13/clientauth.mojo 's/    if not ok:/    if False:/'
+  m tests/test_clientauth.mojo tls/tls13/clientauth.mojo 's/verify_chain(certs, "", now, rs, True)/verify_chain(certs, "", now, rs, False)/'
+  m tests/test_clientauth.mojo tls/x509/chain.mojo 's/if not (leaf.eku_client if client else leaf.eku_server):/if False:/'
+  m tests/test_clientauth.mojo tls/x509/chain.mojo 's/if not client and not host_matches(/if not host_matches(/'
+  m tests/test_clientauth.mojo tls/x509/cert.mojo 's/hex_is(k, "2b06010505070302")/hex_is(k, "2b06010505070399")/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/raise bad(\"certificate_required\", \"the client sent no certificate\")/pass/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/if cv\[0\] not in \[0x0403, 0x0503, 0x0804, 0x0805\]:/if False:/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/self.client_cert = self.cchain\[0\].copy()/pass/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/ or self.cfg.require_client_cert or 1 not in/ or 1 not in/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/ and not self.cfg.require_client_cert:/:/'
+  m tests/test_conn.mojo tls/tls13/server.mojo 's/cv_content(True, self.th_cert)/cv_content(False, self.th_cert)/'
   bash tests/mutant_interop.sh tls/tls13/keysched.mojo 's/"traffic upd"/"traffic upx"/' || { echo "FAIL mutant: interop traffic upd"; bad=1; }
 fi
 

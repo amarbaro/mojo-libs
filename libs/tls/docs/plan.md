@@ -27,7 +27,7 @@ Chrome, Edge, Firefox, Safari (2024+), curl, Python ssl, Go, OpenSSL s_client al
 
 Out: TLS 1.0/1.1 (browsers removed them in 2020), CBC suites, RSA key exchange, static DH, renegotiation,
 compression, 0-RTT. Later, separate pieces: X25519MLKEM768 hybrid (Chrome/Firefox default now, clients fall back
-to x25519 without it), client certificates (wave 3b), OCSP stapling. Session tickets and psk_dhe_ke resumption: wave 3a, done.
+to x25519 without it), OCSP stapling. Client certificates: wave 3b, done. Session tickets and psk_dhe_ke resumption: wave 3a, done.
 
 ## Pieces, lines, gates
 

@@ -32,6 +32,8 @@ struct TlsConfig(Movable):
     var max_conns: Int
     var max_out: Int  # queued output bytes per connection before reading pauses
     var tls12: Bool  # False: TLS 1.3 only, a client that does not offer 1.3 gets Server13's protocol_version alert
+    var client_roots: List[List[UInt8]]  # DER trust anchors for client certificates
+    var require_client_cert: Bool  # ask every client for a certificate that chains to client_roots (clientAuth); no tickets then
     var ticket_keys: List[List[UInt8]]  # TLS 1.3 session ticket keys (32 bytes, first seals); empty = TlsServer makes one at start
     var tls13: Bool  # a TLS 1.3 engine sits behind this config: a TLS 1.2 answer to a 1.3 client carries the DOWNGRD sentinel (RFC 8446 4.1.3)
 
@@ -43,6 +45,8 @@ struct TlsConfig(Movable):
         self.max_conns = 65536
         self.max_out = 1 << 20
         self.tls12 = True
+        self.client_roots = List[List[UInt8]]()
+        self.require_client_cert = False
         self.ticket_keys = List[List[UInt8]]()
         self.tls13 = False
 

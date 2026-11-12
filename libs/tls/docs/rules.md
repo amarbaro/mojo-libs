@@ -82,3 +82,10 @@ Lane x509 wave 2 (2026-11-12).
 - `pkill -f <pattern>` inside the same bash command kills its own wrapper shell -> keep the PID from `$!` or `ps | awk` and `kill` it.
 - The plan said a forged binder falls back to a full handshake; RFC 8446 4.2.11 says abort -> the RFC wins where the plan only paraphrases it: unknown, expired or mismatched tickets fall back, a bad binder on a ticket that opens is `decrypt_error`.
 - `test-tls13-lengths` is 16384 probes (about 280 s in one process, the cell budget) -> four cells of 4096 named probes, so every case still runs.
+- tlsfuzzer `check sigalgs in cert request` answers a CertificateRequest with an empty Certificate and expects the handshake to go on; a server that requires the certificate fails it by design -> expected-fail with that reason, optional client authentication is not implemented.
+- A client-auth server may not resume or issue tickets: a ticket carries no client identity, so a resumed session would skip the authentication -> `pick_psk` ignores PSKs and `send_ticket` is off while `require_client_cert` is set.
+- The TLS 1.2 CertificateVerify signs the messages BEFORE it, but the transcript buffer already holds the received CertificateVerify -> cut `4 + len(body)` bytes off the end before verifying.
+- tlsfuzzer scripts name their expectations about the server (client-auth, sigalgs offered via `-s`, tickets via `-t`): read the script's option list before judging a probe, and pass what our server really does.
+- The matrix echo hook kept state per fd and a reused fd inherited it, so "GET /" was echoed and a probe failed one run in four -> never key per-connection state on an fd without clearing it when the connection ends; decide per chunk.
+- `tests/mutants_x509.txt` is applied with perl: a `(` in a pattern is a group, write `\(`; gate_tls13.sh and check.sh use sed with paths under `src/` (`tls/tls13/...`): a mutant that names a missing file prints "FAIL mutant: ..." with no reason line.
+- Two gate chains started at once share `.work/mut` and corrupt each other's logs -> one chain at a time, check `ps` before launching.

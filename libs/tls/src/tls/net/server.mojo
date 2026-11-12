@@ -241,6 +241,8 @@ struct TlsServer[C: Crypto12](Movable):
                     var sc = ServerConfig(rng.random(32), rng.random(32), rng.random(32))
                     sc.alpn = self.cfg[].alpn.copy()
                     sc.ticket_keys = self.cfg[].ticket_keys.copy()
+                    sc.client_roots = self.cfg[].client_roots.copy()
+                    sc.require_client_cert = self.cfg[].require_client_cert
                     p.e13.append(Server13[CSign[Self.C]](sc^, CSign[Self.C](e.kind, e.key, e.chain.copy())))
                     p.ver = 13
                 else:

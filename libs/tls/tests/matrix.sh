@@ -26,14 +26,14 @@ printf 'HTTP/1.0 200 ok\r\nContent-type: text/plain\r\n\r\nmojo-tls-ok\n' > "$W/
 
 # ---- servers: msrv per (kind, mode, alpn); the SNI name alt.test selects the other key type ----
 declare -A PORT=( [p256,both,on]=4970 [rsa,both,on]=4971 [p256,12,on]=4972 [rsa,12,on]=4973 [p256,both,off]=4974 [rsa,both,off]=4975
-                  [p256,12,off]=4976 [rsa,12,off]=4977 [p256,13,on]=4978 )
+                  [p256,12,off]=4976 [rsa,12,off]=4977 [p256,13,on]=4978 [p256,both,cauth]=4979 [rsa,both,cauth]=4969 )
 SRVPIDS=(); CELLPIDS=()
 stop_all() { for p in "${SRVPIDS[@]:-}"; do [[ -n $p ]] && kill "$p" 2>/dev/null || true; done; return 0; }
 trap stop_all EXIT
 for key in "${!PORT[@]}"; do
   IFS=, read -r kind mode alpn <<< "$key"; port=${PORT[$key]}
   alt=alt-rsa; [[ $kind == rsa ]] && alt=alt-p256
-  a=(); [[ $alpn == on ]] && a=(--alpn http/1.1)
+  a=(); [[ $alpn == on ]] && a=(--alpn http/1.1); [[ $alpn == cauth ]] && a=(--client-ca "$CERTS/ca.pem")  # cauth: asks for a client certificate
   "$BIN/msrv" --mode "$mode" --port "$port" "${a[@]}" --cert "$CERTS/$kind.crt.pem" --key "$CERTS/$kind.key.pem" \
     --cert "$CERTS/$alt.crt.pem" --key "$CERTS/$alt.key.pem" --name alt.test > "$W/srv-$port.log" 2>&1 &
   SRVPIDS+=($!)
@@ -224,6 +224,27 @@ for kind in p256 rsa; do
     cell "ours/$ver/$kind/sni-select" mcli_check "$ver" on alt.test "${PORT[$kind,both,on]}" "mojo-tls-ok ver=$ver sni=alt.test alpn=http/1.1"
   done
 done
+cauth() { # WANT VER [CERT]: s_client against the client-certificate server; WANT "ok" = served, else a substring of the alert text
+  local want=$1 ver=$2 cert=${3:-} port=${PORT[p256,both,cauth]} a o
+  a=(-connect "127.0.0.1:$port" -CAfile "$CERTS/ca.pem" -servername localhost -verify_hostname localhost)
+  [[ $ver == 13 ]] && a+=(-tls1_3) || a+=(-tls1_2)
+  [[ -z $cert ]] || a+=(-cert "$CERTS/$cert.crt.pem" -key "$CERTS/$cert.key.pem")
+  o=$({ printf 'GET / HTTP/1.0\r\n\r\n'; sleep 1.5; } | timeout 20 openssl s_client "${a[@]}" 2>&1 | tr -d '\r' || true)
+  if [[ $want == ok ]]; then
+    grep -q "mojo-tls-ok ver=$ver" <<< "$o" && echo PASS || echo "FAIL not served: $(grep -m2 -iE 'alert|error' <<< "$o" | tr '\n' ' ')"
+  else
+    grep -q 'mojo-tls-ok' <<< "$o" && { echo "FAIL served without a valid client certificate"; return; }
+    grep -qi "$want" <<< "$o" && echo PASS || echo "FAIL wrong refusal (want '$want'): $(grep -m2 -iE 'alert|error' <<< "$o" | tr '\n' ' ')"
+  fi
+}
+oursauth() { # VER CERT: our client presents CERT (or none) to the client-certificate server; none must be refused
+  local ver=$1 cert=${2:-} port=${PORT[p256,both,cauth]} a o
+  a=(--v "$ver" --host localhost --port "$port" --ca "$CERTS/ca.pem" --alpn none)
+  [[ -z $cert ]] || a+=(--cert "$CERTS/$cert.crt.pem" --key "$CERTS/$cert.key.pem")
+  o=$(timeout 30 "$BIN/mcli" "${a[@]}" 2>&1 | tail -1)
+  if [[ -n $cert ]]; then [[ $o == "mcli-ok ver=$ver "* ]] && echo PASS || echo "FAIL got: $o"
+  else [[ $o == mcli-fail* || $o != mcli-ok* ]] && echo PASS || echo "FAIL served without a certificate: $o"; fi
+}
 resume13() { # KIND: s_client saves the session (-sess_out), a second connection offers it (-sess_in) and must say "Reused"
   local port=${PORT[$1,both,on]} f="$W/sess-$1.pem" a o
   a=(-connect "127.0.0.1:$port" -CAfile "$CERTS/ca.pem" -tls1_3 -servername localhost -verify_hostname localhost -brief); rm -f "$f"
@@ -236,6 +257,17 @@ resume13() { # KIND: s_client saves the session (-sess_out), a second connection
   echo PASS
 }
 for kind in p256 rsa; do cell "sc/13/$kind/resume" resume13 "$kind"; done
+cell cauth/13/p256-cert cauth ok 13 cli-p256
+for v in 12 13; do cell ours/cauth/$v/p256 oursauth $v cli-p256; cell ours/cauth/$v/rsa oursauth $v cli-rsa; cell ours/cauth/$v/none oursauth $v; done
+cell cauth/13/rsa-cert cauth ok 13 cli-rsa
+cell cauth/13/no-cert cauth "certificate required" 13
+cell cauth/13/untrusted-ca cauth "bad certificate" 13 cli-evil
+cell cauth/13/serverauth-only cauth "bad certificate" 13 cli-serverauth
+cell cauth/12/p256-cert cauth ok 12 cli-p256
+cell cauth/12/rsa-cert cauth ok 12 cli-rsa
+cell cauth/12/no-cert cauth "handshake failure" 12
+cell cauth/12/untrusted-ca cauth "bad certificate" 12 cli-evil
+cell cauth/12/serverauth-only cauth "bad certificate" 12 cli-serverauth
 cell neg/tls13-client-vs-tls12-server refused "${PORT[p256,12,on]}" -tls1_3
 cell neg/tls12-client-vs-tls13-server refused "${PORT[p256,13,on]}" -tls1_2
 cell neg/alpn-mismatch-13 refused "${PORT[p256,both,on]}" -tls1_3 -alpn nope
@@ -248,18 +280,19 @@ TF13=(test-tls13-conversation test-tls13-finished test-tls13-hrr test-tls13-keyu
       test-tls13-signature-algorithms test-tls13-zero-length-data test-tls13-version-negotiation test-tls13-invalid-ciphers
       test-tls13-record-padding test-tls13-lengths test-tls13-unrecognised-groups test-tls13-serverhello-random test-tls13-ccs
       test-tls13-finished-plaintext test-tls13-unencrypted-alert test-tls13-zero-content-type test-tls13-record-layer-limits
-      test-tls13-ecdsa-in-certificate-verify test-tls13-session-resumption test-tls13-count-tickets test-tls13-0rtt-garbage)
+      test-tls13-ecdsa-in-certificate-verify test-tls13-certificate-verify test-tls13-session-resumption test-tls13-count-tickets test-tls13-0rtt-garbage)
 TF12=(test-conversation test-extended-master-secret-extension test-record-layer-fragmentation test-invalid-content-type
       test-message-skipping test-truncating-of-finished test-downgrade-protection test-serverhello-random test-alpn-negotiation)
 skip_ts() { echo "SKIP $*"; }
 skip12() { echo "SKIP the script's own sanity handshake sends no extended_master_secret and mostly CBC/RSA-kex suites; our server refuses both by policy (docs/tls12.md), so it cannot reach its tests. TLS 1.2 is covered by sc/12, ours/12, browsers and the t_flow policy tests"; }
 for s in "${TF13[@]}"; do
   case $s in
-    test-tls13-ecdsa-in-certificate-verify) cell "tlsfuzzer/$s" skip_ts "needs client certificates (out of scope)";;
+    test-tls13-ecdsa-in-certificate-verify) cell "tlsfuzzer/$s" tlsfuzzer "$s" "${PORT[p256,both,cauth]}" -k "$CERTS/cli-p256.key.pem" -c "$CERTS/cli-p256.crt.pem" -s "ecdsa_secp256r1_sha256 ecdsa_secp384r1_sha384 rsa_pss_rsae_sha256 rsa_pss_rsae_sha384";;
     test-tls13-version-negotiation) cell "tlsfuzzer/$s" skip_ts "197 of 202 cases fall back to a TLS 1.2 handshake without extended_master_secret, which our policy refuses (docs/tls12.md)";;
     test-tls13-lengths)  # 16384 lengths (about 280 s in one process): four cells of 4096, every case runs
       for q in 0 1 2 3; do mapfile -t names < <(seq $((q * 4096 + 1)) $((q * 4096 + 4096)) | sed 's/^/length: /')
         cell "tlsfuzzer/$s/part$q" tlsfuzzer "$s" "${PORT[rsa,both,on]}" -n 0 "${names[@]}"; done;;
+    test-tls13-certificate-verify) cell "tlsfuzzer/$s" tlsfuzzer "$s" "${PORT[rsa,both,cauth]}" -k "$CERTS/cli-rsa.key.pem" -c "$CERTS/cli-rsa.crt.pem" -s "ecdsa_secp256r1_sha256 ecdsa_secp384r1_sha384 rsa_pss_rsae_sha256 rsa_pss_rsae_sha384";;
     test-tls13-count-tickets) cell "tlsfuzzer/$s" tlsfuzzer "$s" "${PORT[rsa,both,on]}" -t 1;;  # we send exactly one NewSessionTicket per connection
     *) cell "tlsfuzzer/$s" tlsfuzzer "$s" "${PORT[rsa,both,on]}";;
   esac

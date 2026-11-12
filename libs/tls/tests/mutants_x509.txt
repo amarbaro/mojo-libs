@@ -14,7 +14,7 @@ wildcard_tld | tls/x509/chain.mojo | s/if dots < 1 or/if dots < 0 or/ | parse
 nc_excluded_ignored | tls/x509/chain.mojo | s/if _dns_under\(ln, lb\) or \(wild and _one_label_below\(lb, stem\)\):/if False:/ | chain
 ip_host_matches_dns | tls/x509/chain.mojo | s/if len\(ip\) > 0:/if len(ip) > 99:/ | chain
 leaf_signature_unchecked | tls/x509/chain.mojo | s/range\(k - 1, 0, -1\)/range(k - 1, 1, -1)/ | chain
-leaf_eku_ignored | tls/x509/chain.mojo | s/if not leaf.eku_server:  # false without an EKU too/if False:/ | chain
+leaf_eku_ignored | tls/x509/chain.mojo | s/if not \(leaf.eku_client if client else leaf.eku_server\):  # false without an EKU too/if False:/ | chain
 pss_salt_assumed | tls/x509/sigs.mojo | s/h, sig, c.pss_salt\)/h, sig, 32)/ | chain
 unknown_critical_ignored | tls/x509/cert.mojo | s/self.unknown_critical = True/self.unknown_critical = False/ | chain
 chain_cap_removed | tls/x509/chain.mojo | s/len\(chain\) > MAX_CHAIN/len(chain) > 99/ | chain

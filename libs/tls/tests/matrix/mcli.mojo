@@ -1,11 +1,12 @@
 """Matrix test client: GET over TLS 1.2 or 1.3 with chain validation against TLS_ROOTS=<ca file>.
-  mcli --v 12|13 --host NAME --addr IP --port N --ca CA.pem [--alpn http/1.1] [--path /]
+  mcli --v 12|13 --host NAME --addr IP --port N --ca CA.pem [--alpn http/1.1] [--path /] [--cert CRT.pem --key KEY.pem]
 Prints one line: "mcli-ok ver=<..> alpn=<..> body=<first line>"; any failure prints "mcli-fail <reason>" and exits 1."""
 from std.sys import argv, exit
 from std.os import setenv
 import aio
 from tls.asym import x25519_base, random_bytes
-from tls.net.stream import tls_connect, tcp_connect
+from tls.net.stream import TlsStream, tcp_connect
+from tls.tls12.client import Client12
 from tls.tls12.realcrypto import RealCrypto
 from tls.tls12.wire import bytes_of, str_of
 from tls.tls13.client import Client13, default_hello
@@ -22,8 +23,12 @@ def first_line(b: List[UInt8]) -> String:
     return String(s[byte = at : end if end > 0 else s.byte_length()])
 
 
-def run12(host: String, addr: String, port: Int, alpn: List[String], path: String) raises:
-    var s = tls_connect[RealCrypto](host, port, alpn, addr)
+def run12(host: String, addr: String, port: Int, alpn: List[String], path: String, cert: String, key: String) raises:
+    var eng = Client12[RealCrypto](host, alpn)
+    if cert.byte_length() > 0:
+        eng.set_client_cert([pem_der(cert)], pem_der(key))
+    var s = TlsStream[RealCrypto](tcp_connect(addr, port), eng^)
+    s.handshake()
     s.write(bytes_of("GET " + path + " HTTP/1.0\r\nHost: " + host + "\r\n\r\n"))
     var got = List[UInt8]()
     while s.read(got) > 0:
@@ -32,11 +37,13 @@ def run12(host: String, addr: String, port: Int, alpn: List[String], path: Strin
     s.close()
 
 
-def run13(host: String, addr: String, port: Int, alpn: List[String], path: String) raises:
+def run13(host: String, addr: String, port: Int, alpn: List[String], path: String, cert: String, key: String) raises:
     var fd = Int(tcp_connect(addr, port))
     var x = random_bytes(32)
     var h = default_hello(host, random_bytes(32), random_bytes(32), x25519_base(x), alpn)
     var cli = Client13[Verify13](h, host, x, random_bytes(32), Verify13())
+    if cert.byte_length() > 0:
+        cli.set_client_cert([pem_der(cert)], pem_der(key))
     _ = fd_write(fd, cli.start())
     var buf = List[UInt8](length=16384, fill=0)
     var got = List[UInt8]()
@@ -70,6 +77,8 @@ def main() raises:
     var port = 0
     var alpn = List[String]()
     var path = String("/")
+    var cert = String()
+    var key = String()
     var i = 1
     while i + 1 < len(a):
         var k = String(a[i])
@@ -84,6 +93,10 @@ def main() raises:
             port = Int(x)
         elif k == "--ca":
             _ = setenv("TLS_ROOTS", x)
+        elif k == "--cert":
+            cert = x
+        elif k == "--key":
+            key = x
         elif k == "--path":
             path = x
         elif k == "--alpn":
@@ -91,9 +104,9 @@ def main() raises:
         i += 2
     try:
         if v == 12:
-            run12(host, addr, port, alpn, path)
+            run12(host, addr, port, alpn, path, cert, key)
         else:
-            run13(host, addr, port, alpn, path)
+            run13(host, addr, port, alpn, path, cert, key)
     except e:
         print("mcli-fail " + String(e))
         exit(1)

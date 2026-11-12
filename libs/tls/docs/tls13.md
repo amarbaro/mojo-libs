@@ -91,10 +91,26 @@ Client: `c.session(i, now_ms)` turns the i-th received ticket into a `Session`; 
 adds psk_key_exchange_modes and `pre_shared_key` (binder filled in `start()` and again after a HelloRetryRequest).
 `c.resumed` tells whether the server accepted it.
 
+## Client certificates (wave 3b)
+
+Server: `ServerConfig.require_client_cert` + `client_roots` (DER trust anchors; `TlsConfig` has the same two fields and passes them
+to both engines). TLS 1.3: a CertificateRequest (empty context, schemes ecdsa_secp256r1_sha256, ecdsa_secp384r1_sha384,
+rsa_pss_rsae_sha256/384) follows EncryptedExtensions; the client Certificate must be non-empty (`certificate_required` 116
+otherwise), its chain valid for clientAuth against `client_roots` (`bad_certificate`), the CertificateVerify scheme one we asked
+for and the signature valid over the transcript with the client context string (`decrypt_error`; `illegal_parameter` when the
+scheme does not fit the key); the client Finished then covers the whole transcript. `Server13.client_cert` / `Server12.client_cert`
+hold the DER of the authenticated certificate. With client authentication on there are no tickets and no resumption (a ticket
+would carry no identity). The check is `tls13/clientauth.mojo` `verify_client`; it is also what Server12 calls.
+TLS 1.2: CertificateRequest (rsa_sign, ecdsa_sign, schemes above plus rsa_pkcs1_sha256/384) after the ServerKeyExchange; an empty
+Certificate is `handshake_failure`, a bad chain `bad_certificate`, a bad CertificateVerify (signature over the messages up to the
+ClientKeyExchange) `decrypt_error`.
+Client: `Client13.set_client_cert(chain, key_der)` / `Client12.set_client_cert(...)`: when the server asks and a scheme of the key is
+in its list the certificate and a CertificateVerify are sent, else an empty Certificate (what a client without certificate does).
+Not done: optional client authentication (ask, accept an empty answer), certificate_authorities filtering, post-handshake auth.
+
 ## Open items
 
-tlsfuzzer is not installed here (not run). 0-RTT, client certificates (client answers a
-CertificateRequest with an empty Certificate), ML-KEM hybrid share (an incoming 1216-byte share is skipped), a
+tlsfuzzer is not installed here (not run). 0-RTT, optional client authentication, post-handshake authentication, ML-KEM hybrid share (an incoming 1216-byte share is skipped), a
 TLS 1.2 fallback decision (lane 5: a ServerHello without `supported_versions` gives `protocol_version`).
 Speed is in `tests/bench_tls13.mojo`; the ported ChaCha20 (2.2 GB/s against openssl 4.8) and x25519 (163 us against 33 us)
 are lane 1-2 work.
