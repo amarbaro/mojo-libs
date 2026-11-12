@@ -28,6 +28,8 @@ done
 
 if r="$(tests/net.sh 2>&1)"; then echo "PASS net.sh: $(echo "$r" | grep -E '^INFO' | cut -c1-200)"; else echo "$r" | grep -E "^FAIL"; bad net.sh "see output above"; fi
 
+if r="$(tests/interop/hello_probe.sh 2>&1)"; then echo "PASS hello_probe: $(echo "$r" | grep -c '^PASS') variants, OpenSSL accepts our ServerHello"; else echo "$r" | grep -E "^FAIL"; bad hello_probe "see output above"; fi
+
 if [[ "${1:-}" == mutants ]]; then
   # name | file | sed expression | test that must go red
   mutants=(

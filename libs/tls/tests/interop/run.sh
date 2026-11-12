@@ -98,25 +98,33 @@ matrix() {
   done
 }
 
-# negatives: the server must refuse these. $1 who
+# negatives: the server must refuse these. A negative only counts when the client really connected and the handshake
+# then failed: an option typo or a closed port must not look like a refusal. $1 who
+refused() { # args to s_client; returns 0 when TCP connected (CONNECTED) and no TLS session was established
+  local o; o="$(printf 'x' | timeout 20 openssl s_client -connect "127.0.0.1:$PORT" "$@" -brief 2>&1 || true)"
+  [[ "$o" == *"CONNECTION ESTABLISHED"* ]] && return 1
+  [[ "$o" == *"Connecting to"* && "$o" != *"Unknown option"* && "$o" != *"Connection refused"* ]]
+}
 negatives() {
   local who="$1"
   start_server "$who" p256 "ECDHE-ECDSA-AES128-GCM-SHA256" || { no "$who/start/neg" "server did not start"; return; }
   # CBC and RSA key exchange are out of scope: the handshake must fail
-  if printf 'x' | timeout 20 openssl s_client -connect "127.0.0.1:$PORT" -tls1_2 -cipher 'AES128-SHA:ECDHE-ECDSA-AES128-SHA' \
-      -CAfile "$C/ca.pem" -brief >/dev/null 2>&1; then no "$who/neg/cbc" "handshake with a CBC suite succeeded"; else ok "$who/neg/cbc"; fi
+  if refused -tls1_2 -cipher 'AES128-SHA:ECDHE-ECDSA-AES128-SHA' -CAfile "$C/ca.pem"; then ok "$who/neg/cbc"; else no "$who/neg/cbc" "handshake with a CBC suite succeeded, or the client did not run"; fi
   # TLS 1.1 (needs seclevel 0 to even send it)
   local o; o="$(printf 'x' | timeout 20 openssl s_client -connect "127.0.0.1:$PORT" -tls1_1 -cipher 'ALL@SECLEVEL=0' -brief 2>&1 || true)"
   if echo "$o" | grep -q -i 'no protocols available'; then sk "$who/neg/tls11: client build cannot send TLS 1.1"
   elif echo "$o" | grep -q 'Protocol version: TLSv1.1'; then no "$who/neg/tls11" "TLS 1.1 handshake succeeded"; else ok "$who/neg/tls11"; fi
   # a client that offers no extended_master_secret: our policy refuses (s_server accepts, so peers mode skips)
   if [[ "$who" == peers ]]; then sk "peers/neg/no-ems: s_server accepts it, policy of our server only"
-  elif printf 'x' | timeout 20 openssl s_client -connect "127.0.0.1:$PORT" -tls1_2 -no_extended_master_secret -CAfile "$C/ca.pem" -brief >/dev/null 2>&1
-  then no "$who/neg/no-ems" "handshake without EMS succeeded"; else ok "$who/neg/no-ems"; fi
+  elif refused -tls1_2 -no_ems -CAfile "$C/ca.pem"; then ok "$who/neg/no-ems"; else no "$who/neg/no-ems" "handshake without EMS succeeded, or the client did not run"; fi
 }
 
 run_peers() { matrix peers; negatives peers; }
 run_ours() {
+  # wave 1, real peer, fake crypto: OpenSSL accepts our ServerHello and Certificate framing (hello_probe.sh)
+  local l; while IFS= read -r l; do
+    echo "$l"; case "$l" in PASS*) pass=$((pass+1));; FAIL*) fail=$((fail+1));; SKIP*) skip=$((skip+1));; esac
+  done < <("$here/hello_probe.sh" 2>&1 || true)
   if [[ -z "${TLS_SERVER_BIN:-}" || ! -x "${TLS_SERVER_BIN:-/nonexistent}" ]]; then
     sk "wave2: ours/server x {s_client,curl,python,vivaldi} x {p256,p384,rsa} x 3 suites + negatives: TLS_SERVER_BIN unset (needs lane 1-3 crypto: ECDHE, PRF, AEAD, ECDSA/RSA sign, PEM keys)"
   else matrix ours; negatives ours; fi
