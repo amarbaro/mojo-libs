@@ -1,5 +1,5 @@
 # Lane 3 gate binary. One resident process, modes picked by argv[1]: unit | bundle | fuzz | chain | keys | bench.
-# Driven by tests/gate.sh, which builds fixtures and oracles with openssl. Prints PASS/FAIL lines, exits 1 on any FAIL.
+# Driven by tests/gate_x509.sh, which builds fixtures and oracles with openssl. Prints PASS/FAIL lines, exits 1 on any FAIL.
 from std.sys import argv, exit
 from std.time import perf_counter_ns
 from tls.x509.der import Der, Bytes, view, copy_of, parse_time, same

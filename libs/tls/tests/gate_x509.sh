@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Lane 3 gate: builds tests/x509_gate.mojo once, runs every stage, compares against openssl oracles.
-# Usage: tests/gate.sh [stage ...]   stages: parse chain keys bench   (default: parse chain keys)
+# Usage: tests/gate_x509.sh [stage ...]   stages: parse chain keys bench   (default: parse chain keys)
 # Prints PASS/FAIL <stage>: <reason>; exits non-zero on any failure. Artifacts in .work/gate/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
