@@ -1,6 +1,7 @@
 """The part of a TLS 1.2 connection both roles share, sans-IO: record layer (RFC 5246 6, AEAD suites only, GCM
 and RFC 7905 ChaCha20), handshake reassembly with size caps, transcript, key schedule (extended master secret,
 RFC 7627: the only mode we speak), alerts. Bytes in with feed(), bytes out with take_output()."""
+from tls.sym.aead import dup
 from .crypto import Crypto12
 from .msg import *
 from .wire import Rd, bl, cat, p16, put, wipe, bytes_of
@@ -195,6 +196,10 @@ struct Conn[C: Crypto12](Movable):
     def feed(mut self, data: Span[UInt8, _]):
         if self.inp == len(self.inb):
             self.inb.clear()
+            self.inp = 0
+        elif self.inp > 65536:  # a read that ends inside a record never empties the buffer: drop the consumed prefix
+            var rest = dup(Span(self.inb)[self.inp :])
+            self.inb = rest^
             self.inp = 0
         self.inb.extend(data)
 

@@ -6,6 +6,7 @@ from tls.net.config import TlsConfig
 from tls.tls12.msg import *
 from fake_crypto import mix
 from tls.tls12.wire import bl, bytes_of, str_of, cat, put
+from tls.tls12.conn import Conn, EV_NONE
 
 
 def rd(path: String) raises -> List[UInt8]:
@@ -253,6 +254,23 @@ def main() raises:
         except:
             rwrapped = sr_.cn.alert == A_INTERNAL
         t.check("read seq: refuses to wrap " + hex(sx), rwrapped and sr_.cn.rd.seq == UInt64.MAX)
+
+    # input buffer stays bounded when every read ends inside a record (audit #3): 16-byte handshake records, one byte first, then 32 bytes at a time: every read ends one byte into a record
+    var gc = Conn[FakeCrypto](False)
+    var stream = List[UInt8]()
+    for _ in range(9000):
+        stream.extend(bl(22, 3, 3, 0, 11, 1, 0, 0, 7, 0, 1, 2, 3, 4, 5, 6))
+    var peak = 0
+    var at = 0
+    var step = 1
+    while at < len(stream):
+        gc.feed(Span(stream)[at : min(at + step, len(stream))])
+        at += step
+        step = 32
+        while gc.poll() != EV_NONE:
+            pass
+        peak = max(peak, len(gc.inb))
+    t.check("input buffer bounded under misaligned reads", peak < 70000, "peak " + String(peak) + " bytes for " + String(len(stream)) + " fed")
 
     # ClientHello errors: the alert is the contract
     expect(t, "good hello accepted", cfg, rec(22, mk_ch()), -9)
