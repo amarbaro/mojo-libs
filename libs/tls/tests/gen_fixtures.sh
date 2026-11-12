@@ -98,6 +98,9 @@ cs ok_out_of_order ok $NOW p1.example.com ec_root.pem ec_leaf_p1.pem,ec_inter_p1
 issue ec_ca_false "Inoca" ec_root ec 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,keyCertSign\n'
 issue ec_leaf4 "l4" ec_ca_false ec "$SRV$(san DNS:noca.example.com)"
 cs bad_inter_not_ca fail $NOW noca.example.com ec_root.pem ec_leaf4.pem,ec_ca_false.pem
+issue ec_noca_noku "Inoku" ec_root ec 'basicConstraints=CA:FALSE\n'
+issue ec_leaf4c "l4c" ec_noca_noku ec "$SRV$(san DNS:noku.example.com)"
+cs bad_inter_not_ca_no_ku fail $NOW noku.example.com ec_root.pem ec_leaf4c.pem,ec_noca_noku.pem
 issue ec_ca_nobc "Inobc" ec_root ec 'keyUsage=critical,keyCertSign\n'
 issue ec_leaf4b "l4b" ec_ca_nobc ec "$SRV$(san DNS:nobc.example.com)"
 cs bad_inter_no_bc fail $NOW nobc.example.com ec_root.pem ec_leaf4b.pem,ec_ca_nobc.pem
@@ -180,6 +183,35 @@ c10=$(for i in 10 9 8 7 6 5 4 3 2 1; do printf 'ec_c%s.pem,' $i; done)
 cs ok_chain_10 ok $NOW long.example.com ec_root.pem "ec_lc9.pem,${c9%,}"
 cs bad_chain_11 fail $NOW long.example.com ec_root.pem "ec_lc10.pem,${c10%,}"
 div bad_chain_11 "openssl's default depth is 100; we cap chains at 10 certificates"
+# self-issued intermediates (RFC 5280 6.1.4 l and 6.1.3 name constraints): subject == issuer, different key
+issue ec_p1_si "Ip1" ec_inter_p1 ec "$CA"
+issue ec_p1_si_b "Ip1si-b" ec_p1_si ec "$CA"
+issue ec_leaf_si "lsi" ec_p1_si_b ec "$SRV$(san DNS:si.example.com)"
+cs ok_selfissued_not_counted ok $NOW si.example.com ec_root.pem ec_leaf_si.pem,ec_p1_si_b.pem,ec_p1_si.pem,ec_inter_p1.pem
+issue nc_dns_si "NC dns" nc_dns ec "$CA$(san DNS:evil.example)"
+issue nc_dns_si_leaf "x" nc_dns_si ec "$SRV$(san DNS:www.good.example)"
+cs ok_nc_skips_selfissued_intermediate ok $NOW www.good.example ec_root.pem nc_dns_si_leaf.pem,nc_dns_si.pem,nc_dns.pem
+# wildcard SAN against excluded subtrees (CVE-2025-61727 class)
+issue nc_wild_x "NC wildx" ec_root ec "$CA"'nameConstraints=critical,permitted;DNS:example.net,excluded;DNS:bar.example.net\n'
+issue nc_wild_p "NC wildp" ec_root ec "$CA"'nameConstraints=critical,permitted;DNS:example.net\n'
+issue nc_wild_x_leaf "w" nc_wild_x ec "$SRV$(san DNS:*.example.net)"
+issue nc_wild_p_leaf "w" nc_wild_p ec "$SRV$(san DNS:*.example.net)"
+cs bad_nc_wildcard_covers_excluded fail $NOW foo.example.net ec_root.pem nc_wild_x_leaf.pem,nc_wild_x.pem
+div bad_nc_wildcard_covers_excluded "openssl compares the wildcard SAN literally against the excluded name"
+cs ok_nc_wildcard_permitted ok $NOW foo.example.net ec_root.pem nc_wild_p_leaf.pem,nc_wild_p.pem
+issue nc_dns_leaf_dot "d" nc_dns ec "$SRV$(san DNS:.good.example,DNS:www.good.example)"
+cs bad_nc_malformed_san fail $NOW www.good.example ec_root.pem nc_dns_leaf_dot.pem,nc_dns.pem
+div bad_nc_malformed_san "openssl accepts a leading-dot dNSName SAN that satisfies the constraint textually"
+# key usage and key size consistency
+issue ec_leaf_cadig "k" ec_inter ec "basicConstraints=CA:TRUE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=serverAuth\n$(san DNS:cadig.example.com)"
+cs bad_ca_leaf_without_keycertsign fail $NOW cadig.example.com ec_root.pem ec_leaf_cadig.pem,ec_inter.pem
+div bad_ca_leaf_without_keycertsign "openssl verify does not cross-check keyCertSign against basicConstraints on a leaf"
+issue ec_leaf_ksnoca "k" ec_inter ec "basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyCertSign\nextendedKeyUsage=serverAuth\n$(san DNS:ksnoca.example.com)"
+cs bad_keycertsign_without_ca fail $NOW ksnoca.example.com ec_root.pem ec_leaf_ksnoca.pem,ec_inter.pem
+div bad_keycertsign_without_ca "openssl verify does not cross-check keyCertSign against basicConstraints on a leaf"
+issue rsa1024_leaf2 "l" ec_inter rsa1024 "$SRV$(san DNS:weak.example.com)"
+cs bad_rsa_1024_leaf fail $NOW weak.example.com ec_root.pem rsa1024_leaf2.pem,ec_inter.pem
+div bad_rsa_1024_leaf "openssl security level 1 accepts a 1024-bit leaf key; CA/B BR 6.1.5 and browsers do not"
 
 # --- RSA family
 issue rsa_root "RSA Root" self rsa "$CA" 36500 -sha256

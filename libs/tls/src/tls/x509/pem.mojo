@@ -31,7 +31,7 @@ def _in(c: Int, lo: Int, hi: Int) -> Int:
     return ~(((c - lo) | (hi - c)) >> 63)
 
 
-def b64_decode(s: Bytes) raises -> List[UInt8]:
+def b64_decode(s: Span[UInt8, _]) raises -> List[UInt8]:
     """Standard base64 with optional whitespace and '=' padding. Errors never name the offending byte."""
     var out = List[UInt8](capacity=len(s) * 3 // 4 + 3)
     var bad = 0

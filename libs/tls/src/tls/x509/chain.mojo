@@ -6,7 +6,7 @@ from std.sys import stderr
 from tls.x509.cert import *
 from tls.x509.der import Bytes, view, same
 from tls.x509.pem import pem_spans, b64_decode
-from tls.x509.sigs import verify_sig
+from tls.x509.sigs import verify_sig, rsa_bits, MIN_RSA_BITS
 
 comptime MAX_CHAIN = 10
 comptime MAX_SIG_ATTEMPTS = 16
@@ -157,9 +157,9 @@ def host_matches(c: Certificate, host: Bytes) -> Bool:
 # ---------------------------------------------------------------- path rules
 def _dns_under(name: List[UInt8], base: List[UInt8]) -> Bool:
     """RFC 5280 4.2.1.10 DNS constraint: `name` is `base` or a subdomain of it (a leading dot means subdomains only)."""
-    var n = name.copy()
-    if len(n) > 2 and n[0] == 42 and n[1] == 46:
-        n = List[UInt8](view(n)[2:])
+    var n = List[UInt8]()
+    for i in range(2 if len(name) > 2 and name[0] == 42 and name[1] == 46 else 0, len(name)):
+        n.append(name[i])
     if len(base) == 0:
         return True
     if base[0] == 46:
@@ -182,18 +182,48 @@ def _ip_in(ip: List[UInt8], c: List[UInt8]) -> Bool:
     return True
 
 
+def _one_label_below(e: List[UInt8], base: List[UInt8]) -> Bool:
+    """`e` is `x.base` for a single non-empty label x."""
+    var k = len(e) - len(base) - 1
+    if k < 1 or e[k] != 46 or not _ends_with(e, base):
+        return False
+    for i in range(k):
+        if e[i] == 46:
+            return False
+    return True
+
+
+def _bad_name(n: List[UInt8]) -> Bool:
+    """Empty label (leading, trailing or doubled dot) after an optional `*.` prefix."""
+    var i = 2 if len(n) > 2 and n[0] == 42 and n[1] == 46 else 0
+    if i >= len(n) or n[i] == 46 or n[len(n) - 1] == 46:
+        return True
+    for j in range(i + 1, len(n)):
+        if n[j] == 46 and n[j - 1] == 46:
+            return True
+    return False
+
+
 def _constrain(ca: Certificate, x: Certificate) raises:
     """Every name in `x` must satisfy the name constraints of `ca`."""
     if (ca.nc_unsup & (x.san_types | 0x10)) != 0:
         raise Error("tls: x509: name constraint of a type this verifier cannot check")
     for ref n in x.dns:
         var ln = _lower(view(n))
+        if _bad_name(ln):
+            raise Error("tls: x509: malformed dns name under name constraints")
         var ok = not ca.has_perm_dns
         for ref b in ca.perm_dns:
             if _dns_under(ln, _lower(view(b))):
                 ok = True
+        var wild = len(ln) > 2 and ln[0] == 42 and ln[1] == 46
+        var stem = List[UInt8]()
+        for i in range(2 if wild else 0, len(ln)):
+            stem.append(ln[i])
         for ref b in ca.excl_dns:
-            if _dns_under(ln, _lower(view(b))):
+            var lb = _lower(view(b))
+            # a wildcard also covers every one-label child of its stem (CVE-2025-61727)
+            if _dns_under(ln, lb) or (wild and _one_label_below(lb, stem)):
                 ok = False
         if not ok:
             raise Error("tls: x509: dns name violates name constraints")
@@ -218,11 +248,11 @@ def _valid_at(c: Certificate, now: Int) raises:
 
 def _ca_rules(c: Certificate, below: Int, anchor: Bool) raises:
     """`below` = intermediates between `c` and the leaf. An anchor without basicConstraints (v1 root) is allowed."""
+    if len(c.subject()) <= 2:
+        raise Error("tls: x509: CA with an empty subject")
     if c.has_bc or not anchor:
         if not (c.has_bc and c.is_ca):
             raise Error("tls: x509: issuer is not a CA")
-    if c.has_ku and (c.ku & KU_KEY_CERT_SIGN) == 0:
-        raise Error("tls: x509: CA key usage lacks keyCertSign")
     if c.path_len >= 0 and below > c.path_len:
         raise Error("tls: x509: path length constraint exceeded")
     if not anchor and c.has_eku and not c.eku_server:
@@ -238,20 +268,29 @@ def _check_path(chain: List[Certificate], below: List[Int], root: Certificate, n
             raise Error("tls: x509: leaf extended key usage excludes serverAuth")
         if leaf.has_ku and (leaf.ku & KU_DIGITAL_SIGNATURE) == 0:
             raise Error("tls: x509: leaf key usage lacks digitalSignature")
+        if leaf.key_kind == KEY_OTHER or (leaf.key_kind == KEY_RSA and rsa_bits(leaf.key_a) < MIN_RSA_BITS):
+            raise Error("tls: x509: leaf key is not P-256, P-384 or RSA of at least 2048 bits")
+    var nsi = 0  # intermediates seen so far that are not self-issued (RFC 5280 6.1.4 l)
     for p in range(k):
         ref c = chain[below[p]]
         _valid_at(c, now)
         if c.unknown_critical:
             raise Error("tls: x509: unknown critical extension")
+        if c.has_ku and ((c.ku & KU_KEY_CERT_SIGN) != 0) != c.is_ca:
+            raise Error("tls: x509: keyCertSign and basicConstraints cA disagree")
         if p > 0:
-            _ca_rules(c, p - 1, False)
+            _ca_rules(c, nsi, False)
             for q in range(p):
-                _constrain(c, chain[below[q]])
+                if q == 0 or not chain[below[q]].self_issued():  # name constraints skip self-issued intermediates
+                    _constrain(c, chain[below[q]])
+            if not c.self_issued():
+                nsi += 1
     _valid_at(root, now)
     if k > 0:
-        _ca_rules(root, k - 1, True)
+        _ca_rules(root, nsi, True)
     for q in range(k):
-        _constrain(root, chain[below[q]])
+        if q == 0 or not chain[below[q]].self_issued():
+            _constrain(root, chain[below[q]])
     if k > 0:
         verify_sig(chain[below[k - 1]], root)
     for p in range(k - 1, 0, -1):
@@ -277,7 +316,8 @@ def _find(
             _check_path(chain, below, r, now)
             return True
         except e:
-            err = String(e)
+            if err.startswith("tls: x509: no path"):
+                err = String(e)  # keep the first reason
     for i in range(len(chain)):
         var seen = False
         for q in path:

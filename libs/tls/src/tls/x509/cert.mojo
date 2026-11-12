@@ -352,11 +352,15 @@ struct Certificate(Copyable, Movable):
         var d = Der(v)
         var s = d.seq()
         d.end()
+        if s.done():
+            raise Error("tls: x509: empty name constraints")
         while not s.done():
             var excl = s.peek() == 0xA1
             if not excl and s.peek() != 0xA0:
                 raise Error("tls: x509: bad name constraints")
             var l = s.sub(s.peek())
+            if l.done():
+                raise Error("tls: x509: empty subtree list")
             while not l.done():
                 var g = l.seq()
                 var base = g.next()

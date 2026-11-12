@@ -683,6 +683,64 @@ def bench(mut t: Tally) raises:
     t.check("bench ran", True)
 
 
+def dec(s: String) raises -> Certificate:
+    return Certificate.parse(b64_decode(s.as_bytes()))
+
+
+def limbo_mode(path: String, mut t: Tally) raises:
+    """Informational x509-limbo run (see tools/limbo_convert.py): prints `DIFF id expected got why` per disagreement."""
+    var text = String(unsafe_from_utf8=read_file(path))
+    var agree = 0
+    var diff = 0
+    var ok_rejected = 0
+    var fail_accepted = 0
+    for line in text.split("\n"):
+        var f = line.split(" ")
+        if len(f) < 6:
+            continue
+        var roots = List[Certificate]()
+        for c in String(f[4]).split(","):
+            try:
+                roots.append(dec(String(c)))
+            except:
+                pass
+        var chain = List[Certificate]()
+        var parts = String(f[5]).split(",")
+        var verdict = String("fail")
+        var why = String("peer certificate did not parse")
+        var peer = True
+        try:
+            chain.append(dec(String(parts[0])))
+        except:
+            peer = False
+        for i in range(1, len(parts)):
+            try:
+                chain.append(dec(String(parts[i])))
+            except:
+                pass
+        var host = String(f[3])
+        if host == "-":
+            host = String()
+        if peer:
+            try:
+                verify_chain(chain, host, Int(atol(String(f[2]))), roots)
+                verdict = "ok"
+                why = String()
+            except e:
+                why = String(e)
+        if verdict == String(f[1]):
+            agree += 1
+        else:
+            diff += 1
+            if String(f[1]) == "ok":
+                ok_rejected += 1
+            else:
+                fail_accepted += 1
+            print("DIFF", String(f[0]), "expected", String(f[1]), "got", verdict, "(" + why + ")")
+    print("limbo:", agree + diff, "cases,", agree, "agree,", ok_rejected, "valid chains rejected,", fail_accepted, "invalid chains accepted")
+    t.check("limbo ran", True)
+
+
 def main() raises:
     var a = argv()
     var mode = String(a[1])
@@ -692,6 +750,8 @@ def main() raises:
     elif mode == "fuzzchain":
         fuzz_chain("ec_leaf.pem", "ec_inter.pem", "ec_root.pem", "a.example.com", Int(atol(String(a[2]))), t)
         fuzz_chain("rsa_leaf.pem", "rsa_inter.pem", "rsa_root.pem", "rsa.example.com", Int(atol(String(a[2]))), t)
+    elif mode == "limbo":
+        limbo_mode(String(a[2]), t)
     elif mode == "bench":
         bench(t)
     elif mode == "bundle":

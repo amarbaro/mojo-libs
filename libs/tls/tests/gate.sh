@@ -122,7 +122,22 @@ stage_bench() {
   echo "PASS bench: numbers above (resident process, median of 5 batches)"
 }
 
+stage_limbo() {
+  local L=.work/limbo
+  [ -f $L/cases.txt ] || tools/limbo_fetch.sh > /dev/null 2>&1 || { echo "SKIP limbo: no .work/limbo/cases.txt and tools/limbo_fetch.sh failed (needs network); NOT a pass"; return 0; }
+  timeout 300 $BIN limbo $L/cases.txt > $L/out_$$.txt || fail limbo "limbo run crashed"
+  local sum; sum=$(grep '^limbo:' $L/out_$$.txt)
+  grep '^DIFF' $L/out_$$.txt | cut -d' ' -f2 | sort > $W/limbo_diff_ids.txt
+  mv $L/out_$$.txt $W/limbo_out.txt
+  local fresh gone
+  fresh=$(comm -13 tests/limbo_known.txt $W/limbo_diff_ids.txt | wc -l)
+  gone=$(comm -23 tests/limbo_known.txt $W/limbo_diff_ids.txt | wc -l)
+  [ "$fresh" = 0 ] || { comm -13 tests/limbo_known.txt $W/limbo_diff_ids.txt | head -5; fail limbo "$fresh cases now disagree with limbo that did not before"; }
+  [ "$gone" = 0 ] || echo "note limbo: $gone known disagreements are fixed; shrink tests/limbo_known.txt"
+  echo "PASS limbo: $sum; every disagreement is listed in tests/limbo_known.txt ($(wc -l < tests/limbo_known.txt) ids)"
+}
+
 build
 stages=("$@")
-[ ${#stages[@]} -eq 0 ] && stages=(parse chain keys)
+[ ${#stages[@]} -eq 0 ] && stages=(parse chain keys limbo)
 for s in "${stages[@]}"; do "stage_$s"; done
