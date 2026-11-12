@@ -1,0 +1,7 @@
+bn.mojo	r[i] = (a[i] & mask) | (b[i] & ~mask)	r[i] = (b[i] & mask) | (a[i] & ~mask)	vectors	.work/vectors.txt
+x25519.mojo	k[31] |= 64	k[31] |= 0	vectors	.work/vectors.txt x25519
+ec.mojo	 or lt(s, c.o.m) == 0:	:	vectors	.work/vectors.txt ecdsa
+ec.mojo	if b[0] >= 0x80 or (b[0] == 0 and (n == 1 or b[1] < 0x80)):	if b[0] >= 0x80:	vectors	.work/vectors.txt ecdsa
+ec.mojo	return is_zero(sub(mont_mul(ym, ym, c.f), rhs, c.f)) == 1	return True	vectors	.work/vectors.txt ecdh ecdsa
+rsa.mojo	em[k - 1] != 0xBC or 	False or 	vectors	.work/vectors.txt rsa_pss
+rsa.mojo	want[k - len(t) - 1] = 0	want[k - len(t) - 1] = 1	vectors	.work/vectors.txt rsa_pkcs1
