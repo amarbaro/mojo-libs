@@ -53,6 +53,43 @@ stage_parse() {
   echo "PASS parse: all $have certs of $BUNDLE parse; not_before, not_after, serial and key bytes equal openssl's"
 }
 
+oracle_cases() {  # manifest; prints "total agree div" to $W/oracle.txt
+  local agree=0 div=0 total=0 d=tests/data
+  while read -r name expect now host roots chain; do
+    [ -z "$name" ] && continue
+    ( cd $d && cat $(echo "$chain" | tr ',' ' ') ) > $W/all.pem
+    awk '/BEGIN CERTIFICATE/{n++} n==1{print}' $W/all.pem > $W/leaf.pem
+    local ca=$BUNDLE ho=()
+    if [ "$roots" != "@system" ]; then
+      ( cd $d && cat $(echo "$roots" | tr ',' ' ') ) > $W/roots.pem; ca=$W/roots.pem
+    fi
+    if [ "$host" != "-" ]; then
+      if [[ "$host" == *:* || "$host" =~ ^[0-9.]+$ ]]; then ho=(-verify_ip "$host"); else ho=(-verify_hostname "$host"); fi
+    fi
+    local oss=fail
+    if openssl verify -CAfile $ca -untrusted $W/all.pem -purpose sslserver -attime "$now" "${ho[@]}" $W/leaf.pem > /dev/null 2>&1; then oss=ok; fi
+    total=$((total + 1))
+    if grep -q "^$name " $d/divergences.txt; then
+      div=$((div + 1))
+      [ "$oss" != "$expect" ] || echo "note chain: $name is listed as divergent but openssl agrees"
+    elif [ "$oss" != "$expect" ]; then
+      fail chain "$name: openssl says $oss, expected $expect (fixture wrong or undocumented divergence)"
+    else
+      agree=$((agree + 1))
+    fi
+  done < $1
+  echo "$total $agree $div" > $W/oracle.txt
+}
+
+stage_chain() {
+  timeout 120 $BIN chain tests/data/chain_cases.txt || fail chain "synthetic verdicts differ from the expected ones"
+  timeout 120 $BIN chain tests/data/chain_real.txt || fail chain "real-site verdicts differ from the expected ones"
+  local t1 a1 d1 t2 a2 d2
+  oracle_cases tests/data/chain_cases.txt; read -r t1 a1 d1 < $W/oracle.txt
+  oracle_cases tests/data/chain_real.txt; read -r t2 a2 d2 < $W/oracle.txt
+  echo "PASS chain: $t1 synthetic + $t2 real-site cases give the expected verdict; $((a1 + a2)) agree with openssl verify -purpose sslserver, $((d1 + d2)) documented divergences"
+}
+
 build
 stages=("$@")
 [ ${#stages[@]} -eq 0 ] && stages=(parse chain keys)

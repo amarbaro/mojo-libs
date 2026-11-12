@@ -68,7 +68,6 @@ cs ok_wild ok $NOW x.wild.example.com ec_root.pem ec_wild.pem,ec_inter.pem
 cs bad_wild_apex fail $NOW wild.example.com ec_root.pem ec_wild.pem,ec_inter.pem
 cs bad_wild_two_labels fail $NOW a.b.wild.example.com ec_root.pem ec_wild.pem,ec_inter.pem
 cs bad_wild_tld fail $NOW foo.com ec_root.pem ec_wild.pem,ec_inter.pem
-div bad_wild_tld "openssl accepts a *.com wildcard; browsers and RFC 6125 6.4.3 do not"
 cs bad_wild_partial fail $NOW fa.example.org ec_root.pem ec_wild.pem,ec_inter.pem
 div bad_wild_partial "openssl accepts partial-label wildcards"
 cs bad_wild_middle fail $NOW x.y.example.net ec_root.pem ec_wild.pem,ec_inter.pem
@@ -94,7 +93,7 @@ issue ec_leaf_p1 "lp1" ec_inter_p1b ec "$SRV$(san DNS:p1.example.com)"
 issue ec_leaf_p1c "lp1c" ec_inter_p1c ec "$SRV$(san DNS:p1c.example.com)"
 cs ok_pathlen1 ok $NOW p1.example.com ec_root.pem ec_leaf_p1.pem,ec_inter_p1b.pem,ec_inter_p1.pem
 cs bad_pathlen1_exceeded fail $NOW p1c.example.com ec_root.pem ec_leaf_p1c.pem,ec_inter_p1c.pem,ec_inter_p1b.pem,ec_inter_p1.pem
-cs ok_out_of_order ok $NOW deep.example.com ec_root.pem ec_leaf3.pem,ec_inter.pem,ec_inter2.pem
+cs ok_out_of_order ok $NOW p1.example.com ec_root.pem ec_leaf_p1.pem,ec_inter_p1.pem,ec_inter_p1b.pem
 issue ec_ca_false "Inoca" ec_root ec 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,keyCertSign\n'
 issue ec_leaf4 "l4" ec_ca_false ec "$SRV$(san DNS:noca.example.com)"
 cs bad_inter_not_ca fail $NOW noca.example.com ec_root.pem ec_leaf4.pem,ec_ca_false.pem
@@ -108,6 +107,7 @@ issue ec_leaf_cli "c" ec_inter ec "basicConstraints=CA:FALSE\nkeyUsage=critical,
 cs bad_eku_client fail $NOW cli.example.com ec_root.pem ec_leaf_cli.pem,ec_inter.pem
 issue ec_leaf_anyeku "a" ec_inter ec "basicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature\nextendedKeyUsage=anyExtendedKeyUsage\n$(san DNS:any.example.com)"
 cs ok_eku_any ok $NOW any.example.com ec_root.pem ec_leaf_anyeku.pem,ec_inter.pem
+div ok_eku_any "openssl treats a leaf with only anyExtendedKeyUsage as unsuitable for sslserver; Go and Chromium accept it"
 issue ec_leaf_noeku "n" ec_inter ec "basicConstraints=CA:FALSE\n$(san DNS:noeku.example.com)"
 cs ok_no_eku_no_ku ok $NOW noeku.example.com ec_root.pem ec_leaf_noeku.pem,ec_inter.pem
 issue ec_leaf_ku "k" ec_inter ec "basicConstraints=CA:FALSE\nkeyUsage=critical,keyEncipherment\n$(san DNS:ku.example.com)"
@@ -149,7 +149,6 @@ cs bad_nc_ip_v6_not_permitted fail $NOW 2001:db8::1 ec_root.pem nc_ip_v6.pem,nc_
 issue nc_mail "NC mail" ec_root ec "$CA"'nameConstraints=critical,permitted;email:good.example\n'
 issue nc_mail_leaf "m" nc_mail ec "$SRV$(san DNS:www.example.com,email:a@bad.example)"
 cs bad_nc_unsupported_type_used fail $NOW www.example.com ec_root.pem nc_mail_leaf.pem,nc_mail.pem
-div bad_nc_unsupported_type_used "openssl checks the email name against the constraint; we refuse a name type we cannot check"
 issue nc_mail_leaf2 "m" nc_mail ec "$SRV$(san DNS:www.example.com)"
 cs ok_nc_unsupported_type_unused ok $NOW www.example.com ec_root.pem nc_mail_leaf2.pem,nc_mail.pem
 # SHA-1 and other digests

@@ -5,3 +5,19 @@ time_pivot | tls/x509/der.mojo | s/y >= 50/y >= 51/ | parse
 validity_swapped | tls/x509/cert.mojo | s/self.not_before = val.time\(\)\n(\s+)self.not_after = val.time\(\)/self.not_after = val.time()\n$1self.not_before = val.time()/ | parse
 duplicate_ext_allowed | tls/x509/cert.mojo | s/if same\(view\(p\), o\):/if False:/ | parse
 b64_pad_unchecked | tls/x509/pem.mojo | s/pad != \(4 - r\) % 4/False/ | parse
+ca_check_removed | tls/x509/chain.mojo | s/if not \(c.has_bc and c.is_ca\):/if False:/ | chain
+pathlen_loosened | tls/x509/chain.mojo | s/below > c.path_len:/below > c.path_len + 5:/ | chain
+expiry_ignored | tls/x509/chain.mojo | s/if now > c.not_after:/if False:/ | chain
+not_yet_valid_ignored | tls/x509/chain.mojo | s/if now < c.not_before:/if False:/ | chain
+sha1_accepted | tls/x509/sigs.mojo | s/raise Error\("tls: x509: sha1 signature refused"\)/return/ | chain
+wildcard_tld | tls/x509/chain.mojo | s/if dots < 1 or/if dots < 0 or/ | chain
+nc_excluded_ignored | tls/x509/chain.mojo | s/(excl_dns:\n\s+if _dns_under\(ln, _lower\(view\(b\)\)\):\n\s+)ok = False/$1ok = True/ | chain
+ip_host_matches_dns | tls/x509/chain.mojo | s/if len\(ip\) > 0:/if len(ip) > 99:/ | chain
+leaf_signature_unchecked | tls/x509/chain.mojo | s/range\(k - 1, 0, -1\)/range(k - 1, 1, -1)/ | chain
+leaf_eku_ignored | tls/x509/chain.mojo | s/if leaf.has_eku and not leaf.eku_server:/if False:/ | chain
+pss_salt_assumed | tls/x509/sigs.mojo | s/h, sig, c.pss_salt\)/h, sig, 32)/ | chain
+unknown_critical_ignored | tls/x509/cert.mojo | s/self.unknown_critical = True/self.unknown_critical = False/ | chain
+chain_cap_removed | tls/x509/chain.mojo | s/len\(chain\) > MAX_CHAIN/len(chain) > 99/ | chain
+host_case_sensitive | tls/x509/chain.mojo | s/b\[i\] \+ 32 if b\[i\] >= 65 and b\[i\] <= 90 else b\[i\]/b[i]/ | chain
+ku_cert_sign_ignored | tls/x509/chain.mojo | s/\(c.ku & KU_KEY_CERT_SIGN\) == 0/False/ | chain
+trusted_leaf_needs_ca | tls/x509/chain.mojo | s/    if k > 0:\n        _ca_rules\(root, k - 1, True\)/    _ca_rules(root, k - 1, True)/ | chain

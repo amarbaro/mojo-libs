@@ -5,6 +5,7 @@ from std.time import perf_counter_ns
 from tls.x509.der import Der, Bytes, view, copy_of, parse_time
 from tls.x509.pem import b64_decode, pem_blocks, pem_spans
 from tls.x509.cert import Certificate
+from tls.x509.chain import verify_chain, load_roots_pem, load_system_roots, host_matches, parse_ip
 
 comptime HEX = "0123456789abcdef"
 
@@ -390,6 +391,46 @@ def fuzz(path: String, rounds: Int, mut t: Tally) raises:
     _ = raw[0]
 
 
+# ---------------------------------------------------------------- chain
+def load_certs(files: String, dir: String) raises -> List[Certificate]:
+    var out = List[Certificate]()
+    if files == "@system":
+        return load_system_roots()
+    for f in files.split(","):
+        var raw = read_file(dir + String(f))
+        for ref sp in pem_spans(view(raw)):
+            out.append(Certificate.parse(b64_decode(sp[1])))
+        _ = len(raw)
+    return out^
+
+
+def chain_mode(manifest: String, mut t: Tally) raises:
+    """Lines: name expect now host roots chain. Verdict must equal `expect` (ok | fail)."""
+    var text = String(unsafe_from_utf8=read_file(manifest))
+    var n = 0
+    var t0 = perf_counter_ns()
+    for line in text.split("\n"):
+        var f = line.split(" ")
+        if len(f) < 6:
+            continue
+        var name = String(f[0])
+        var certs = load_certs(String(f[5]), "tests/data/")
+        var roots = load_certs(String(f[4]), "tests/data/")
+        var host = String(f[3])
+        if host == "-":
+            host = String()
+        var verdict = String("ok")
+        var why = String()
+        try:
+            verify_chain(certs, host, Int(atol(String(f[2]))), roots)
+        except e:
+            verdict = "fail"
+            why = String(e)
+        t.check(name, verdict == String(f[1]), "expected " + String(f[1]) + ", got " + verdict + " (" + why + ")")
+        n += 1
+    print("chain: ", n, "cases in", (perf_counter_ns() - t0) // 1000000, "ms")
+
+
 def main() raises:
     var a = argv()
     var mode = String(a[1])
@@ -400,6 +441,8 @@ def main() raises:
         bundle(String(a[2]), t)
     elif mode == "fuzz":
         fuzz(String(a[2]), Int(atol(String(a[3]))), t)
+    elif mode == "chain":
+        chain_mode(String(a[2]), t)
     else:
         print("FAIL mode: unknown mode", mode)
         exit(2)

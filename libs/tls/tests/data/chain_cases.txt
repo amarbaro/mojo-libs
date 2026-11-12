@@ -27,7 +27,7 @@ bad_nonca_issuer fail 1794455136 evil.example.com ec_root.pem ec_leaf2.pem,ec_le
 bad_pathlen0 fail 1794455136 deep.example.com ec_root.pem ec_leaf3.pem,ec_inter2.pem,ec_inter.pem
 ok_pathlen1 ok 1794455136 p1.example.com ec_root.pem ec_leaf_p1.pem,ec_inter_p1b.pem,ec_inter_p1.pem
 bad_pathlen1_exceeded fail 1794455136 p1c.example.com ec_root.pem ec_leaf_p1c.pem,ec_inter_p1c.pem,ec_inter_p1b.pem,ec_inter_p1.pem
-ok_out_of_order ok 1794455136 deep.example.com ec_root.pem ec_leaf3.pem,ec_inter.pem,ec_inter2.pem
+ok_out_of_order ok 1794455136 p1.example.com ec_root.pem ec_leaf_p1.pem,ec_inter_p1.pem,ec_inter_p1b.pem
 bad_inter_not_ca fail 1794455136 noca.example.com ec_root.pem ec_leaf4.pem,ec_ca_false.pem
 bad_inter_no_bc fail 1794455136 nobc.example.com ec_root.pem ec_leaf4b.pem,ec_ca_nobc.pem
 bad_inter_no_certsign fail 1794455136 noks.example.com ec_root.pem ec_leaf5.pem,ec_ca_noks.pem
