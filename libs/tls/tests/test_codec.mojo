@@ -217,6 +217,13 @@ def reader_bounds(mut t: T) raises:
     var r3 = Rd(b.copy())
     var exact = len(r3.take(3)) == 3 and r3.left() == 0
     t.ok("Rd: take(left + 1) raises and take(left) works", short and exact)
+    var empty = False
+    try:
+        _ = p_u16s([0, 0])  # an extension body holding an empty list: signature_algorithms and supported_groups need >= 1 entry
+    except e:
+        empty = alert_of(String(e)) == 50
+    var one = len(p_u16s([0, 2, 4, 3])) == 1
+    t.ok("an empty u16 list is a decode_error, a one-entry list parses", empty and one)
 
 
 def main() raises:

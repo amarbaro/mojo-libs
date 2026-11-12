@@ -258,8 +258,8 @@ def p_u16s(d: List[UInt8]) raises -> List[Int]:
     var r = Rd(d.copy())
     var l = r.sub16()
     r.done()
-    if l.left() % 2 != 0:
-        raise bad("decode_error", "odd u16 list")
+    if l.left() % 2 != 0 or l.left() == 0:  # RFC 8446 4.2.3, 4.2.7: both vectors are <2..2^16-1>, an empty one is malformed
+        raise bad("decode_error", "odd or empty u16 list")
     var o = List[Int]()
     while l.left() > 0:
         o.append(l.u16())
