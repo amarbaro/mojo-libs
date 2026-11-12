@@ -54,6 +54,11 @@ def put24(mut o: List[UInt8], v: Int):
     o.append(UInt8(v & 0xFF))
 
 
+def put32(mut o: List[UInt8], v: Int):
+    put16(o, v >> 16)
+    put16(o, v & 0xFFFF)
+
+
 def putb(mut o: List[UInt8], b: List[UInt8]):
     o.extend(Span(b))
 
@@ -140,6 +145,10 @@ struct Rd(Copyable, Movable):
         self.p += 3
         return (Int(self.b[self.p - 3]) << 16) | (Int(self.b[self.p - 2]) << 8) | Int(self.b[self.p - 1])
 
+    def u32(mut self) raises -> Int:
+        var hi = self.u16()
+        return (hi << 16) | self.u16()
+
     def take(mut self, n: Int) raises -> List[UInt8]:
         self.need(n)
         var o = List[UInt8](capacity=n)
@@ -148,8 +157,12 @@ struct Rd(Copyable, Movable):
         self.p += n
         return o^
 
-    def rest(mut self) raises -> List[UInt8]:
-        return self.take(self.left())
+    def rest(self) -> List[UInt8]:
+        """The unread bytes (a copy; does not advance, use on a reader that is dropped after)."""
+        var o = List[UInt8](capacity=self.left())
+        for i in range(self.p, len(self.b)):
+            o.append(self.b[i])
+        return o^
 
     def sub8(mut self) raises -> Rd:
         return Rd(self.take(self.u8()))
