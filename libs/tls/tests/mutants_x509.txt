@@ -10,7 +10,7 @@ pathlen_loosened | tls/x509/chain.mojo | s/below > c.path_len:/below > c.path_le
 expiry_ignored | tls/x509/chain.mojo | s/if now > c.not_after:/if False:/ | chain
 not_yet_valid_ignored | tls/x509/chain.mojo | s/if now < c.not_before:/if False:/ | chain
 sha1_accepted | tls/x509/sigs.mojo | s/raise Error\("tls: x509: sha1 signature refused"\)/return/ | chain
-wildcard_tld | tls/x509/chain.mojo | s/if dots < 1 or/if dots < 0 or/ | chain
+wildcard_tld | tls/x509/chain.mojo | s/if dots < 1 or/if dots < 0 or/ | parse
 nc_excluded_ignored | tls/x509/chain.mojo | s/if _dns_under\(ln, lb\) or \(wild and _one_label_below\(lb, stem\)\):/if False:/ | chain
 ip_host_matches_dns | tls/x509/chain.mojo | s/if len\(ip\) > 0:/if len(ip) > 99:/ | chain
 leaf_signature_unchecked | tls/x509/chain.mojo | s/range\(k - 1, 0, -1\)/range(k - 1, 1, -1)/ | chain

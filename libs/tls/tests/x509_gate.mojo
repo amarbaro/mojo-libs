@@ -208,6 +208,10 @@ def _b64_bad(s: String) -> Bool:
 
 
 def unit(mut t: Tally) raises:
+    # host_matches alone (the leaf rules already refuse these SANs): *.com is not a wildcard, a partial label is not either
+    var wild = load_certs("ec_wild.pem", "tests/data/")[0].copy()
+    t.check("host_matches *.com refused", not host_matches(wild, view("foo.com".as_bytes())), "matched")
+    t.check("host_matches *.wild.example.com", host_matches(wild, view("x.wild.example.com".as_bytes())), "no match")
     # DER strictness: each malformed encoding must be rejected
     t.check("der non-minimal length 81 05", _raises_der("308105020100" + "0000", 0), "accepted")
     t.check("der long length 82 0001", _raises_der("30820001ff", 0), "accepted")

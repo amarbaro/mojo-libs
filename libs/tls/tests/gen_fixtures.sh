@@ -120,7 +120,7 @@ issue ec_leaf_p1c "lp1c" ec_inter_p1c ec "$SRV$(san DNS:p1c.example.com)"
 cs ok_pathlen1 ok $NOW p1.example.com ec_root.pem ec_leaf_p1.pem,ec_inter_p1b.pem,ec_inter_p1.pem
 cs bad_pathlen1_exceeded fail $NOW p1c.example.com ec_root.pem ec_leaf_p1c.pem,ec_inter_p1c.pem,ec_inter_p1b.pem,ec_inter_p1.pem
 cs ok_out_of_order ok $NOW p1.example.com ec_root.pem ec_leaf_p1.pem,ec_inter_p1.pem,ec_inter_p1b.pem
-issue ec_ca_false "Inoca" ec_root ec 'basicConstraints=critical,CA:FALSE\nkeyUsage=critical,keyCertSign\n'
+issue ec_ca_false "Inoca" ec_root ec 'basicConstraints=critical,CA:FALSE\n'
 issue ec_leaf4 "l4" ec_ca_false ec "$SRV$(san DNS:noca.example.com)"
 cs bad_inter_not_ca fail $NOW noca.example.com ec_root.pem ec_leaf4.pem,ec_ca_false.pem
 issue ec_noca_noku "Inoku" ec_root ec 'basicConstraints=CA:FALSE\n'
