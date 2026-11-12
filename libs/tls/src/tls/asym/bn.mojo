@@ -51,6 +51,11 @@ def to_be[N: Int](a: Fe[N]) -> List[UInt8]:
     return out^
 
 
+def eq_mask(a: Int, b: Int) -> UInt64:
+    """All ones when a == b (both in [0, 2^63)), else 0, by arithmetic only so no compiler turns it into a branch."""
+    return UInt64(0) - (((UInt64(a) ^ UInt64(b)) - 1) >> 63)
+
+
 def is_zero[N: Int](a: Fe[N]) -> UInt64:
     var acc: UInt64 = 0
     comptime for i in range(N):
@@ -101,9 +106,19 @@ struct Modulus[N: Int](Copyable, Movable):
         while k0 & 1 == 0:
             k0 >>= 1
             sq += 1
-        var x = Fe[Self.N](fill=0)
-        x[0] = 1
-        for _ in range(64 * Self.N + k0):
+        var x = Fe[Self.N](fill=0)  # R mod m = (R - m) minus m while it is >= m (m is public or only its size is used)
+        var br: UInt64 = 0
+        for i in range(Self.N):
+            var d = sbb(0, m[i], br)
+            x[i] = d[0]
+            br = d[1]
+        while lt(x, m) == 0:
+            br = 0
+            for i in range(Self.N):
+                var d = sbb(x[i], m[i], br)
+                x[i] = d[0]
+                br = d[1]
+        for _ in range(k0):
             x = add(x, x, self)
         for _ in range(sq):
             x = mont_mul(x, x, self)
@@ -150,7 +165,7 @@ def sub[N: Int](a: Fe[N], b: Fe[N], md: Modulus[N]) -> Fe[N]:
 @always_inline
 def _row[N: Int](mut t: Array[UInt64, N + 2], a: Fe[N], bi: UInt64, md: Modulus[N]):
     var c: UInt64 = 0
-    comptime if N <= 8:
+    comptime if N <= 32:
         comptime for j in range(N):
             var uv = mac(t[j], a[j], bi, c)
             t[j] = uv[0]
@@ -166,7 +181,7 @@ def _row[N: Int](mut t: Array[UInt64, N + 2], a: Fe[N], bi: UInt64, md: Modulus[
     var mq = t[0] * md.m0inv
     var uv = mac(t[0], mq, md.m[0], 0)
     c = uv[1]
-    comptime if N <= 8:
+    comptime if N <= 32:
         comptime for j in range(1, N):
             uv = mac(t[j], mq, md.m[j], c)
             t[j - 1] = uv[0]
@@ -185,7 +200,7 @@ def _row[N: Int](mut t: Array[UInt64, N + 2], a: Fe[N], bi: UInt64, md: Modulus[
 def mont_mul[N: Int](a: Fe[N], b: Fe[N], md: Modulus[N]) -> Fe[N]:
     """a*b/R mod m (CIOS)."""
     var t = Array[UInt64, N + 2](fill=0)
-    comptime if N <= 8:
+    comptime if N <= 32:
         comptime for i in range(N):
             _row(t, a, b[i], md)
     else:
@@ -225,7 +240,7 @@ def pow_ct[N: Int, E: Int](a: Fe[N], e: Fe[E], md: Modulus[N]) -> Fe[N]:
         var nib = (e[w >> 4] >> UInt64(4 * (w & 15))) & 15
         var sel = Fe[N](fill=0)
         for k in range(16):
-            var mask = UInt64(0) - UInt64(k == Int(nib))
+            var mask = eq_mask(k, Int(nib))
             comptime for i in range(N):
                 sel[i] |= tab[k * N + i] & mask
         r = mont_mul(r, sel, md)

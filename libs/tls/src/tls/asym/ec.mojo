@@ -170,7 +170,7 @@ def scalar_mult[N: Int](k: Fe[N], p: Point[N], c: Curve[N]) -> Point[N]:
         var nib = Int((k[w >> 4] >> UInt64(4 * (w & 15))) & 15)
         var sel = Point[N](zero[N](), zero[N](), zero[N]())
         for j in range(16):
-            var mask = UInt64(0) - UInt64(j == nib)
+            var mask = eq_mask(j, nib)
             for i in range(N):
                 sel.x[i] |= tab[j].x[i] & mask
                 sel.y[i] |= tab[j].y[i] & mask
