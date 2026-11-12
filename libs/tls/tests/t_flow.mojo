@@ -183,6 +183,10 @@ def main() raises:
     sp.feed(cp.cn.take_output())
     var fl2 = sp.cn.take_output()
     t.check("no sentinel for a 1.2-only client", List[UInt8](Span(fl2)[35:43]) != want)
+    var c12 = started("localhost", [], True)  # a server with no TLS 1.3 engine (cfg.tls13 False) must not claim a downgrade
+    var s12 = Sv(make_cfg(False))
+    s12.feed(c12.cn.take_output())
+    t.check("no sentinel from a TLS 1.2-only server", List[UInt8](Span(s12.cn.take_output())[35:43]) != want)
 
     # ClientHello errors: the alert is the contract
     expect(t, "good hello accepted", cfg, rec(22, mk_ch()), -9)

@@ -31,6 +31,7 @@ struct TlsConfig(Movable):
     var idle_ms: Int  # an established connection with no traffic for this long is closed
     var max_conns: Int
     var max_out: Int  # queued output bytes per connection before reading pauses
+    var tls13: Bool  # a TLS 1.3 engine sits behind this config: a TLS 1.2 answer to a 1.3 client carries the DOWNGRD sentinel (RFC 8446 4.1.3)
 
     def __init__(out self):
         self.certs = List[CertEntry]()
@@ -39,6 +40,7 @@ struct TlsConfig(Movable):
         self.idle_ms = 60000
         self.max_conns = 65536
         self.max_out = 1 << 20
+        self.tls13 = False
 
     def order(self, sni: String) -> List[Int]:
         """Entries to try, SNI matches first, then the rest in configuration order (default first)."""
