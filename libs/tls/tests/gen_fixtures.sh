@@ -65,7 +65,8 @@ issue ec_dnsonly "d" ec_inter ec "$SRV$(san DNS:192.0.2.7)"
 cs bad_ip_vs_dns_san fail $NOW 192.0.2.7 ec_root.pem ec_dnsonly.pem,ec_inter.pem
 # wildcard
 issue ec_wild "w" ec_inter ec "$SRV$(san 'DNS:*.wild.example.com,DNS:*.com,DNS:f*.example.org,DNS:x.*.example.net')"
-cs ok_wild ok $NOW x.wild.example.com ec_root.pem ec_wild.pem,ec_inter.pem
+issue ec_wild_ok "w" ec_inter ec "$SRV$(san DNS:*.wild.example.com)"
+cs ok_wild ok $NOW x.wild.example.com ec_root.pem ec_wild_ok.pem,ec_inter.pem
 cs bad_wild_apex fail $NOW wild.example.com ec_root.pem ec_wild.pem,ec_inter.pem
 cs bad_wild_two_labels fail $NOW a.b.wild.example.com ec_root.pem ec_wild.pem,ec_inter.pem
 cs bad_wild_tld fail $NOW foo.com ec_root.pem ec_wild.pem,ec_inter.pem
@@ -73,6 +74,9 @@ cs bad_wild_partial fail $NOW fa.example.org ec_root.pem ec_wild.pem,ec_inter.pe
 div bad_wild_partial "openssl accepts partial-label wildcards"
 cs bad_wild_middle fail $NOW x.y.example.net ec_root.pem ec_wild.pem,ec_inter.pem
 # CN only
+issue ec_cn_victim "victim.example" ec_inter ec "$SRV$(san DNS:other.example)"
+cs bad_cn_victim fail $NOW victim.example ec_root.pem ec_cn_victim.pem,ec_inter.pem
+cs ok_cn_victim_san ok $NOW other.example ec_root.pem ec_cn_victim.pem,ec_inter.pem
 issue ec_cnonly "cn.example.com" ec_inter ec "$SRV"
 cs bad_cn_only fail $NOW cn.example.com ec_root.pem ec_cnonly.pem,ec_inter.pem
 div bad_cn_only "openssl falls back to the subject CN when there is no SAN; RFC 9525 forbids it"
@@ -113,7 +117,8 @@ issue ec_leaf_anyeku "a" ec_inter ec "basicConstraints=CA:FALSE\nkeyUsage=critic
 cs ok_eku_any ok $NOW any.example.com ec_root.pem ec_leaf_anyeku.pem,ec_inter.pem
 div ok_eku_any "openssl treats a leaf with only anyExtendedKeyUsage as unsuitable for sslserver; Go and Chromium accept it"
 issue ec_leaf_noeku "n" ec_inter ec "basicConstraints=CA:FALSE\n$(san DNS:noeku.example.com)"
-cs ok_no_eku_no_ku ok $NOW noeku.example.com ec_root.pem ec_leaf_noeku.pem,ec_inter.pem
+cs bad_no_eku fail $NOW noeku.example.com ec_root.pem ec_leaf_noeku.pem,ec_inter.pem
+div bad_no_eku "openssl accepts a leaf without extendedKeyUsage; CA/B BR 7.1.2.7.6 requires one (limbo webpki::eku::ee-without-eku)"
 issue ec_leaf_ku "k" ec_inter ec "basicConstraints=CA:FALSE\nkeyUsage=critical,keyEncipherment\n$(san DNS:ku.example.com)"
 cs bad_ku_no_signature fail $NOW ku.example.com ec_root.pem ec_leaf_ku.pem,ec_inter.pem
 div bad_ku_no_signature "openssl -purpose sslserver accepts keyEncipherment (RSA key transport); our suites cannot use it"
@@ -173,16 +178,16 @@ cs ok_p384_signs_p256_leaf ok $NOW p384b.example.com ec384_root.pem ec384_leaf_p
 issue ss_leaf "ss" self ec "$SRV$(san DNS:ss.example.com)"
 cs ok_selfsigned_trusted ok $NOW ss.example.com ss_leaf.pem ss_leaf.pem
 cs bad_selfsigned_untrusted fail $NOW ss.example.com ec_root.pem ss_leaf.pem
-# chain length cap
+# chain length cap (MAX_CHAIN = 40)
 prev=ec_root
-for i in 1 2 3 4 5 6 7 8 9 10; do issue ec_c$i "C$i" $prev ec "$CA"; prev=ec_c$i; done
-issue ec_lc9 "l" ec_c9 ec "$SRV$(san DNS:long.example.com)"
-issue ec_lc10 "l" ec_c10 ec "$SRV$(san DNS:long.example.com)"
-c9=$(for i in 9 8 7 6 5 4 3 2 1; do printf 'ec_c%s.pem,' $i; done)
-c10=$(for i in 10 9 8 7 6 5 4 3 2 1; do printf 'ec_c%s.pem,' $i; done)
-cs ok_chain_10 ok $NOW long.example.com ec_root.pem "ec_lc9.pem,${c9%,}"
-cs bad_chain_11 fail $NOW long.example.com ec_root.pem "ec_lc10.pem,${c10%,}"
-div bad_chain_11 "openssl's default depth is 100; we cap chains at 10 certificates"
+for i in $(seq 1 40); do issue ec_c$i "C$i" $prev ec "$CA"; prev=ec_c$i; done
+issue ec_lc39 "l" ec_c39 ec "$SRV$(san DNS:long.example.com)"
+issue ec_lc40 "l" ec_c40 ec "$SRV$(san DNS:long.example.com)"
+c39=$(for i in $(seq 39 -1 1); do printf 'ec_c%s.pem,' $i; done)
+c40=$(for i in $(seq 40 -1 1); do printf 'ec_c%s.pem,' $i; done)
+cs ok_chain_40 ok $NOW long.example.com ec_root.pem "ec_lc39.pem,${c39%,}"
+cs bad_chain_41 fail $NOW long.example.com ec_root.pem "ec_lc40.pem,${c40%,}"
+div bad_chain_41 "openssl's default depth is 100; we cap chains at 40 certificates"
 # self-issued intermediates (RFC 5280 6.1.4 l and 6.1.3 name constraints): subject == issuer, different key
 issue ec_p1_si "Ip1" ec_inter_p1 ec "$CA"
 issue ec_p1_si_b "Ip1si-b" ec_p1_si ec "$CA"

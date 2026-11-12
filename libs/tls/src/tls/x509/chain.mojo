@@ -4,12 +4,14 @@
 # the peer is used only after the root has vouched for it.
 from std.sys import stderr
 from tls.x509.cert import *
-from tls.x509.der import Bytes, view, same
+from tls.x509.der import Bytes, view, same, copy_of
 from tls.x509.pem import pem_spans, b64_decode
+from tls.x509.psl import PSL
 from tls.x509.sigs import verify_sig, rsa_bits, MIN_RSA_BITS
 
-comptime MAX_CHAIN = 10
-comptime MAX_SIG_ATTEMPTS = 16
+comptime MAX_CHAIN = 40  # certificates offered by the peer (BetterTLS path building offers 36 intermediates)
+comptime MAX_SIG_ATTEMPTS = 16  # candidate paths that reach a trusted root and get checked
+comptime MAX_PATH_STEPS = 4096  # nodes of the path search; the peer controls the graph, so the walk is bounded
 
 
 # ---------------------------------------------------------------- names
@@ -256,6 +258,8 @@ def _ca_rules(c: Certificate, below: Int, anchor: Bool) raises:
         raise Error("tls: x509: CA basicConstraints must be critical")
     if c.has_ku and (c.ku & KU_KEY_CERT_SIGN) == 0:
         raise Error("tls: x509: CA key usage lacks keyCertSign")
+    if c.key_kind == KEY_RSA and rsa_bits(c.key_a) % 8 != 0:
+        raise Error("tls: x509: RSA key size is not a multiple of 8 bits")
     if c.path_len >= 0 and below > c.path_len:
         raise Error("tls: x509: path length constraint exceeded")
     if not anchor and c.has_eku and not c.eku_server:
@@ -282,17 +286,58 @@ def _profile(c: Certificate, anchor: Bool) raises:
         raise Error("tls: x509: root authority key identifier must be the subject key identifier alone")
 
 
+def _valid_dns(n: List[UInt8]) -> Bool:
+    """Preferred name syntax (letters, digits, hyphen; `*` only as the whole first label), no empty label."""
+    if _bad_name(n) or len(n) > 253:
+        return False
+    for i in range(len(n)):
+        var c = n[i]
+        var ok = (c >= 48 and c <= 57) or (c >= 65 and c <= 90) or (c >= 97 and c <= 122) or c == 45 or c == 46
+        if not (ok or (c == 42 and i == 0 and len(n) > 1 and n[1] == 46)):
+            return False
+    return True
+
+
+def _listed(rule: String) -> Bool:
+    return ("\n" + rule + "\n") in PSL
+
+
+def public_suffix(x: String) -> Bool:
+    """`x` (lower case, no leading dot) is a public suffix: one label, or listed (exact or by wildcard rule, minus exceptions)."""
+    var dot = x.find(".")
+    if dot < 0:
+        return True
+    if _listed("!" + x):
+        return False
+    return _listed(x) or _listed("*." + String(x[byte=dot + 1 :]))
+
+
+def _san_cn_rules(leaf: Certificate) raises:
+    """CA/B BR 7.1.4.2: SAN criticality follows the subject and names are well formed. The CN is never read (RFC 9525)."""
+    var empty_subject = len(leaf.subject()) <= 2
+    if leaf.has_san and leaf.san_crit != empty_subject:
+        raise Error("tls: x509: subject alternative name is critical exactly when the subject is empty")
+    for ref n in leaf.dns:
+        if not _valid_dns(copy_of(view(n))):
+            raise Error("tls: x509: malformed dns name in the subject alternative name")
+        if len(n) > 2 and n[0] == 42 and public_suffix(String(unsafe_from_utf8=_lower(view(n))[2:])):
+            raise Error("tls: x509: wildcard over a public suffix")
+
+
 def _leaf_rules(leaf: Certificate) raises:
     """End-entity rules; they apply to chain[0] even when it is itself the trust anchor."""
     if not leaf.serial_ok():
         raise Error("tls: x509: serial number must be positive, non-zero and at most 20 octets")
-    if leaf.has_nc and not (leaf.has_bc and leaf.is_ca):
+    if leaf.has_bc and leaf.is_ca:
+        raise Error("tls: x509: end-entity certificate with basicConstraints cA")
+    if leaf.has_nc:
         raise Error("tls: x509: name constraints in an end-entity certificate")
-    if leaf.has_eku and not leaf.eku_server:
-        raise Error("tls: x509: leaf extended key usage excludes serverAuth")
+    if not leaf.has_eku or not leaf.eku_server:
+        raise Error("tls: x509: leaf needs an extended key usage that includes serverAuth")
     if leaf.has_ku and (leaf.ku & KU_DIGITAL_SIGNATURE) == 0:
         raise Error("tls: x509: leaf key usage lacks digitalSignature")
-    if leaf.key_kind == KEY_OTHER or (leaf.key_kind == KEY_RSA and rsa_bits(leaf.key_a) < MIN_RSA_BITS):
+    _san_cn_rules(leaf)
+    if leaf.key_kind == KEY_OTHER or (leaf.key_kind == KEY_RSA and (rsa_bits(leaf.key_a) < MIN_RSA_BITS or rsa_bits(leaf.key_a) % 8 != 0)):
         raise Error("tls: x509: leaf key is not P-256, P-384 or RSA of at least 2048 bits")
 
 
@@ -337,9 +382,19 @@ def _check_path(chain: List[Certificate], below: List[Int], root: Certificate, n
 
 
 def _find(
-    chain: List[Certificate], roots: List[Certificate], mut path: List[Int], now: Int, mut budget: Int, mut err: String
+    chain: List[Certificate],
+    roots: List[Certificate],
+    mut path: List[Int],
+    now: Int,
+    mut budget: Int,
+    mut steps: Int,
+    mut err: String,
 ) -> Bool:
     ref cur = chain[path[len(path) - 1]]
+    steps -= 1
+    if steps < 0:
+        err = "tls: x509: path search limit reached"
+        return False
     for j in range(len(roots)):
         ref r = roots[j]
         var below = path.copy()
@@ -364,14 +419,14 @@ def _find(
                 seen = True
         if not seen and same(cur.issuer(), chain[i].subject()):
             path.append(i)
-            if _find(chain, roots, path, now, budget, err):
+            if _find(chain, roots, path, now, budget, steps, err):
                 return True
             _ = path.pop()
     return False
 
 
 def verify_chain(chain: List[Certificate], host: String, now: Int, roots: List[Certificate]) raises:
-    """Raises unless `chain` (leaf first, at most 10 certificates) leads to one of `roots` and is valid for `host`
+    """Raises unless `chain` (leaf first, at most 40 certificates) leads to one of `roots` and is valid for `host`
     at `now` (epoch seconds). The peer may add or omit the root and may order the intermediates freely."""
     if len(chain) == 0 or len(chain) > MAX_CHAIN:
         raise Error("tls: x509: bad chain length")
@@ -380,8 +435,9 @@ def verify_chain(chain: List[Certificate], host: String, now: Int, roots: List[C
     var path = List[Int]()
     path.append(0)
     var budget = MAX_SIG_ATTEMPTS
+    var steps = MAX_PATH_STEPS
     var err = String("tls: x509: no path to a trusted root")
-    if not _find(chain, roots, path, now, budget, err):
+    if not _find(chain, roots, path, now, budget, steps, err):
         raise Error(err)
 
 

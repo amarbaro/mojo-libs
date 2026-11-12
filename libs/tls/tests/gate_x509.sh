@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Lane 3 gate: builds tests/x509_gate.mojo once, runs every stage, compares against openssl oracles.
-# Usage: tests/gate_x509.sh [stage ...]   stages: parse chain keys bench   (default: parse chain keys)
+# Usage: tests/gate_x509.sh [stage ...]   stages: parse chain keys limbo roots bench   (default: parse chain keys limbo)
 # Prints PASS/FAIL <stage>: <reason>; exits non-zero on any failure. Artifacts in .work/gate/.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -123,18 +123,48 @@ stage_bench() {
 }
 
 stage_limbo() {
+  # x509-limbo. A valid chain rejected must match a line of tests/limbo_known.txt: `<id or glob><TAB><reason>`.
+  # An invalid chain accepted is a failure unless a `!<id or glob><TAB><reason>` line pins it, and only the
+  # webpki::cn:: class may be pinned that way (policy: the CN is never read, RFC 9525).
   local L=.work/limbo
   [ -f $L/cases.txt ] || tools/limbo_fetch.sh > /dev/null 2>&1 || { echo "SKIP limbo: no .work/limbo/cases.txt and tools/limbo_fetch.sh failed (needs network); NOT a pass"; return 0; }
   timeout 300 $BIN limbo $L/cases.txt > $L/out_$$.txt || fail limbo "limbo run crashed"
   local sum; sum=$(grep '^limbo:' $L/out_$$.txt)
-  grep '^DIFF' $L/out_$$.txt | cut -d' ' -f2 | sort > $W/limbo_diff_ids.txt
   mv $L/out_$$.txt $W/limbo_out.txt
-  local fresh gone
-  fresh=$(comm -13 tests/limbo_known.txt $W/limbo_diff_ids.txt | wc -l)
-  gone=$(comm -23 tests/limbo_known.txt $W/limbo_diff_ids.txt | wc -l)
-  [ "$fresh" = 0 ] || { comm -13 tests/limbo_known.txt $W/limbo_diff_ids.txt | head -5; fail limbo "$fresh cases now disagree with limbo that did not before"; }
-  [ "$gone" = 0 ] || echo "note limbo: $gone known disagreements are fixed; shrink tests/limbo_known.txt"
-  echo "PASS limbo: $sum; every disagreement is listed in tests/limbo_known.txt ($(wc -l < tests/limbo_known.txt) ids)"
+  local pat reason pats=() apats=() id
+  while IFS=$'\t' read -r pat reason; do
+    [ -z "$pat" ] && continue
+    [ -n "$reason" ] || fail limbo "tests/limbo_known.txt: '$pat' has no reason"
+    if [ "${pat:0:1}" = '!' ]; then
+      [[ ${pat:1} == webpki::cn::* ]] || fail limbo "tests/limbo_known.txt: '$pat' pins an invalid chain outside webpki::cn::"
+      apats+=("${pat:1}")
+    else
+      pats+=("$pat")
+    fi
+  done < tests/limbo_known.txt
+  declare -A hit=()
+  local nr=0 na=0 unknown=0 found
+  while read -r _ id _ _ _ got _; do
+    found=0
+    for pat in "${pats[@]}"; do if [[ $id == $pat ]]; then found=1; hit[$pat]=1; break; fi; done
+    nr=$((nr + 1)); [ $found = 1 ] || { unknown=$((unknown + 1)); echo "  new valid chain rejected: $id"; }
+  done < <(grep '^DIFF .* expected ok got fail' $W/limbo_out.txt)
+  while read -r _ id _; do
+    found=0
+    for pat in "${apats[@]}"; do if [[ $id == $pat ]]; then found=1; hit[!$pat]=1; break; fi; done
+    na=$((na + 1)); [ $found = 1 ] || { unknown=$((unknown + 1)); echo "  INVALID chain ACCEPTED: $id"; }
+  done < <(grep '^DIFF .* expected fail got ok' $W/limbo_out.txt)
+  [ "$unknown" = 0 ] || fail limbo "$unknown disagreements with limbo that tests/limbo_known.txt does not explain (an accepted invalid chain is a security bug)"
+  for pat in "${pats[@]}"; do [ -n "${hit[$pat]:-}" ] || echo "note limbo: '$pat' matches no disagreement any more; delete it from tests/limbo_known.txt"; done
+  for pat in "${apats[@]}"; do [ -n "${hit[!$pat]:-}" ] || echo "note limbo: '!$pat' matches no disagreement any more; delete it from tests/limbo_known.txt"; done
+  echo "PASS limbo: ${sum#limbo: }; $na invalid accepted (all pinned policy webpki::cn::), $nr valid rejected, explained by $((${#pats[@]} + ${#apats[@]})) lines of tests/limbo_known.txt"
+}
+
+stage_roots() {
+  # the system bundle against the trust-anchor profile; informational, the bundle differs per machine
+  local out; out=$(timeout 60 $BIN roots $BUNDLE) || fail roots "roots audit crashed"
+  echo "$out" | grep '^ROOT' | sed 's/^/note roots: /' | cut -c1-200 || true
+  echo "PASS roots: $(echo "$out" | grep '^roots:' | cut -d: -f2-)"
 }
 
 build
