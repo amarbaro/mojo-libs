@@ -5,6 +5,9 @@ polynomial product reduced by x^128 + x^7 + x^2 + x + 1 (x^128 = 0x87). Eight bl
 H^8..H^1 and reduced once. The carry-less multiply is PCLMULQDQ, or a constant-time integer-multiply
 version (BearSSL's ctmul64) when the hardware path is off. open() verifies the tag over the ciphertext
 before it decrypts, so no unauthenticated plaintext is ever produced.
+
+The field layout (bit-reversed bytes, deferred Karatsuba over 8 blocks, 0x87 reduction) follows crypto/aes_hw.mojo of
+Mosaad-M-tls (MIT, Copyright (c) 2026 mmosaad); the code here is rewritten.
 """
 from std.bit import byte_swap
 from std.memory import bitcast
