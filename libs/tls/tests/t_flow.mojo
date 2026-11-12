@@ -156,6 +156,12 @@ def main() raises:
     var sa = Sv(cfg)
     pump(ca, sa)
     t.check("alpn picked", ca.negotiated == "http/1.1" and sa.alpn == "http/1.1")
+    var cfg0 = make_cfg()
+    cfg0[].alpn = List[String]()  # no ALPN configured: a client that offers it still gets a handshake, no protocol selected
+    var c0 = started("localhost", ["h2", "http/1.1"])
+    var s0 = Sv(cfg0)
+    pump(c0, s0)
+    t.check("server without ALPN ignores the extension", c0.cn.established and s0.cn.established and c0.negotiated == "" and s0.alpn == "")
     var cb = started("localhost", ["spdy/3"])
     var sb = Sv(cfg)
     try:

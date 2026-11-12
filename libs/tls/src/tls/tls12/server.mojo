@@ -96,7 +96,7 @@ struct Server12[C: Crypto12](Movable):
         if pick < 0:
             raise self.cn.fatal(A_HANDSHAKE, "no common cipher suite, signature scheme and certificate")
         self.sni = ch.sni.copy()
-        if len(ch.alpn) > 0:
+        if len(ch.alpn) > 0 and len(self.cfg[].alpn) > 0:  # RFC 7301: a server with no ALPN protocols ignores the extension
             for a in self.cfg[].alpn:
                 if a in ch.alpn:
                     self.alpn = a.copy()
