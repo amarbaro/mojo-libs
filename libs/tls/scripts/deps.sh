@@ -11,6 +11,6 @@ while read -r repo sha; do
   { git -C "$d" fetch -q --depth 1 "$base/$repo" "$sha" && git -C "$d" checkout -q FETCH_HEAD; } \
     || { echo "FAIL setup: fetch $repo $sha"; exit 1; }
 done <<'PINS'
-mojo-aio 7b2dba77aa53b4208b6518c0a634c0f5be028736
+mojo-aio 962b967e97e7c1c3149eaad8c3b9cbfc75fa32b3
 PINS
 echo "PASS deps"
