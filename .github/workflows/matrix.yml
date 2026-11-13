@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   plan:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       libs: ${{ steps.l.outputs.libs }}
     steps:
@@ -20,7 +20,7 @@ jobs:
 
   cell:
     needs: plan
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 45   # matrix-cell.sh stops itself at 2400 s and says why; this is the backstop
     strategy:
       fail-fast: false
@@ -51,7 +51,7 @@ jobs:
   report:
     needs: cell
     if: always()
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       contents: write   # the orphan `status` branch
       issues: write
