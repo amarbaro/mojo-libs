@@ -91,7 +91,7 @@ else echo "NOT RUN: actionlint, pixi missing"; fi
 
 # --- callers
 t "ci-adopt: bare caller for a plain library is 3 job lines calling lib-ci.yml@v1" 'scripts/ci-adopt.sh mojo-json-public "$T/ad1" && [ "$(sed -n "/^jobs:/,\$p" "$T/ad1/.github/workflows/ci.yml" | wc -l)" = 3 ] && grep -q "uses: amarbaro/mojo-libs/.github/workflows/lib-ci.yml@v1" "$T/ad1/.github/workflows/ci.yml"'
-t "ci-adopt: imkit gets apt, uregex gets pre, both valid YAML" 'scripts/ci-adopt.sh mojo-imkit-public "$T/ad2" && scripts/ci-adopt.sh mojo-uregex-public "$T/ad3" && python3 -I -c "import yaml; a=yaml.safe_load(open(\"$T/ad2/.github/workflows/ci.yml\")); b=yaml.safe_load(open(\"$T/ad3/.github/workflows/ci.yml\")); assert a[\"jobs\"][\"ci\"][\"with\"][\"apt\"]==\"fonts-dejavu-core libfreetype6\"; assert b[\"jobs\"][\"ci\"][\"with\"][\"pre\"].startswith(\"uv sync\")"'
+t "ci-adopt: imkit gets apt, uregex gets pre, both valid YAML" 'scripts/ci-adopt.sh mojo-imkit-public "$T/ad2" && scripts/ci-adopt.sh mojo-uregex-public "$T/ad3" && python3 -I -c "import yaml; a=yaml.safe_load(open(\"$T/ad2/.github/workflows/ci.yml\")); b=yaml.safe_load(open(\"$T/ad3/.github/workflows/ci.yml\")); assert a[\"jobs\"][\"ci\"][\"with\"][\"apt\"]==\"fonts-dejavu-core fonts-noto-cjk libfreetype6 imagemagick libwebp7 libavif-bin dav1d ffmpeg\"; assert b[\"jobs\"][\"ci\"][\"with\"][\"pre\"].startswith(\"uv sync\")"'
 
 # --- matrix-cell: a ci-setup.tsv row with an empty apt column still runs its pre command (tab collapsed in `read`)
 t "matrix-cell: empty apt column, pre command runs before ci.sh" 'R=$T/mc; rm -rf "$R"; mkdir -p "$R/s/fakelib/scripts"; cp -r scripts "$R/scripts"; printf "fakelib\t\ttouch pre-ran\n" > "$R/ci-setup.tsv"
