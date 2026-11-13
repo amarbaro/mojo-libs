@@ -15,7 +15,8 @@ for b in net_server net_client; do
   timeout 300 "$MOJO" build -I "$SRC" -I "$AIO" -I tests "tests/$b.mojo" -o "$OUT/$b" >"$OUT/$b.build" 2>&1 || { echo "FAIL build $b: $(grep -m2 error "$OUT/$b.build")"; exit 1; }
 done
 rm -f "$OUT/srv.out"
-/usr/bin/time -f "RSS_KB %M" timeout 90 "$OUT/net_server" 0 "$HS_MS" "$IDLE_MS" "$TOTAL" >"$OUT/srv.out" 2>"$OUT/srv.err" &
+TIME=(); [ -x /usr/bin/time ] && TIME=(/usr/bin/time -f "RSS_KB %M")  # RSS is info only; a bare runner (ubuntu image) has no /usr/bin/time
+"${TIME[@]}" timeout 90 "$OUT/net_server" 0 "$HS_MS" "$IDLE_MS" "$TOTAL" >"$OUT/srv.out" 2>"$OUT/srv.err" &
 srv=$!
 port=""; for _ in $(seq 50); do port="$(sed -n 's/^LISTENING //p' "$OUT/srv.out" 2>/dev/null | head -1)"; [[ -n "$port" ]] && break; sleep 0.1; done
 [[ -n "$port" ]] || { echo "FAIL start: server printed no LISTENING: $(head -c 300 "$OUT/srv.err")"; kill "$srv" 2>/dev/null || true; exit 1; }
