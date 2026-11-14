@@ -1,0 +1,4 @@
+name = "mojo-semver"
+version = "0.1.2"
+description = "Semantic Versioning 2.0 for Mojo: parse, precedence, bump, match, identical to Python semver"
+tags = ["mojo", "semver", "versions"]
