@@ -1,6 +1,6 @@
 # CI for the libraries: one shared workflow, one weekly matrix
 
-Every library calls one reusable workflow, and one Monday run builds all 36 on stable and nightly Mojo.
+Every library calls one reusable workflow, and one Monday run builds every library on stable and nightly Mojo.
 
 ## Parts
 
@@ -33,7 +33,7 @@ library repo                         mojo-libs
 ## Choices that are easy to get wrong
 
 - **Nightly = `MOJO=`.** The only mechanism that exists: `scripts/ci.sh` reads `MOJO` and uses it for every mojo call, in `ci.sh`
-  and in the scripts it calls (`${MOJO:-.venv/bin/mojo}`; unset, the commands are the same as before). 35 of 36 libraries do. With
+  and in the scripts it calls (`${MOJO:-.venv/bin/mojo}`; unset, the commands are the same as before). All but the libraries listed in the matrix report do. With
   `MOJO` set, a library whose oracle is the system `python3` skips `uv sync` (it only installs Mojo); one whose oracle lives in `.venv`
   (bento, cv, gguf, gguf-core, msgpack, proptest, safetensors, tokenizers, uregex, zstd) still syncs and ignores the `.venv` Mojo.
   **xmojo cannot switch**: its gate is `pixi run gate` and pixi puts its own `mojo==1.2.0` first on `PATH`, so its nightly cell is `na`.
@@ -44,7 +44,7 @@ library repo                         mojo-libs
   (same date for both, m.ledger/tooling 2026-10-21). `lib-ci.yml` and `matrix-cell.sh` carry the same install line; a test keeps them equal.
 - **Remote name = checkout name minus `-public`** (`mojo-json-public` -> `amarbaro/mojo-json`). libs.txt names checkouts.
 - **A caller needs `permissions: contents: write`** or the badge push is refused (a reusable workflow's token is capped by the caller).
-- **Job name changes.** The 36 old jobs were `check`, `gate`, `conformance`; the status context becomes `ci / ci`. A branch protection that
+- **Job name changes.** The old per-library jobs were `check`, `gate`, `conformance`; the status context becomes `ci / ci`. A branch protection that
   requires the old name must be updated at rollout (not checked: this lane makes no GitHub reads of repo settings).
 - **xmojo keeps its own workflow**: pixi, a daily `pixi update` schedule and a 30 min timeout are not `lib-ci` inputs.
   The matrix still runs it (`pixi update` is its row in `ci-setup.tsv`, `setup-pixi` is a step of every cell).
