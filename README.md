@@ -13,7 +13,7 @@ pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amar
 pixi add mojo-json
 ```
 
-Toolchains: Mojo 1.2 stable for all 36; the weekly matrix also builds 35 of them on the nightly 1.3.0.dev2026110805 (xmojo pins 1.2.0).
+Toolchains: Mojo 1.2 stable; the weekly matrix also builds every library on the current nightly, and reports the ones whose `scripts/ci.sh` cannot select one (xmojo pins 1.2.0).
 
 <!-- libs -->
 | library | what | version | toolchain | our deps | ci |
@@ -28,12 +28,12 @@ Toolchains: Mojo 1.2 stable for all 36; the weekly matrix also builds 35 of them
 | [mojo-gguf](https://github.com/amarbaro/mojo-gguf) | GGUF tooling in Mojo, byte-identical with llama.cpp's converters, quantizer and gguf-py scripts | 0.2.1 | `mojo>=1.2.0,<1.3` | mojo-uregex | ![ci](https://github.com/amarbaro/mojo-gguf/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-gzip](https://github.com/amarbaro/mojo-gzip) | gzip, zlib and raw deflate for Mojo through the system libz, plus crc32 and adler32 | 0.1.4 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-gzip/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-hashlib](https://github.com/amarbaro/mojo-hashlib) | Hashing and shell quoting for Mojo, byte-identical with Python hashlib and shlex | 0.1.4 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-hashlib/actions/workflows/ci.yml/badge.svg?branch=main) |
-| [mojo-imkit](https://github.com/amarbaro/mojo-imkit) | Immediate-mode GUI for Mojo, composed on the GPU: SDL3 window, FreeType text, widgets as one draw list | 0.7.2 | `max==26.7.0` | - | ![ci](https://github.com/amarbaro/mojo-imkit/actions/workflows/ci.yml/badge.svg?branch=main) |
+| [mojo-imkit](https://github.com/amarbaro/mojo-imkit) | Immediate-mode GUI for Mojo, composed on the GPU: SDL3 window, FreeType text, widgets as one draw list | 0.10.0 | `max==26.7.0` | - | ![ci](https://github.com/amarbaro/mojo-imkit/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-inotify](https://github.com/amarbaro/mojo-inotify) | Watch files and directories from Mojo with Linux inotify, pollable | 0.1.5 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-inotify/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-json](https://github.com/amarbaro/mojo-json) | JSON for Mojo, byte-identical with Python json | 0.1.4 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-json/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-log](https://github.com/amarbaro/mojo-log) | Structured logging for Mojo: levels, key=value fields, text and JSON-lines, stderr/file/journald sinks | 0.1.1 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-log/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-msgpack](https://github.com/amarbaro/mojo-msgpack) | MessagePack encode and decode for Mojo, pure Mojo, zero-copy str and bin views | 0.1.1 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-msgpack/actions/workflows/ci.yml/badge.svg?branch=main) |
-| [mojo-posix](https://github.com/amarbaro/mojo-posix) | POSIX processes, signals and sockets for Mojo: spawn with cwd/env/pgid, signalfd, poll | 0.1.5 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-posix/actions/workflows/ci.yml/badge.svg?branch=main) |
+| [mojo-posix](https://github.com/amarbaro/mojo-posix) | POSIX processes, signals and sockets for Mojo: spawn with cwd/env/pgid, signalfd, poll | 0.1.6 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-posix/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-proptest](https://github.com/amarbaro/mojo-proptest) | Property tests for Mojo: seeded generators, shrinking, a failure that names the seed and the minimal case | 0.2.0 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-proptest/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-pyformat](https://github.com/amarbaro/mojo-pyformat) | Python-exact number formatting for Mojo: {:.Nf}, {:,}, {:g}, {:%}, rounding on the exact binary value | 0.2.2 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-pyformat/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-safetensors](https://github.com/amarbaro/mojo-safetensors) | Read (mmapped, zero copy) and write safetensors files from Mojo, as the reference does | 0.1.5 | `mojo>=1.2.0,<1.3` | mojo-json | ![ci](https://github.com/amarbaro/mojo-safetensors/actions/workflows/ci.yml/badge.svg?branch=main) |
@@ -43,7 +43,7 @@ Toolchains: Mojo 1.2 stable for all 36; the weekly matrix also builds 35 of them
 | [mojo-toml](https://github.com/amarbaro/mojo-toml) | TOML 1.1 parser for Mojo, passes the full toml-test suite | 0.2.4 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-toml/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-uregex](https://github.com/amarbaro/mojo-uregex) | Unicode-aware backtracking regex engine for Mojo: \p{L} classes, lookahead, case-insensitive groups, PCRE alternation semantics, built for LLM tokenizers | 0.3.3 | `mojo==1.2.0` | - | ![ci](https://github.com/amarbaro/mojo-uregex/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-vattn](https://github.com/amarbaro/mojo-vattn) | Flash-attention forward for video DiT self-attention in Mojo, gfx1100 | 0.1.4 | `max==26.7.0` | - | ![ci](https://github.com/amarbaro/mojo-vattn/actions/workflows/ci.yml/badge.svg?branch=main) |
-| [mojo-zstd](https://github.com/amarbaro/mojo-zstd) | zstd and lz4 frame compression for Mojo through the system libzstd and liblz4 | 0.1.1 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-zstd/actions/workflows/ci.yml/badge.svg?branch=main) |
+| [mojo-zstd](https://github.com/amarbaro/mojo-zstd) | zstd and lz4 frame compression for Mojo, pure Mojo with no C library | 0.2.0 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-zstd/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [xmojo](https://github.com/amarbaro/xmojo) | XML for Mojo: parse into structs, stream records, write back, checked against expat | 0.2.2 | `mojo==1.2.0` | - | ![ci](https://github.com/amarbaro/xmojo/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-mmap](https://github.com/amarbaro/mojo-mmap) | Memory-mapped files for Mojo: zero-copy Span views, read and write, madvise, msync | 0.1.3 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-mmap/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-semver](https://github.com/amarbaro/mojo-semver) | Semantic Versioning 2.0 for Mojo: parse, precedence, bump, match, identical to Python semver | 0.1.2 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-semver/actions/workflows/ci.yml/badge.svg?branch=main) |
@@ -54,7 +54,13 @@ Toolchains: Mojo 1.2 stable for all 36; the weekly matrix also builds 35 of them
 | [mojo-csv](https://github.com/amarbaro/mojo-csv) | CSV reader/writer with CPython csv parity | 0.1.2 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-csv/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-uuid](https://github.com/amarbaro/mojo-uuid) | RFC UUID values, parsing, formatting and generation for Mojo | 0.1.2 | `mojo>=1.2.0,<1.3` | mojo-hashlib >=0.1.2,<0.2 | ![ci](https://github.com/amarbaro/mojo-uuid/actions/workflows/ci.yml/badge.svg?branch=main) |
 | [mojo-base64](https://github.com/amarbaro/mojo-base64) | Base16/32/64 encode/decode matching CPython base64 | 0.1.2 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-base64/actions/workflows/ci.yml/badge.svg?branch=main) |
+| [mojo-tls](https://github.com/amarbaro/mojo-tls) | TLS 1.3 and 1.2 client and server for Mojo, with X.509, in pure Mojo: no OpenSSL, no C library | 0.1.2 | `mojo>=1.2.0,<1.3` | mojo-aio | ![ci](https://github.com/amarbaro/mojo-tls/actions/workflows/ci.yml/badge.svg?branch=main) |
+| [mojo-struct](https://github.com/amarbaro/mojo-struct) | Pack and unpack binary data like CPython struct | 0.1.0 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-struct/actions/workflows/ci.yml/badge.svg?branch=main) |
+| [mojo-zip](https://github.com/amarbaro/mojo-zip) | zipfile read/write for Mojo, pure Mojo: stored + deflate (zlib port), zip64, CRC, CPython zipfile behaviour | 0.1.0 | `mojo>=1.2.0,<1.3` | - | ![ci](https://github.com/amarbaro/mojo-zip/actions/workflows/ci.yml/badge.svg?branch=main) |
+| [mojo-supervision](https://github.com/amarbaro/mojo-supervision) | Roboflow supervision ported to Mojo, each op checked against Python supervision | 0.1.1 | `mojo>=1.2.0,<1.3` | mojo-cv, mojo-gzip, mojo-json | ![ci](https://github.com/amarbaro/mojo-supervision/actions/workflows/ci.yml/badge.svg?branch=main) |
 <!-- /libs -->
+
+Tools (command-line programs, not libraries): [mojo-ablate](https://github.com/amarbaro/mojo-ablate), behavior steering for local models in Mojo: directions, rank-1 edit, TPE, BF16 bake.
 
 The table is generated from each library's `pyproject.toml` by `tools/gen.mojo`; `scripts/check.sh`
 fails when it is stale, and `scripts/check.sh --write` refreshes it. Toolchain is the pin the

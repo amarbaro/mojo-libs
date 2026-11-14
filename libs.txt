@@ -35,3 +35,7 @@ mojo-xxhash-public
 mojo-csv-public
 mojo-uuid-public
 mojo-base64-public
+mojo-tls-public
+mojo-struct-public
+mojo-zip-public
+mojo-supervision-public
