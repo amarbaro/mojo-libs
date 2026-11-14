@@ -1,0 +1,5 @@
+name = "mojo-safetensors"
+version = "0.1.5"
+description = "Read (mmapped, zero copy) and write safetensors files from Mojo, as the reference does"
+tags = ["mojo", "safetensors", "llm"]
+tins = ["mojo-json"]
