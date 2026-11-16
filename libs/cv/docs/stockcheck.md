@@ -111,7 +111,7 @@ result back under the original name; one that still fails keeps its error. Gate:
 some of them (the control), then finds the face in all four through the retry.
 
 Two stages (rule 26 of `rules.md`). The GPU slot is held for detection only: `mcv-stockcheck --faces` first decodes and letterboxes every picture on the CPU
-(`mcv-faces - OUT LIST prep=1 cache=DIR`, one shard per job, a cpu-room `gpu-wait` job capped by `MCV_PREP_MEM` GB, default 16), then one short `gpu-wait` job runs
+(`mcv-faces - OUT LIST prep=1 cache=DIR`, one shard per job, a cpu-room `gpu-wait` job capped by `MCV_PREP_MEM` GB, default 2 per core, cores = min(jobs, images)), then one short `gpu-wait` job runs
 `mcv-faces MODEL OUT LIST gpu=16 cache=DIR`. The cache holds the 640-long-edge RGB resize with the source size and scale (`.lb`, about 0.8 MB per photo), named by an
 FNV-1a hash of path, size and mtime, so a touched source is made again and a truncated file is made again; a rerun keeps valid files (resume). `MCV_FACES_CACHE=DIR`
 keeps the cache between runs (default: inside the run's work directory, deleted at exit); for private photos point it at a local, ignored directory. The run prints the

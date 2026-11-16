@@ -60,16 +60,17 @@ if [ "$faces" = 1 ]; then  # SCRFD from mojo-faces on the originals; a face rout
   # two stages: decode + letterbox on the CPU (outside gpu-wait, resumable cache, MCV_FACES_CACHE keeps it between runs),
   # then one short GPU job that only detects. The slot is not held while the CPU decodes (docs/gpu.md of mojo-faces: ~455 of ~465 ms).
   fc=${MCV_FACES_CACHE:-$work/fcache}; mkdir -p "$fc"
-  rm -rf "$work/sh"; mkdir -p "$work/sh"; split -n "l/$jobs" -d "$work/list" "$work/sh/s."
+  rm -rf "$work/sh"; mkdir -p "$work/sh"; split -n "r/$jobs" -d "$work/list" "$work/sh/s."
   t0=$(date +%s.%N)
-  # a cpu-room job with its own core and RAM cap (MCV_PREP_MEM GB, default 16): one 200 MP photo decodes to ~0.6 GB per shard,
+  # a cpu-room job with its own core and RAM cap (MCV_PREP_MEM GB, default 2 per core): one 200 MP photo decodes to ~0.6 GB per shard,
   # and an uncapped parallel stage can take the machine down (2026-11-16 OOM)
   cat > "$work/prep.sh" <<'EOS'
 #!/bin/sh
 # prep.sh WORK JOBS BIN CACHE: one mcv-faces prep=1 process per shard, JOBS at a time
 ls "$1"/sh/s.* | xargs -P "$2" -I{} sh -c '"$1" - "$2.prep" "$2" prep=1 cache="$3"' _ "$3" {} "$4"
 EOS
-  gpu-wait run --room cpu --cores "$jobs" --mem "${MCV_PREP_MEM:-16}" --label faces-prep -- sh "$work/prep.sh" "$work" "$jobs" "$root/.bin/mcv-faces" "$fc" > "$work/prep.log" 2>&1 \
+  pc=$(( n < jobs ? n : jobs ))  # reserve only the cores the batch can use: a 2-image run waited 275-353 s for 8
+  gpu-wait run --room cpu --cores "$pc" --mem "${MCV_PREP_MEM:-$((2 * pc))}" --label faces-prep -- sh "$work/prep.sh" "$work" "$jobs" "$root/.bin/mcv-faces" "$fc" > "$work/prep.log" 2>&1 \
     || { tail -3 "$work/prep.log" >&2; echo "FAIL faces: prep stage" >&2; exit 1; }
   cat "$work"/sh/s.*.prep > "$work/prep.jsonl"
   t1=$(date +%s.%N)
