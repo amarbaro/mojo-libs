@@ -3,6 +3,8 @@
 the way transformers' SiglipTokenizer(padding="max_length", max_length=64, truncation=True) does."""
 from std.collections import Dict
 from std.math import sqrt
+from std.os import stat
+from std.os.path import exists
 from std.sys import argv
 from faces.nn import Arr, run
 from faces.onnx import Model
@@ -10,6 +12,7 @@ from tokenizers import Tokenizer
 
 comptime SEQ = 64
 comptime EOS = 1
+comptime IMG = 224
 
 
 def canon(text: String) -> String:
@@ -45,6 +48,30 @@ def encode64(mut t: Tokenizer, text: String) raises -> List[Int]:
     return out^
 
 
+def load_ppm(path: String) raises -> List[Float32]:
+    """A binary 224x224 P6 file as CHW float32, SiglipImageProcessor's rescale 1/255 and mean 0.5 / std 0.5."""
+    var b = open(path, "r").read_bytes()
+    var p = 0
+    var tok = 0
+    while tok < 4:  # magic, width, height, maxval; '#' comments run to the line end
+        while p < len(b) and (b[p] <= 32 or b[p] == 35):
+            if b[p] == 35:
+                while p < len(b) and b[p] != 10:
+                    p += 1
+            p += 1
+        while p < len(b) and b[p] > 32:
+            p += 1
+        tok += 1
+    p += 1
+    if len(b) - p != 3 * IMG * IMG or b[0] != 80 or b[1] != 54:
+        raise Error(path + ": not a P6 file of " + String(IMG) + "x" + String(IMG))
+    var d = List[Float32](length=3 * IMG * IMG, fill=0)
+    for q in range(IMG * IMG):
+        for c in range(3):
+            d[c * IMG * IMG + q] = (Float32(b[p + q * 3 + c]) / 255.0 - 0.5) / 0.5
+    return d^
+
+
 def lines(path: String) raises -> List[String]:
     var out = List[String]()
     for line in open(path, "r").read().split("\n"):
@@ -66,6 +93,19 @@ def main() raises:
             s += "\n"
         with open(String(a[4]), "w") as f:
             f.write(s)
+    elif String(a[1]) == "image":  # image MODEL PPMS.txt OUT.f32: image_embeds, 768 float32 per 224x224 P6 file, appended per image
+        var m = Model(String(a[2]))
+        var done = 0
+        if exists(String(a[4])):  # resume: the embeddings already in OUT are skipped
+            done = Int(stat(String(a[4])).st_size) // (768 * 4)
+        var todo = lines(String(a[3]))
+        for i in range(done, len(todo)):
+            var feeds = Dict[String, Arr]()
+            feeds["pixel_values"] = Arr([1, 3, IMG, IMG], load_ppm(todo[i]))
+            var r = run(m, feeds^, ["image_embeds"])
+            ref e = r["image_embeds"]
+            with open(String(a[4]), "a") as f:
+                f.write_bytes(Span[UInt8](unsafe_ptr=e.d.unsafe_ptr().bitcast[UInt8](), length=e.numel() * 4))
     elif String(a[1]) == "text":  # text MODEL TOK TEXTS OUT.f32: text_embeds, 768 float32 per line
         var m = Model(String(a[2]))
         var t = Tokenizer(String(a[3]))
