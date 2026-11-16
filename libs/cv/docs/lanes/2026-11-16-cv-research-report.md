@@ -31,6 +31,11 @@ Brief: `2026-11-16-cv-research-brief.md`, with the scope change that made step 5
 
 ## Neurons
 
-`repo-net build` of `~/Projects/mojo/mojo-cv-papers` passed: 415 files, 8814 neurons; the post-commit hook is installed (`PASS hook`). The merge into the Brain
-network is deferred (the build printed `trailing run in 1311 s`). A first `brain-ask --net text` query before the merge returned no card of this store (it
-returned other papers). The proof query and its result are added below once `grep -c '^text/mojo-cv-papers/' ~/.local/share/coios-brain/merged/net.paths` is above 0.
+`repo-net build` of `~/Projects/mojo/mojo-cv-papers` passed: 415 files, 8814 neurons (486 card neurons); the post-commit hook is installed (`PASS hook`). The merge into
+the Brain network was deferred by about 22 minutes (`trailing run in 1311 s`); a query before the merge returned no card of this store. After the merge
+(`grep -c '^text/mojo-cv-papers/' merged/net.paths` = 8814):
+
+`brain-ask --net text "CleanPatrick benchmark for image data cleaning near-duplicates Fitzpatrick17k mojo-cv use"` returned
+`mojo-cv-papers/cards__arxiv_2505.11034v2.md/0` (score 7.11) as the first hit, then four text chunks of the same paper.
+A looser query about perceptual-hash near-duplicate AUROC returned a text chunk of a different paper from the store (2608.03101), not the CleanPatrick card, so
+a card is found by naming its paper or its topic words, not by quoting a number.
