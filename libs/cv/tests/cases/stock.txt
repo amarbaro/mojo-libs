@@ -109,3 +109,15 @@ box_tiny_f3           boxDown st_tinyg f=3 => exact
 stock_big_default     stockMetrics st_big => eqnan:1e-6
 stock_hd_asc700       stockMetrics hd ascale=700 => eqnan:1e-6
 stock_sm_asc200       stockMetrics sm ascale=200 => eqnan:1e-6
+hyst_hdg              hysteresis hdg lo=100 hi=200 min_area=50 => exact
+hyst_smg_conn4        hysteresis smg lo=80 hi=150 min_area=1 connectivity=4 => exact
+hyst_blown            hysteresis st_blowng lo=200 hi=252 min_area=500 => exact
+hyst_flat_all         hysteresis st_flatg lo=100 hi=127 => exact
+hyst_none             hysteresis st_flatg lo=200 hi=250 => exact
+hyst_big_bin          hysteresis binhd lo=10 hi=200 min_area=5000 => exact
+cliprg_blown          clipRegion st_blowng => max:1e-12
+cliprg_hdg            clipRegion hdg => max:1e-12
+cliprg_flat           clipRegion st_flatg => max:1e-12
+cliprg_smg_wide       clipRegion smg lo=40 hi=200 => max:1e-12
+cliprg_tiny           clipRegion st_tinyg lo=20 hi=60 => max:1e-12
+cliprg_fog            clipRegion st_fogg lo=0 hi=214 => max:1e-12

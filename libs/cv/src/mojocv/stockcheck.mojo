@@ -8,6 +8,7 @@ from std.bit import pop_count
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args, par_dyn
 from mojocv.imgproc import cvt_color
+from mojocv.regions import clip_region
 
 comptime F64 = DType.float64
 comptime PI = 3.141592653589793
@@ -423,7 +424,7 @@ def ham_pairs(bits: Mat[DType.uint8], thr: Int) raises -> Mat[DType.int32]:
     return o^
 
 
-comptime NM = 29  # numbers per image from stock_metrics
+comptime NM = 37  # numbers per image from stock_metrics
 
 
 def scale_factor(rows: Int, cols: Int, ascale: Int) -> Int:
@@ -455,7 +456,7 @@ def box_down(g: Mat[DType.uint8], f: Int) raises -> Mat[DType.uint8]:
 
 
 def _analyse(src: Mat[DType.uint8], tile: Int, thr: Float64, lo: Int, hi: Int, bt: Int, bstd: Float64, brange: Int, ascale: Int) raises -> Tuple[Mat[F64], Mat[DType.uint8]]:
-    """(1 x 29 numbers, 2 x 64 hash bits) of a BGR image, the grey image computed once (cv2's BGR2GRAY)."""
+    """(1 x 37 numbers, 2 x 64 hash bits) of a BGR image, the grey image computed once (cv2's BGR2GRAY)."""
     if src.ch != 3:
         raise Error("stockMetrics needs a 3-channel BGR image, got " + String(src.ch) + " channels")
     var g = cvt_color(src, 0)
@@ -469,6 +470,7 @@ def _analyse(src: Mat[DType.uint8], tile: Int, thr: Float64, lo: Int, hi: Int, b
     parts.append(color_cast(src))
     parts.append(banding(ga, bt, bstd, brange))
     parts.append(haze_band(ga))
+    parts.append(clip_region(ga, lo, hi))
     var o = Mat[F64](1, NM, 1)
     var k = 0
     for i in range(len(parts)):
@@ -479,8 +481,8 @@ def _analyse(src: Mat[DType.uint8], tile: Int, thr: Float64, lo: Int, hi: Int, b
 
 
 def stock_metrics(src: Mat[DType.uint8], a: Args) raises -> Mat[F64]:
-    """1 x 29 from a BGR image, in this order: sharpness(3) noiseEst(2) blockiness(5) clipping(6) colorCast(5)
-    banding(4) hazeBand(4)."""
+    """1 x 37 from a BGR image, in this order: sharpness(3) noiseEst(2) blockiness(5) clipping(6) colorCast(5)
+    banding(4) hazeBand(4) clipRegion(8)."""
     var r = _analyse(src, a.i("tile", 32), a.f("thr", 10.0), a.i("lo", 3), a.i("hi", 252), a.i("btile", 16), a.f("bstd", 6.0), a.i("brange", 3), a.i("ascale", 1536))
     return Mat[F64](copy=r[0])
 
@@ -636,6 +638,8 @@ def batch(mut a: Args) raises -> Bool:
                 fl.append("clipHigh")
             if m[10] > a.f("cliplo", 0.5):
                 fl.append("clipLow")
+            if m[29] > a.f("voidhi", 0.08):
+                fl.append("blownVoid")
             if abs(m[19]) > a.f("castrg", 35.0) or abs(m[20]) > a.f("castby", 60.0):
                 fl.append("cast")
             if m[25] < a.f("flatstrip", 0.001) or m[27] < a.f("flatstrip", 0.001):
@@ -645,6 +649,7 @@ def batch(mut a: Args) raises -> Bool:
             line += String(',"noise":{"sigma":', _jn(m[3]), ',"nbr":', _jn(m[4]), "}")
             line += String(',"blocks":', _jn(m[9]))
             line += String(',"clip":{"lo":', _jn(m[10]), ',"hi":', _jn(m[11]), ',"p01":', _jn(m[12]), ',"p99":', _jn(m[13]), "}")
+            line += String(',"void":{"hi":', _jn(m[29]), ',"hiW":', _jn(m[30]), ',"hiH":', _jn(m[31]), ',"lo":', _jn(m[33]), ',"loW":', _jn(m[34]), ',"loH":', _jn(m[35]), "}")
             line += String(',"cast":{"rg":', _jn(m[19]), ',"by":', _jn(m[20]), "}")
             line += String(',"band":{"smooth":', _jn(m[21]), ',"eq":', _jn(m[22]), ',"jump":', _jn(m[23]), "}")
             line += String(',"haze":{"col":', _jn(m[25]), ',"colAt":', Int(m[26]), ',"row":', _jn(m[27]), ',"rowAt":', Int(m[28]), "}")

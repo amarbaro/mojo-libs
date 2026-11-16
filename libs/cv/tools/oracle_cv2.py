@@ -644,7 +644,33 @@ def stockMetrics(i, kv):
     asc = kv_i(kv, "ascale", 1536)
     f = max(1, (max(g.shape) + asc // 2) // asc)
     ga = boxDown([g], {"f": f}) if f > 1 else g  # sharpness, noise, clipping, banding, fog at the analysis scale
-    return np.concatenate([sharpness([ga], kv), noiseEst([ga], kv), blockiness([g], kv), clipping([ga], kv), colorCast([a], kv), banding([ga], kv), hazeBand([ga], kv)], 1)
+    return np.concatenate([sharpness([ga], kv), noiseEst([ga], kv), blockiness([g], kv), clipping([ga], kv), colorCast([a], kv), banding([ga], kv), hazeBand([ga], kv), clipRegion([ga], kv)], 1)
+
+
+@op()
+def hysteresis(i, kv):
+    a, lo, hi = i[0], kv_i(kv, "lo", 100), kv_i(kv, "hi", 200)
+    n, lab, st, _ = cv2.connectedComponentsWithStats((a > lo).astype(np.uint8), connectivity=kv_i(kv, "connectivity", 8))
+    keep = np.zeros(n, bool)
+    keep[1:] = st[1:, cv2.CC_STAT_AREA] >= kv_i(kv, "min_area", 1)
+    seeded = np.zeros(n, bool)
+    seeded[np.unique(lab[a > hi])] = True
+    return ((keep & seeded)[lab] & (lab > 0)).astype(np.uint8) * 255
+
+
+def _largest(mask):
+    n, lab, st, _ = cv2.connectedComponentsWithStats(mask.astype(np.uint8), connectivity=8)
+    if n < 2:
+        return [0.0] * 4
+    k = 1 + int(np.argmax(st[1:, cv2.CC_STAT_AREA]))
+    R, C = mask.shape
+    return [st[k, cv2.CC_STAT_AREA] / (R * C), st[k, cv2.CC_STAT_WIDTH] / C, st[k, cv2.CC_STAT_HEIGHT] / R, float(n - 1)]
+
+
+@op()
+def clipRegion(i, kv):
+    g = i[0]
+    return np.array([_largest(g >= kv_i(kv, "hi", 252)) + _largest(g <= kv_i(kv, "lo", 3))])
 
 
 # ---- fixtures ---------------------------------------------------------------------------------------------
@@ -916,6 +942,7 @@ def make_fixtures(d):
           "st_blown": np.clip(H.astype(np.float64) * 2.4, 0, 255).astype(np.uint8),
           "st_cast": np.clip(H.astype(np.float64) * (0.7, 1.0, 1.4), 0, 255).astype(np.uint8),
           "st_big": cv2.resize(H, (3072, 1728), interpolation=cv2.INTER_CUBIC),
+          "st_sparkle": np.where(S.random(H.shape[:2])[..., None] < 0.12, 255, H).astype(np.uint8),  # 12 % of pixels clipped, scattered
           "st_fog": fog.astype(np.uint8), "st_flat": np.full((64, 64, 3), 128, np.uint8), "st_tiny": H[100:116, 200:216].copy()}
     for n, a in st.items():
         fx[n], fx[n + "g"] = a, cv2.cvtColor(a, cv2.COLOR_BGR2GRAY)

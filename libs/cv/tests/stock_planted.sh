@@ -15,7 +15,9 @@ check() {  # name expected-flags
   [ "$got" = "$2" ] && echo "PASS flags $1: [$got]" || { echo "FAIL flags $1: got [$got] want [$2]"; fail=1; }
 }
 check hd ""; check hd2 ""; check st_big ""; check st_jpg95 ""
-check st_blur "blur"; check st_noise "noise"; check st_blown "clipHigh"; check st_cast "cast"; check st_fog "flatStrip"
+check st_blur "blur"; check st_noise "noise"; check st_cast "cast"; check st_fog "flatStrip"
+check st_blown "blownVoid clipHigh"   # one big clipped region
+check st_sparkle "clipHigh noise"    # the same share of clipped pixels, scattered (salt noise): no void
 check st_jpg8 "banding blocks"   # heavy JPEG also leaves flat runs with big steps
 check st_band "banding blur"     # a banded ramp has no detail either
 check st_grad "blur"             # the clean dithered ramp: soft, but not banded

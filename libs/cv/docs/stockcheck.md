@@ -36,8 +36,10 @@ every near-duplicate pair of the batch (both hashes within `dthr`/`pthr`, defaul
 | `hazeBand` | col, colAt, row, rowAt | weakest of 4 column (row) strips by Sobel energy over the median strip |
 | `hashes` | 2 x 64 bits | dHash (8x9 box means) and pHash (32x32 box means, orthonormal DCT, 63 AC bits) |
 | `hamPairs thr` | M x 3 int32 | all pairs of N 64-bit rows within `thr` |
+| `clipRegion lo hi` | 8 numbers | largest 8-connected region of pixels >= hi and of pixels <= lo: area share, box width and height share, region count |
+| `hysteresis lo hi min_area connectivity` | mask | regions of (src > lo) that reach above hi and cover at least min_area (seeded threshold) |
 | `boxDown f` | image | integer area shrink, rounded mean |
-| `stockMetrics ascale` | 29 numbers | everything above for one BGR image; sharpness, noise, clipping, banding and haze run on the grey image shrunk by `round(long edge / ascale)` (default 1536) so one threshold fits 1280 px and 6144 px files; blockiness and hashes run native |
+| `stockMetrics ascale` | 37 numbers | everything above for one BGR image; sharpness, noise, clipping, banding and haze run on the grey image shrunk by `round(long edge / ascale)` (default 1536) so one threshold fits 1280 px and 6144 px files; blockiness and hashes run native |
 
 Each is checked against numpy/cv2 on the same definition (`tests/cases/stock.txt`, 109 rows, `eqnan` = NaN only where the
 oracle has NaN), with planted failures (`tests/stock_planted.sh`) and malformed inputs (`tools/malformed_check.py`).
@@ -54,7 +56,8 @@ Placed just outside the range of the 46 pictures Adobe accepted from `doar-bio-s
 | `noise` | sigma > 6 (`noisesig`) | 0 of 46 (max 2.98) | noise (9.4) |
 | `blocks` | ratio > 2.0 (`blk`) | 0 of 46 (max 1.73) | JPEG q8 (2.45) |
 | `banding` | smooth >= 0.05 and eq > 0.85 and jump > 0.7 (`bandmin bandeq bandjump`) | 0 of 46 | banded ramp, JPEG q8 |
-| `clipHigh` / `clipLow` | hi > 0.10 / lo > 0.50 (`cliphi cliplo`) | 0 of 46 | blown (0.28) |
+| `clipHigh` / `clipLow` | hi > 0.10 / lo > 0.50 (`cliphi cliplo`) | 0 of 46 | blown (0.28), salt noise (0.12) |
+| `blownVoid` | largest region of clipped-high pixels > 8 % of the picture (`voidhi`) | 0 of 46 (max 4.5 %) | blown ramp (10 %); scattered 12 % clip: 0.001 % |
 | `cast` | abs(R-G) > 35 or abs(B-(R+G)/2) > 60 (`castrg castby`) | 0 of 46 | cast |
 | `flatStrip` | weakest strip ratio < 0.001 (`flatstrip`) | 1 of 46 | white-out |
 | `duplicate` | dHash and pHash both <= 10 bits (`dthr pthr`) | 0 | JPEG q95/blur/noise/cast twins |

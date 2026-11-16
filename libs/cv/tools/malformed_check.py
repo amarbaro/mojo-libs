@@ -65,6 +65,11 @@ lines = open(f"{W}/b.jsonl").read().splitlines()
 ok = len(lines) == 3 and '"error"' in lines[0] and '"error"' in lines[1] and '"error"' not in lines[2] and '"lowres"' in lines[2]
 print(("ok   " if ok else "BAD  ") + f"stockBatch: unreadable and grey images give error lines, the 40x40 image a measured line with lowres (got {len(lines)} lines)")
 bad += not ok
+for op in ["hysteresis", "clipRegion"]:
+    expect_error(f"{op}: 3-channel input", [".bin/mojo-cv", op, f"{W}/o.mcv", c40], msg=b"1-channel")
+expect_error("hysteresis: lo >= hi", [".bin/mojo-cv", "hysteresis", f"{W}/o.mcv", g64, "lo=200", "hi=100"], msg=b"need 0 <= lo")
+expect_error("hysteresis: connectivity 6", [".bin/mojo-cv", "hysteresis", f"{W}/o.mcv", g64, "connectivity=6"], msg=b"connectivity")
+expect_error("clipRegion: hi above 255", [".bin/mojo-cv", "clipRegion", f"{W}/o.mcv", g64, "hi=300"], msg=b"need 0 <= lo")
 # the .ppm loader of stockBatch: every malformed P6 is an error line, a good one is measured (RGB swapped to BGR)
 rgb40 = bytes([10, 20, 30]) * 1600
 ppms = {"good": b"P6\n# c\n40 40\n255\n" + rgb40, "magic": b"P5\n40 40\n255\n" + rgb40, "short": b"P6\n40 40\n255\n" + rgb40[:-3],
