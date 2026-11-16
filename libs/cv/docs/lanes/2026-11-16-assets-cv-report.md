@@ -1,0 +1,57 @@
+# assets-cv report
+
+## Phase 1: stockcheck (2026-11-16)
+
+mojo-cv now checks a stock batch at 28.5 images/s (4202 ComfyUI renders in 147 s, 263 s before), and the checks catch every
+technical failure we planted. They do not catch what Adobe actually refused: 24 of its 25 refusals in the doar-bio set are
+semantic (similar content, anatomy, pseudo-text), and no pixel number separated the 7 quality refusals from the 46
+accepted pictures except one white-out fog band, at a false-positive cost.
+
+### What landed (commits 2dfbd05, d8277e0, f3d012d, f084389)
+
+- `src/mojocv/stockcheck.mojo`, 13 ops: `sharpness`, `noiseEst`, `blockiness`, `clipping`, `colorCast`, `banding`,
+  `hazeBand`, `boxDown`, `hashes` (dHash, pHash), `hamPairs`, `stockMetrics` (29 numbers per image), `stockBatch`
+  (parallel, one JSON line per image), `stockDups` (near-duplicates over the whole batch). Docs `docs/stockcheck.md`.
+- `scripts/mcv-stockcheck OUT.jsonl IMAGE|@LIST...` with `--sidecar` (writes `IMAGE.stockcheck.json` beside each image).
+  Flags: `lowres blur noise blocks banding clipHigh clipLow cast flatStrip duplicate`; thresholds are `k=v` overrides.
+- Decoder `scripts/decode-stock.sh`: libvips for 8-bit RGB without a profile, ImageMagick for alpha, grey, 16-bit, ICC.
+
+### Gates
+
+| gate | result |
+|---|---|
+| `tests/cases/stock.txt`, every op against numpy/cv2 on the same definition | 109 of 109 rows |
+| full 2D suite after the changes (`tests/run.sh`) | 396 of 396 rows |
+| `tests/stock_planted.sh`: each planted failure raises exactly its flag, clean images none, twins pair, decoders agree | all pass (20 flag/dup checks, vips = magick on 4 images) |
+| `tools/malformed_check.py`: wrong channels, tiny images, bad hashes, 7 bad `.ppm` files, unreadable files | 40 ok; 2 glb rows fail on the 29 Oct `mojo-cv3d` binary, untouched by this work |
+
+### Numbers
+
+- Library, 4202 images, 6.6 GB: 263 s, RSS 1.88 GB before; 147 s, RSS 1.87 GB after; output identical row for row.
+- One 21 MP image: analysis 319 to 46 ms (blockiness 110 to 1.3, colorCast 165 to 6.5), JPEG decode 0.67 to 0.24 s.
+- Measured at load average 27 from other lanes: the 10 % overlap gain is rough.
+- Calibration on 128 real files (46 Adobe-accepted): thresholds sit outside the accepted range; 0 of 46 flagged except one
+  `flatStrip`. Planted: blur lapvar 3 (clean 1176), noise sigma 9.4 (2.8), JPEG q8 blockiness 2.45 (1.02), banding jump 0.88 (0.06),
+  blown 28 % clipped, cast R-G 37, white-out strip 0.0003; every near-copy of one scene is a duplicate pair (dHash 0 to 4, pHash 0 to 2 bits).
+
+### What failed or is missing
+
+- Item 3 (AI-artifact cues): hands, text and anatomy are not visible to sharpness, noise, banding or clipping. db019 "soft
+  detail" measured lapvar 316 at 1536 px, above the accepted median 201. `flatStrip` is a prompt to look: it catches db067
+  (ratio 0.0008), misses a 75 % haze, flags 1 of 46 accepted and 15 of the 82 other files.
+- "Similar content" (18 of 25 refusals) concerns Adobe's collection, not our pixels; the batch duplicate check only stops our own twins.
+- BRISQUE and NIQE not built (need a trained natural-scene model that is not in the repo); the PaperBrain vault holds no image-quality
+  papers (queries returned unrelated mathematics), so `docs/sources.md` cites the original methods instead.
+- `stock-review` and `bulk-stock-tag` do not read the sidecars yet; I did not touch those repos.
+- Thresholds come from one site's accepted set (Adobe, 46 pictures at 21 MP). Other sites and sizes need their own set.
+- Mistakes recorded: `docs/rules.md` 5 to 8, `~/Brain/SINDEX/mojo-cv.md`.
+
+## Phase 2: faces
+
+Not started. Plan: import `faces` from `~/Projects/mojo/mojo-faces` (SCRFD detection, ArcFace embedding, `GpuNet`), add `faces` and the largest
+face's share of the picture to the JSON, route platforms from it (face present: Adobe only, tick "people are fictional"; Dreamstime
+refuses generated faces; add a face-quality review flag), and gate on the mojo-faces test photos.
+
+## Phase 3: SigLIP
+
+Not started. Needs the transformer ops in `GpuNet` (LayerNorm, Softmax, MatMul, GELU, attention) gated against onnxruntime.
