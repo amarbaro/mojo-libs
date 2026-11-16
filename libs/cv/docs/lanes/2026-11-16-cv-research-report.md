@@ -28,3 +28,9 @@ Brief: `2026-11-16-cv-research-brief.md`, with the scope change that made step 5
 - `granulo` has 2 papers: arXiv 2024 to 2026 has little new on classical granulometry.
 - GPU was not used by this lane except the network embedding (see Neurons).
 - Mistakes of the lane: `SINDEX/mojo-cv.md` and `docs/rules.md` 19 to 24 (paperhub shim, one-batch get-list, id join, wait marker, broadcast, shallow cards); lanes rules 45 and 46; paper-study section "Large lists".
+
+## Neurons
+
+`repo-net build` of `~/Projects/mojo/mojo-cv-papers` passed: 415 files, 8814 neurons; the post-commit hook is installed (`PASS hook`). The merge into the Brain
+network is deferred (the build printed `trailing run in 1311 s`). A first `brain-ask --net text` query before the merge returned no card of this store (it
+returned other papers). The proof query and its result are added below once `grep -c '^text/mojo-cv-papers/' ~/.local/share/coios-brain/merged/net.paths` is above 0.
