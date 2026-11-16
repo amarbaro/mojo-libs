@@ -65,3 +65,17 @@ Not measured: the face-quality review itself (eyes, teeth, nearby hands) is only
 ## Phase 3: SigLIP
 
 Not started. Needs the transformer ops in `GpuNet` (LayerNorm, Softmax, MatMul, GELU, attention) gated against onnxruntime.
+
+### Phase 3 status (2026-11-16, not done)
+
+The SigLIP vision tower runs on mojo-faces' CPU runner and equals onnxruntime; the GPU port, the text tower and the labels are still open.
+
+| piece | state | receipt |
+|---|---|---|
+| model | `onnx-community/siglip-base-patch16-224-ONNX` (Apache-2.0) at `~/Models/siglip-base-patch16-224-onnx/onnx/model.onnx`, 813080024 B, one graph with both towers; no tokenizer files in that repo | HF API listing, size from the HF header |
+| op inventory | 14 op types missing from the runner, 1036 vision nodes | `.work/siglip_ops.md` (cvhelp) |
+| CPU ops | MatMul (batched), LayerNormalization, Softmax, Tanh, Exp, ReduceL2, Div, Constant, Cast, Squeeze, Expand, Tile, ConstantOfShape, Mod, float Gather/Unsqueeze/Slice, general broadcasting; `run(targets)` runs only what a value needs | mojo-faces 201a2a2 |
+| gate | `tests/check_siglip.sh`: 15 intermediate values (1 to 2 per op type) against onnxruntime: all cosine 1.0000000, `image_embeds` max abs 1.8e-7; 7.7 s per image on the CPU; ArcFace/SCRFD gate unchanged (cosine 1.0000000) | `.work/siglip/` in mojo-faces |
+| GPU ops | not built. At 7.7 s per image the 4202-image library needs 9 h on the CPU; brief: `docs/lanes/2026-11-16-gpunet-transformer-brief.md` | |
+| text tower, labels, embedding duplicates | not built. The graph has the text tower, but tokenization needs SentencePiece and its model file (not in the ONNX repo, `sentencepiece` not installed) | |
+| `assets.db` columns | not written: `~/Projects/AssetsHQ/docs/schema.md` does not exist yet (only `plan-library.md`) | |
