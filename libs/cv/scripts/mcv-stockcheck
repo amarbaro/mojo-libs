@@ -60,6 +60,23 @@ if [ "$faces" = 1 ]; then  # SCRFD from mojo-faces on the originals; a face rout
   gpu-wait run --timeout "${MCV_FACES_TIMEOUT:-3600}" -- "$root/.bin/mcv-faces" "$model" "$work/faces.jsonl" "$work/list" gpu=16 > "$work/faces.log" 2>&1 \
     || { tail -3 "$work/faces.log" >&2; echo "FAIL faces: mcv-faces" >&2; exit 1; }
   [ "$(wc -l < "$work/faces.jsonl")" -eq "$n" ] || { echo "FAIL faces: $(wc -l < "$work/faces.jsonl") result lines for $n images" >&2; exit 1; }
+  jq -r 'select(.error != null) | .file' "$work/faces.jsonl" > "$work/fb.list"
+  if [ -s "$work/fb.list" ]; then  # imkit refuses grey, palette, 16-bit and interlaced PNGs: decode those through vips/ImageMagick and retry
+    mkdir -p "$work/fb"
+    awk -v w="$work/fb" '{ printf "%s\t%s/%d\n", $0, w, NR }' "$work/fb.list" > "$work/fb.tsv"
+    xargs -P "$jobs" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r src dst <<< "$1"; "$dec" "$src" "$dst" 2>&1 | head -2 || true' _ {} < "$work/fb.tsv" || true
+    while IFS=$'\t' read -r src dst; do p=$dst.mcv; [ -f "$dst.ppm" ] && p=$dst.ppm; printf '%s\t%s\n' "$src" "$p"; done < "$work/fb.tsv" > "$work/fb.map"
+    cut -f2 "$work/fb.map" > "$work/fb.paths"
+    gpu-wait run --timeout "${MCV_FACES_TIMEOUT:-3600}" -- "$root/.bin/mcv-faces" "$model" "$work/faces2.jsonl" "$work/fb.paths" gpu=16 > "$work/faces2.log" 2>&1 \
+      || { tail -3 "$work/faces2.log" >&2; echo "FAIL faces: mcv-faces on the decoded retry list" >&2; exit 1; }
+    # a retried picture takes its original name back; one that still fails keeps its first error line
+    jq -c --slurpfile f2 "$work/faces2.jsonl" --rawfile m "$work/fb.map" '
+      ($m | split("\n") | map(select(length > 0) | split("\t") | {(.[0]): .[1]}) | add // {}) as $dst
+      | ($f2 | map({(.file): .}) | add // {}) as $r
+      | . as $cur
+      | if .error != null and $dst[.file] != null and $r[$dst[.file]] != null and $r[$dst[.file]].error == null
+        then $r[$dst[.file]] | .file = $cur.file else $cur end' "$work/faces.jsonl" > "$work/faces3.jsonl" && mv "$work/faces3.jsonl" "$work/faces.jsonl"
+  fi
   jq -c --slurpfile f "$work/faces.jsonl" '
     ($f | map({(.file): .}) | add // {}) as $m
     | if .file == null or .error != null then .

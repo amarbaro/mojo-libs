@@ -26,5 +26,19 @@ chk "db044 routes to Adobe only" "$(row db044 | jq -r '[.platforms.adobe, .platf
 chk "db000 no face" "$(row db000 | jq -r '.faces.n')" 0
 chk "db000 routes to both" "$(row db000 | jq -r '[.platforms.adobe, .platforms.dreamstime, .faceReview] | @csv')" "true,true,false"
 chk "sidecar equals output line" "$(cat .work/faces_in/db044-*.stockcheck.json | jq -S -c .)" "$(row db044 | jq -S -c .)"
+# pictures imkit's PNG loader refuses (grey, palette, 16-bit, interlaced): the face stage retries them through decode-stock.sh.
+# The control run proves the inputs reach the branch: mcv-faces alone must fail on at least one of them.
+rm -rf .work/faces_in2; mkdir -p .work/faces_in2
+src=$(ls "$DBS/db044-"*.jpg | head -1)
+magick "$src" -resize 1536x -type Grayscale .work/faces_in2/grey.png
+magick "$src" -resize 1536x -colors 64 PNG8:.work/faces_in2/palette.png
+magick "$src" -resize 1536x -depth 16 PNG48:.work/faces_in2/depth16.png
+magick "$src" -resize 1536x -interlace PNG PNG24:.work/faces_in2/interlaced.png
+ls "$PWD"/.work/faces_in2/*.png > .work/faces_in2.list
+gpu-wait run --timeout 600 -- .bin/mcv-faces "$D" .work/faces_ctl.jsonl .work/faces_in2.list gpu=16 > /dev/null 2>&1 || { echo "FAIL run: mcv-faces control"; exit 1; }
+chk "control: mcv-faces alone refuses some of the 4 pngs" "$(jq -s '[.[] | select(.error != null)] | length > 0' .work/faces_ctl.jsonl)" true
+scripts/mcv-stockcheck --faces .work/faces_out2.jsonl @.work/faces_in2.list > .work/faces_out2.log || { cat .work/faces_out2.log; echo "FAIL stockcheck --faces on the 4 pngs"; exit 1; }
+chk "4 odd pngs: no face-stage error" "$(jq -s '[.[] | select(.file and (.faces.error != null or .faces == null))] | length' .work/faces_out2.jsonl)" 0
+chk "4 odd pngs: the face is found in each" "$(jq -s '[.[] | select(.file and (.faces.n // 0) >= 1)] | length' .work/faces_out2.jsonl)" 4
 [ "$fail" = 0 ] || exit 1
 echo "PASS stock_faces"

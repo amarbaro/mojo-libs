@@ -6,6 +6,8 @@ from std.sys import argv
 from faces.onnx import Model
 from faces.image import load_rgb
 from faces.detect import detect
+from mojocv.mat import Mat, load
+from mojocv.stockcheck import _load_ppm
 from faces.gpu.net import GpuNet
 from faces.gpu.detect import detect_gpu
 from max.gpu.host import DeviceContext
@@ -18,6 +20,21 @@ def _esc(s: String) -> String:
             o += "\\"
         o += String(c)
     return o^
+
+
+def _rgb(path: String) raises -> Mat[DType.uint8]:
+    """A picture as RGB: `.ppm` (P6) and `.mcv` (BGR) files come from scripts/decode-stock.sh, which reads the grey, palette,
+    16-bit and interlaced PNGs that imkit's loader refuses; anything else goes through mojo-faces' load_rgb."""
+    if not (path.endswith(".ppm") or path.endswith(".mcv")):
+        return load_rgb(path)
+    var m = _load_ppm(path) if path.endswith(".ppm") else load[DType.uint8](path)  # both give B, G, R
+    if m.ch != 3:
+        raise Error("mcv-faces: " + path + " has " + String(m.ch) + " channels, wanted 3")
+    for i in range(m.rows * m.cols):
+        var t = m.data[3 * i]
+        m.data[3 * i] = m.data[3 * i + 2]
+        m.data[3 * i + 2] = t
+    return m^
 
 
 def main() raises:
@@ -47,7 +64,7 @@ def main() raises:
             continue
         var l = String()
         try:
-            var img = load_rgb(p)
+            var img = _rgb(p)
             var faces = detect_gpu(net.value(), img) if arm > 0 else detect(m, img)
             if boxes:
                 for f in faces:

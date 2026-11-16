@@ -104,3 +104,8 @@ Measured on the 128 doar-bio files (21 MP): the 4 pictures Dreamstime refused fo
 is 0.13 % of the frame at score 0.57); 2 of the 42 pictures Dreamstime accepted also carry a detection (db080, 0.4 % of the frame; db084, 0.17 %), so routing every
 face to Adobe over-routes about 5 % of the safe set and no size threshold separates them (db065 is smaller than both). The 128 files took 93 s (decode-bound: the
 GPU detects in about 12 ms; JPEG decode of a 21 MP file takes most of the rest).
+
+Grey, palette, 16-bit and interlaced PNGs are refused by mojo-faces' loader (3.1 % of the AssetsHQ library, 232 of 7592, per cvint). `mcv-faces` also reads `.ppm` and `.mcv` files, and
+`mcv-stockcheck --faces` retries every picture that came back with a face-stage error through `scripts/decode-stock.sh` (vips, ImageMagick for what vips does not take) and puts the
+result back under the original name; one that still fails keeps its error. Gate: `tests/stock_faces.sh` makes the four kinds of PNG from one face picture, shows that `mcv-faces` alone refuses
+some of them (the control), then finds the face in all four through the retry.
