@@ -1,0 +1,44 @@
+# cvint report (2026-11-16): SigLIP labels beat the library's own categories, 0.80 against 0.40
+
+On 40 library pictures I labelled by eye, SigLIP's top-1 category is right 32 times (top-3: 38), the category stored in the library 16 times. All 7593 library
+pictures now carry stockcheck numbers, faces and SigLIP labels in `assets.db` (13233 assets, 7593 cv rows, 7593 label rows, `verify` problems 0). The label rows come
+from the CPU runner; the GPU rows wait in the queue behind the camera job and replace them once a parity gate passes.
+
+Lane `cvint` (pane wYT:p1). Receipts are commits and files in each row; mistakes: `docs/rules.md` 10 to 19, `~/Brain/SINDEX/mojo-cv.md`.
+
+## What the labels are worth
+
+- 40 pictures (seeded draw, 7 allow an alternative label): SigLIP top-1 32 (0.80), top-3 38 (0.95); library category 16 (0.40). Sample with every tag: `docs/lanes/2026-11-16-siglip-sample40.md` (0baee81).
+- All 7593 against the library category alone: top-1 0.281 (2131). That number mostly measures the library: game props sit under icons-ui (669 land on props), furniture and weapons overlap props (337, 243),
+  and 37 % of predictions fall on `props`. One reworded `props` phrase gave 0.292 on the library but 29 of 40 on my labels, so the approved phrase stays.
+- Tags (142, approved by Mario via the lead): 5849 pictures have at least one tag with p >= 0.002 in their top 5, 1744 have none. Probabilities are low and relative (laboratory 0.147 on a lab picture,
+  tea 0.008 on a tea table); the floor is a policy that can change without rerunning the model.
+- Predictions live in `label` and `<picture>.labels.json` only. Sidecar `category:` and `tags:` are untouched until Mario approves moving tags.
+
+## Done
+
+| piece | result | receipt |
+|---|---|---|
+| stock-review reads `<id>.stockcheck.json` | sidebar line `check lowres, face, 1 face(s)`; 6 core cases; a real-window gate reads the line back with tesseract (shown with a json, absent without) | stock-review 41ad876 |
+| bulk-stock-tag reads the sidecars | `stockcheck` table, `stocktag stockcheck`, per-member flags in the cluster detail API; nothing is culled by it; 7 tests pass | bulk-stock-tag dab791c |
+| stockcheck + faces over the library | 7593 png/jpg in about 1 h at load 25 to 48; `.stockcheck.json` beside each (git-ignored); 578 faces, 6182 under 4 MP, 4612 `duplicate` (24074 pairs), 872 `flatStrip`, 445 `blownVoid`, 282 `blur`, 206 `cast`; 2 not measurable | `.work/cvint/library.jsonl` |
+| `assets.db` cv and label tables | live db rebuilt, `verify` problems 0; `assetdb` test: 25 value checks, 17 negative controls | AssetsHQ 21cc5fc (inside 34891fa), library 494a5c7 |
+| SigLIP tokenizer in Mojo | ids equal transformers' SiglipTokenizer on 2000 of 2000 texts, planted change differs on 1998 | 338bb31 |
+| text tower, CPU runner | cosine 1.0000000, max abs <= 6e-7 against onnxruntime on 12 texts | eadcab3 |
+| image path | libvips squash against PIL: cosine 0.9993 to 0.9999 on 8 pictures | 26f0316 |
+| ranking and label writer | `mcv-labels top` equals numpy; `scripts/siglip-labels.sh` writes the json | b2bfc72, bf4b9cf |
+| library embeddings, CPU rows | 7593 pictures, 0 decode failures, 23325696 B | `.work/cvint/siglip-full.log` PASS |
+| ledgers | 10 mistakes of this session: rules, SINDEX entries, skill rules (lanes 41-44, bench-gates 55-57, toolscript, mojo-cv skill), Brain note | Brain b2d1e1d0d, f56874632 |
+
+## Speed
+
+The CPU runner takes 0.85 to 1.4 s per picture solo (the 7.7 s in the assets-cv report was measured under load) and ran the library in about 1.6 h with other lanes active. On GpuNet (mojo-faces 9141c1c) one picture takes 41.6 ms, about 5 min for 7593.
+Mario's rule 19: embeddings run on the GPU from now on.
+
+## Open
+
+- **GPU rows**: `mcv-labels gimage` is built; gpu-wait job `siglip-gpu-library` (mwjog157f4kd, prio 80) waits behind assets-cv's `camera-faces`, which the boss said not to preempt. After it runs: `tests/siglip_gpu.sh` (every row cosine >= 0.99999 against the CPU rows, planted shift), then `scripts/siglip-labels.sh`, `assetdb build`, `verify`.
+- **232 face errors** (184 png, 48 jpg: grey, palette and 16-bit files the old loader refused): assetscv fixed the decode in 0d1e184; rerun those pictures once the queue clears and merge faces into their jsons.
+- **TAGS Camera run** (6528 JPEGs, counts only into `~/Pictures/TAGS/.mojocv/`): not started; its face stage needs the GPU slot too.
+- **mojo-faces `Gather` along axis 1** is missing in `faces.nn` (the text head takes the last token that way); `mcv-labels text` does that step in Mojo. Tell assetscv if `text_embeds` should run directly.
+- Messages and commit b2bfc72 say 130 tags; `data/siglip/tags.tsv` has 142.

@@ -6,8 +6,10 @@ from std.math import exp, sqrt
 from std.os import stat
 from std.os.path import exists
 from std.sys import argv
+from faces.gpu.net import GpuNet
 from faces.nn import Arr, run
 from faces.onnx import Model
+from max.gpu.host import DeviceContext
 from tokenizers import Tokenizer
 
 comptime SEQ = 64
@@ -115,6 +117,24 @@ def main() raises:
             ref e = r["image_embeds"]
             with open(String(a[4]), "a") as f:
                 f.write_bytes(Span[UInt8](unsafe_ptr=e.d.unsafe_ptr().bitcast[UInt8](), length=e.numel() * 4))
+    elif String(a[1]) == "gimage":  # gimage MODEL PPMS.txt OUT.f32: the same on GpuNet (fp32), start it under `gpu-wait run --timeout S`
+        var m = Model(String(a[2]))
+        var net = GpuNet(DeviceContext(), m, False, ["image_embeds"])
+        var done = 0
+        if exists(String(a[4])):
+            done = Int(stat(String(a[4])).st_size) // (768 * 4)
+        var todo = lines(String(a[3]))
+        var buf = List[UInt8]()
+        for i in range(done, len(todo)):
+            var feeds = Dict[String, Arr]()
+            feeds["pixel_values"] = Arr([1, 3, IMG, IMG], load_ppm(todo[i]))
+            var r = net.run(feeds^)
+            ref e = r["image_embeds"]
+            buf.extend(Span[UInt8](unsafe_ptr=e.d.unsafe_ptr().bitcast[UInt8](), length=e.numel() * 4))
+            if len(buf) >= 768 * 4 * 256 or i == len(todo) - 1:  # one append per 256 pictures
+                with open(String(a[4]), "a") as f:
+                    f.write_bytes(buf)
+                buf = List[UInt8]()
     elif String(a[1]) == "top":  # top MODEL IMG.f32 TXT.f32 K OUT.tsv: per picture its K best labels as `index:cosine:probability`
         var m = Model(String(a[2]))
         var scale = exp(m.inits[m.init("onnx::Exp_3336")].f[0])  # SigLIP's learned logit scale and bias, read from the graph
