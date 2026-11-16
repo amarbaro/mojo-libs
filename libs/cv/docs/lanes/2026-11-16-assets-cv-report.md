@@ -82,3 +82,19 @@ The SigLIP vision tower runs on mojo-faces' CPU runner and equals onnxruntime; t
 
 Added from cvint's note: `Gather` on axis 1 (SigLIP text last token) and a tiled CPU `gemm` are on the GPU-port list (`docs/lanes/2026-11-16-gpunet-transformer-brief.md`);
 the face stage now decodes grey, palette, 16-bit and interlaced PNGs through `scripts/decode-stock.sh` (`src/stockfaces.mojo`, retry in `scripts/mcv-stockcheck`), gate `tests/stock_faces.sh`, result pending in the GPU queue.
+
+### Phase 3, GPU port (mojo-faces 9141c1c)
+
+The SigLIP vision tower runs on GpuNet and equals onnxruntime: 41.6 ms per 224 px image warm against 7679 ms on the CPU runner (185 times), 410 MB of device memory.
+
+| gate (`GPU=1 GPU_MUTANTS=1 tests/check_siglip.sh`, every launch through `gpu-wait`) | result |
+|---|---|
+| 15 values (1 to 2 per op type) against onnxruntime, fp32 arm | cosine 1.0000000 on all, `image_embeds` max abs 1.6e-7 |
+| same, fp16 arm (cosine floor 0.999) | cosine >= 0.9999999, `image_embeds` max abs 1.2e-5 |
+| mutant: LayerNorm without the mean; mutant: Softmax without normalisation | both fail the fp32 arm (killed) |
+| `tests/check_gpu.sh` (ArcFace, SCRFD on the GPU runner), run after the change | passes |
+
+Ops: LayerNormalization, Softmax, Tanh, Exp, ReduceL2, Div, batched MatMul, float Gather/Unsqueeze/Squeeze/Cast, Slice/Expand/Tile as one strided gather, rank-5 Transpose with size-1 dims,
+host shape arithmetic, `GpuNet(targets)`. The fp16 arm changes only the convolution; the new MatMul runs the fp32 GEMM in both arms, so both arms take 41.6 ms. A WMMA arm for MatMul, `Gather` on axis 1,
+a tiled CPU `gemm` and a fused attention kernel are the next levers, none needed for the current speed (4202 pictures take about 3 minutes at 42 ms each, decode excluded).
+Not built here: the text tower and labels on the GPU (cvint's CPU path works; `Gather` axis 1 is the missing op), and the `assets.db` columns (cvint wrote them).
