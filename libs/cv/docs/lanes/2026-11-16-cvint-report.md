@@ -31,6 +31,7 @@ Lane `cvint` (pane wYT:p1). Receipts are commits and files in each row; mistakes
 | library embeddings, CPU rows | 7593 pictures, 0 decode failures, 23325696 B | `.work/cvint/siglip-full.log` PASS |
 | library embeddings, GPU rows | `mcv-labels gimage` on GpuNet under gpu-wait (priority 80, resumed after the herdr crash from row 2048); `tests/siglip_gpu.sh`: 7593 rows, cosine min 1.000000000, max abs 3.96e-06, planted shift differs on 7592 | `.work/cvint/siglip-gpu.f32`, `tests/siglip_gpu.sh` |
 | labels applied to the sidecars | `scripts/siglip-apply.sh`: 7593 sidecars rewritten, a second run rewrites 0; old non-empty tags: 0 (nothing lost); `assetdb` gets a last column `library_category` and `verify` checks folder == library_category (28 value + 19 negative checks); live db rebuilt, `verify` problems 0, re-run by the lead with the same result | AssetsHQ 8ea4d4f, library eeeab8a, mojo-cv `scripts/siglip-apply.sh` |
+| brainnet | the library's post-commit hook (installed earlier by the assets-index lane) ran `repo-net build` after eeeab8a: 13244 neurons (13233 sidecars + INDEX chunks), embedded on the GPU at 2241 rows/s, store 88 MB; the merge was deferred by `refresh.sh`'s 1800 s rate limit, so with Mario's OK I ran `REFRESH_FORCE=1 refresh.sh` (42 s bridge, rc 0): 13244 `text/library/` neurons in the merged network; `net-index --write` PASS; `brain-ask --net text "orange fox sitting in snow, category animals"` returns the fox render first: its sidecar says `category: animals`, `library_category: tech-devices` (the old path-word rule filed it there), `tags: [snow]` | `.work/cvint/refresh-force.log` |
 | ledgers | 10 mistakes of this session: rules, SINDEX entries, skill rules (lanes 41-44, bench-gates 55-57, toolscript, mojo-cv skill), Brain note | Brain b2d1e1d0d, f56874632 |
 
 ## Speed
@@ -40,7 +41,6 @@ Mario's rule 19: embeddings run on the GPU from now on.
 
 ## Open
 
-- **brainnet**: `repo-net build` of the library was started by the library's post-commit hook after eeeab8a; it replaces the 203-neuron sample store. `net-index --write` and one `brain-ask --net text` query come after it finishes (below, if done).
 - **232 face errors** (184 png, 48 jpg: grey, palette and 16-bit files the old loader refused): assetscv fixed the decode in 0d1e184; rerun those pictures once the queue clears and merge faces into their jsons.
 - **TAGS Camera run** (6528 JPEGs, counts only into `~/Pictures/TAGS/.mojocv/`): not started; its face stage needs the GPU slot too.
 - **mojo-faces `Gather` along axis 1** is missing in `faces.nn` (the text head takes the last token that way); `mcv-labels text` does that step in Mojo. Tell assetscv if `text_embeds` should run directly.
