@@ -49,3 +49,7 @@ The command-line tool runs one op on `.mcv` files: `mojo-cv OP OUT IN... [k=v]`
 ## Stock pre-check
 
 `scripts/mcv-stockcheck [--sidecar] [--faces] OUT.jsonl IMAGE|@LIST...` writes one JSON line per image (numbers, hashes, flags, near-duplicates over the batch, faces and platform routing with `--faces`). Ops, flags, thresholds and what the numbers do not catch: `docs/stockcheck.md`. Thresholds sit just outside the 46 Adobe-accepted pictures of one set; the Adobe quality refusals are mostly semantic, so a clean report is not a pass. Faces need `.bin/mcv-faces` (`tests/stock_faces.sh` builds it) and the GPU through `gpu-wait`.
+
+## Personal photos (`~/Pictures/TAGS`, Mario's, local only)
+
+Test and calibration data in full, under `docs/lanes/2026-11-16-cv-team.md`: never copied into this repo, never in git, never off the machine, never as pixels or names in a prompt. Results are numbers and aggregates, derived files live in `~/Pictures/TAGS/.mojocv/` or the gitignored `.work/`. Faces: counts and boxes only, no identity. List the tree only through `wc -l` or `awk` on a counted pattern, and read a JSONL of it through `jq` selecting numbers (its `file` field holds names); a `sed 's/.*\.//'` extension count printed folder names once (`docs/rules.md` 10).
