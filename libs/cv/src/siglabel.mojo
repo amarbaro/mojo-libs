@@ -1,7 +1,11 @@
 """mcv-labels: SigLIP zero-shot labels on the CPU runner of mojo-faces. A separate binary like stockfaces.mojo
 (mojo-faces imports mojocv).  `mcv-labels tok TOK.json TEXTS.txt OUT.ids` writes the 64 ids of each text line,
 the way transformers' SiglipTokenizer(padding="max_length", max_length=64, truncation=True) does."""
+from std.collections import Dict
+from std.math import sqrt
 from std.sys import argv
+from faces.nn import Arr, run
+from faces.onnx import Model
 from tokenizers import Tokenizer
 
 comptime SEQ = 64
@@ -62,5 +66,36 @@ def main() raises:
             s += "\n"
         with open(String(a[4]), "w") as f:
             f.write(s)
+    elif String(a[1]) == "text":  # text MODEL TOK TEXTS OUT.f32: text_embeds, 768 float32 per line
+        var m = Model(String(a[2]))
+        var t = Tokenizer(String(a[3]))
+        var out = List[Float32]()
+        for text in lines(String(a[4])):
+            var d = List[Float32](capacity=SEQ)
+            for i in encode64(t, text):
+                d.append(Float32(i))  # ids are exact in float32 (< 2^24); the runner keeps tensors as float
+            var feeds = Dict[String, Arr]()
+            feeds["input_ids"] = Arr([1, SEQ], d^)
+            # faces.nn has no Gather along axis 1, which the graph uses to pick the last token: stop at the final
+            # LayerNorm and finish here (last position, head Linear, L2 norm), checked against text_embeds by siglip_text.sh
+            var ln = "/text_model/final_layer_norm/LayerNormalization_output_0"
+            var r = run(m, feeds^, [ln])
+            ref h = r[ln]
+            var width = h.shape[2]
+            ref w = m.inits[m.init("text_model.head.weight")]
+            ref bias = m.inits[m.init("text_model.head.bias")]
+            var e = List[Float32](capacity=width)
+            var ss = Float32(0)
+            for j in range(width):
+                var s = bias.f[j]
+                for k in range(width):
+                    s += h.d[(SEQ - 1) * width + k] * w.f[j * width + k]
+                e.append(s)
+                ss += s * s
+            var inv = 1.0 / sqrt(ss)
+            for j in range(width):
+                out.append(e[j] * inv)
+        with open(String(a[5]), "w") as f:
+            f.write_bytes(Span[UInt8](unsafe_ptr=out.unsafe_ptr().bitcast[UInt8](), length=len(out) * 4))
     else:
         raise Error("FAIL usage: unknown mode " + String(a[1]))

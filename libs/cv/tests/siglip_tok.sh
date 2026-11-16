@@ -12,7 +12,7 @@ W=.work/siglip; mkdir -p $W .bin
 TOK=${SIGLIP_TOK:-$HOME/Models/siglip-base-patch16-224-tok}; P=${MOJO_PROJECTS:-$HOME/Projects/mojo}
 for f in spiece.model tokenizer.json; do [ -f "$TOK/$f" ] || { echo "FAIL input: $TOK/$f missing"; exit 1; }; done
 jq -c '.normalizer.normalizers = [.normalizer.normalizers[4], .normalizer.normalizers[5]] | .model.byte_fallback = false' "$TOK/tokenizer.json" > $W/tokenizer_pre.json
-.venv/bin/mojo build -O3 -I src -I $P/mojo-tokenizers/src src/siglabel.mojo -o .bin/mcv-labels 2> $W/tok_build.err || { grep -m3 -A3 "error:" $W/tok_build.err || true; echo "FAIL build: src/siglabel.mojo"; exit 1; }
+scripts/build-labels.sh || exit 1
 uv run -q --no-project --with transformers --with sentencepiece --with protobuf python -I - "$TOK" $W <<'EOF' 2>/dev/null || { echo "FAIL oracle: transformers SiglipTokenizer"; exit 1; }
 import random, sys
 from transformers import SiglipTokenizer
