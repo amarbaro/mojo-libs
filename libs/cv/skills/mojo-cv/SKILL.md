@@ -53,3 +53,7 @@ The command-line tool runs one op on `.mcv` files: `mojo-cv OP OUT IN... [k=v]`
 ## Personal photos (`~/Pictures/TAGS`, Mario's, local only)
 
 Test and calibration data in full, under `docs/lanes/2026-11-16-cv-team.md`: never copied into this repo, never in git, never off the machine, never as pixels or names in a prompt. Results are numbers and aggregates, derived files live in `~/Pictures/TAGS/.mojocv/` or the gitignored `.work/`. Faces: counts and boxes only, no identity. List the tree only through `wc -l` or `awk` on a counted pattern, and read a JSONL of it through `jq` selecting numbers (its `file` field holds names); a `sed 's/.*\.//'` extension count printed folder names once (`docs/rules.md` 10).
+
+## Embeddings run on the GPU
+
+SigLIP and any other model's vectors are computed on the 7900 XTX through the GpuNet runner under `gpu-wait run --timeout S`, never as a long CPU job (Mario, 2026-11-16; `docs/rules.md` 19). `scripts/siglip-embed.sh` and `.bin/mcv-labels image` use the CPU runner of mojo-faces: parity oracle and a fallback for about 100 pictures (0.85 to 1.4 s each solo, 2.2 GB RSS per process). A longer list waits for the GPU port (`docs/lanes/2026-11-16-gpunet-transformer-brief.md`) or is reported to the boss as a blocker.
