@@ -25,3 +25,20 @@ OpenCV 5.0 semantics, so cv2 5.0 is the oracle for them; the 3D ops are checked 
 - Koppula et al. 2024 (TAPVid-3D); Wronski et al. 2019 (handheld burst super-resolution).
 - Piegl & Tiller, The NURBS Book; Khronos glTF 2.0 specification; ISO 10303-21 and the AP242 schema.
 - Any continuum mechanics text for von Mises and principal stresses.
+
+## Stock-site checks (`stockcheck`)
+
+Methods are the published definitions, implemented from their descriptions; numpy/cv2 on the same definition is the oracle.
+
+- Variance of the Laplacian as a focus measure: Pech-Pacheco et al. 2000; Tenengrad (Sobel gradient energy): Krotkov 1987.
+- Immerkaer 1996, *Fast noise variance estimation*, CVIU 64(2): the 3x3 mask used by `noiseEst`.
+- Block-edge discontinuity as JPEG blockiness: Wang, Bovik et al. 2002, *No-reference perceptual quality assessment of JPEG
+  compressed images*, the 8-pixel boundary contrast idea, here as a plain boundary-to-interior difference ratio.
+- dHash (Krawetz 2013) and pHash (Zauner 2010, DCT of a 32x32 reduction); the box reduction and the 1e-6 rounding of DCT
+  coefficients before the median compare are ours, chosen so the hash is bit exact against the numpy oracle.
+- Nothing from the PaperBrain vault: `paperbrain-ask` on no-reference IQA (BRISQUE, NIQE), perceptual hashing and
+  AI-image detection returned only unrelated mathematics papers (the vault holds no image-quality literature; queries and
+  answers in `.work/paperbrain.txt`). BRISQUE and NIQE were not built: both need a pretrained natural-scene model that
+  is not in the repo, and the measured pixel numbers already show that technical quality does not separate Adobe's refusals.
+- Calibration data: `~/Projects/gpu-media/doar-bio-stock` (128 uploaded files) with the per-file Adobe refusals in
+  `~/Brain/gpu-media/doar-bio-stock/2026-11-13-adobe-review.md`; rejection reasons from `~/Projects/AssetsHQ/docs/mistakes-extracted.md`.

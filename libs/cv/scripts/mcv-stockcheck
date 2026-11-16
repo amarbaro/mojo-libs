@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+# mcv-stockcheck [-j N] [-c CHUNK] [--sidecar] OUT.jsonl IMAGE|@LIST... [k=v...]
+# Stock-site pre-check: one JSON line per image (size, sharpness, noise, JPEG blocks, clipping, cast, banding, fog
+# band, hashes, flags, near-duplicates across the whole batch) for the pass/deny app and bulk tagging to read.
+# --sidecar also writes IMAGE.stockcheck.json beside every image. k=v overrides a threshold (docs/stockcheck.md).
+# Images decode N at a time (default 8) into .mcv files, CHUNK images (default 48) per analysis run, then are deleted.
+set -euo pipefail
+root=$(cd "$(dirname "$0")/.." && pwd)
+bin=$root/.bin/mojo-cv
+dec=$root/scripts/img2mcv.sh
+jobs=8 chunk=48 side=0
+while [ $# -gt 0 ]; do
+  case $1 in
+    -j) jobs=$2; shift 2;;
+    -c) chunk=$2; shift 2;;
+    --sidecar) side=1; shift;;
+    *) break;;
+  esac
+done
+[ $# -ge 2 ] || { echo "FAIL usage: mcv-stockcheck [-j N] [-c CHUNK] [--sidecar] OUT.jsonl IMAGE|@LIST... [k=v...]" >&2; exit 2; }
+[ -x "$bin" ] || { echo "FAIL setup: $bin missing, build with: mojo build -O3 -I src src/main.mojo -o .bin/mojo-cv" >&2; exit 1; }
+out=$(realpath -m -- "$1"); shift
+work=$root/.work/stockcheck.$$; mkdir -p "$work"
+trap 'rm -rf "$work"' EXIT
+opts=(); : > "$work/list"
+for a in "$@"; do  # paths are resolved here, before anything changes directory
+  if [[ $a =~ ^[a-z]+=[0-9.eE+-]+$ ]]; then opts+=("$a")
+  elif [[ $a == @* ]]; then
+    while IFS= read -r f; do [ -n "$f" ] && { [ -f "$f" ] || { echo "FAIL missing: $f" >&2; exit 1; }; realpath -- "$f" >> "$work/list"; }; done < "${a:1}"
+  else [ -f "$a" ] || { echo "FAIL missing: $a" >&2; exit 1; }; realpath -- "$a" >> "$work/list"; fi
+done
+n=$(wc -l < "$work/list")
+[ "$n" -gt 0 ] || { echo "FAIL input: no images" >&2; exit 1; }
+[ "$side" = 1 ] && opts+=("sidecar=1")
+export dec work MAGICK_THREAD_LIMIT=1
+split -l "$chunk" -d -a 5 "$work/list" "$work/c."
+: > "$work/all.jsonl"
+for c in "$work"/c.?????; do
+  id=${c##*.}
+  awk -v w="$work" -v id="$id" '{ printf "%s\t%s/%s.%d.mcv\n", $0, w, id, NR }' "$c" > "$work/d.$id"
+  # a failed decode leaves no file: the analysis reports it as an error line, never as a pass
+  xargs -P "$jobs" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r src dst <<< "$1"; "$dec" "$src" "$dst" bgr 2>&1 | head -2 || true' _ {} < "$work/d.$id" || true
+  while IFS=$'\t' read -r src dst; do printf '%s\t%s\t%s\n' "$dst" "$src" "$(stat -c %s "$src")"; done < "$work/d.$id" > "$work/m.$id"
+  "$bin" stockBatch "$work/p.$id.jsonl" "$work/m.$id" "${opts[@]}" || { echo "FAIL analysis: chunk $id" >&2; exit 1; }
+  cat "$work/p.$id.jsonl" >> "$work/all.jsonl"
+  awk -F'\t' '{print $1}' "$work/m.$id" | xargs rm -f
+done
+"$bin" stockDups "$out" "$work/all.jsonl" "${opts[@]}" || { echo "FAIL dups" >&2; exit 1; }
+lines=$(grep -c '"file"' "$out" || true)
+[ "$lines" -eq "$n" ] || { echo "FAIL count: $lines result lines for $n images" >&2; exit 1; }
+echo "PASS stockcheck: $n images -> $out ($(grep -c '"error"' "$out" || true) errors, $(grep -c '"dup"' "$out" || true) duplicate pairs)"

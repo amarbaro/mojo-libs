@@ -13,3 +13,4 @@ tests/fixtures/*.mcv
 tests/real/
 .venv*
 .work/
+tests/fixtures/stock/
