@@ -6,11 +6,12 @@ from mojocv.video import run as run_video
 from mojocv.calib3d import run as run_calib3d
 from mojocv.cli3d import dispatch3d
 from mojocv.granulo import run as run_granulo
+from mojocv.stockcheck import run as run_stockcheck
 
 
 def main() raises:
     var a = Args()
-    var ok = run_core(a) or run_imgproc(a) or run_features(a) or run_video(a) or run_calib3d(a) or run_granulo(a)
+    var ok = run_core(a) or run_imgproc(a) or run_features(a) or run_video(a) or run_calib3d(a) or run_granulo(a) or run_stockcheck(a)
     if not ok:
         var v = List[String]()
         var av = argv()

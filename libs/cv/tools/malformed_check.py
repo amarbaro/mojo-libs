@@ -42,6 +42,29 @@ f64 = lambda r, c, *v: mcv(r, c, 1, 3, struct.pack("<%dd" % (r * c), *(list(v) +
 K = put("k.mcv", f64(3, 3, 500, 0, 320, 0, 500, 240, 0, 0, 1))
 expect_error("solvePnPRansac with 3 points", [".bin/mojo-cv", "solvePnPRansac", f"{W}/o.mcv", put("o3.mcv", f64(3, 3)), put("i3.mcv", f64(3, 2)), K, put("d0.mcv", f64(0, 1))], timeout=5, msg=b"need at least 4 points")
 expect_error("findEssentialMat with 4 points", [".bin/mojo-cv", "findEssentialMat", f"{W}/o.mcv", put("e1.mcv", f64(4, 2)), put("e2.mcv", f64(4, 2)), K], timeout=5, msg=b"need at least 5 points")
+# stockcheck: wrong channels and images too small to measure raise; a plausible number is never the answer
+g20, g64, c40 = put("g20.mcv", mcv(20, 20, 1, 0, bytes(400))), put("g64.mcv", mcv(64, 64, 1, 0, bytes(4096))), put("c40.mcv", mcv(40, 40, 3, 0, bytes(4800)))
+for op in ["sharpness", "noiseEst", "blockiness", "clipping", "banding", "hazeBand", "hashes", "boxDown"]:
+    expect_error(f"{op}: 3-channel input", [".bin/mojo-cv", op, f"{W}/o.mcv", c40], msg=b"1-channel")
+for op in ["colorCast", "stockMetrics"]:
+    expect_error(f"{op}: grey input", [".bin/mojo-cv", op, f"{W}/o.mcv", g64], msg=b"3-channel")
+expect_error("sharpness: 2x2 image", [".bin/mojo-cv", "sharpness", f"{W}/o.mcv", put("g2.mcv", mcv(2, 2, 1, 0, bytes(4)))], msg=b"smaller than")
+expect_error("sharpness: tile larger than the image", [".bin/mojo-cv", "sharpness", f"{W}/o.mcv", g64, "tile=64"], msg=b"no full")
+expect_error("blockiness: 10x10 image", [".bin/mojo-cv", "blockiness", f"{W}/o.mcv", put("g10.mcv", mcv(10, 10, 1, 0, bytes(100)))], msg=b"smaller than")
+expect_error("hazeBand: 4x4 image", [".bin/mojo-cv", "hazeBand", f"{W}/o.mcv", put("g4.mcv", mcv(4, 4, 1, 0, bytes(16)))], msg=b"smaller than")
+expect_error("hashes: image under the 32x32 grid", [".bin/mojo-cv", "hashes", f"{W}/o.mcv", g20], msg=b"smaller than the")
+expect_error("clipping: lo >= hi", [".bin/mojo-cv", "clipping", f"{W}/o.mcv", g64, "lo=200", "hi=100"], msg=b"need 0 <= lo")
+expect_error("boxDown: factor 0", [".bin/mojo-cv", "boxDown", f"{W}/o.mcv", g64, "f=0"], msg=b"does not fit")
+expect_error("boxDown: factor above the image", [".bin/mojo-cv", "boxDown", f"{W}/o.mcv", g20, "f=21"], msg=b"does not fit")
+expect_error("hamPairs: 3 columns", [".bin/mojo-cv", "hamPairs", f"{W}/o.mcv", put("b3.mcv", mcv(5, 3, 1, 0, bytes(15)))], msg=b"hamPairs needs")
+expect_error("hamPairs: bit value 2", [".bin/mojo-cv", "hamPairs", f"{W}/o.mcv", put("b2.mcv", mcv(2, 64, 1, 0, bytes([2]) * 128))], msg=b"bit value")
+# stockBatch must write an error line for an image it cannot measure (and keep going), never a pass or a gap
+open(f"{W}/b.tsv", "w").write(f"{W}/nope.mcv\t/x/missing.png\t1\n{W}/g20.mcv\t/x/grey.png\t1\n{c40}\t/x/ok-small.png\t1\n")
+subprocess.run([".bin/mojo-cv", "stockBatch", f"{W}/b.jsonl", f"{W}/b.tsv"], check=True)
+lines = open(f"{W}/b.jsonl").read().splitlines()
+ok = len(lines) == 3 and '"error"' in lines[0] and '"error"' in lines[1] and '"error"' not in lines[2] and '"lowres"' in lines[2]
+print(("ok   " if ok else "BAD  ") + f"stockBatch: unreadable and grey images give error lines, the 40x40 image a measured line with lowres (got {len(lines)} lines)")
+bad += not ok
 # glb accessor bounds: (count - 1) * stride must not wrap to a small number
 import json
 def glb(acc):

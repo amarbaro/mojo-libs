@@ -338,6 +338,10 @@ def compare(ours, ref, spec):
         return bool((d == 0).all()), f"maxdiff {d.max() if d.size else 0}"
     if k == "max":
         return bool((d <= p[0]).all()), f"maxdiff {d.max() if d.size else 0} (tol {p[0]})"
+    if k == "eqnan":  # eqnan:T NaN exactly where the oracle has NaN, within T elsewhere
+        an, rn = np.isnan(o), np.isnan(r)
+        ok = bool((an == rn).all()) and bool((np.abs(o[~rn] - r[~rn]) <= p[0]).all())
+        return ok, f"nan at {int(an.sum())} of {int(rn.sum())} oracle NaN, others within {p[0]}"
     if k == "mean":
         return bool(d.mean() <= p[0]), f"meandiff {d.mean():.4g} (tol {p[0]})"
     if k == "frac":
@@ -505,6 +509,142 @@ def granulometryRec(i, kv):
         se = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * r + 1, 2 * r + 1))
         out.append(float(_reconstruct(cv2.erode(i[0], se), i[0]).astype(np.float64).sum()))
     return np.array([out])
+
+
+# ---- stockcheck (cv2 / numpy on the same definitions: interior pixels, integer sums, one formula per number) ---
+def _interior(f): return f[1:-1, 1:-1].astype(np.int64)
+def _lap(g): return _interior(cv2.Laplacian(g, cv2.CV_64F, ksize=1))
+def _sobel(g, dx, dy): return _interior(cv2.Sobel(g, cv2.CV_64F, dx, dy, ksize=3))
+
+
+@op()
+def sharpness(i, kv):
+    g, t, thr = i[0], kv_i(kv, "tile", 32), kv_f(kv, "thr", 10.0)
+    L = _lap(g)
+    n = L.size
+    ty, tx = (g.shape[0] - 2) // t, (g.shape[1] - 2) // t
+    T = L[:ty * t, :tx * t].reshape(ty, t, tx, t).transpose(0, 2, 1, 3).reshape(ty, tx, -1)
+    s1, s2 = T.sum(-1), (T * T).sum(-1)
+    tv = (t * t * s2 - s1 * s1) / float(t * t * t * t)
+    gx, gy = _sobel(g, 1, 0), _sobel(g, 0, 1)
+    return np.array([[float(np.var(L.astype(np.float64))), float((gx * gx + gy * gy).sum()) / n, float((tv < thr).mean())]])
+
+
+@op()
+def noiseEst(i, kv):
+    g = i[0].astype(np.int64)
+    R, C = g.shape
+    v = (g[:-2, :-2] - 2 * g[:-2, 1:-1] + g[:-2, 2:] - 2 * g[1:-1, :-2] + 4 * g[1:-1, 1:-1] - 2 * g[1:-1, 2:]
+         + g[2:, :-2] - 2 * g[2:, 1:-1] + g[2:, 2:])
+    d = np.abs(g[:, 1:] - g[:, :-1]).sum() + np.abs(g[1:] - g[:-1]).sum()
+    return np.array([[np.sqrt(np.pi / 2) * float(np.abs(v).sum()) / (6.0 * (R - 2) * (C - 2)), float(d) / (R * (C - 1) + (R - 1) * C)]])
+
+
+@op()
+def blockiness(i, kv):
+    g = i[0].astype(np.int64)
+    eh, ev = np.abs(g[:, 1:] - g[:, :-1]), np.abs(g[1:] - g[:-1])
+    mh, mv = (np.arange(g.shape[1] - 1) % 8) == 7, (np.arange(g.shape[0] - 1) % 8) == 7
+    bh, nh = eh[:, mh].sum() / eh[:, mh].size, eh[:, ~mh].sum() / eh[:, ~mh].size
+    bv, nv = ev[mv].sum() / ev[mv].size, ev[~mv].sum() / ev[~mv].size
+    return np.array([[bh, nh, bv, nv, (bh + bv) / (nh + nv) if nh + nv > 0 else np.nan]])
+
+
+@op()
+def clipping(i, kv):
+    g, lo, hi = i[0], kv_i(kv, "lo", 3), kv_i(kv, "hi", 252)
+    h = np.bincount(g.ravel(), minlength=256).astype(np.int64)
+    n = float(g.size)
+    v = np.arange(256, dtype=np.int64)
+    c = np.cumsum(h)
+    m = float((v * h).sum()) / n
+    return np.array([[h[:lo + 1].sum() / n, h[hi:].sum() / n, float(np.argmax(c >= int(np.ceil(0.01 * n)))),
+                      float(np.argmax(c >= int(np.ceil(0.99 * n)))), m, np.sqrt(float((v * v * h).sum()) / n - m * m)]])
+
+
+@op()
+def colorCast(i, kv):
+    a = i[0]
+    n = float(a.shape[0] * a.shape[1])
+    m = [a[:, :, k].astype(np.int64).sum() / n for k in range(3)]
+    return np.array([[*m, m[2] - m[1], m[0] - (m[2] + m[1]) / 2.0]])
+
+
+@op()
+def banding(i, kv):
+    g, t, bstd, brange = i[0], kv_i(kv, "btile", 16), kv_f(kv, "bstd", 6.0), kv_i(kv, "brange", 3)
+    ty, tx = g.shape[0] // t, g.shape[1] // t
+    T = g[:ty * t, :tx * t].astype(np.int64).reshape(ty, t, tx, t).transpose(0, 2, 1, 3)
+    s1, s2 = T.sum((2, 3)), (T * T).sum((2, 3))
+    smooth = ((T.max((2, 3)) - T.min((2, 3))) >= brange) & ~((t * t * s2 - s1 * s1).astype(np.float64) > bstd * bstd * float(t * t * t * t))
+    S = T[smooth]
+    dh, dv = np.abs(S[:, :, 1:] - S[:, :, :-1]), np.abs(S[:, 1:, :] - S[:, :-1, :])
+    eq, jump = (dh == 0).sum() + (dv == 0).sum(), (dh >= 2).sum() + (dv >= 2).sum()
+    pairs = dh.size + dv.size
+    neq = pairs - eq
+    return np.array([[smooth.mean(), eq / pairs if pairs else np.nan, jump / neq if neq else np.nan, float(smooth.sum())]])
+
+
+@op()
+def hazeBand(i, kv):
+    g = i[0]
+    R, C = g.shape
+    gx, gy = _sobel(g, 1, 0), _sobel(g, 0, 1)
+    E = gx * gx + gy * gy
+    out = []
+    for ax, idx in ((0, np.arange(1, C - 1) * 4 // C), (1, np.arange(1, R - 1) * 4 // R)):
+        c = np.array([E[:, idx == s].sum() / E[:, idx == s].size if ax == 0 else E[idx == s].sum() / E[idx == s].size for s in range(4)])
+        s = np.sort(c)
+        med = (s[1] + s[2]) / 2.0
+        out += [c.min() / med if med > 0 else np.nan, float(np.argmin(c))]
+    return np.array([out])
+
+
+def _cells(g, gh, gw):
+    I = np.zeros((g.shape[0] + 1, g.shape[1] + 1), np.int64)
+    I[1:, 1:] = g.astype(np.int64).cumsum(0).cumsum(1)
+    ys = [k * g.shape[0] // gh for k in range(gh + 1)]
+    xs = [k * g.shape[1] // gw for k in range(gw + 1)]
+    return np.array([[(I[ys[a + 1], xs[b + 1]] - I[ys[a], xs[b + 1]] - I[ys[a + 1], xs[b]] + I[ys[a], xs[b]]) / float((ys[a + 1] - ys[a]) * (xs[b + 1] - xs[b]))
+                      for b in range(gw)] for a in range(gh)])
+
+
+@op()
+def hashes(i, kv):
+    g = i[0]
+    d = _cells(g, 8, 9)
+    out = np.zeros((2, 64), np.uint8)
+    out[0] = (d[:, 1:] > d[:, :-1]).ravel()
+    q = np.ceil(cv2.dct(_cells(g, 32, 32))[:8, :8].ravel() * 1e6 - 0.5)
+    out[1, :63] = q[1:] > np.sort(q[1:])[31]
+    return out
+
+
+@op()
+def hamPairs(i, kv):
+    b = i[0]
+    d = (b[:, None, :] != b[None, :, :]).sum(-1)
+    iu, ju = np.triu_indices(len(b), 1)
+    k = d[iu, ju] <= kv_i(kv, "thr", 10)
+    return np.stack([iu[k], ju[k], d[iu, ju][k]], 1).astype(np.int32).reshape(-1, 3)
+
+
+@op()
+def boxDown(i, kv):
+    g, f = i[0], kv_i(kv, "f", 2)
+    h, w = g.shape[0] // f, g.shape[1] // f
+    s = g[:h * f, :w * f].astype(np.int64).reshape(h, f, w, f).sum((1, 3))
+    return ((s + f * f // 2) // (f * f)).astype(np.uint8)
+
+
+@op()
+def stockMetrics(i, kv):
+    a = i[0]
+    g = cv2.cvtColor(a, cv2.COLOR_BGR2GRAY)
+    asc = kv_i(kv, "ascale", 1536)
+    f = max(1, (max(g.shape) + asc // 2) // asc)
+    ga = boxDown([g], {"f": f}) if f > 1 else g  # sharpness, noise, clipping, banding, fog at the analysis scale
+    return np.concatenate([sharpness([ga], kv), noiseEst([ga], kv), blockiness([g], kv), clipping([ga], kv), colorCast([a], kv), banding([ga], kv), hazeBand([ga], kv)], 1)
 
 
 # ---- fixtures ---------------------------------------------------------------------------------------------
@@ -759,6 +899,34 @@ def make_fixtures(d):
     if sv.returncode or len(sv.stdout) != 3781 * 4:
         raise SystemExit("FAIL fixtures: the default people detector from cv2 4.x (%s) did not return 3781 weights" % PY4)
     fx["hog_svm"] = np.frombuffer(sv.stdout, "<f4").reshape(-1, 1).copy()
+    # stockcheck: planted failures on the 1080p scene and a dithered ramp (blur, noise, JPEG blocks, banding,
+    # blown exposure, colour cast, a fog band over the left quarter), plus the degenerate inputs
+    H, S = fx["hd"], np.random.default_rng(31)
+    def jpg(a, q): return cv2.imdecode(cv2.imencode(".jpg", a, [cv2.IMWRITE_JPEG_QUALITY, q])[1], cv2.IMREAD_COLOR)
+    yy, xx = np.mgrid[0:1080, 0:1920]
+    ramp = 40 + 150 * xx / 1919.0 + 30 * yy / 1079.0
+    grad = np.stack([ramp * 0.9, ramp, ramp * 1.05], -1)
+    fog = H.astype(np.float64)
+    fog[:, :500] = 0.02 * fog[:, :500] + 0.98 * 215  # a white-out like db067, not a mild haze
+    st = {"st_grad": np.clip(np.rint(grad + S.normal(0, 0.6, grad.shape)), 0, 255).astype(np.uint8),
+          "st_band": (np.clip(np.rint(grad), 0, 255).astype(np.uint8) // 8) * 8,
+          "st_blur": cv2.GaussianBlur(H, (0, 0), 3),
+          "st_noise": np.clip(H.astype(np.float64) + S.normal(0, 12, H.shape), 0, 255).astype(np.uint8),
+          "st_jpg95": jpg(H, 95), "st_jpg8": jpg(H, 8),
+          "st_blown": np.clip(H.astype(np.float64) * 2.4, 0, 255).astype(np.uint8),
+          "st_cast": np.clip(H.astype(np.float64) * (0.7, 1.0, 1.4), 0, 255).astype(np.uint8),
+          "st_big": cv2.resize(H, (3072, 1728), interpolation=cv2.INTER_CUBIC),
+          "st_fog": fog.astype(np.uint8), "st_flat": np.full((64, 64, 3), 128, np.uint8), "st_tiny": H[100:116, 200:216].copy()}
+    for n, a in st.items():
+        fx[n], fx[n + "g"] = a, cv2.cvtColor(a, cv2.COLOR_BGR2GRAY)
+    fx["ham_bits"] = S.integers(0, 2, (200, 64), dtype=np.uint8)
+    for k in range(11):  # copies of rows 0..10 with k bits flipped: planted near-duplicates at distance k
+        fx["ham_bits"][50 + k] = fx["ham_bits"][k]
+        fx["ham_bits"][50 + k, :k] ^= 1
+    os.makedirs(os.path.join(d, "stock"), exist_ok=True)  # the same planted failures as image files, for scripts/mcv-stockcheck
+    for n in ["hd", "hd2", *st]:
+        if fx[n].shape[0] > 64:
+            cv2.imwrite(os.path.join(d, "stock", n + ".png"), fx[n])
     for n, a in fx.items():
         mcv.save(a, os.path.join(d, n + ".mcv"))
 
