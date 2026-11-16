@@ -64,3 +64,4 @@ stock upload, and mojo-cv/mojo-faces as the checking engine.
   and vidcode `.claude/skills/`; `skilldex`; a SKILLDEX line naming it the hub for visual assets.
 - Done = a fresh agent loads only SKILL.md, picks the right reference for 5 sample tasks (one per domain), and the
   answers cite a paper id and a local receipt; record that check in the lane report.
+- Build asset-vision as a **skill hub** per `~/Brain/Skills/_hubs/contract.md` (router SKILL.md <= 150 lines, description <= 600 chars, `rules.md` with every asset/CV ledger rule cited `[ledger:file:line]` from SINDEX assets, mojo-cv, comfyui, blender, stock), add it to `_hubs/hubs.tsv`, prompts to `_hubs/route-prompts.tsv`, and pass `hub-check.sh` + `route-test.sh`.
