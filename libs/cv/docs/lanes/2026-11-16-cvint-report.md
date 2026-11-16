@@ -2,7 +2,8 @@
 
 On 40 library pictures I labelled by eye, SigLIP's top-1 category is right 32 times (top-3: 38), the category stored in the library 16 times. All 7593 library
 pictures now carry stockcheck numbers, faces and SigLIP labels in `assets.db` (13233 assets, 7593 cv rows, 7593 label rows, `verify` problems 0). The label rows come
-from the CPU runner; the GPU rows wait in the queue behind the camera job and replace them once a parity gate passes.
+from the GPU runner (GpuNet, 41.6 ms per picture): its 7593 embeddings equal the CPU runner's on every row (cosine 1.000000000, max abs 4e-6), so swapping them in changed 0 labels. Mario approved applying them:
+sidecar `category:` and `tags:` are SigLIP's in 7593 image sidecars, the old category is `library_category:` (5462 pictures differ, 2131 agree), the folder stays the import category.
 
 Lane `cvint` (pane wYT:p1). Receipts are commits and files in each row; mistakes: `docs/rules.md` 10 to 19, `~/Brain/SINDEX/mojo-cv.md`.
 
@@ -28,6 +29,8 @@ Lane `cvint` (pane wYT:p1). Receipts are commits and files in each row; mistakes
 | image path | libvips squash against PIL: cosine 0.9993 to 0.9999 on 8 pictures | 26f0316 |
 | ranking and label writer | `mcv-labels top` equals numpy; `scripts/siglip-labels.sh` writes the json | b2bfc72, bf4b9cf |
 | library embeddings, CPU rows | 7593 pictures, 0 decode failures, 23325696 B | `.work/cvint/siglip-full.log` PASS |
+| library embeddings, GPU rows | `mcv-labels gimage` on GpuNet under gpu-wait (priority 80, resumed after the herdr crash from row 2048); `tests/siglip_gpu.sh`: 7593 rows, cosine min 1.000000000, max abs 3.96e-06, planted shift differs on 7592 | `.work/cvint/siglip-gpu.f32`, `tests/siglip_gpu.sh` |
+| labels applied to the sidecars | `scripts/siglip-apply.sh`: 7593 sidecars rewritten, a second run rewrites 0; old non-empty tags: 0 (nothing lost); `assetdb` gets a last column `library_category` and `verify` checks folder == library_category (28 value + 19 negative checks); live db rebuilt, `verify` problems 0, re-run by the lead with the same result | AssetsHQ 8ea4d4f, library eeeab8a, mojo-cv `scripts/siglip-apply.sh` |
 | ledgers | 10 mistakes of this session: rules, SINDEX entries, skill rules (lanes 41-44, bench-gates 55-57, toolscript, mojo-cv skill), Brain note | Brain b2d1e1d0d, f56874632 |
 
 ## Speed
@@ -37,7 +40,7 @@ Mario's rule 19: embeddings run on the GPU from now on.
 
 ## Open
 
-- **GPU rows**: `mcv-labels gimage` is built; gpu-wait job `siglip-gpu-library` (mwjog157f4kd, prio 80) waits behind assets-cv's `camera-faces`, which the boss said not to preempt. After it runs: `tests/siglip_gpu.sh` (every row cosine >= 0.99999 against the CPU rows, planted shift), then `scripts/siglip-labels.sh`, `assetdb build`, `verify`.
+- **brainnet**: `repo-net build` of the library was started by the library's post-commit hook after eeeab8a; it replaces the 203-neuron sample store. `net-index --write` and one `brain-ask --net text` query come after it finishes (below, if done).
 - **232 face errors** (184 png, 48 jpg: grey, palette and 16-bit files the old loader refused): assetscv fixed the decode in 0d1e184; rerun those pictures once the queue clears and merge faces into their jsons.
 - **TAGS Camera run** (6528 JPEGs, counts only into `~/Pictures/TAGS/.mojocv/`): not started; its face stage needs the GPU slot too.
 - **mojo-faces `Gather` along axis 1** is missing in `faces.nn` (the text head takes the last token that way); `mcv-labels text` does that step in Mojo. Tell assetscv if `text_embeds` should run directly.
