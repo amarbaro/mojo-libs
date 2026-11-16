@@ -1,6 +1,6 @@
 ---
 name: mojo-cv
-description: "OpenCV-style image processing, features, calibration and 3D/CAD helpers in Mojo, checked against cv2 5.0. Use when Mojo code must blur, threshold, resize, measure grain size (sieve-shaped granulometry, reconstruction, autocorrelation, wavelet energy, GLCM, LBP, smooth and sharp maps, tray rim), warp, find contours or corners, match ORB features, track optical flow, solve PnP or write GLB/STEP, or when a Mojo op must agree with cv2 on the same input."
+description: "OpenCV-style image processing, features, calibration and 3D/CAD helpers in Mojo, checked against cv2 5.0. Use when Mojo code must blur, threshold, resize, measure grain size (sieve-shaped granulometry, reconstruction, autocorrelation, wavelet energy, GLCM, LBP, smooth and sharp maps, tray rim), warp, find contours or corners, match ORB features, track optical flow, solve PnP or write GLB/STEP, or when a Mojo op must agree with cv2 on the same input. Also stock-site pre-checks of generated pictures: sharpness, noise, JPEG blocks, banding, clipping, blown void, colour cast, fog strip, near-duplicate hashes and faces (scripts/mcv-stockcheck, docs/stockcheck.md)."
 ---
 
 # mojo-cv
@@ -45,3 +45,7 @@ The command-line tool runs one op on `.mcv` files: `mojo-cv OP OUT IN... [k=v]`
 - HOG exists only as the cv2 4.x people detector (`hog_detect`); its oracle runs under cv2 4.8.1 (`.venv4`).
 - A new op needs case rows in `tests/cases/*.txt` (2D, against cv2) or `tests/cases3d/*.txt` (3D, against an oracle in
   `tools/oracle3d.py`); a row is never loosened to make it pass.
+
+## Stock pre-check
+
+`scripts/mcv-stockcheck [--sidecar] [--faces] OUT.jsonl IMAGE|@LIST...` writes one JSON line per image (numbers, hashes, flags, near-duplicates over the batch, faces and platform routing with `--faces`). Ops, flags, thresholds and what the numbers do not catch: `docs/stockcheck.md`. Thresholds sit just outside the 46 Adobe-accepted pictures of one set; the Adobe quality refusals are mostly semantic, so a clean report is not a pass. Faces need `.bin/mcv-faces` (`tests/stock_faces.sh` builds it) and the GPU through `gpu-wait`.
