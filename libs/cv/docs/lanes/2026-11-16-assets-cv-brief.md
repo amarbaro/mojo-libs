@@ -21,8 +21,10 @@ rejection reasons there are your requirements). Any improvement to mojo-cv is we
 ## Phase 2: faces (Mario, 2026-11-16)
 `~/Projects/mojo/mojo-faces` (package `faces`): SCRFD detection + ArcFace embedding, CPU and GPU runner
 (`docs/gpu.md`, `GpuNet`). Import it, do not copy. In `mcv-stockcheck`: `faces: N` and the largest face's share of
-the picture, so recognisable people (model release needed, Adobe/Dreamstime refuse without) are flagged before
-upload. Gate on the mojo-faces test photos.
+the picture. Our assets are AI-generated, so no model release is needed; the flag routes platforms instead:
+Dreamstime refuses generated faces (back views and body parts OK; site map, FAQ 4623), Adobe accepts fictional AI
+people (tick "people are fictional", no real-person likeness). Face present -> Adobe only + face-quality review
+(eyes, teeth, nearby hands). Gate on the mojo-faces test photos.
 
 ## Phase 3: what is in the picture (after phases 1-2 land)
 Extend `GpuNet` with the transformer ops a SigLIP image encoder needs (LayerNorm, Softmax, MatMul, GELU, attention),
