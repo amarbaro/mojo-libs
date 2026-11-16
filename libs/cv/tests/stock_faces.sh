@@ -40,5 +40,16 @@ chk "control: mcv-faces alone refuses some of the 4 pngs" "$(jq -s '[.[] | selec
 scripts/mcv-stockcheck --faces .work/faces_out2.jsonl @.work/faces_in2.list > .work/faces_out2.log || { cat .work/faces_out2.log; echo "FAIL stockcheck --faces on the 4 pngs"; exit 1; }
 chk "4 odd pngs: no face-stage error" "$(jq -s '[.[] | select(.file and (.faces.error != null or .faces == null))] | length' .work/faces_out2.jsonl)" 0
 chk "4 odd pngs: the face is found in each" "$(jq -s '[.[] | select(.file and (.faces.n // 0) >= 1)] | length' .work/faces_out2.jsonl)" 4
+# the CPU stage cache (prep=1): a rerun keeps valid files (resume), a touched source or a truncated cache file is made again.
+rm -rf .work/faces_cache; mkdir -p .work/faces_cache
+prep() { .bin/mcv-faces - .work/faces_prep.jsonl .work/faces_in2.list prep=1 cache=.work/faces_cache; jq -r 'select(.error == null) | .state' .work/faces_prep.jsonl | sort | uniq -c | tr -s ' ' | tr '\n' ' '; }
+cp .work/faces_in/db000-*.jpg .work/faces_in2/one.jpg; printf '%s\n' "$PWD/.work/faces_in2/one.jpg" > .work/faces_in2.list
+chk "cache: first run makes" "$(prep)" " 1 made "
+chk "cache: rerun keeps (resume)" "$(prep)" " 1 hit "
+touch .work/faces_in2/one.jpg
+chk "cache: touched source is made again" "$(prep)" " 1 made "
+f=$(ls -t .work/faces_cache/*.lb | head -1); head -c 5000 "$f" > "$f.cut"; mv "$f.cut" "$f"
+chk "cache: truncated file is made again" "$(prep)" " 1 made "
+rm -f .work/faces_in2/one.jpg
 [ "$fail" = 0 ] || exit 1
 echo "PASS stock_faces"

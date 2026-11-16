@@ -57,8 +57,28 @@ if [ "$faces" = 1 ]; then  # SCRFD from mojo-faces on the originals; a face rout
   model=${MCV_FACES_MODEL:-$HOME/Models/deep-live-cam-models/buffalo_l/buffalo_l/det_10g.onnx}
   [ -x "$root/.bin/mcv-faces" ] || { echo "FAIL faces: $root/.bin/mcv-faces missing (see docs/stockcheck.md)" >&2; exit 1; }
   [ -f "$model" ] || { echo "FAIL faces: model $model missing (set MCV_FACES_MODEL)" >&2; exit 1; }
-  gpu-wait run --timeout "${MCV_FACES_TIMEOUT:-3600}" -- "$root/.bin/mcv-faces" "$model" "$work/faces.jsonl" "$work/list" gpu=16 > "$work/faces.log" 2>&1 \
+  # two stages: decode + letterbox on the CPU (outside gpu-wait, resumable cache, MCV_FACES_CACHE keeps it between runs),
+  # then one short GPU job that only detects. The slot is not held while the CPU decodes (docs/gpu.md of mojo-faces: ~455 of ~465 ms).
+  fc=${MCV_FACES_CACHE:-$work/fcache}; mkdir -p "$fc"
+  rm -rf "$work/sh"; mkdir -p "$work/sh"; split -n "l/$jobs" -d "$work/list" "$work/sh/s."
+  t0=$(date +%s.%N)
+  # a cpu-room job with its own core and RAM cap (MCV_PREP_MEM GB, default 16): one 200 MP photo decodes to ~0.6 GB per shard,
+  # and an uncapped parallel stage can take the machine down (2026-11-16 OOM)
+  cat > "$work/prep.sh" <<'EOS'
+#!/bin/sh
+# prep.sh WORK JOBS BIN CACHE: one mcv-faces prep=1 process per shard, JOBS at a time
+ls "$1"/sh/s.* | xargs -P "$2" -I{} sh -c '"$1" - "$2.prep" "$2" prep=1 cache="$3"' _ "$3" {} "$4"
+EOS
+  gpu-wait run --room cpu --cores "$jobs" --mem "${MCV_PREP_MEM:-16}" --label faces-prep -- sh "$work/prep.sh" "$work" "$jobs" "$root/.bin/mcv-faces" "$fc" > "$work/prep.log" 2>&1 \
+    || { tail -3 "$work/prep.log" >&2; echo "FAIL faces: prep stage" >&2; exit 1; }
+  cat "$work"/sh/s.*.prep > "$work/prep.jsonl"
+  t1=$(date +%s.%N)
+  [ "$(wc -l < "$work/prep.jsonl")" -eq "$n" ] || { echo "FAIL faces: prep wrote $(wc -l < "$work/prep.jsonl") lines for $n images" >&2; exit 1; }
+  gpu-wait run --timeout "${MCV_FACES_TIMEOUT:-3600}" --mem 4 -- "$root/.bin/mcv-faces" "$model" "$work/faces.jsonl" "$work/list" gpu=16 cache="$fc" > "$work/faces.log" 2>&1 \
     || { tail -3 "$work/faces.log" >&2; echo "FAIL faces: mcv-faces" >&2; exit 1; }
+  t2=$(date +%s.%N)
+  awk -v n="$n" -v a="$t0" -v b="$t1" -v c="$t2" 'BEGIN { printf "faces: CPU stage %.1f s incl. queue wait (%.1f img/s, %d shards), GPU stage %.1f s incl. queue wait (%.1f img/s)\n", b-a, n/(b-a), '"$jobs"', c-b, n/(c-b) }' >&2
+  echo "faces prep: $(jq -r .state "$work/prep.jsonl" | sort | uniq -c | tr -s ' ' | tr '\n' ' ')" >&2
   [ "$(wc -l < "$work/faces.jsonl")" -eq "$n" ] || { echo "FAIL faces: $(wc -l < "$work/faces.jsonl") result lines for $n images" >&2; exit 1; }
   jq -r 'select(.error != null) | .file' "$work/faces.jsonl" > "$work/fb.list"
   if [ -s "$work/fb.list" ]; then  # imkit refuses grey, palette, 16-bit and interlaced PNGs: decode those through vips/ImageMagick and retry
@@ -67,7 +87,7 @@ if [ "$faces" = 1 ]; then  # SCRFD from mojo-faces on the originals; a face rout
     xargs -P "$jobs" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r src dst <<< "$1"; "$dec" "$src" "$dst" 2>&1 | head -2 || true' _ {} < "$work/fb.tsv" || true
     while IFS=$'\t' read -r src dst; do p=$dst.mcv; [ -f "$dst.ppm" ] && p=$dst.ppm; printf '%s\t%s\n' "$src" "$p"; done < "$work/fb.tsv" > "$work/fb.map"
     cut -f2 "$work/fb.map" > "$work/fb.paths"
-    gpu-wait run --timeout "${MCV_FACES_TIMEOUT:-3600}" -- "$root/.bin/mcv-faces" "$model" "$work/faces2.jsonl" "$work/fb.paths" gpu=16 > "$work/faces2.log" 2>&1 \
+    gpu-wait run --timeout "${MCV_FACES_TIMEOUT:-3600}" --mem 4 -- "$root/.bin/mcv-faces" "$model" "$work/faces2.jsonl" "$work/fb.paths" gpu=16 > "$work/faces2.log" 2>&1 \
       || { tail -3 "$work/faces2.log" >&2; echo "FAIL faces: mcv-faces on the decoded retry list" >&2; exit 1; }
     # a retried picture takes its original name back; one that still fails keeps its first error line
     jq -c --slurpfile f2 "$work/faces2.jsonl" --rawfile m "$work/fb.map" '

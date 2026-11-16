@@ -109,3 +109,11 @@ Grey, palette, 16-bit and interlaced PNGs are refused by mojo-faces' loader (3.1
 `mcv-stockcheck --faces` retries every picture that came back with a face-stage error through `scripts/decode-stock.sh` (vips, ImageMagick for what vips does not take) and puts the
 result back under the original name; one that still fails keeps its error. Gate: `tests/stock_faces.sh` makes the four kinds of PNG from one face picture, shows that `mcv-faces` alone refuses
 some of them (the control), then finds the face in all four through the retry.
+
+Two stages (rule 26 of `rules.md`). The GPU slot is held for detection only: `mcv-stockcheck --faces` first decodes and letterboxes every picture on the CPU
+(`mcv-faces - OUT LIST prep=1 cache=DIR`, one shard per job, a cpu-room `gpu-wait` job capped by `MCV_PREP_MEM` GB, default 16), then one short `gpu-wait` job runs
+`mcv-faces MODEL OUT LIST gpu=16 cache=DIR`. The cache holds the 640-long-edge RGB resize with the source size and scale (`.lb`, about 0.8 MB per photo), named by an
+FNV-1a hash of path, size and mtime, so a touched source is made again and a truncated file is made again; a rerun keeps valid files (resume). `MCV_FACES_CACHE=DIR`
+keeps the cache between runs (default: inside the run's work directory, deleted at exit); for private photos point it at a local, ignored directory. The run prints the
+two stage rates to stderr. A picture the CPU stage cannot decode (grey, palette, 16-bit, interlaced PNG) leaves no cache file, comes back from the GPU stage as an
+error line, and takes the decode-stock.sh retry as before. Checked by hand (not yet in a test): on the 55 test photos the cached GPU run and the direct GPU run write byte-identical lines; resume, touched-source and truncated-file cases are in `tests/stock_faces.sh`.
