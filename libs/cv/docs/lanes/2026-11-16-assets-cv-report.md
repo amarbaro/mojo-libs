@@ -79,3 +79,6 @@ The SigLIP vision tower runs on mojo-faces' CPU runner and equals onnxruntime; t
 | GPU ops | not built. At 7.7 s per image the 4202-image library needs 9 h on the CPU; brief: `docs/lanes/2026-11-16-gpunet-transformer-brief.md` | |
 | text tower, labels, embedding duplicates | not built. The graph has the text tower, but tokenization needs SentencePiece and its model file (not in the ONNX repo, `sentencepiece` not installed) | |
 | `assets.db` columns | not written: `~/Projects/AssetsHQ/docs/schema.md` does not exist yet (only `plan-library.md`) | |
+
+Added from cvint's note: `Gather` on axis 1 (SigLIP text last token) and a tiled CPU `gemm` are on the GPU-port list (`docs/lanes/2026-11-16-gpunet-transformer-brief.md`);
+the face stage now decodes grey, palette, 16-bit and interlaced PNGs through `scripts/decode-stock.sh` (`src/stockfaces.mojo`, retry in `scripts/mcv-stockcheck`), gate `tests/stock_faces.sh`, result pending in the GPU queue.

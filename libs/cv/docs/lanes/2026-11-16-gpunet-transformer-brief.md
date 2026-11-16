@@ -17,3 +17,10 @@ must fail it. Numbers for the commit body: ms per image warm (fp32, fp16), devic
 
 Rules: a GPU job is `gpu-wait run --timeout S` always; `ROCR_VISIBLE_DEVICES=-1` does not stop `mojo build` from opening the card, build when it is quiet;
 commit by path, no push; report `herd tell wXY:p1 "DONE gpunet-transformer -> <report file>"` with what passed and what failed.
+
+## Added 2026-11-16 from cvint's note (`~/Brain/mojo-cv/2026-11-16-cvint-siglip-cpu-labels.md`)
+
+- `Gather` along axis 1 on floats, in `faces.nn` (CPU) and on GpuNet: the SigLIP text graph takes its last token that way; `mcv-labels text` stops at the final
+  LayerNorm and finishes in Mojo until this exists. Gate it with the text tower values against onnxruntime (cosine 1.0000000 on 12 texts is cvint's number to keep).
+- `faces.nn.gemm` is a row-wise axpy without register tiling; a tiled micro-kernel for the CPU runner is the next lever if the full-library SigLIP run stays slow
+  (cvint measured 1.4 s per picture solo, 0.28 pictures/s under load with three shards). Measure before and after in alternating rounds.
