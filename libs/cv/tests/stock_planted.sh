@@ -25,5 +25,11 @@ paired() {  # a b want(1|0)
 }
 paired hd st_jpg95 1; paired hd st_blur 1; paired hd st_noise 1; paired hd st_cast 1; paired hd hd2 1
 paired hd st_grad 0; paired st_grad st_band 0; paired hd st_big 1
+# the fast decoder (libvips, .ppm) must give the same numbers as the ImageMagick one (.mcv)
+four=(tests/fixtures/stock/hd.png tests/fixtures/stock/st_blur.png tests/fixtures/stock/st_noise.png tests/fixtures/stock/st_jpg8.png)
+MCV_DECODER=magick scripts/mcv-stockcheck .work/stock_planted_magick.jsonl "${four[@]}" > /dev/null
+scripts/mcv-stockcheck .work/stock_planted_vips.jsonl "${four[@]}" > /dev/null
+nums() { jq -c 'select(.file) | del(.dupOf, .flags)' "$1" | sort; }
+if [ "$(nums .work/stock_planted_magick.jsonl)" = "$(nums .work/stock_planted_vips.jsonl)" ]; then echo "PASS decoders: vips and magick numbers identical on 4 images"; else echo "FAIL decoders: vips and magick numbers differ"; fail=1; fi
 [ "$fail" = 0 ] || exit 1
 echo "PASS stock_planted"

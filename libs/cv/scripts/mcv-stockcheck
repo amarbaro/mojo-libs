@@ -3,11 +3,11 @@
 # Stock-site pre-check: one JSON line per image (size, sharpness, noise, JPEG blocks, clipping, cast, banding, fog
 # band, hashes, flags, near-duplicates across the whole batch) for the pass/deny app and bulk tagging to read.
 # --sidecar also writes IMAGE.stockcheck.json beside every image. k=v overrides a threshold (docs/stockcheck.md).
-# Images decode N at a time (default 8) into .mcv files, CHUNK images (default 48) per analysis run, then are deleted.
+# Images decode N at a time (default 8) into .ppm (libvips) or .mcv (ImageMagick) files, CHUNK images (default 48) per analysis run, then are deleted.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 bin=$root/.bin/mojo-cv
-dec=$root/scripts/img2mcv.sh
+dec=$root/scripts/decode-stock.sh
 jobs=8 chunk=48 side=0
 while [ $# -gt 0 ]; do
   case $1 in
@@ -35,15 +35,22 @@ n=$(wc -l < "$work/list")
 export dec work MAGICK_THREAD_LIMIT=1
 split -l "$chunk" -d -a 5 "$work/list" "$work/c."
 : > "$work/all.jsonl"
-for c in "$work"/c.?????; do
-  id=${c##*.}
-  awk -v w="$work" -v id="$id" '{ printf "%s\t%s/%s.%d.mcv\n", $0, w, id, NR }' "$c" > "$work/d.$id"
-  # a failed decode leaves no file: the analysis reports it as an error line, never as a pass
-  xargs -P "$jobs" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r src dst <<< "$1"; "$dec" "$src" "$dst" bgr 2>&1 | head -2 || true' _ {} < "$work/d.$id" || true
-  while IFS=$'\t' read -r src dst; do printf '%s\t%s\t%s\n' "$dst" "$src" "$(stat -c %s "$src")"; done < "$work/d.$id" > "$work/m.$id"
+decode_chunk() {  # decode the images of chunk file $1 N at a time; a failed decode leaves no file, which the analysis reports as an error line
+  local c=$1 id=${1##*.}
+  awk -v w="$work" -v id="$id" '{ printf "%s\t%s/%s.%d\n", $0, w, id, NR }' "$c" > "$work/d.$id"
+  xargs -P "$jobs" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r src dst <<< "$1"; "$dec" "$src" "$dst" 2>&1 | head -2 || true' _ {} < "$work/d.$id" || true
+}
+chunks=("$work"/c.?????)
+decode_chunk "${chunks[0]}"
+for i in "${!chunks[@]}"; do
+  id=${chunks[$i]##*.}
+  next=""; [ $((i + 1)) -lt ${#chunks[@]} ] && next=${chunks[$((i + 1))]}
+  dpid=""; [ -n "$next" ] && [ "${MCV_OVERLAP:-1}" = 1 ] && { decode_chunk "$next" & dpid=$!; }  # the next chunk decodes while this one is analysed
+  while IFS=$'\t' read -r src dst; do p=$dst.mcv; [ -f "$dst.ppm" ] && p=$dst.ppm; printf '%s\t%s\t%s\n' "$p" "$src" "$(stat -c %s "$src")"; done < "$work/d.$id" > "$work/m.$id"
   "$bin" stockBatch "$work/p.$id.jsonl" "$work/m.$id" "${opts[@]}" || { echo "FAIL analysis: chunk $id" >&2; exit 1; }
   cat "$work/p.$id.jsonl" >> "$work/all.jsonl"
-  awk -F'\t' '{print $1}' "$work/m.$id" | xargs rm -f
+  rm -f "$work/$id".*.ppm "$work/$id".*.mcv
+  if [ -n "$dpid" ]; then wait "$dpid"; elif [ -n "$next" ]; then decode_chunk "$next"; fi
 done
 "$bin" stockDups "$out" "$work/all.jsonl" "${opts[@]}" || { echo "FAIL dups" >&2; exit 1; }
 lines=$(grep -c '"file"' "$out" || true)

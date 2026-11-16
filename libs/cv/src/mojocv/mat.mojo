@@ -1,6 +1,7 @@
 # Mat: an owned image or array, rows x cols x ch, row-major and interleaved (the layout cv2 uses), one dtype
 # fixed at compile time. Ops are generic over dt; the file format below carries dt so both sides agree.
 from std.sys.info import size_of
+from std.memory import unsafe_memcpy
 
 comptime MAGIC = "MCV1"
 
@@ -90,8 +91,7 @@ def load[dt: DType](path: String) raises -> Mat[dt]:
         raise Error(String("mojocv: ", path, " has ", len(b) - 16, " data bytes, wanted ", n))
     var m = Mat[dt](rows, cols, ch)
     var dst = m.ptr().unsafe_bitcast[UInt8]()
-    for i in range(n):
-        dst[i] = b[16 + i]
+    unsafe_memcpy(dest=dst, src=b.unsafe_ptr() + 16, count=n)
     return m^
 
 

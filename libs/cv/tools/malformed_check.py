@@ -1,6 +1,6 @@
 """Malformed input must raise a mojocv error (exit 1, message on stderr), never abort, crash or hang.
   run from the repo root after tests/run.sh and tests/run3d.sh built .bin/: `.venv/bin/python -I tools/malformed_check.py`"""
-import struct, subprocess, sys
+import json, struct, subprocess, sys
 
 W = ".work/malformed"
 bad = 0
@@ -64,6 +64,18 @@ subprocess.run([".bin/mojo-cv", "stockBatch", f"{W}/b.jsonl", f"{W}/b.tsv"], che
 lines = open(f"{W}/b.jsonl").read().splitlines()
 ok = len(lines) == 3 and '"error"' in lines[0] and '"error"' in lines[1] and '"error"' not in lines[2] and '"lowres"' in lines[2]
 print(("ok   " if ok else "BAD  ") + f"stockBatch: unreadable and grey images give error lines, the 40x40 image a measured line with lowres (got {len(lines)} lines)")
+bad += not ok
+# the .ppm loader of stockBatch: every malformed P6 is an error line, a good one is measured (RGB swapped to BGR)
+rgb40 = bytes([10, 20, 30]) * 1600
+ppms = {"good": b"P6\n# c\n40 40\n255\n" + rgb40, "magic": b"P5\n40 40\n255\n" + rgb40, "short": b"P6\n40 40\n255\n" + rgb40[:-3],
+        "maxval": b"P6\n40 40\n65535\n" + rgb40, "huge": b"P6\n999999999 999999999\n255\n" + rgb40, "nohdr": b"P6\n40", "zero": b"P6\n0 40\n255\n"}
+for k, v in ppms.items():
+    open(f"{W}/{k}.ppm", "wb").write(v)
+open(f"{W}/p.tsv", "w").write("".join(f"{W}/{k}.ppm\t/x/{k}.png\t1\n" for k in ppms))
+subprocess.run([".bin/mojo-cv", "stockBatch", f"{W}/p.jsonl", f"{W}/p.tsv"], check=True)
+res = {json.loads(l)["file"].split("/")[-1][:-4]: l for l in open(f"{W}/p.jsonl").read().splitlines()}
+ok = '"error"' not in res["good"] and all('"error"' in res[k] for k in ppms if k != "good") and '"cast":{"rg":-10.0,"by":15.0}' in res["good"]
+print(("ok   " if ok else "BAD  ") + "stockBatch .ppm: good P6 measured (R,G,B 10,20,30 read as B,G,R 30,20,10), 6 malformed ones are error lines")
 bad += not ok
 # glb accessor bounds: (count - 1) * stride must not wrap to a small number
 import json

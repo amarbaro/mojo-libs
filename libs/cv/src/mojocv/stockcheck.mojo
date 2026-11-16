@@ -509,6 +509,50 @@ def _esc(s: String) -> String:
     return o^
 
 
+def _load_ppm(path: String) raises -> Mat[DType.uint8]:
+    """A binary P6 file with 8-bit RGB (what `vips autorot IN OUT.ppm` writes) as a BGR Mat."""
+    var b = open(path, "r").read_bytes()
+    if len(b) < 2 or b[0] != 80 or b[1] != 54:
+        raise Error("mojocv: not a P6 file: " + path)
+    var pos = 2
+    var v = List[Int]()
+    while len(v) < 3:
+        while pos < len(b) and (b[pos] == 32 or b[pos] == 10 or b[pos] == 13 or b[pos] == 9):
+            pos += 1
+        if pos < len(b) and b[pos] == 35:  # a comment runs to the end of its line
+            while pos < len(b) and b[pos] != 10:
+                pos += 1
+            continue
+        var x = 0
+        var nd = 0
+        while pos < len(b) and b[pos] >= 48 and b[pos] <= 57 and nd < 9:
+            x = x * 10 + Int(b[pos]) - 48
+            pos += 1
+            nd += 1
+        if nd == 0:
+            raise Error("mojocv: bad P6 header: " + path)
+        v.append(x)
+    pos += 1  # the one whitespace byte after maxval
+    var w = v[0]
+    var h = v[1]
+    var left = len(b) - pos
+    if v[2] != 255 or w < 1 or h < 1 or left < 0 or left % 3 != 0 or (left // 3) % w != 0 or (left // 3) // w != h:
+        raise Error("mojocv: " + path + " is not an 8-bit " + String(w) + "x" + String(h) + " RGB P6 with " + String(left) + " data bytes")
+    var m = Mat[DType.uint8](h, w, 3, False)
+    var q = m.ptr()
+    var s = b.unsafe_ptr() + pos
+    for i in range(w * h):
+        q[3 * i] = s[3 * i + 2]
+        q[3 * i + 1] = s[3 * i + 1]
+        q[3 * i + 2] = s[3 * i]
+    _ = len(b)
+    return m^
+
+
+def _load_any(path: String) raises -> Mat[DType.uint8]:
+    return _load_ppm(path) if path.endswith(".ppm") else load[DType.uint8](path)
+
+
 def batch(mut a: Args) raises -> Bool:
     """stockBatch OUT.jsonl BATCH.tsv [k=v]: BATCH.tsv rows are `mcv path <TAB> original path <TAB> original bytes`.
     One JSON line per image (numbers, hashes, flags, near-duplicates in the batch), images analysed in parallel.
@@ -544,7 +588,7 @@ def batch(mut a: Args) raises -> Bool:
 
     def task(i: Int) {imm}:
         try:
-            var src = load[DType.uint8](paths[i])
+            var src = _load_any(paths[i])
             dp[2 * i] = src.cols
             dp[2 * i + 1] = src.rows
             var r = _analyse(src, tile, thr, lo, hi, bt, bs, br, asc)
@@ -561,7 +605,7 @@ def batch(mut a: Args) raises -> Bool:
     for i in range(n):  # the reason of a failed image, read again on this thread
         if ef[i] != 0:
             try:
-                _ = _analyse(load[DType.uint8](paths[i]), tile, thr, lo, hi, bt, bs, br, asc)
+                _ = _analyse(_load_any(paths[i]), tile, thr, lo, hi, bt, bs, br, asc)
                 errs[i] = "analysis failed"
             except e:
                 errs[i] = String(e)
