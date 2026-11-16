@@ -2,7 +2,7 @@
 (mojo-faces imports mojocv).  `mcv-labels tok TOK.json TEXTS.txt OUT.ids` writes the 64 ids of each text line,
 the way transformers' SiglipTokenizer(padding="max_length", max_length=64, truncation=True) does."""
 from std.collections import Dict
-from std.math import sqrt
+from std.math import exp, sqrt
 from std.os import stat
 from std.os.path import exists
 from std.sys import argv
@@ -72,6 +72,15 @@ def load_ppm(path: String) raises -> List[Float32]:
     return d^
 
 
+def load_f32(path: String) raises -> List[Float32]:
+    var b = open(path, "r").read_bytes()
+    var p = b.unsafe_ptr().bitcast[Float32]()
+    var d = List[Float32](length=len(b) // 4, fill=0)
+    for i in range(len(d)):
+        d[i] = p[i]
+    return d^
+
+
 def lines(path: String) raises -> List[String]:
     var out = List[String]()
     for line in open(path, "r").read().split("\n"):
@@ -106,6 +115,33 @@ def main() raises:
             ref e = r["image_embeds"]
             with open(String(a[4]), "a") as f:
                 f.write_bytes(Span[UInt8](unsafe_ptr=e.d.unsafe_ptr().bitcast[UInt8](), length=e.numel() * 4))
+    elif String(a[1]) == "top":  # top MODEL IMG.f32 TXT.f32 K OUT.tsv: per picture its K best labels as `index:cosine:probability`
+        var m = Model(String(a[2]))
+        var scale = exp(m.inits[m.init("onnx::Exp_3336")].f[0])  # SigLIP's learned logit scale and bias, read from the graph
+        var bias = m.inits[m.init("onnx::Add_3337")].f[0]
+        var im = load_f32(String(a[3]))
+        var tx = load_f32(String(a[4]))
+        var k = Int(String(a[5]))
+        var ni = len(im) // 768
+        var nt = len(tx) // 768
+        var s = String()
+        for i in range(ni):
+            var cs = List[Float32](length=nt, fill=0)
+            for j in range(nt):
+                var d = Float32(0)
+                for q in range(768):
+                    d += im[i * 768 + q] * tx[j * 768 + q]
+                cs[j] = d
+            for _ in range(min(k, nt)):
+                var best = 0
+                for j in range(nt):
+                    if cs[j] > cs[best]:
+                        best = j
+                s += String(best) + ":" + String(cs[best]) + ":" + String(1.0 / (1.0 + exp(-(scale * cs[best] + bias)))) + "\t"
+                cs[best] = -2.0
+            s += "\n"
+        with open(String(a[6]), "w") as f:
+            f.write(s)
     elif String(a[1]) == "text":  # text MODEL TOK TEXTS OUT.f32: text_embeds, 768 float32 per line
         var m = Model(String(a[2]))
         var t = Tokenizer(String(a[3]))
