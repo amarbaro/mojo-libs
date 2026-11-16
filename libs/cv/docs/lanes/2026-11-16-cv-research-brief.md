@@ -40,3 +40,27 @@ GLB / texture), efficient GPU inference of small vision models. Prefer 2025-2026
 ## Coordinate
 `assetscv` (wYQ:p1) builds mojo-cv phases 2-3 now; send it the skill path when step 5 lands. Do not edit
 `src/mojocv/stockcheck.mojo` yourself.
+
+## Scope change (Mario, 2026-11-16): one mega skill for the whole visual pipeline
+Step 5 becomes **`~/Brain/Skills/own/asset-vision/`** (replaces the planned `cv-supervision`; create with `skill-new.sh`).
+It is used along the whole AssetsHQ pipeline: ComfyUI generation, Blender, Gonzales (our renderer,
+`~/Projects/imports/Gonzales`), vidcode (video), TRELLIS/3D, stills and photos (`~/Pictures/TAGS` as local calibration),
+stock upload, and mojo-cv/mojo-faces as the checking engine.
+- **SKILL.md is a short hub** (< 150 lines): when to use, a route table "task -> reference file", the 10 rules that
+  never bend, and the pipeline diagram (generate -> render -> check -> pick -> tag -> upload). Nothing else loads by default.
+- **`references/` load only when needed**, one file per domain, each with paper citations (arXiv id, claim, number,
+  verbatim quote checked by study-check) and what it means for us: `generation-comfyui.md`, `rendering-blender.md`,
+  `rendering-gonzales.md` (path tracing, denoise, grain/noise metrics), `video-vidcode.md`, `3d-assets-trellis.md`
+  (mesh/GLB/texture quality), `image-quality.md` (NR-IQA, AIGC-IQA), `artifacts.md` (hands, text, anatomy),
+  `aesthetics.md`, `dedupe-similarity.md`, `tagging-captioning.md` (SigLIP/CLIP, keywords), `faces.md`,
+  `segmentation-granulometry.md` (incl. our Kaggle methods, no data), `efficient-inference.md` (GPU, Mojo, RDNA3),
+  `evaluation.md` (gates, calibration on accepted sets, A/B with common random numbers, planted failures),
+  `stock-platforms.md` (link to AssetsHQ marketplaces + mistakes, no copy), `build-list.md` (ranked next builds for
+  mojo-cv with paper, expected number and gate). Add files if the cards show another domain.
+- `references/papers.tsv`: all 207 with topic and the reference file that cites each.
+- Every reference names our own receipts where they exist (mojo-cv stockcheck, mojo-faces, Gonzales grain numbers)
+  next to the paper numbers, and says UNVERIFIED for any paper claim we have not reproduced.
+- Link it into `~/Projects/AssetsHQ/.claude/skills/asset-vision`, mojo-cv, ComfyUI-v0.43.0, Gonzales, gpu-media/Blender
+  and vidcode `.claude/skills/`; `skilldex`; a SKILLDEX line naming it the hub for visual assets.
+- Done = a fresh agent loads only SKILL.md, picks the right reference for 5 sample tasks (one per domain), and the
+  answers cite a paper id and a local receipt; record that check in the lane report.
