@@ -106,18 +106,57 @@ def blockiness(g: Mat[DType.uint8]) raises -> Mat[F64]:
     var p = g.ptr()
     var sums = SIMD[DType.int64, 4](0)
     var cnts = SIMD[DType.int64, 4](0)
+    # horizontal: 16 lanes starting at a multiple of 16 keep lane % 8 == x % 8, so lanes 7 and 15 are block edges
+    var hb: Int64 = 0
+    var hn: Int64 = 0
     for y in range(R):
-        for x in range(C - 1):
-            var e = Int64(p[y * C + x + 1]) - Int64(p[y * C + x])
-            var k = 0 if x % 8 == 7 else 1
-            sums[k] += e if e >= 0 else -e
-            cnts[k] += 1
+        var r = p + y * C
+        var acc = SIMD[DType.uint32, 16](0)
+        var x = 0
+        while x + 17 <= C:
+            var a = r.load[width=16](x)
+            var b = r.load[width=16](x + 1)
+            acc += (max(a, b) - min(a, b)).cast[DType.uint32]()
+            x += 16
+        var edge = Int64(acc[7]) + Int64(acc[15])
+        hb += edge
+        hn += Int64(acc.reduce_add()) - edge
+        for xx in range(x, C - 1):
+            var e = Int64(r[xx + 1]) - Int64(r[xx])
+            if xx % 8 == 7:
+                hb += e if e >= 0 else -e
+            else:
+                hn += e if e >= 0 else -e
+    var vb: Int64 = 0
+    var vn: Int64 = 0
     for y in range(R - 1):
-        for x in range(C):
-            var e = Int64(p[(y + 1) * C + x]) - Int64(p[y * C + x])
-            var k = 2 if y % 8 == 7 else 3
-            sums[k] += e if e >= 0 else -e
-            cnts[k] += 1
+        var r0 = p + y * C
+        var r1 = p + (y + 1) * C
+        var acc = SIMD[DType.uint32, 32](0)
+        var x = 0
+        while x + 32 <= C:
+            var a = r0.load[width=32](x)
+            var b = r1.load[width=32](x)
+            acc += (max(a, b) - min(a, b)).cast[DType.uint32]()
+            x += 32
+        var s = Int64(acc.reduce_add())
+        for xx in range(x, C):
+            var e = Int64(r1[xx]) - Int64(r0[xx])
+            s += e if e >= 0 else -e
+        if y % 8 == 7:
+            vb += s
+        else:
+            vn += s
+    var nb = (C - 1) // 8  # horizontal positions per row with x % 8 == 7, x <= C - 2
+    var mb = (R - 1) // 8
+    sums[0] = hb
+    sums[1] = hn
+    sums[2] = vb
+    sums[3] = vn
+    cnts[0] = Int64(R * nb)
+    cnts[1] = Int64(R * (C - 1 - nb))
+    cnts[2] = Int64(mb * C)
+    cnts[3] = Int64((R - 1 - mb) * C)
     var o = Mat[F64](1, 5, 1)
     for k in range(4):
         o.data[k] = Float64(sums[k]) / Float64(cnts[k])
@@ -168,15 +207,20 @@ def color_cast(src: Mat[DType.uint8]) raises -> Mat[F64]:
     0; a legitimately blue or green scene reads as a cast too, so this flags, the judge decides)."""
     if src.ch != 3:
         raise Error("colorCast needs a 3-channel BGR image, got " + String(src.ch) + " channels")
-    var sm = SIMD[DType.int64, 4](0)
     var p = src.ptr()
-    for i in range(src.rows * src.cols):
-        for k in range(3):
-            sm[k] += Int64(p[i * 3 + k])
-    var n = Float64(src.rows * src.cols)
+    var n0 = src.rows * src.cols
+    var s0: UInt64 = 0
+    var s1: UInt64 = 0
+    var s2: UInt64 = 0
+    for i in range(n0):
+        s0 += UInt64(p[i * 3])
+        s1 += UInt64(p[i * 3 + 1])
+        s2 += UInt64(p[i * 3 + 2])
+    var n = Float64(n0)
     var o = Mat[F64](1, 5, 1)
-    for k in range(3):
-        o.data[k] = Float64(sm[k]) / n
+    o.data[0] = Float64(s0) / n
+    o.data[1] = Float64(s1) / n
+    o.data[2] = Float64(s2) / n
     o.data[3] = o.data[2] - o.data[1]
     o.data[4] = o.data[0] - (o.data[2] + o.data[1]) / 2.0
     return o^
