@@ -80,3 +80,24 @@ Sources: `docs/sources.md`.
 | whole library | 263 s (16.0 img/s, 61.8 MP/s, RSS 1.88 GB) | 147 s (28.5 img/s, 110 MP/s, RSS 1.87 GB) | output identical: 0 differing rows of 4202, same 3685 duplicate pairs |
 
 Decode of the next chunk overlaps the analysis of the current one (`MCV_OVERLAP=0` turns it off): 14.4 s and 14.9 s against 17.0 s and 15.8 s on 700 images, measured at a load average of 27 from other work on the machine, so treat it as about 10 %. The wall times above the overlap row were taken before it existed.
+
+## Faces (`--faces`, phase 2)
+
+`scripts/mcv-stockcheck --faces ...` runs `.bin/mcv-faces` (`src/stockfaces.mojo`) over the original files: SCRFD from `~/Projects/mojo/mojo-faces`
+(imported with `-I`, not copied; `mojo-faces` itself imports `mojocv`, so the stage is a separate binary, not part of the `mojocv` package) through its GPU
+runner under `gpu-wait`. Build: `mojo build -O3 -I src -I ../mojo-faces/src -I ../mojo-imkit/src -I ../mojo-mmap/src src/stockfaces.mojo -o .bin/mcv-faces`
+(`tests/stock_faces.sh` does it). Model: `MCV_FACES_MODEL`, default buffalo_l `det_10g.onnx`.
+
+Added to each line: `faces:{n, largest, score}` (`largest` is the biggest face box over the picture area, upright as shown), `platforms:{adobe, dreamstime}`,
+`faceReview`, and the flag `face`. Our assets are AI-generated, so no model release is involved; the face only routes the picture: Adobe accepts fictional
+AI people (tick "people are fictional", no real likeness), Dreamstime refuses generated faces (back views and body parts are fine, FAQ 4623), so a face means
+`dreamstime:false` and `faceReview:true` for the human look at eyes, teeth and nearby hands. The review itself is not measured here.
+
+Gates (`tests/stock_faces.sh`, GPU, not in `ci.sh`): on the 55 mojo-faces test photos mojo-cv's `mcv-faces` equals insightface (51 faces, boxes IoU 1.0000 on the CPU
+runner and 0.9997 on the GPU runner, landmarks within 0.02 % of the box, same upright pixels via `tools/cmp_faces.py`); end to end, db044 (refused by Dreamstime for a
+face) gets `face`, `dreamstime:false`; db000 gets neither; the sidecar equals the output line.
+
+Measured on the 128 doar-bio files (21 MP): the 4 pictures Dreamstime refused for faces (db044, db048, db062, db065) are all detected (recall 4 of 4, db065's face
+is 0.13 % of the frame at score 0.57); 2 of the 42 pictures Dreamstime accepted also carry a detection (db080, 0.4 % of the frame; db084, 0.17 %), so routing every
+face to Adobe over-routes about 5 % of the safe set and no size threshold separates them (db065 is smaller than both). The 128 files took 93 s (decode-bound: the
+GPU detects in about 12 ms; JPEG decode of a 21 MP file takes most of the rest).

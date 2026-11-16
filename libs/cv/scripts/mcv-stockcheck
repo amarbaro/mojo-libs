@@ -1,23 +1,24 @@
 #!/usr/bin/env bash
-# mcv-stockcheck [-j N] [-c CHUNK] [--sidecar] OUT.jsonl IMAGE|@LIST... [k=v...]
+# mcv-stockcheck [-j N] [-c CHUNK] [--sidecar] [--faces] OUT.jsonl IMAGE|@LIST... [k=v...]
 # Stock-site pre-check: one JSON line per image (size, sharpness, noise, JPEG blocks, clipping, cast, banding, fog
 # band, hashes, flags, near-duplicates across the whole batch) for the pass/deny app and bulk tagging to read.
-# --sidecar also writes IMAGE.stockcheck.json beside every image. k=v overrides a threshold (docs/stockcheck.md).
+# --sidecar writes IMAGE.stockcheck.json (the final line, duplicates and faces included) beside every image. --faces adds SCRFD face count, the largest face share and platform routing (needs .bin/mcv-faces and a GPU slot). k=v overrides a threshold (docs/stockcheck.md).
 # Images decode N at a time (default 8) into .ppm (libvips) or .mcv (ImageMagick) files, CHUNK images (default 48) per analysis run, then are deleted.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 bin=$root/.bin/mojo-cv
 dec=$root/scripts/decode-stock.sh
-jobs=8 chunk=48 side=0
+jobs=8 chunk=48 side=0 faces=0
 while [ $# -gt 0 ]; do
   case $1 in
     -j) jobs=$2; shift 2;;
     -c) chunk=$2; shift 2;;
     --sidecar) side=1; shift;;
+    --faces) faces=1; shift;;
     *) break;;
   esac
 done
-[ $# -ge 2 ] || { echo "FAIL usage: mcv-stockcheck [-j N] [-c CHUNK] [--sidecar] OUT.jsonl IMAGE|@LIST... [k=v...]" >&2; exit 2; }
+[ $# -ge 2 ] || { echo "FAIL usage: mcv-stockcheck [-j N] [-c CHUNK] [--sidecar] [--faces] OUT.jsonl IMAGE|@LIST... [k=v...]" >&2; exit 2; }
 [ -x "$bin" ] || { echo "FAIL setup: $bin missing, build with: mojo build -O3 -I src src/main.mojo -o .bin/mojo-cv" >&2; exit 1; }
 out=$(realpath -m -- "$1"); shift
 work=$root/.work/stockcheck.$$; mkdir -p "$work"
@@ -31,7 +32,6 @@ for a in "$@"; do  # paths are resolved here, before anything changes directory
 done
 n=$(wc -l < "$work/list")
 [ "$n" -gt 0 ] || { echo "FAIL input: no images" >&2; exit 1; }
-[ "$side" = 1 ] && opts+=("sidecar=1")
 export dec work MAGICK_THREAD_LIMIT=1
 split -l "$chunk" -d -a 5 "$work/list" "$work/c."
 : > "$work/all.jsonl"
@@ -53,6 +53,28 @@ for i in "${!chunks[@]}"; do
   if [ -n "$dpid" ]; then wait "$dpid"; elif [ -n "$next" ]; then decode_chunk "$next"; fi
 done
 "$bin" stockDups "$out" "$work/all.jsonl" "${opts[@]}" || { echo "FAIL dups" >&2; exit 1; }
+if [ "$faces" = 1 ]; then  # SCRFD from mojo-faces on the originals; a face routes the picture to Adobe only
+  model=${MCV_FACES_MODEL:-$HOME/Models/deep-live-cam-models/buffalo_l/buffalo_l/det_10g.onnx}
+  [ -x "$root/.bin/mcv-faces" ] || { echo "FAIL faces: $root/.bin/mcv-faces missing (see docs/stockcheck.md)" >&2; exit 1; }
+  [ -f "$model" ] || { echo "FAIL faces: model $model missing (set MCV_FACES_MODEL)" >&2; exit 1; }
+  gpu-wait run --timeout "${MCV_FACES_TIMEOUT:-3600}" -- "$root/.bin/mcv-faces" "$model" "$work/faces.jsonl" "$work/list" gpu=16 > "$work/faces.log" 2>&1 \
+    || { tail -3 "$work/faces.log" >&2; echo "FAIL faces: mcv-faces" >&2; exit 1; }
+  [ "$(wc -l < "$work/faces.jsonl")" -eq "$n" ] || { echo "FAIL faces: $(wc -l < "$work/faces.jsonl") result lines for $n images" >&2; exit 1; }
+  jq -c --slurpfile f "$work/faces.jsonl" '
+    ($f | map({(.file): .}) | add // {}) as $m
+    | if .file == null or .error != null then .
+      else ($m[.file] // {error: "no face result"}) as $x
+        | if $x.error != null then .faces = {error: $x.error} | .flags += ["faceError"]
+          else .faces = {n: $x.faces, largest: $x.largest, score: $x.score}
+            | .platforms = {adobe: true, dreamstime: ($x.faces == 0)}
+            | .faceReview = ($x.faces > 0)
+            | if $x.faces > 0 then .flags += ["face"] else . end
+          end
+      end' "$out" > "$out.tmp" && mv "$out.tmp" "$out"
+fi
 lines=$(grep -c '"file"' "$out" || true)
 [ "$lines" -eq "$n" ] || { echo "FAIL count: $lines result lines for $n images" >&2; exit 1; }
 echo "PASS stockcheck: $n images -> $out ($(grep -c '"error"' "$out" || true) errors, $(grep -c '"dup"' "$out" || true) duplicate pairs)"
+if [ "$side" = 1 ]; then
+  jq -r 'select(.file) | [.file, tostring] | @tsv' "$out" | while IFS=$'\t' read -r f j; do printf '%s\n' "$j" > "$f.stockcheck.json"; done
+fi
