@@ -46,11 +46,21 @@ accepted pictures except one white-out fog band, at a false-positive cost.
 - Thresholds come from one site's accepted set (Adobe, 46 pictures at 21 MP). Other sites and sizes need their own set.
 - Mistakes recorded: `docs/rules.md` 5 to 8, `~/Brain/SINDEX/mojo-cv.md`.
 
-## Phase 2: faces
+## Phase 2: faces (commit 8d76221)
 
-Not started. Plan: import `faces` from `~/Projects/mojo/mojo-faces` (SCRFD detection, ArcFace embedding, `GpuNet`), add `faces` and the largest
-face's share of the picture to the JSON, route platforms from it (face present: Adobe only, tick "people are fictional"; Dreamstime
-refuses generated faces; add a face-quality review flag), and gate on the mojo-faces test photos.
+`mcv-stockcheck --faces` adds the face count, the largest face's share of the picture and platform routing to every line: a face means
+Adobe only (people fictional) and a face-quality review flag, because Dreamstime refuses generated faces. SCRFD comes from
+`mojo-faces` by import (`src/stockfaces.mojo`, a separate binary because `mojo-faces` itself imports `mojocv`), through its GPU runner.
+
+| gate | result |
+|---|---|
+| mojo-faces' 55 test photos against insightface (`tools/cmp_faces.py`, boxes IoU >= 0.99, landmarks within 1 %, same upright pixels) | 51 faces, IoU 1.0000 (CPU runner), 0.9997 (GPU runner), kps 0.0002 |
+| `tests/stock_faces.sh` end to end: db044 (Dreamstime refused its face) and db000 (none) | face flag, `dreamstime:false`, `faceReview:true` for db044; both platforms for db000; sidecar equals the line |
+
+Measured on the 128 doar-bio files: all 4 Dreamstime face refusals detected (recall 4 of 4; db065's face is 0.13 % of the frame); 2 of the
+42 Dreamstime-accepted pictures also carry a detection (db080 0.4 %, db084 0.17 %), so routing every face to Adobe over-routes about 5 % of
+the safe set and no size threshold separates them. 128 files of 21 MP took 93 s, decode-bound (GPU detection about 12 ms).
+Not measured: the face-quality review itself (eyes, teeth, nearby hands) is only routed to a human. The gate needs the GPU and the private test photos, so it is not in `scripts/ci.sh`.
 
 ## Phase 3: SigLIP
 
