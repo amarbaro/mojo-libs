@@ -119,7 +119,7 @@ def main() raises:
                 f.write_bytes(Span[UInt8](unsafe_ptr=e.d.unsafe_ptr().bitcast[UInt8](), length=e.numel() * 4))
     elif String(a[1]) == "gimage":  # gimage MODEL PPMS.txt OUT.f32: the same on GpuNet (fp32), GBATCH (16) pictures per run, under `gpu-wait run --timeout S`
         var m = Model(String(a[2]))
-        var net = GpuNet(DeviceContext(), m, False, ["image_embeds"])
+        var net = GpuNet(DeviceContext(), m, getenv("GARM", "16") == "16", ["image_embeds"])
         var nb = Int(getenv("GBATCH", "16"))
         var done = 0
         if exists(String(a[4])):
