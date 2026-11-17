@@ -102,3 +102,4 @@
 - A stale .work/imkit.mojoc shadowed src/imkit for files under .work ("unable to locate module avifrgb") -> probes live in .work/probe/, never next to a .mojoc.
 - Showcase screenshots 2026-11-16 taken with spectacle captured a private terminal and chat instead of the app window -> app screenshots come only from `IMKIT_SHOT=FILE` (renderer readback), never a desktop or active-window capture.
 - Apps importing imkit by sibling path (`-I ../mojo-imkit/src`) failed ci-local and GitHub CI in their public repos -> an app that ships an imkit window depends on imkit as a package (conda `mojo-imkit`) or builds the GUI only when imkit is present.
+- corewait's hottest-rows panel drew a 364 px branch symbol in a 252 px column over the right border, seen only in a screenshot -> a GUI change runs once with `IMKIT_BOUNDS=1` and must print no `IMKIT_BOUNDS:` line; a column of variable text sits inside a `clip` that ends 8 px inside the panel.
