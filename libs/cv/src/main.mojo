@@ -8,11 +8,12 @@ from mojocv.cli3d import dispatch3d
 from mojocv.granulo import run as run_granulo
 from mojocv.stockcheck import run as run_stockcheck
 from mojocv.regions import run as run_regions
+from mojocv.ruler import run as run_ruler
 
 
 def main() raises:
     var a = Args()
-    var ok = run_core(a) or run_imgproc(a) or run_features(a) or run_video(a) or run_calib3d(a) or run_granulo(a) or run_stockcheck(a) or run_regions(a)
+    var ok = run_core(a) or run_imgproc(a) or run_features(a) or run_video(a) or run_calib3d(a) or run_granulo(a) or run_stockcheck(a) or run_regions(a) or run_ruler(a)
     if not ok:
         var v = List[String]()
         var av = argv()
