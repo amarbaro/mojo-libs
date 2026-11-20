@@ -49,7 +49,7 @@ def hashm(p: ImmPointer[UInt8, _], i: Int, bits: Int, mls: Int) -> Int:
 def fast(mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int) -> Int:
     """ZSTD_compressBlock_fast_noDict_generic over p[start:end]: positions are searched in a software pipeline
     of four, the step grows every 128 bytes without a match. Returns where the unmatched tail begins."""
-    var ht = e.ht.unsafe_ptr()
+    var ht = e.ht.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
     var hl = e.hlog
     var mls = min(max(e.mml, 4), 7)
     var step_size = e.tlen + (1 if e.tlen == 0 else 0) + 1
@@ -148,8 +148,8 @@ def fast(mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int) -> Int:
 
 def dfast(mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int) -> Int:
     """ZSTD_compressBlock_doubleFast: a long (8-byte) and a short (mml-byte) hash table."""
-    var hl = e.ht.unsafe_ptr()
-    var hs = e.ct.unsafe_ptr()
+    var hl = e.ht.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+    var hs = e.ct.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
     var lbits = e.hlog
     var sbits = e.clog
     var mls = min(max(e.mml, 4), 7)

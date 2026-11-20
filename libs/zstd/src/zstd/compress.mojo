@@ -267,7 +267,7 @@ struct Zenc(Movable):
             self.out.clear()
 
     def _blocks(mut self, mut f: FileHandle) raises:
-        var p = self.buf.unsafe_ptr().unsafe_mut_cast[False]()
+        var p = self.buf.unsafe_ptr().unsafe_mut_cast[False]().unsafe_origin_cast[ImmUntrackedOrigin]()
         while self.blen - self.bpos >= BLOCK:
             encode_blocks(self.e, p, self.bpos, self.bpos + BLOCK, False, self.out)
             self.bpos += BLOCK
