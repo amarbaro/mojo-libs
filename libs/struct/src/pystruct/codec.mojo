@@ -2,6 +2,7 @@
 # native alignment, and the same error texts. Values are `Value` (int, float, bool, bytes, complex).
 from std.memory import bitcast
 from std.math import isinf
+from std.bit import byte_swap
 
 comptime Bytes = List[UInt8]
 
@@ -169,7 +170,7 @@ struct Struct(Movable, Sized):
             raise Error(t"unpack requires a buffer of {self.size} bytes")
         return self._unpack(buf, 0)
 
-    def unpack_from(self, buf: Span[UInt8, _], offset: Int = 0) raises -> List[Value]:
+    def _start(self, buf: Span[UInt8, _], offset: Int) raises -> Int:
         var at = offset
         if at < 0:
             if at + len(buf) < 0:
@@ -179,7 +180,16 @@ struct Struct(Movable, Sized):
             if offset < 0:
                 raise Error(t"not enough data to unpack {self.size} bytes at offset {offset}")
             raise Error(t"unpack_from requires a buffer of at least {self.size + at} bytes for unpacking {self.size} bytes at offset {at} (actual buffer size is {len(buf)})")
-        return self._unpack(buf, at)
+        return at
+
+    def unpack_from(self, buf: Span[UInt8, _], offset: Int = 0) raises -> List[Value]:
+        return self._unpack(buf, self._start(buf, offset))
+
+    def unpack_from_into(self, buf: Span[UInt8, _], offset: Int, mut out: List[Value]) raises:
+        """`unpack_from` into a caller list: cleared, capacity kept, so a loop allocates nothing."""
+        var at = self._start(buf, offset)
+        out.clear()
+        self._unpack_into(buf, at, out)
 
     def iter_unpack(self, buf: Span[UInt8, _]) raises -> List[List[Value]]:
         if self.size == 0:
@@ -219,6 +229,10 @@ struct Struct(Movable, Sized):
 
     def _unpack(self, buf: Span[UInt8, _], base: Int) raises -> List[Value]:
         var out = List[Value](capacity=self.nvalues)
+        self._unpack_into(buf, base, out)
+        return out^
+
+    def _unpack_into(self, buf: Span[UInt8, _], base: Int, mut out: List[Value]) raises:
         for ref it in self.items:
             var at = base + it.offset
             if it.code == ord("x"):
@@ -232,10 +246,19 @@ struct Struct(Movable, Sized):
                 continue
             for j in range(it.count):
                 out.append(_get(buf, at + j * it.size, it.code, it.size, self.little))
-        return out^
 
 
 def _raw(buf: Span[UInt8, _], at: Int, n: Int, little: Bool) -> UInt64:
+    var p = buf.unsafe_ptr().unsafe_offset(at)
+    if n == 8:
+        var w = p.unsafe_bitcast[UInt64]().unsafe_load[alignment=1]()
+        return w if little else byte_swap(w)
+    if n == 4:
+        var w = p.unsafe_bitcast[UInt32]().unsafe_load[alignment=1]()
+        return UInt64(w if little else byte_swap(w))
+    if n == 2:
+        var w = p.unsafe_bitcast[UInt16]().unsafe_load[alignment=1]()
+        return UInt64(w if little else byte_swap(w))
     var v = UInt64(0)
     for j in range(n):
         v |= UInt64(buf[at + j if little else at + n - 1 - j]) << UInt64(8 * j)
@@ -243,6 +266,16 @@ def _raw(buf: Span[UInt8, _], at: Int, n: Int, little: Bool) -> UInt64:
 
 
 def _store(buf: Span[mut=True, UInt8, _], at: Int, n: Int, v: UInt64, little: Bool):
+    var p = buf.unsafe_ptr().unsafe_offset(at)
+    if n == 8:
+        p.unsafe_bitcast[UInt64]().unsafe_store[alignment=1](v if little else byte_swap(v))
+        return
+    if n == 4:
+        p.unsafe_bitcast[UInt32]().unsafe_store[alignment=1](UInt32(v) if little else byte_swap(UInt32(v)))
+        return
+    if n == 2:
+        p.unsafe_bitcast[UInt16]().unsafe_store[alignment=1](UInt16(v) if little else byte_swap(UInt16(v)))
+        return
     for j in range(n):
         buf[at + j if little else at + n - 1 - j] = UInt8((v >> UInt64(8 * j)) & 0xFF)
 
