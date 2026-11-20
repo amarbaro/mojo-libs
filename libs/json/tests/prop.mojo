@@ -1,5 +1,5 @@
 # Property smoke step: parse(dumps(x)) == x for random arrays of strings (ASCII to 4 byte UTF-8) and Ints.
-from proptest import check, Lists, Strings, Ints
+from mproptest import check, Lists, Strings, Ints
 from json import Json, parse
 
 

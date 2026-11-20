@@ -1,5 +1,5 @@
 # Property smoke step: parse never crashes. On random TOML-ish text and on random bytes it parses or raises.
-from proptest import check, Lists, Strings, Byte
+from mproptest import check, Lists, Strings, Byte
 from toml import parse
 
 

@@ -1,5 +1,5 @@
 # Property smoke step: encode then parse gives the values back, for random Int arrays (whole Int64 range) and string arrays.
-from proptest import check, Lists, Strings, Ints
+from mproptest import check, Lists, Strings, Ints
 from msgpack import Encoder, parse
 
 
