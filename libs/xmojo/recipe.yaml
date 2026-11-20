@@ -1,0 +1,51 @@
+# rattler-build recipe, modular-community shape. Build locally: pixi run package (needs
+# rattler-build); the tests import the installed xmojo.mojoc, not the source tree.
+context:
+  version: 0.2.2
+
+package:
+  name: "xmojo"
+  version: ${{ version }}
+
+source:
+  - path: .
+
+build:
+  number: 0
+  script:
+    - mojo precompile -I ${{ PREFIX }}/lib/mojo src/xmojo -o ${{ PREFIX }}/lib/mojo/xmojo.mojoc
+
+requirements:
+  host:
+    - mojo-compiler =1.2.0
+  build:
+    - mojo-compiler =1.2.0
+  run:
+    - ${{ pin_compatible('mojo-compiler', upper_bound='x.x') }}  # .mojoc loads only on the minor it was built with
+
+tests:
+  - script:
+    - if: unix
+      then:
+        - for f in tests/test_*.mojo; do mojo run -I tests "$f" || exit 1; done
+    files:
+      source:
+        - tests/
+    requirements:
+      run:
+        - mojo =1.2.0
+
+about:
+  homepage: https://github.com/amarbaro/xmojo
+  license: Apache-2.0
+  license_file:
+    - LICENSE
+    - NOTICE
+  summary: XML for Mojo, parse into structs, stream records, write back, checked against expat
+  repository: https://github.com/amarbaro/xmojo
+
+extra:
+  maintainers:
+    - amarbaro.org
+  project_name:
+    - xmojo
