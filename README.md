@@ -5,7 +5,7 @@
 The amarbaro Mojo libraries in one repository, one folder per library under `libs/<name>/`. Each keeps its own package,
 import name, version, `recipe.yaml`, tests against an oracle, `docs/api.md`, `docs/design.md` and an agent skill in `skills/`.
 A library reaches another as the sibling folder `../<name>` (`deps.tsv` lists who uses whom); `scripts/ci-all.sh` runs every
-library's `scripts/ci.sh`. A tag `<name>-v<version>` publishes that one library's conda package.
+library's `scripts/ci.sh`. A tag `<name>-v<version>` publishes that one library's conda package ([docs/monorepo.md](docs/monorepo.md)).
 
 ## Install
 
