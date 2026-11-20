@@ -1,0 +1,6 @@
+mojo-semver
+Copyright 2026 AMARBARO · amarbaro.org labs <dev@amarbaro.org>
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Portions ported from python-semver: Copyright (c) 2013, Konstantine Rybnikov, BSD-3-Clause, full text in LICENSE-semver.

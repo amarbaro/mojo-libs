@@ -1,0 +1,6 @@
+src/semver/version.mojo|return -1 if p[0] < p[1] else 1|return 1 if p[0] < p[1] else -1
+src/semver/version.mojo|            r = -1 if ie - i < je - j else 1|            r = 1 if ie - i < je - j else -1
+src/semver/version.mojo|if i == start or (i - start > 1 and b[start] == 48)|if i == start or (i - start > 2 and b[start] == 48)
+src/semver/version.mojo|return 0 if x_end and y_end else (-1 if x_end else 1)|return 0 if x_end and y_end else (1 if x_end else -1)
+src/semver/version.mojo|var cut = max(end - nxt.byte_length(), start)|var cut = start
+src/semver/version.mojo|        if pre and digits and i - start > 1 and b[start] == 48:|        if pre and digits and i - start > 2 and b[start] == 48:
