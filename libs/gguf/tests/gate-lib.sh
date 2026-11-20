@@ -1,7 +1,7 @@
 # Shared by tests/*-gate.sh (source it). Fixtures come from .work/oracle (tools/mkoracle.sh), the oracle scripts and
 # library from the pinned llama.cpp checkout (scripts/fetch-llamacpp.sh, or LLAMACPP=/path to your own at the pin).
 set -euo pipefail
-cd "$(git rev-parse --show-toplevel)"
+cd "$(dirname "${BASH_SOURCE[0]}")/.."
 MAIN=$PWD
 ORACLE=$MAIN/.work/oracle/qwen25-05b
 LLAMACPP=${LLAMACPP:-$MAIN/.work/llama.cpp}

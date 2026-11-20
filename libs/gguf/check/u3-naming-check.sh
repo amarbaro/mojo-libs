@@ -2,7 +2,7 @@
 # hfconv.naming vs gguf-py Metadata.get_model_id_components / id_to_title / size_label on a list of model ids.
 #   check/u3-naming-check.sh          exit 0 only when every line agrees
 set -euo pipefail
-cd "$(git rev-parse --show-toplevel)"
+cd "$(dirname "$0")/.."
 MAIN=$PWD
 LLAMACPP=${LLAMACPP:-$MAIN/.work/llama.cpp}
 W=.work/u3; mkdir -p "$W"
