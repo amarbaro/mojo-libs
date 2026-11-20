@@ -1,0 +1,47 @@
+# rattler-build recipe, modular-community shape.
+# Build locally: rattler-build build -r recipe.yaml -c https://conda.modular.com/max -c conda-forge
+context:
+  version: 0.3.3
+
+package:
+  name: "mojo-uregex"
+  version: ${{ version }}
+
+source:
+  - path: .
+
+build:
+  number: 0
+  script:
+    - mojo precompile src/uregex -o ${{ PREFIX }}/lib/mojo/uregex.mojoc
+
+requirements:
+  host:
+    - mojo-compiler =1.2.0
+  build:
+    - mojo-compiler =1.2.0
+  run:
+    - ${{ pin_compatible('mojo-compiler', upper_bound='x.x') }}  # .mojoc loads only on the minor it was built with
+
+tests:
+  - script:
+    - if: unix
+      then:
+        - mojo run -I src tests/test_uregex.mojo
+    files:
+      source:
+        - src/
+        - tests/
+
+about:
+  homepage: https://github.com/amarbaro/mojo-uregex
+  license: Apache-2.0
+  license_file: LICENSE
+  summary: Unicode-aware backtracking regex engine for Mojo
+  repository: https://github.com/amarbaro/mojo-uregex
+
+extra:
+  maintainers:
+    - amarbaro.org
+  project_name:
+    - mojo-uregex
