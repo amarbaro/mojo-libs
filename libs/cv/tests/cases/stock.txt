@@ -1,0 +1,123 @@
+# stockcheck: stock-rejection numbers (cv2 / numpy on the same definitions) and the 64-bit hashes; st_* are planted failures, *g their grey twins
+# eqnan:T = NaN exactly where the oracle has NaN (flat image), within T elsewhere
+sharp_hdg             sharpness hdg => eqnan:1e-6
+sharp_smg             sharpness smg => eqnan:1e-6
+sharp_st_blurg        sharpness st_blurg => eqnan:1e-6
+sharp_st_noiseg       sharpness st_noiseg => eqnan:1e-6
+sharp_st_jpg8g        sharpness st_jpg8g => eqnan:1e-6
+sharp_st_jpg95g       sharpness st_jpg95g => eqnan:1e-6
+sharp_st_bandg        sharpness st_bandg => eqnan:1e-6
+sharp_st_gradg        sharpness st_gradg => eqnan:1e-6
+sharp_st_blowng       sharpness st_blowng => eqnan:1e-6
+sharp_st_fogg         sharpness st_fogg => eqnan:1e-6
+sharp_st_flatg        sharpness st_flatg => eqnan:1e-6
+noise_hdg             noiseEst hdg => eqnan:1e-6
+noise_smg             noiseEst smg => eqnan:1e-6
+noise_st_blurg        noiseEst st_blurg => eqnan:1e-6
+noise_st_noiseg       noiseEst st_noiseg => eqnan:1e-6
+noise_st_jpg8g        noiseEst st_jpg8g => eqnan:1e-6
+noise_st_jpg95g       noiseEst st_jpg95g => eqnan:1e-6
+noise_st_bandg        noiseEst st_bandg => eqnan:1e-6
+noise_st_gradg        noiseEst st_gradg => eqnan:1e-6
+noise_st_blowng       noiseEst st_blowng => eqnan:1e-6
+noise_st_fogg         noiseEst st_fogg => eqnan:1e-6
+noise_st_flatg        noiseEst st_flatg => eqnan:1e-6
+block_hdg             blockiness hdg => eqnan:1e-6
+block_smg             blockiness smg => eqnan:1e-6
+block_st_blurg        blockiness st_blurg => eqnan:1e-6
+block_st_noiseg       blockiness st_noiseg => eqnan:1e-6
+block_st_jpg8g        blockiness st_jpg8g => eqnan:1e-6
+block_st_jpg95g       blockiness st_jpg95g => eqnan:1e-6
+block_st_bandg        blockiness st_bandg => eqnan:1e-6
+block_st_gradg        blockiness st_gradg => eqnan:1e-6
+block_st_blowng       blockiness st_blowng => eqnan:1e-6
+block_st_fogg         blockiness st_fogg => eqnan:1e-6
+block_st_flatg        blockiness st_flatg => eqnan:1e-6
+clipp_hdg             clipping hdg => eqnan:1e-6
+clipp_smg             clipping smg => eqnan:1e-6
+clipp_st_blurg        clipping st_blurg => eqnan:1e-6
+clipp_st_noiseg       clipping st_noiseg => eqnan:1e-6
+clipp_st_jpg8g        clipping st_jpg8g => eqnan:1e-6
+clipp_st_jpg95g       clipping st_jpg95g => eqnan:1e-6
+clipp_st_bandg        clipping st_bandg => eqnan:1e-6
+clipp_st_gradg        clipping st_gradg => eqnan:1e-6
+clipp_st_blowng       clipping st_blowng => eqnan:1e-6
+clipp_st_fogg         clipping st_fogg => eqnan:1e-6
+clipp_st_flatg        clipping st_flatg => eqnan:1e-6
+bandi_hdg             banding hdg => eqnan:1e-6
+bandi_smg             banding smg => eqnan:1e-6
+bandi_st_blurg        banding st_blurg => eqnan:1e-6
+bandi_st_noiseg       banding st_noiseg => eqnan:1e-6
+bandi_st_jpg8g        banding st_jpg8g => eqnan:1e-6
+bandi_st_jpg95g       banding st_jpg95g => eqnan:1e-6
+bandi_st_bandg        banding st_bandg => eqnan:1e-6
+bandi_st_gradg        banding st_gradg => eqnan:1e-6
+bandi_st_blowng       banding st_blowng => eqnan:1e-6
+bandi_st_fogg         banding st_fogg => eqnan:1e-6
+bandi_st_flatg        banding st_flatg => eqnan:1e-6
+hazeB_hdg             hazeBand hdg => eqnan:1e-6
+hazeB_smg             hazeBand smg => eqnan:1e-6
+hazeB_st_blurg        hazeBand st_blurg => eqnan:1e-6
+hazeB_st_noiseg       hazeBand st_noiseg => eqnan:1e-6
+hazeB_st_jpg8g        hazeBand st_jpg8g => eqnan:1e-6
+hazeB_st_jpg95g       hazeBand st_jpg95g => eqnan:1e-6
+hazeB_st_bandg        hazeBand st_bandg => eqnan:1e-6
+hazeB_st_gradg        hazeBand st_gradg => eqnan:1e-6
+hazeB_st_blowng       hazeBand st_blowng => eqnan:1e-6
+hazeB_st_fogg         hazeBand st_fogg => eqnan:1e-6
+hazeB_st_flatg        hazeBand st_flatg => eqnan:1e-6
+sharp_tile8           sharpness hdg tile=8 thr=40 => eqnan:1e-6
+sharp_tiny            sharpness st_tinyg tile=2 thr=1 => eqnan:1e-6
+block_tiny            blockiness st_tinyg => eqnan:1e-6
+clip_lo0              clipping st_blowng lo=0 hi=255 => eqnan:1e-6
+clip_mid              clipping hdg lo=60 hi=200 => eqnan:1e-6
+band_tile8            banding st_bandg btile=8 bstd=3 brange=2 => eqnan:1e-6
+cast_hd               colorCast hd => eqnan:1e-9
+cast_sm               colorCast sm => eqnan:1e-9
+cast_st_cast          colorCast st_cast => eqnan:1e-9
+cast_st_blown         colorCast st_blown => eqnan:1e-9
+cast_st_fog           colorCast st_fog => eqnan:1e-9
+cast_st_flat          colorCast st_flat => eqnan:1e-9
+hash_hdg              hashes hdg => exact
+hash_hdg2             hashes hdg2 => exact
+hash_smg              hashes smg => exact
+hash_st_jpg95g        hashes st_jpg95g => exact
+hash_st_blurg         hashes st_blurg => exact
+hash_st_noiseg        hashes st_noiseg => exact
+hash_st_fogg          hashes st_fogg => exact
+hash_st_flatg         hashes st_flatg => exact
+ham_thr0              hamPairs ham_bits thr=0 => exact
+ham_thr5              hamPairs ham_bits thr=5 => exact
+ham_thr10             hamPairs ham_bits thr=10 => exact
+ham_thr32             hamPairs ham_bits thr=32 => exact
+stock_hd              stockMetrics hd => eqnan:1e-6
+stock_sm              stockMetrics sm => eqnan:1e-6
+stock_st_blur         stockMetrics st_blur => eqnan:1e-6
+stock_st_noise        stockMetrics st_noise => eqnan:1e-6
+stock_st_jpg8         stockMetrics st_jpg8 => eqnan:1e-6
+stock_st_band         stockMetrics st_band => eqnan:1e-6
+stock_st_blown        stockMetrics st_blown => eqnan:1e-6
+stock_st_cast         stockMetrics st_cast => eqnan:1e-6
+stock_st_fog          stockMetrics st_fog => eqnan:1e-6
+stock_st_flat         stockMetrics st_flat => eqnan:1e-6
+box_hdg_f1            boxDown hdg f=1 => exact
+box_hdg_f2            boxDown hdg f=2 => exact
+box_hdg_f3            boxDown hdg f=3 => exact
+box_hdg_f7            boxDown hdg f=7 => exact
+box_smg_f5            boxDown smg f=5 => exact
+box_tiny_f3           boxDown st_tinyg f=3 => exact
+stock_big_default     stockMetrics st_big => eqnan:1e-6
+stock_hd_asc700       stockMetrics hd ascale=700 => eqnan:1e-6
+stock_sm_asc200       stockMetrics sm ascale=200 => eqnan:1e-6
+hyst_hdg              hysteresis hdg lo=100 hi=200 min_area=50 => exact
+hyst_smg_conn4        hysteresis smg lo=80 hi=150 min_area=1 connectivity=4 => exact
+hyst_blown            hysteresis st_blowng lo=200 hi=252 min_area=500 => exact
+hyst_flat_all         hysteresis st_flatg lo=100 hi=127 => exact
+hyst_none             hysteresis st_flatg lo=200 hi=250 => exact
+hyst_big_bin          hysteresis binhd lo=10 hi=200 min_area=5000 => exact
+cliprg_blown          clipRegion st_blowng => max:1e-12
+cliprg_hdg            clipRegion hdg => max:1e-12
+cliprg_flat           clipRegion st_flatg => max:1e-12
+cliprg_smg_wide       clipRegion smg lo=40 hi=200 => max:1e-12
+cliprg_tiny           clipRegion st_tinyg lo=20 hi=60 => max:1e-12
+cliprg_fog            clipRegion st_fogg lo=0 hi=214 => max:1e-12

@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# mcv-stockcheck [-j N] [-c CHUNK] [--sidecar] [--faces] OUT.jsonl IMAGE|@LIST... [k=v...]
+# Stock-site pre-check: one JSON line per image (size, sharpness, noise, JPEG blocks, clipping, cast, banding, fog
+# band, hashes, flags, near-duplicates across the whole batch) for the pass/deny app and bulk tagging to read.
+# --sidecar writes IMAGE.stockcheck.json (the final line, duplicates and faces included) beside every image. --faces adds SCRFD face count, the largest face share and platform routing (needs .bin/mcv-faces and a GPU slot). k=v overrides a threshold (docs/stockcheck.md).
+# Images decode N at a time (default 8) into .ppm (libvips) or .mcv (ImageMagick) files, CHUNK images (default 48) per analysis run, then are deleted.
+set -euo pipefail
+root=$(cd "$(dirname "$0")/.." && pwd)
+bin=$root/.bin/mojo-cv
+dec=$root/scripts/decode-stock.sh
+jobs=8 chunk=48 side=0 faces=0
+while [ $# -gt 0 ]; do
+  case $1 in
+    -j) jobs=$2; shift 2;;
+    -c) chunk=$2; shift 2;;
+    --sidecar) side=1; shift;;
+    --faces) faces=1; shift;;
+    *) break;;
+  esac
+done
+[ $# -ge 2 ] || { echo "FAIL usage: mcv-stockcheck [-j N] [-c CHUNK] [--sidecar] [--faces] OUT.jsonl IMAGE|@LIST... [k=v...]" >&2; exit 2; }
+[ -x "$bin" ] || { echo "FAIL setup: $bin missing, build with: mojo build -O3 -I src src/main.mojo -o .bin/mojo-cv" >&2; exit 1; }
+out=$(realpath -m -- "$1"); shift
+work=$root/.work/stockcheck.$$; mkdir -p "$work"
+trap 'rm -rf "$work"' EXIT
+opts=(); : > "$work/list"
+for a in "$@"; do  # paths are resolved here, before anything changes directory
+  if [[ $a =~ ^[a-z]+=[0-9.eE+-]+$ ]]; then opts+=("$a")
+  elif [[ $a == @* ]]; then
+    while IFS= read -r f; do [ -n "$f" ] && { [ -f "$f" ] || { echo "FAIL missing: $f" >&2; exit 1; }; realpath -- "$f" >> "$work/list"; }; done < "${a:1}"
+  else [ -f "$a" ] || { echo "FAIL missing: $a" >&2; exit 1; }; realpath -- "$a" >> "$work/list"; fi
+done
+n=$(wc -l < "$work/list")
+[ "$n" -gt 0 ] || { echo "FAIL input: no images" >&2; exit 1; }
+export dec work MAGICK_THREAD_LIMIT=1
+split -l "$chunk" -d -a 5 "$work/list" "$work/c."
+: > "$work/all.jsonl"
+decode_chunk() {  # decode the images of chunk file $1 N at a time; a failed decode leaves no file, which the analysis reports as an error line
+  local c=$1 id=${1##*.}
+  awk -v w="$work" -v id="$id" '{ printf "%s\t%s/%s.%d\n", $0, w, id, NR }' "$c" > "$work/d.$id"
+  xargs -P "$jobs" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r src dst <<< "$1"; "$dec" "$src" "$dst" 2>&1 | head -2 || true' _ {} < "$work/d.$id" || true
+}
+chunks=("$work"/c.?????)
+decode_chunk "${chunks[0]}"
+for i in "${!chunks[@]}"; do
+  id=${chunks[$i]##*.}
+  next=""; [ $((i + 1)) -lt ${#chunks[@]} ] && next=${chunks[$((i + 1))]}
+  dpid=""; [ -n "$next" ] && [ "${MCV_OVERLAP:-1}" = 1 ] && { decode_chunk "$next" & dpid=$!; }  # the next chunk decodes while this one is analysed
+  while IFS=$'\t' read -r src dst; do p=$dst.mcv; [ -f "$dst.ppm" ] && p=$dst.ppm; printf '%s\t%s\t%s\n' "$p" "$src" "$(stat -c %s "$src")"; done < "$work/d.$id" > "$work/m.$id"
+  "$bin" stockBatch "$work/p.$id.jsonl" "$work/m.$id" "${opts[@]}" || { echo "FAIL analysis: chunk $id" >&2; exit 1; }
+  cat "$work/p.$id.jsonl" >> "$work/all.jsonl"
+  rm -f "$work/$id".*.ppm "$work/$id".*.mcv
+  if [ -n "$dpid" ]; then wait "$dpid"; elif [ -n "$next" ]; then decode_chunk "$next"; fi
+done
+"$bin" stockDups "$out" "$work/all.jsonl" "${opts[@]}" || { echo "FAIL dups" >&2; exit 1; }
+if [ "$faces" = 1 ]; then  # SCRFD from mojo-faces on the originals; a face routes the picture to Adobe only
+  model=${MCV_FACES_MODEL:-$HOME/Models/deep-live-cam-models/buffalo_l/buffalo_l/det_10g.onnx}
+  [ -x "$root/.bin/mcv-faces" ] || { echo "FAIL faces: $root/.bin/mcv-faces missing (see docs/stockcheck.md)" >&2; exit 1; }
+  [ -f "$model" ] || { echo "FAIL faces: model $model missing (set MCV_FACES_MODEL)" >&2; exit 1; }
+  # two stages: decode + letterbox on the CPU (outside gpu-wait, resumable cache, MCV_FACES_CACHE keeps it between runs),
+  # then one short GPU job that only detects. The slot is not held while the CPU decodes (docs/gpu.md of mojo-faces: ~455 of ~465 ms).
+  fc=${MCV_FACES_CACHE:-$work/fcache}; mkdir -p "$fc"
+  rm -rf "$work/sh"; mkdir -p "$work/sh"; split -n "r/$jobs" -d "$work/list" "$work/sh/s."
+  t0=$(date +%s.%N)
+  # a cpu-room job with its own core and RAM cap (MCV_PREP_MEM GB, default 2 per core): one 200 MP photo decodes to ~0.6 GB per shard,
+  # and an uncapped parallel stage can take the machine down (2026-11-16 OOM)
+  cat > "$work/prep.sh" <<'EOS'
+#!/bin/sh
+# prep.sh WORK JOBS BIN CACHE: one mcv-faces prep=1 process per shard, JOBS at a time
+ls "$1"/sh/s.* | xargs -P "$2" -I{} sh -c '"$1" - "$2.prep" "$2" prep=1 cache="$3"' _ "$3" {} "$4"
+EOS
+  pc=$(( n < jobs ? n : jobs ))  # reserve only the cores the batch can use: a 2-image run waited 275-353 s for 8
+  gpu-wait run --room cpu --cores "$pc" --mem "${MCV_PREP_MEM:-$((2 * pc))}" --label faces-prep -- sh "$work/prep.sh" "$work" "$jobs" "$root/.bin/mcv-faces" "$fc" > "$work/prep.log" 2>&1 \
+    || { tail -3 "$work/prep.log" >&2; echo "FAIL faces: prep stage" >&2; exit 1; }
+  cat "$work"/sh/s.*.prep > "$work/prep.jsonl"
+  t1=$(date +%s.%N)
+  [ "$(wc -l < "$work/prep.jsonl")" -eq "$n" ] || { echo "FAIL faces: prep wrote $(wc -l < "$work/prep.jsonl") lines for $n images" >&2; exit 1; }
+  gpu-wait run --timeout "${MCV_FACES_TIMEOUT:-3600}" --mem 4 -- "$root/.bin/mcv-faces" "$model" "$work/faces.jsonl" "$work/list" gpu=16 cache="$fc" > "$work/faces.log" 2>&1 \
+    || { tail -3 "$work/faces.log" >&2; echo "FAIL faces: mcv-faces" >&2; exit 1; }
+  t2=$(date +%s.%N)
+  awk -v n="$n" -v a="$t0" -v b="$t1" -v c="$t2" 'BEGIN { printf "faces: CPU stage %.1f s incl. queue wait (%.1f img/s, %d shards), GPU stage %.1f s incl. queue wait (%.1f img/s)\n", b-a, n/(b-a), '"$jobs"', c-b, n/(c-b) }' >&2
+  echo "faces prep: $(jq -r .state "$work/prep.jsonl" | sort | uniq -c | tr -s ' ' | tr '\n' ' ')" >&2
+  [ "$(wc -l < "$work/faces.jsonl")" -eq "$n" ] || { echo "FAIL faces: $(wc -l < "$work/faces.jsonl") result lines for $n images" >&2; exit 1; }
+  jq -r 'select(.error != null) | .file' "$work/faces.jsonl" > "$work/fb.list"
+  if [ -s "$work/fb.list" ]; then  # imkit refuses grey, palette, 16-bit and interlaced PNGs: decode those through vips/ImageMagick and retry
+    mkdir -p "$work/fb"
+    awk -v w="$work/fb" '{ printf "%s\t%s/%d\n", $0, w, NR }' "$work/fb.list" > "$work/fb.tsv"
+    xargs -P "$jobs" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r src dst <<< "$1"; "$dec" "$src" "$dst" 2>&1 | head -2 || true' _ {} < "$work/fb.tsv" || true
+    while IFS=$'\t' read -r src dst; do p=$dst.mcv; [ -f "$dst.ppm" ] && p=$dst.ppm; printf '%s\t%s\n' "$src" "$p"; done < "$work/fb.tsv" > "$work/fb.map"
+    cut -f2 "$work/fb.map" > "$work/fb.paths"
+    gpu-wait run --timeout "${MCV_FACES_TIMEOUT:-3600}" --mem 4 -- "$root/.bin/mcv-faces" "$model" "$work/faces2.jsonl" "$work/fb.paths" gpu=16 > "$work/faces2.log" 2>&1 \
+      || { tail -3 "$work/faces2.log" >&2; echo "FAIL faces: mcv-faces on the decoded retry list" >&2; exit 1; }
+    # a retried picture takes its original name back; one that still fails keeps its first error line
+    jq -c --slurpfile f2 "$work/faces2.jsonl" --rawfile m "$work/fb.map" '
+      ($m | split("\n") | map(select(length > 0) | split("\t") | {(.[0]): .[1]}) | add // {}) as $dst
+      | ($f2 | map({(.file): .}) | add // {}) as $r
+      | . as $cur
+      | if .error != null and $dst[.file] != null and $r[$dst[.file]] != null and $r[$dst[.file]].error == null
+        then $r[$dst[.file]] | .file = $cur.file else $cur end' "$work/faces.jsonl" > "$work/faces3.jsonl" && mv "$work/faces3.jsonl" "$work/faces.jsonl"
+  fi
+  jq -c --slurpfile f "$work/faces.jsonl" '
+    ($f | map({(.file): .}) | add // {}) as $m
+    | if .file == null or .error != null then .
+      else ($m[.file] // {error: "no face result"}) as $x
+        | if $x.error != null then .faces = {error: $x.error} | .flags += ["faceError"]
+          else .faces = {n: $x.faces, largest: $x.largest, score: $x.score}
+            | .platforms = {adobe: true, dreamstime: ($x.faces == 0)}
+            | .faceReview = ($x.faces > 0)
+            | if $x.faces > 0 then .flags += ["face"] else . end
+          end
+      end' "$out" > "$out.tmp" && mv "$out.tmp" "$out"
+fi
+lines=$(grep -c '"file"' "$out" || true)
+[ "$lines" -eq "$n" ] || { echo "FAIL count: $lines result lines for $n images" >&2; exit 1; }
+echo "PASS stockcheck: $n images -> $out ($(grep -c '"error"' "$out" || true) errors, $(grep -c '"dup"' "$out" || true) duplicate pairs)"
+if [ "$side" = 1 ]; then
+  jq -r 'select(.file) | [.file, tostring] | @tsv' "$out" | while IFS=$'\t' read -r f j; do printf '%s\n' "$j" > "$f.stockcheck.json"; done
+fi

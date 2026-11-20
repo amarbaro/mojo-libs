@@ -1,0 +1,209 @@
+arxiv_id	title	year	topic	why_it_fits
+2406.17146	Vastextures: Vast repository of textures and PBR materials extracted from real-world images using unsupervised methods	2024	3d	PBR texture repository from real images
+2412.01986	HybridMQA: Exploring Geometry-Texture Interactions for Colored Mesh Quality Assessment	2024	3d	colored mesh quality assessment
+2504.18509	Eval3D: Interpretable and Fine-grained Evaluation for 3D Generation	2025	3d	fine-grained evaluation of 3D generation
+2505.10824	Textured mesh Quality Assessment using Geometry and Color Field Similarity	2025	3d	textured mesh quality via geometry and color
+2506.02846	PBR-SR: Mesh PBR Texture Super Resolution from 2D Image Priors	2025	3d	PBR texture super-resolution from 2D priors
+2508.05609	Hi3DEval: Advancing 3D Generation Evaluation with Hierarchical Validity	2025	3d	hierarchical validity for 3D generation evaluation
+2509.02474	Unifi3D: A Study on 3D Representations for Generation and Reconstruction in a Common Framework	2025	3d	study of 3D representations, common framework
+2509.23841	Towards Fine-Grained Text-to-3D Quality Assessment: A Benchmark and A Two-Stage Rank-Learning Metric	2025	3d	text-to-3D quality benchmark and metric
+2510.03874	DHQA-4D: Perceptual Quality Assessment of Dynamic 4D Digital Human	2025	3d	dynamic 4D digital human quality
+2510.07636	PIT-QMM: A Large Multimodal Model For No-Reference Point Cloud Quality Assessment	2025	3d	LMM quality for point clouds
+2510.13349	No-Reference Rendered Video Quality Assessment: Dataset and Metrics	2025	3d	quality assessment of rendered video dataset
+2511.09948	Beyond Cosine Similarity: Magnitude-Aware CLIP for No-Reference Image Quality Assessment	2025	3d	subjective dataset and metric for 3DGS
+2512.19741	EdgeFlex-Transformer: Transformer Inference for Edge Devices	2025	3d	symmetry audit of 3D generative models
+2603.14951	GT-PCQA: Geometry-Texture Decoupled Point Cloud Quality Assessment with MLLM	2026	3d	point cloud quality with MLLM
+2605.28241	PointQ-Bench: Benchmarking Diagnostic and Interpretable Point Cloud Quality Assessment	2026	3d	point cloud quality benchmark
+2606.10142	DB-3DME: From Dataset to Benchmark for Human-aligned Automatic 3D Mesh Evaluation	2026	3d	human-aligned 3D mesh evaluation
+2607.26595	SpatialQ: Understanding 3D Gaussian Splatting Scene Quality via Visual-based MLLM	2026	3d	MLLM quality for 3DGS scenes
+2608.03279	3DGSI-Assessor: A Large-Scale Dataset and An LMM-based Method for 3D Gaussian Splatting Image Quality Assessment	2026	3d	3DGS image quality dataset and LMM method
+2608.18627	PCQA-R1: Advancing Generalized 3D Point Cloud Quality Assessment with Reinforcement Learning	2026	3d	RL-based point cloud quality
+2608.28080	Cyc3D: Evaluating Cyclic Structural Stability and Asset Usability in Image-to-3D Generation	2026	3d	evaluation of image-to-3D cyclic stability
+2609.07346	From Explicit References to Scene Manifolds: Distributional Fidelity and Realism for Radiance Field Quality Assessment	2026	3d	distributional quality for radiance fields
+2609.23027	Quality Assessment of 3D Gaussian Splatting: Distortions, Benchmarks, and Open Challenges	2026	3d	3DGS quality assessment survey
+2610.13219	Complexity-Calibrated Reconstruction Discrepancy for No-Reference Point Cloud Quality Assessment	2026	3d	no-reference point cloud quality via reconstruction
+2610.19173	Perceptual Characterization of Scan-induced Artifacts in Dynamic 3D Meshes	2026	3d	perceptual characterization of scan artifacts in meshes
+2611.04498	3DGS-VBench+ and 3DGSV-Assessor: A Multi-Dimensional Subjective Benchmark and a Reference-Flexible Objective Model for 3D Gaussian Splatting Video Quality Assessment	2026	3d	3DGS video quality benchmark and model
+2507.14533	ArtiMuse: Fine-Grained Image Aesthetics Assessment with Joint Scoring and Expert-Level Understanding	2025	aesthetic	fine-grained aesthetic scoring with expert reasoning
+2603.01083	Can Vision Language Models Assess Graphic Design Aesthetics? A Benchmark, Evaluation, and Dataset Perspective	2026	aesthetic	VLMs assess graphic design aesthetics
+2603.03907	Fine-grained Image Aesthetic Assessment: Learning Discriminative Scores from Relative Ranks	2026	aesthetic	fine-grained IAA from relative ranks
+2603.18108	From Concepts to Judgments: Interpretable Image Aesthetic Assessment	2026	aesthetic	interpretable aesthetic assessment
+2603.19779	One Model, Two Minds: Task-Conditioned Reasoning for Unified Image Quality and Aesthetic Assessment	2026	aesthetic	unified IQA and IAA reasoning
+2604.11374	What Do Vision-Language Models Encode for Personalized Image Aesthetics Assessment?	2026	aesthetic	VLM encoding for personalized aesthetics
+2604.17233	Enhancing Zero-shot Personalized Image Aesthetics Assessment with Profile-aware Multimodal LLM	2026	aesthetic	zero-shot personalized aesthetics with MLLM
+2605.12684	Visual Aesthetic Benchmark: Can Frontier Models Judge Beauty?	2026	aesthetic	visual aesthetic benchmark for frontier models
+2605.19776	Preferences Order, Ratings Anchor: From Fused Expert Aesthetic Ground Truth to Self-Distillation	2026	aesthetic	fused expert aesthetic ground truth
+2606.05778	Beyond Absolute Scores: Relative Edit-induced Difference for Generalizable Image Aesthetic Assessment	2026	aesthetic	relative edit differences for IAA
+2606.15629	XPASS-Vis: A Dataset for Cross-Domain Personalized Image Aesthetic Assessment	2026	aesthetic	cross-domain personalized aesthetics dataset
+2607.15752	Personalized Image Aesthetic Assessment via Preference-rich Sample Mining and Cohort Merging	2026	aesthetic	personalized aesthetics via sample mining
+2608.26713	AesCanvas: A Large-Scale Dataset and Benchmark for Aesthetic Critique and Contextual Suitability	2026	aesthetic	aesthetic critique dataset
+2610.05010	PortraitAes: Intent-Conditioned Structured Portrait Aesthetic Assessment	2026	aesthetic	portrait aesthetic assessment
+2610.34221	CropReward: A Human-Preference Benchmark and Reward Model for Aesthetic Image Cropping	2026	aesthetic	human-preference benchmark for aesthetic cropping
+2504.09291	Towards Explainable Partial-AIGC Image Quality Assessment	2025	aigc-iqa	explainable partial-AIGC image quality
+2504.21308	AGHI-QA: A Subjective-Aligned Dataset and Metric for AI-Generated Human Images	2025	aigc-iqa	subjective dataset and metric for AI human images
+2505.16314	NTIRE 2025 challenge on Text to Image Generation Model Quality Assessment	2025	aigc-iqa	NTIRE challenge on T2I quality assessment
+2506.21925	Quality Assessment and Distortion-aware Saliency Prediction for AI-Generated Omnidirectional Images	2025	aigc-iqa	quality and saliency for AI omnidirectional images
+2507.10432	Text-Visual Semantic Constrained AI-Generated Image Quality Assessment	2025	aigc-iqa	text-visual semantic constraints for AI image quality
+2507.17240	Perceptual Classifiers: Detecting Generative Images using Perceptual Features	2025	aigc-iqa	perceptual features to detect generated images
+2602.03558	ELIQ: A Label-Free Framework for Quality Assessment of Evolving AI-Generated Images	2026	aigc-iqa	label-free quality for evolving T2I
+2603.07119	TIQA: Human-Aligned Perceptual Text Quality Assessment in Generated Images	2026	aigc-iqa	text quality in generated images
+2606.16799	Decoupling Semantics from Distortions: Multi-Scale Two-Stream Vision-Language Alignment for AI-Generated Image Quality Assessment	2026	aigc-iqa	two-stream VLM quality for AIGI
+2607.05605	Patch Knowledge Transfer for Efficient AI-Generated Image Quality Assessment	2026	aigc-iqa	patch knowledge transfer for AIGI quality
+2608.24372	Bridging Adversarial and Collaborative Learning for AI-Generated Image Quality Assessment	2026	aigc-iqa	adversarial and collaborative AIGI quality
+2609.37576	Evaluating the Evaluators: Diagnosing Large Multimodal Models for AI-Generated Image Assessment	2026	aigc-iqa	diagnosing LMMs for AIGI assessment
+2411.13842	Detecting Human Artifacts from Text-to-Image Models	2024	artifact	detecting human artifacts in generated images
+2601.19430	Unveiling Perceptual Artifacts: A Fine-Grained Benchmark for Interpretable AI-Generated Image Detection	2026	artifact	fine-grained benchmark for AIGI artifacts
+2605.02567	Automated In-the-Wild Data Collection for Continual AI Generated Image Detection	2026	artifact	continual AIGI detection data collection
+2605.08226	SPECTRA-Net: Scalable Pipeline for Explainable Cross-domain Tensor Representations for AI-generated Images Detection	2026	artifact	explainable cross-domain AIGI detection
+2605.14486	Reduce the Artifacts Bias for More Generalizable AI-Generated Image Detection	2026	artifact	artifact bias reduction in AIGI detection
+2605.16122	GenShield: Unified Detection and Artifact Correction for AI-Generated Images	2026	artifact	unified AIGI detection and correction
+2606.07660	Need We Teach Foundation Models What is a Generative Image? Gradient-Free Generative Artifact Detection via Analytic Spectral Adaptation	2026	artifact	gradient-free generative artifact detection
+2606.12671	SalArt-VQA: Diagnosing Whether VLMs Understand Salient Artifacts in Generated Images	2026	artifact	VLM understanding of salient artifacts
+2606.18554	Forged Calamity: Benchmark for Cross-Domain Synthetic Disaster Detection in the Age of Diffusion	2026	artifact	synthetic disaster detection benchmark
+2606.26552	Perception, Verdict, and Evolution: Hindsight-Driven Self-Refining Forensics Agent for AI-Generated Image Detection	2026	artifact	self-refining forensics agent for AIGI
+2607.03862	Ghosts Beneath Textures: Texture-Relation Cues for Cross-Paradigm AI-Generated Image Detection	2026	artifact	texture-relation cues for AIGI detection
+2607.06354	Generalized Synthetic Image Detection with Enhanced RGB-Noise Representation Learning	2026	artifact	RGB-noise representations for synthetic detection
+2607.16283	GenSyn10: A Multi-Generative AI Dataset For Benchmarking Image Classification	2026	artifact	multi-generator dataset for AI image classification
+2607.24016	DailyBench: A Unified Benchmark for AI-Generated and Manipulated Images from Modern Generative Models	2026	artifact	unified benchmark for AIGI and manipulated images
+2607.28974	RAID: Towards Robust AI-Generated Image Detection with Bit-Reversed Images	2026	artifact	bit-reversed images for AIGI detection
+2608.01258	A Benchmark Dataset for MLLM-Generated Image Detection: GPT Image2 & Nano Banana2	2026	artifact	benchmark for MLLM-generated image detection
+2608.01988	Grounding and Explaining Visual Evidence for AI-Generated Image Detection in Human-Centric Scenes	2026	artifact	grounded evidence for AIGI detection
+2608.04935	Unleashing the Potential of Vision-Language Models for Generalizable AI-Generated Image Detection	2026	artifact	VLM linear probe for AIGI detection
+2608.07863	Low, High, and Semantic-Level Vision-Language Learning for AI-Generated Image Detection	2026	artifact	multi-level VL learning for AIGI detection
+2608.16259	Defake-o3: From Speculative Rationales to Verifiable Evidence for Explainable AIGI Detection	2026	artifact	explainable AIGI detection with evidence
+2608.16646	Training-Free Reconstruction-Based AI-Generated Image Detectors Are Inherently Vulnerable to Adversarial Examples	2026	artifact	adversarial vulnerability of reconstruction detectors
+2608.18523	Prior-Conditioned Gaussian Discriminants for Generalizable AI-generated Image Detection	2026	artifact	Gaussian discriminants for AIGI detection
+2608.20713	AGIDefect-4K: A Richly Annotated Dataset for AI-Generated Image Defect Detection, Localization and Explanation	2026	artifact	defect dataset for AI-generated images
+2609.05876	FACT: A Forensic Agent with Compiled Tool-Use Trajectories for AI-Generated Image Detection	2026	artifact	forensic agent with tool trajectories
+2609.32734	REALIS: A Curated Dataset for Studying the Challenges of AI Image Detection	2026	artifact	curated dataset for AI image detection challenges
+2610.09952	MSU Team at the Explainable Deepfake Detection Challenge 2026: Grounded Artifact Evidence for Deepfake Detection	2026	artifact	grounded artifact evidence for deepfake detection
+2611.00043	Out-of-distribution AI-generated image detection with zero-phase deconvolution for residual whitening	2026	artifact	OOD AIGI detection via deconvolution
+2506.19848	ScaleCap: Inference-Time Scalable Image Captioning via Dual-Modality Debiasing	2025	caption	inference-time scalable captioning
+2507.20077	The Devil is in the EOS: Sequence Training for Detailed Image Captioning	2025	caption	sequence training for detailed captioning
+2603.15253	HalDec-Bench: Benchmarking Hallucination Detector in Image Captioning	2026	caption	hallucination detector benchmark for captions
+2604.05623	DetailVerifyBench: A Benchmark for Dense Hallucination Localization in Long Image Captions	2026	caption	dense hallucination localization benchmark
+2605.06080	MSD-Score: Multi-Scale Distributional Scoring for Reference-Free Image Caption Evaluation	2026	caption	reference-free caption scoring
+2605.21728	BEiTScore: Reference-free Image Captioning Evaluation with an Efficient Cross-Encoder Model	2026	caption	reference-free caption evaluation model
+2605.24702	Do Image-Text Metrics Respect Semantic Invariances?	2026	caption	semantic invariance of image-text metrics
+2607.23235	A Reconstruction-Based Framework for Caption Evaluation Beyond Reference Captions	2026	caption	reconstruction-based caption evaluation
+2608.11074	CapProbe: Evaluating Detailed Image Captions via Full-Scene Dense Question Answering	2026	caption	dense QA evaluation of detailed captions
+2611.09505	BEiTScore++: Reference-free Image Captioning Evaluation with BEiT-3 and Conformalized Quantile Regression	2026	caption	reference-free caption evaluation with conformal
+2406.00918	Robustness of Practical Perceptual Hashing Algorithms to Hash-Evasion and Hash-Inversion Attacks	2024	dedupe	perceptual hash attacks, fits dedupe scope, no code
+2408.07689	Detecting Near-Duplicate Face Images	2024	dedupe	near-duplicate face image detection
+2410.19437	Transductive Learning for Near-Duplicate Image Detection in Scanned Photo Collections	2024	dedupe	near-duplicate detection in scanned photos
+2412.06056	Perceptual Hash Inversion Attacks on Image-Based Sexual Abuse Removal Tools	2024	dedupe	perceptual hash inversion attacks, fits dedupe
+2503.11195	Provenance Detection for AI-Generated Images: Combining Perceptual Hashing, Homomorphic Encryption, and AI Detection Models	2025	dedupe	provenance via perceptual hash and detection
+2505.11034	CleanPatrick: A Benchmark for Image Data Cleaning	2025	dedupe	image data cleaning benchmark, duplicates
+2509.15858	Optimizing Product Deduplication in E-Commerce with Multimodal Embeddings	2025	dedupe	multimodal embeddings for product deduplication
+2602.02412	Provenance Verification of AI-Generated Images via a Perceptual Hash Registry Using Merkle Patricia Trie and BK-Tree	2026	dedupe	perceptual hash registry for provenance
+2602.17484	Tracing Copied Pixels and Regularizing Patch Affinity in Copy Detection	2026	dedupe	copy detection, patch affinity
+2603.28603	ELViS: Efficient Visual Similarity from Local Descriptors that Generalizes Across Domains	2026	dedupe	visual similarity from local descriptors
+2607.11472	LLM-Guided Program Evolution for Targeted Black-Box Attacks on Perceptual Hash Algorithms	2026	dedupe	LLM-guided black-box attacks on perceptual hash
+2608.03101	Double Down on Defense: Strengthening Deep Perceptual Hashes against Evasion Attacks without Retraining	2026	dedupe	perceptual hash robustness without retraining
+2610.19127	AdaFrame: Hierarchical Multimodal Deduplication with Adaptive Information Budgeting for Cost-Efficient Video Advertisement Analysis	2026	dedupe	hierarchical multimodal video-ad dedup
+2503.18286	CO-SPY: Combining Semantic and Pixel Features to Detect Synthetic Images by AI	2025	detect	semantic and pixel features for synthetic detection
+2509.20890	FerretNet: Efficient Synthetic Image Detection via Local Pixel Dependencies	2025	detect	efficient synthetic image detection, local pixels
+2606.16119	EdgeZSAD: Value-Range Quantization for Deploying Zero-Shot Anomaly Detection on Edge Neural Processing Units	2026	detect	quantized zero-shot AD on edge NPUs
+2608.03681	Keep the Needle, Prune the Haystack: Defect-Preserving Token Pruning for Efficient Zero-Shot Anomaly Detection	2026	detect	defect-preserving token pruning for zero-shot AD
+2408.03291	DopQ-ViT: Towards Distribution-Friendly and Outlier-Aware Post-Training Quantization for Vision Transformers	2024	efficient	ViT post-training quantization, outlier-aware
+2408.03703	CAS-ViT: Convolutional Additive Self-attention Vision Transformers for Efficient Mobile Applications	2024	efficient	mobile vision transformer, additive attention
+2408.08437	PQV-Mobile: A Combined Pruning and Quantization Toolkit to Optimize Vision Transformers for Mobile Applications	2024	efficient	pruning and quantization toolkit for mobile ViT
+2410.04960	On Efficient Variants of Segment Anything Model: A Survey	2024	efficient	survey of efficient SAM variants
+2502.00490	Oscillations Make Neural Networks Robust to Quantization	2025	efficient	quantization-aware training oscillations
+2502.04628	AIQViT: Architecture-Informed Post-Training Quantization for Vision Transformers	2025	efficient	ViT post-training quantization, architecture-informed
+2506.11093	EfficientQuant: An Efficient Post-Training Quantization for CNN-Transformer Hybrid Models on Edge Devices	2025	efficient	post-training quantization, CNN-transformer hybrids
+2510.12014	Embedding the Teacher: Distilling vLLM Preferences for Scalable Image Retrieval	2025	efficient	edge-oriented embedding distillation for retrieval
+2511.16541	Supervised Contrastive Learning for Few-Shot AI-Generated Image Detection and Attribution	2025	efficient	integer-only ViT post-training quantization
+2602.11804	Efficient Segment Anything with Depth-Aware Fusion and Limited Training Data	2026	efficient	efficient SAM with depth fusion
+2604.15408	Dispatch-Aware Ragged Attention for Pruned Vision Transformers	2026	efficient	ragged attention for pruned ViTs
+2605.01330	Colinearity Decay: Training Quantization-Friendly ViTs with Outlier Decay	2026	efficient	quantization-friendly ViT training
+2607.28589	MixFrag: Fragility-Guided Mixed-Precision Post-Training Quantization for Vision Transformers	2026	efficient	mixed-precision PTQ for ViT
+2506.02161	TIIF-Bench: How Does Your T2I Model Follow Your Instructions?	2025	eval	T2I instruction-following benchmark
+2506.07977	OneIG-Bench: Omni-dimensional Nuanced Evaluation for Image Generation	2025	eval	omni-dimensional T2I evaluation benchmark
+2506.08480	Re-Thinking the Automatic Evaluation of Image-Text Alignment in Text-to-Image Models	2025	eval	automatic image-text alignment evaluation
+2508.03789	HPSv3: Towards Wide-Spectrum Human Preference Score	2025	eval	human preference score for T2I
+2508.06152	VISTAR:A User-Centric and Role-Driven Benchmark for Text-to-Image Evaluation	2025	eval	user-centric T2I evaluation benchmark
+2511.15369	IPTQ-ViT: Post-Training Quantization of Non-linear Functions for Integer-only Vision Transformers	2025	eval	physics-based metrics for synthetic images
+2601.04614	HyperAlign: Hyperbolic Entailment Cones for Adaptive Text-to-Image Alignment Assessment	2026	eval	hyperbolic alignment assessment for T2I
+2606.31711	Arena-T2I Hard: Benchmarking and Improving Faithfulness with Dependency-Aware Checklist	2026	eval	T2I faithfulness benchmark with checklist
+2607.15740	Debiasing Text-to-Image Evaluation via Implicit Cultural Alignment Reward Modeling	2026	eval	cultural alignment reward for T2I evaluation
+2610.03617	DEPICT: Scoring Text-to-Image Alignment by Answer Agreement	2026	eval	T2I alignment scoring by answer agreement
+2406.19107	FDLite: A Single Stage Lightweight Face Detector Network	2024	face	lightweight single-stage face detector, small model
+2507.23341	The Impact of Image Resolution on Face Detection: A Comparative Analysis of MTCNN, YOLOv XI and YOLOv XII models	2025	face	image resolution effect on face detectors
+2602.07403	Surveillance Facial Image Quality Assessment: A Multi-dimensional Dataset and Lightweight Model	2026	face	surveillance face quality, lightweight model
+2604.22841	ATTN-FIQA: Interpretable Attention-based Face Image Quality Assessment with Vision Transformers	2026	face	attention-based face quality with ViT
+2604.22842	EX-FIQA: Leveraging Intermediate Early eXit Representations from Vision Transformers for Face Image Quality Assessment	2026	face	early-exit face quality
+2604.26598	FunFace: Feature Utility and Norm Estimation for Face Recognition	2026	face	feature utility for face recognition
+2605.13396	PreFIQs: Face Image Quality Is What Survives Pruning	2026	face	face quality survives pruning
+2605.17489	Employing Vision-Language Models for Face Image Quality Assessment	2026	face	VLM for face quality
+2606.11884	Image Quality Assessment of Identity Cards Using Measures from Open Face Image Quality	2026	face	ID card quality from face measures
+2607.22752	Beyond Error-vs-Discard Characteristic: Toward Stable and Reliable Evaluation for Face Image Quality Assessment	2026	face	stable face quality evaluation
+2609.02644	Learning to Attract and Repel: Dual Quality Margin Learning for Face Recognition (DQM-Face)	2026	face	quality margin learning for face recognition
+2609.31662	Learning Steadily: Accumulating Relative Point Margin Scores for Face Image Quality Assessment	2026	face	relative margin scores for face quality
+2610.28766	Different Defects, Different Effects: A Controlled Audit of Face Recognition Training Data	2026	face	controlled audit of face recognition training data
+2610.33627	ONOT/TONO-Print: A Paired Benchmark for Identity-Document Portrait Quality under Document Production Shift	2026	face	paired benchmark for ID-document portrait quality
+2611.00074	When Morphs Look Better: Face Image Quality as a Training-Free Signal for Morphing Attack Detection	2026	face	training-free face quality for morph detection
+2603.03654	Field imaging framework for morphological characterization of aggregates with computer vision: Algorithms and applications	2026	granulo	aggregate morphology with computer vision
+2604.18957	Bridging Foundation Models and ASTM Metallurgical Standards for Automated Grain Size Estimation from Microscopy Images	2026	granulo	foundation models for ASTM grain size
+2409.01212	MobileIQA: Exploiting Mobile-level Diverse Opinion Network For No-Reference Image Quality Assessment Using Knowledge Distillation	2024	iqa	mobile-scale no-reference quality via distillation
+2409.07762	Exploring Kolmogorov-Arnold networks for realistic image sharpness assessment	2024	iqa	KAN-based realistic sharpness assessment
+2410.02505	Dog-IQA: Standard-guided Zero-shot MLLM for Mix-grained Image Quality Assessment	2024	iqa	zero-shot MLLM mixed-grain quality assessment
+2410.10488	A Novel No-Reference Image Quality Metric For Assessing Sharpness In Satellite Imagery	2024	iqa	satellite sharpness metric, remote sensing
+2508.08700	Subjective and Objective Quality Assessment of Banding Artifacts on Compressed Videos	2025	iqa	banding artifact quality, subjective and objective
+2508.11331	Guiding WaveMamba with Frequency Maps for Image Debanding	2025	iqa	frequency-guided debanding
+2508.17965	TuningIQA: Fine-Grained Blind Image Quality Assessment for Livestreaming Camera Tuning	2025	iqa	fine-grained blind quality for livestream tuning
+2602.18720	Subtle Motion Blur Detection and Segmentation from Static Image Artworks	2026	iqa	motion blur detection in artworks
+2604.09704	Multi-Granularity Reasoning for Image Quality Assessment via Attribute-Aware Reinforcement Learning to Rank	2026	iqa	reasoning IQA with RL rank
+2605.02863	Pixel Perfect: Relational Image Quality Assessment with Spatially-Aware Distortions	2026	iqa	relational IQA with spatial distortions
+2605.09479	ML-CLIPSim: Multi-Layer CLIP Similarity for Machine-Oriented Image Quality	2026	iqa	machine-oriented FR-IQA via CLIP
+2605.17748	Unleashing Vision Transformer Potential In Image Quality Assessment via Global-Local Adaptive Interaction	2026	iqa	ViT global-local interaction for BIQA
+2605.24553	IQA-Spider: Unifying Multi-Granularity Image Quality Assessment with Reasoning, Grounding and Referring	2026	iqa	multi-granularity IQA with reasoning
+2606.02002	Parameter-Efficient Adaptation of a Multi-Stream Vision-Language Framework for Blind Image Quality Assessment	2026	iqa	adapted VLM for BIQA
+2606.29162	Spatially Localized Image Degradation Embeddings for Image Quality Assessment	2026	iqa	degradation embeddings for NR-IQA
+2606.29752	LEIQ-Assessor: Multi-dimensional Quality Assessment of Low-light Enhanced Images via Multi-task Learning	2026	iqa	low-light enhanced image quality, multi-task
+2606.29760	MR-IQA: A Unified Margin View of Regression and Ranking for Blind Image Quality Assessment	2026	iqa	margin view of regression and ranking for BIQA
+2607.06615	Format-Controlled Multi-Scale JPEG Compression Response Analysis for Image-Level Forgery Screening	2026	iqa	JPEG response analysis for forgery screening
+2607.10427	BOCCHI: A More Realistic and Challenging Benchmark for Local Motion Blur Detection with MSDCT-UNet	2026	iqa	local motion blur benchmark
+2607.12375	IQA-T1: Tool-based Visual Evidence Reasoning for Image Quality Assessment	2026	iqa	tool-based visual evidence reasoning for IQA
+2607.23321	A Reference-Free Framework for Evaluating Single-Frame ISP Pipelines	2026	iqa	reference-free evaluation of ISP pipelines
+2607.27628	BlindPSNR: A No-Reference Fidelity Predictor for Low-Light Image Enhancement	2026	iqa	no-reference fidelity for low-light enhancement
+2608.01730	Learning Where to Look and How to Judge: Resolution-agnostic Image Quality Assessment with Quality-aware Saliency	2026	iqa	resolution-agnostic quality with saliency
+2608.09122	Visual Distortion Detection in UGC Images Using Large Multimodal Models	2026	iqa	distortion detection in UGC images via LMMs
+2608.15217	Self-Supervised Topologically Invariant Manifold Learning for Railway Image Quality Assessment	2026	iqa	self-supervised railway image quality
+2608.18579	MR-IQA-2: Faithful Image Quality Reflection via Fine-Grained Credit Assignment	2026	iqa	MLLM quality reflection with credit assignment
+2608.28798	Blind Stereoscopic Omnidirectional Image Quality Assessment Using Predictive Coding Hierarchy	2026	iqa	blind stereoscopic omnidirectional IQA
+2609.08316	From Glance to Scrutiny: Progressive Distortion Reasoning for Fine-Grained Image Quality Assessment	2026	iqa	progressive distortion reasoning for IQA
+2609.14495	MCIQA-2K: A Multi-Dimensional Dataset and No-Reference Quality Assessment Benchmark for Colorized Images	2026	iqa	colorized image quality dataset and NR-QA
+2609.16664	Bridging the Perceptual Gap: Residual-Enhanced Downscaling and Manifold-Aware Perception Alignment Adaptation for NR-IQA	2026	iqa	NR-IQA with CLIP residual downscaling
+2609.19634	Scientific Image Quality Assessment via Multi-modal Retrieval-Augmented Generation	2026	iqa	scientific IQA with multimodal RAG
+2609.25716	FoMo: Forking Moment in Generative Trajectory as a Perceptual Distance	2026	iqa	forking moment as perceptual distance
+2609.27959	Local SVD-Entropy Maps as a Complementary Structural Representation for Full-Reference and No-Reference Image Quality Assessment	2026	iqa	local SVD-entropy maps for IQA
+2610.35905	Task-Utility IQA: Rethinking Image Quality Assessment in Embodied Tasks	2026	iqa	task-utility IQA for embodied tasks
+2610.37186	VGIQA: Fine-Grained Image Quality Assessment with Visual Grounding Rewards	2026	iqa	fine-grained IQA with visual grounding rewards
+2611.06203	BiCG-Net: Target-Specific Image Quality Assessment via Observation Modeling and In-Image Differencing	2026	iqa	target-specific IQA via differencing
+2611.16451	HIFC-IQA: Train-Free Cross-Domain Image Quality Assessment via Dual-Process Cognition	2026	iqa	train-free cross-domain IQA
+2611.18429	Do Underwater Image Quality Metrics Agree with Human Perception? A Benchmark with Human Choices, Simple Edits and Generative Drift	2026	iqa	underwater metrics vs human choices benchmark
+2412.20749	Solar Filaments Detection using Active Contours Without Edges	2024	seg	active contours for solar filament detection
+2502.07259	Flat U-Net: An Efficient Ultralightweight Model for Solar Filament Segmentation in Full-disk H$α$ Images	2025	seg	ultralightweight solar filament segmentation
+2509.02964	EdgeAttNet: Towards Barb-Aware Filament Segmentation	2025	seg	barb-aware solar filament segmentation
+2509.18214	Automatic Classification of Magnetic Chirality of Solar Filaments from H-Alpha Observations	2025	seg	magnetic chirality of solar filaments
+2512.06032	The SAM2-to-SAM3 Gap in the Segment Anything Model Family: Why Prompt-Based Expertise Fails in Concept-Driven Image Segmentation	2025	seg	benchmark and reward-based spatial aesthetics for AIGI
+2601.02273	TopoLoRA-SAM: Topology-Aware Parameter-Efficient Adaptation of Foundation Segmenters for Thin-Structure and Cross-Domain Binary Semantic Segmentation	2026	seg	thin-structure adaptation of SAM, PEFT
+2603.13659	FMS$^2$: Unified Flow Matching for Segmentation and Synthesis of Thin Structures	2026	seg	flow matching for thin structures
+2607.24525	A Modern ConvNet for Solar Filament Detection	2026	seg	ConvNet for solar filament detection
+2610.34502	Data-driven segmentation of solar filaments based on ground-based instrument data	2026	seg	data-driven solar filament segmentation
+2407.07726	PaliGemma: A versatile 3B VLM for transfer	2024	zeroshot-tag	general 3B VLM, background only
+2409.01936	Optimizing CLIP Models for Image Retrieval with Maintained Joint-Embedding Alignment	2024	zeroshot-tag	CLIP retrieval embedding alignment
+2410.14969	Visual Navigation of Digital Libraries: Retrieval and Classification of Images in the National Library of Norway's Digitised Book Collection	2024	zeroshot-tag	image retrieval and classification in digital library
+2412.03871	CLIP-PING: Boosting Lightweight Vision-Language Models with Proximus Intrinsic Neighbors Guidance	2024	zeroshot-tag	lightweight VLM with neighbor guidance
+2412.06190	Category-Adaptive Cross-Modal Semantic Refinement and Transfer for Open-Vocabulary Multi-Label Recognition	2024	zeroshot-tag	open-vocabulary multi-label CLIP recognition
+2502.14786	SigLIP 2: Multilingual Vision-Language Encoders with Improved Semantic Understanding, Localization, and Dense Features	2025	zeroshot-tag	SigLIP 2 multilingual encoders, checkpoints
+2502.15682	ELIP: Enhanced Visual-Language Foundation Models for Image Retrieval	2025	zeroshot-tag	CLIP-style retrieval framework improvement
+2502.16911	SPARC: Score Prompting and Adaptive Fusion for Zero-Shot Multi-Label Recognition in Vision-Language Models	2025	zeroshot-tag	zero-shot multi-label recognition with VLMs
+2503.15485	TULIP: Towards Unified Language-Image Pretraining	2025	zeroshot-tag	unified language-image pretraining, dense detail
+2505.18983	AmorLIP: Efficient Language-Image Pretraining via Amortization	2025	zeroshot-tag	efficient CLIP-style language-image pretraining
+2507.22431	HQ-CLIP: Leveraging Large Vision-Language Models to Create High-Quality Image-Text Datasets and CLIP Models	2025	zeroshot-tag	high-quality image-text data and CLIP models
+2508.05585	DART: Dual Adaptive Refinement Transfer for Open-Vocabulary Multi-Label Recognition	2025	zeroshot-tag	open-vocabulary multi-label recognition, refinement
+2605.25821	[CLS] is Not Enough: Multi-Label Recognition via Patch-Level Inference and Adaptive Aggregation	2026	zeroshot-tag	patch-level multi-label CLIP
+2607.09488	SigLIP-HD by Fine-to-Coarse Supervision	2026	zeroshot-tag	fine-to-coarse supervision for SigLIP
+2611.10321	LoCo: Selective Local Competition for Discriminative Open-Vocabulary Multi-Label Recognition	2026	zeroshot-tag	selective local competition for OV-MLR

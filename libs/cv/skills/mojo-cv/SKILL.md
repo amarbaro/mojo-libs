@@ -1,0 +1,59 @@
+---
+name: mojo-cv
+description: "OpenCV-style image processing, features, calibration and 3D/CAD helpers in Mojo, checked against cv2 5.0. Use when Mojo code must blur, threshold, resize, measure grain size (sieve-shaped granulometry, reconstruction, autocorrelation, wavelet energy, GLCM, LBP, smooth and sharp maps, tray rim), warp, find contours or corners, match ORB features, track optical flow, solve PnP or write GLB/STEP, or when a Mojo op must agree with cv2 on the same input. Also stock-site pre-checks of generated pictures: sharpness, noise, JPEG blocks, banding, clipping, blown void, colour cast, fog strip, near-duplicate hashes and faces (scripts/mcv-stockcheck, docs/stockcheck.md)."
+---
+
+# mojo-cv
+
+CPU computer vision for Mojo, with cv2 5.0 as the oracle. 287 2D rows and 161 3D rows run in `scripts/ci.sh`.
+
+## Install
+
+Needs Mojo 1.2 and MAX 26.7 from `pyproject.toml` (`uv sync`). Mojo 1.1.0 does not compile it.
+`mojo build -I <repo>/src app.mojo`, then `from mojocv.imgproc import ...`.
+
+## Use
+
+```mojo
+from mojocv.mat import Mat
+from mojocv.imgproc import gaussian_blur, otsu, threshold
+
+def main() raises:
+    var img = Mat[DType.uint8](64, 64, 1)
+    for r in range(64):
+        for c in range(64):
+            img.set(r, c, 0, UInt8(40) if c < 32 else UInt8(200))
+    var mask = threshold(img, Float64(otsu(img)), 255.0, 0)   # cv2.THRESH_OTSU then THRESH_BINARY
+    var soft = gaussian_blur(img, 5, 0.0)                      # cv2.GaussianBlur((5, 5), 0)
+    print(mask.at(0, 0, 0), mask.at(0, 63, 0), soft.at(32, 31, 0))
+```
+
+The command-line tool runs one op on `.mcv` files: `mojo-cv OP OUT IN... [k=v]`
+(`mojo build -O3 -I src src/main.mojo -o .bin/mojo-cv`). Op names and options: `docs/2d.md`, `docs/3d.md`.
+
+## Rules
+
+- `Mat[dt]` is `rows x cols x ch`, row-major, interleaved, one dtype fixed at compile time (`uint8`, `int16`,
+  `int32`, `float32`, `float64`). Ops are generic over `dt`; a few take only `uint8`.
+- Function arguments follow cv2's meaning, not its spelling: `flip(a, code)`, `threshold(src, thresh, maxval, kind)` with
+  kind 0 binary, 1 inverse, 2 trunc, 3 tozero, 4 tozero inverse. Read the docstring before assuming a cv2 default.
+- Most 2D ops are bit exact or within one grey level of cv2. StereoSGBM, GrabCut, findEssentialMat's root solve and
+  chessboard corner order are not cv2's algorithm; `docs/2d.md` lists each difference with its measured agreement.
+- `Mat.at` is bounds-checked and slow; hot loops take `m.ptr()`. A `Mat` that only a raw pointer outlives is freed at its
+  last named use: keep it with `_ = m.rows`.
+- Parallel regions use 8 workers (`core.par`); 16 workers cost about 215 us per region, 8 cost about 8 us.
+- HOG exists only as the cv2 4.x people detector (`hog_detect`); its oracle runs under cv2 4.8.1 (`.venv4`).
+- A new op needs case rows in `tests/cases/*.txt` (2D, against cv2) or `tests/cases3d/*.txt` (3D, against an oracle in
+  `tools/oracle3d.py`); a row is never loosened to make it pass.
+
+## Stock pre-check
+
+`scripts/mcv-stockcheck [--sidecar] [--faces] OUT.jsonl IMAGE|@LIST...` writes one JSON line per image (numbers, hashes, flags, near-duplicates over the batch, faces and platform routing with `--faces`). Ops, flags, thresholds and what the numbers do not catch: `docs/stockcheck.md`. Thresholds sit just outside the 46 Adobe-accepted pictures of one set; the Adobe quality refusals are mostly semantic, so a clean report is not a pass. Faces need `.bin/mcv-faces` (`tests/stock_faces.sh` builds it) and the GPU through `gpu-wait`.
+
+## Personal photos (`~/Pictures/TAGS`, Mario's, local only)
+
+Test and calibration data in full, under `docs/lanes/2026-11-16-cv-team.md`: never copied into this repo, never in git, never off the machine, never as pixels or names in a prompt. Results are numbers and aggregates, derived files live in `~/Pictures/TAGS/.mojocv/` or the gitignored `.work/`. Faces: counts and boxes only, no identity. List the tree only through `wc -l` or `awk` on a counted pattern, and read a JSONL of it through `jq` selecting numbers (its `file` field holds names); a `sed 's/.*\.//'` extension count printed folder names once (`docs/rules.md` 10).
+
+## Embeddings run on the GPU
+
+SigLIP and any other model's vectors are computed on the 7900 XTX through the GpuNet runner under `gpu-wait run --timeout S`, never as a long CPU job (Mario, 2026-11-16; `docs/rules.md` 19). `scripts/siglip-embed.sh` and `.bin/mcv-labels image` use the CPU runner of mojo-faces: parity oracle and a fallback for about 100 pictures (0.85 to 1.4 s each solo, 2.2 GB RSS per process). A longer list waits for the GPU port (`docs/lanes/2026-11-16-gpunet-transformer-brief.md`) or is reported to the boss as a blocker.

@@ -1,0 +1,115 @@
+"""Malformed input must raise a mojocv error (exit 1, message on stderr), never abort, crash or hang.
+  run from the repo root after tests/run.sh and tests/run3d.sh built .bin/: `.venv/bin/python -I tools/malformed_check.py`"""
+import json, struct, subprocess, sys
+
+W = ".work/malformed"
+bad = 0
+
+
+def mcv(rows, cols, ch, code, data=b""):
+    return b"MCV1" + struct.pack("<IIHH", rows, cols, ch, code) + data
+
+
+def put(name, data):
+    open(f"{W}/{name}", "wb").write(data)
+    return f"{W}/{name}"
+
+
+def expect_error(label, cmd, timeout=10, msg=b"mojocv"):
+    """cmd must exit 1 with msg (default 'mojocv') in its stderr: a raised Error."""
+    global bad
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=timeout)
+        ok, why = r.returncode == 1 and msg in r.stderr, f"rc {r.returncode}: {r.stderr[-120:]!r}"
+    except subprocess.TimeoutExpired:
+        ok, why = False, f"no exit in {timeout} s"
+    print(("ok   " if ok else "BAD  ") + label + ("" if ok else "  " + why))
+    bad += not ok
+
+
+subprocess.run(["mkdir", "-p", W], check=True)
+# mat.load: a header whose rows*cols*ch wraps Int64 to 0 must not allocate or run
+expect_error("load: 2^31 x 2^31 x 4 header", [".bin/mojo-cv", "flip", f"{W}/o.mcv", put("ovf.mcv", mcv(1 << 31, 1 << 31, 4, 0))])
+# core.peek_code: a file shorter than its 16-byte header, and an op with no input at all
+expect_error("peek_code: empty .mcv", [".bin/mojo-cv", "flip", f"{W}/o.mcv", put("empty.mcv", b"")])
+expect_error("peek_code: 15-byte .mcv", [".bin/mojo-cv", "flip", f"{W}/o.mcv", put("short.mcv", mcv(1, 1, 1, 0)[:15])])
+expect_error("core op without an input", [".bin/mojo-cv", "flip", f"{W}/o.mcv"])
+# Rng.sample(n, k) with n < k looped forever; callers need at least 3 (affine), 4 (PnP), 5 (essential) points
+pts = lambda n: mcv(n, 2, 1, 3, struct.pack("<%dd" % (2 * n), *[float(i % 7) for i in range(2 * n)]))
+expect_error("estimateAffine2D with 2 points", [".bin/mojo-cv", "estimateAffine2D", f"{W}/o.mcv", put("p2a.mcv", pts(2)), put("p2b.mcv", pts(2))], timeout=5)
+expect_error("estimateAffine2D with 0 points", [".bin/mojo-cv", "estimateAffine2D", f"{W}/o.mcv", put("p0a.mcv", pts(0)), put("p0b.mcv", pts(0))], timeout=5)
+f64 = lambda r, c, *v: mcv(r, c, 1, 3, struct.pack("<%dd" % (r * c), *(list(v) + [1.0] * (r * c - len(v)))))
+K = put("k.mcv", f64(3, 3, 500, 0, 320, 0, 500, 240, 0, 0, 1))
+expect_error("solvePnPRansac with 3 points", [".bin/mojo-cv", "solvePnPRansac", f"{W}/o.mcv", put("o3.mcv", f64(3, 3)), put("i3.mcv", f64(3, 2)), K, put("d0.mcv", f64(0, 1))], timeout=5, msg=b"need at least 4 points")
+expect_error("findEssentialMat with 4 points", [".bin/mojo-cv", "findEssentialMat", f"{W}/o.mcv", put("e1.mcv", f64(4, 2)), put("e2.mcv", f64(4, 2)), K], timeout=5, msg=b"need at least 5 points")
+# stockcheck: wrong channels and images too small to measure raise; a plausible number is never the answer
+g20, g64, c40 = put("g20.mcv", mcv(20, 20, 1, 0, bytes(400))), put("g64.mcv", mcv(64, 64, 1, 0, bytes(4096))), put("c40.mcv", mcv(40, 40, 3, 0, bytes(4800)))
+for op in ["sharpness", "noiseEst", "blockiness", "clipping", "banding", "hazeBand", "hashes", "boxDown"]:
+    expect_error(f"{op}: 3-channel input", [".bin/mojo-cv", op, f"{W}/o.mcv", c40], msg=b"1-channel")
+for op in ["colorCast", "stockMetrics"]:
+    expect_error(f"{op}: grey input", [".bin/mojo-cv", op, f"{W}/o.mcv", g64], msg=b"3-channel")
+expect_error("sharpness: 2x2 image", [".bin/mojo-cv", "sharpness", f"{W}/o.mcv", put("g2.mcv", mcv(2, 2, 1, 0, bytes(4)))], msg=b"smaller than")
+expect_error("sharpness: tile larger than the image", [".bin/mojo-cv", "sharpness", f"{W}/o.mcv", g64, "tile=64"], msg=b"no full")
+expect_error("blockiness: 10x10 image", [".bin/mojo-cv", "blockiness", f"{W}/o.mcv", put("g10.mcv", mcv(10, 10, 1, 0, bytes(100)))], msg=b"smaller than")
+expect_error("hazeBand: 4x4 image", [".bin/mojo-cv", "hazeBand", f"{W}/o.mcv", put("g4.mcv", mcv(4, 4, 1, 0, bytes(16)))], msg=b"smaller than")
+expect_error("hashes: image under the 32x32 grid", [".bin/mojo-cv", "hashes", f"{W}/o.mcv", g20], msg=b"smaller than the")
+expect_error("clipping: lo >= hi", [".bin/mojo-cv", "clipping", f"{W}/o.mcv", g64, "lo=200", "hi=100"], msg=b"need 0 <= lo")
+expect_error("boxDown: factor 0", [".bin/mojo-cv", "boxDown", f"{W}/o.mcv", g64, "f=0"], msg=b"does not fit")
+expect_error("boxDown: factor above the image", [".bin/mojo-cv", "boxDown", f"{W}/o.mcv", g20, "f=21"], msg=b"does not fit")
+expect_error("hamPairs: 3 columns", [".bin/mojo-cv", "hamPairs", f"{W}/o.mcv", put("b3.mcv", mcv(5, 3, 1, 0, bytes(15)))], msg=b"hamPairs needs")
+expect_error("hamPairs: bit value 2", [".bin/mojo-cv", "hamPairs", f"{W}/o.mcv", put("b2.mcv", mcv(2, 64, 1, 0, bytes([2]) * 128))], msg=b"bit value")
+# stockBatch must write an error line for an image it cannot measure (and keep going), never a pass or a gap
+open(f"{W}/b.tsv", "w").write(f"{W}/nope.mcv\t/x/missing.png\t1\n{W}/g20.mcv\t/x/grey.png\t1\n{c40}\t/x/ok-small.png\t1\n")
+subprocess.run([".bin/mojo-cv", "stockBatch", f"{W}/b.jsonl", f"{W}/b.tsv"], check=True)
+lines = open(f"{W}/b.jsonl").read().splitlines()
+ok = len(lines) == 3 and '"error"' in lines[0] and '"error"' in lines[1] and '"error"' not in lines[2] and '"lowres"' in lines[2]
+print(("ok   " if ok else "BAD  ") + f"stockBatch: unreadable and grey images give error lines, the 40x40 image a measured line with lowres (got {len(lines)} lines)")
+bad += not ok
+for op in ["hysteresis", "clipRegion"]:
+    expect_error(f"{op}: 3-channel input", [".bin/mojo-cv", op, f"{W}/o.mcv", c40], msg=b"1-channel")
+expect_error("hysteresis: lo >= hi", [".bin/mojo-cv", "hysteresis", f"{W}/o.mcv", g64, "lo=200", "hi=100"], msg=b"need 0 <= lo")
+expect_error("hysteresis: connectivity 6", [".bin/mojo-cv", "hysteresis", f"{W}/o.mcv", g64, "connectivity=6"], msg=b"connectivity")
+expect_error("clipRegion: hi above 255", [".bin/mojo-cv", "clipRegion", f"{W}/o.mcv", g64, "hi=300"], msg=b"need 0 <= lo")
+# the .ppm loader of stockBatch: every malformed P6 is an error line, a good one is measured (RGB swapped to BGR)
+rgb40 = bytes([10, 20, 30]) * 1600
+ppms = {"good": b"P6\n# c\n40 40\n255\n" + rgb40, "magic": b"P5\n40 40\n255\n" + rgb40, "short": b"P6\n40 40\n255\n" + rgb40[:-3],
+        "maxval": b"P6\n40 40\n65535\n" + rgb40, "huge": b"P6\n999999999 999999999\n255\n" + rgb40, "nohdr": b"P6\n40", "zero": b"P6\n0 40\n255\n"}
+for k, v in ppms.items():
+    open(f"{W}/{k}.ppm", "wb").write(v)
+open(f"{W}/p.tsv", "w").write("".join(f"{W}/{k}.ppm\t/x/{k}.png\t1\n" for k in ppms))
+subprocess.run([".bin/mojo-cv", "stockBatch", f"{W}/p.jsonl", f"{W}/p.tsv"], check=True)
+res = {json.loads(l)["file"].split("/")[-1][:-4]: l for l in open(f"{W}/p.jsonl").read().splitlines()}
+ok = '"error"' not in res["good"] and all('"error"' in res[k] for k in ppms if k != "good") and '"cast":{"rg":-10.0,"by":15.0}' in res["good"]
+print(("ok   " if ok else "BAD  ") + "stockBatch .ppm: good P6 measured (R,G,B 10,20,30 read as B,G,R 30,20,10), 6 malformed ones are error lines")
+bad += not ok
+# glb accessor bounds: (count - 1) * stride must not wrap to a small number
+import json
+def glb(acc):
+    doc = {"asset": {"version": "2.0"}, "meshes": [{"primitives": [{"attributes": {"POSITION": 0}}]}],
+           "bufferViews": [{"buffer": 0, "byteLength": 16}], "accessors": [acc]}
+    js = json.dumps(doc).encode(); js += b" " * (-len(js) % 4)
+    return (struct.pack("<III", 0x46546C67, 2, 12 + 8 + len(js) + 8 + 16) + struct.pack("<II", len(js), 0x4E4F534A) + js
+            + struct.pack("<II", 16, 0x004E4942) + bytes(16))
+for count in (1 << 62, 3 << 61, 1 << 40):  # the first two wrap (count - 1) * 12; the last is a plain too-big control
+    acc = {"bufferView": 0, "componentType": 5126, "count": count, "type": "VEC3"}
+    expect_error(f"glb_read accessor count {count}", [".bin/mojo-cv3d", "glb_read", f"{W}/g.mcv", put("wrap.glb", glb(acc)), f"faces={W}/gf.mcv"], timeout=10, msg=b"reads outside")
+# shapes and lengths the ops index without checking (each must raise a mojocv error, not read out of range)
+u8 = lambda r, c, ch=1: mcv(r, c, ch, 0, bytes((i * 7) % 256 for i in range(r * c * ch)))
+f32 = lambda r, c, ch=1: mcv(r, c, ch, 1, struct.pack("<%df" % (r * c * ch), *[float(i % 5) for i in range(r * c * ch)]))
+O = f"{W}/o.mcv"
+expect_error("remap: mapy shape differs from mapx", [".bin/mojo-cv", "remap", O, put("rm_i.mcv", u8(4, 4)), put("rm_x.mcv", f32(4, 4)), put("rm_y.mcv", f32(2, 2))], msg=b"mojocv: remap")
+expect_error("blobFromImage: 1 mean value for 3 channels", [".bin/mojo-cv", "blobFromImage", O, put("bl_i.mcv", u8(4, 4, 3)), "mean=1.0"], msg=b"mojocv: blobFromImage")
+expect_error("HOGScores: svm with 10 floats", [".bin/mojo-cv", "HOGScores", O, put("hg_i.mcv", u8(128, 64)), put("hg_s.mcv", f32(1, 10))], msg=b"mojocv: HOGScores")
+expect_error("calcOpticalFlowFarneback: frames of different shape", [".bin/mojo-cv", "calcOpticalFlowFarneback", O, put("fb_a.mcv", u8(40, 40)), put("fb_b.mcv", u8(20, 20))], msg=b"mojocv: calcOpticalFlowFarneback")
+expect_error("calcOpticalFlowFarneback: 3-channel frames", [".bin/mojo-cv", "calcOpticalFlowFarneback", O, put("fb_c.mcv", u8(40, 40, 3)), put("fb_d.mcv", u8(40, 40, 3))], msg=b"mojocv: calcOpticalFlowFarneback")
+expect_error("bfmatch: descriptors of different width", [".bin/mojo-cv", "bfmatch", O, put("kn_q.mcv", u8(3, 32)), put("kn_t.mcv", u8(5, 16))], msg=b"mojocv: descriptor widths")
+expect_error("knnmatch: descriptors of different width", [".bin/mojo-cv", "knnmatch", O, put("kn_q.mcv", u8(3, 32)), put("kn_t.mcv", u8(5, 16))], msg=b"mojocv: descriptor widths")
+# threshold: a maxval outside the dtype saturates like cv2 (300 -> 255, -5 -> 0) instead of an undefined float-to-uint8 cast
+for mv, want in ((300.0, 255), (-5.0, 0)):
+    p = subprocess.run([".bin/mojo-cv", "threshold", O, put("th_i.mcv", mcv(8, 8, 1, 0, bytes([100]) * 64)), "thresh=50", f"maxval={mv}", "type=0"], capture_output=True)
+    got = open(O, "rb").read()[16:] if p.returncode == 0 else b""
+    ok = p.returncode == 0 and len(got) == 64 and set(got) == {want}
+    print(("ok   " if ok else "BAD  ") + f"threshold maxval={mv} saturates to {want}" + ("" if ok else f"  rc {p.returncode}, values {sorted(set(got))[:6]}"))
+    bad += not ok
+print("BAD", bad)
+sys.exit(1 if bad else 0)
