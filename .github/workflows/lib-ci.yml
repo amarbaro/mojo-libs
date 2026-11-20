@@ -3,6 +3,10 @@ name: lib-ci
 on:
   workflow_call:
     inputs:
+      lib:
+        description: "monorepo: the folder under libs/ to test (its ci-setup.tsv row supplies apt and pre); empty = this repo's root, for a standalone library repo"
+        type: string
+        default: ""
       mojo:
         description: "stable = the library's own pin; nightly = a nightly Mojo through MOJO=, only for a scripts/ci.sh that honours it"
         type: string
@@ -19,23 +23,45 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-26.04
+    defaults:
+      run:
+        working-directory: ${{ inputs.lib != '' && format('libs/{0}', inputs.lib) || '.' }}
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0
-      - if: inputs.apt != ''
-        run: sudo apt-get update -q && sudo apt-get install -yq ${{ inputs.apt }}
+      - if: inputs.lib == 'xmojo'   # xmojo builds with pixi
+        uses: prefix-dev/setup-pixi@v0.10.2
+        with:
+          pixi-version: v0.84.1
+          run-install: false
+      - name: Setup row of ci-setup.tsv
+        working-directory: .
+        shell: bash
+        env:
+          LIB: ${{ inputs.lib }}
+          IN_APT: ${{ inputs.apt }}
+          IN_PRE: ${{ inputs.pre }}
+        run: |
+          apt=$IN_APT; pre=$IN_PRE
+          if [ -n "$LIB" ]; then
+            apt=$(awk -F'\t' -v l="$LIB" '$1 == l { print $2 }' ci-setup.tsv); pre=$(awk -F'\t' -v l="$LIB" '$1 == l { print $3 }' ci-setup.tsv)
+          fi
+          { echo "APT=$apt"; echo "PRE=$pre"; } >> "$GITHUB_ENV"
+      - if: env.APT != ''
+        run: sudo apt-get update -q && sudo apt-get install -yq $APT
       - if: inputs.mojo == 'nightly'
         shell: bash
         run: |
           grep -q MOJO scripts/ci.sh || { echo "FAIL setup: scripts/ci.sh has no MOJO= override, nightly cannot be selected"; exit 1; }
           uv venv -q "$RUNNER_TEMP/nightly" && uv pip install -q --python "$RUNNER_TEMP/nightly/bin/python" --prerelease allow --index-strategy unsafe-best-match --extra-index-url https://whl.modular.com/nightly/simple/ mojo max
           echo "MOJO=$RUNNER_TEMP/nightly/bin/mojo" >> "$GITHUB_ENV"
-      - if: inputs.pre != ''
-        run: ${{ inputs.pre }}
+      - if: env.PRE != ''
+        shell: bash
+        run: bash -c "$PRE"
       - run: bash scripts/ci.sh 2>&1 | tee ci.log
         shell: bash
       - name: Badge
-        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: always() && inputs.lib == '' && github.event_name == 'push' && github.ref == 'refs/heads/main'   # monorepo runs carry no badge: one workflow badge in README.md
         continue-on-error: true   # a failed badge write must not turn CI red
         shell: bash
         run: |

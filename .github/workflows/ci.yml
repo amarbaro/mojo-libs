@@ -1,0 +1,43 @@
+# CI for the monorepo: one job per library whose folder changed, plus every library that depends on it (deps.tsv).
+# A change outside libs/ (scripts/, .github/, deps.tsv) runs all of them. Each job is lib-ci.yml on libs/<name>.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-26.04
+    outputs:
+      libs: ${{ steps.p.outputs.libs }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: p
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: echo "libs=$(scripts/ci-plan.sh "$BASE")" >> "$GITHUB_OUTPUT"
+
+  lib:
+    needs: plan
+    if: needs.plan.outputs.libs != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        lib: ${{ fromJSON(needs.plan.outputs.libs) }}
+    uses: ./.github/workflows/lib-ci.yml
+    with:
+      lib: ${{ matrix.lib }}
+
+  ci:   # the one status to require: green when every library job passed or none had to run
+    needs: lib
+    if: always()
+    runs-on: ubuntu-26.04
+    steps:
+      - env:
+          RESULT: ${{ needs.lib.result }}
+        run: '[ "$RESULT" = success ] || [ "$RESULT" = skipped ] || { echo "FAIL ci: library jobs $RESULT"; exit 1; }'

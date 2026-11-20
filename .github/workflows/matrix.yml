@@ -1,4 +1,4 @@
-# Weekly matrix: every library in libs.txt x {stable, nightly}, then status.md, per-library shields and one issue per
+# Weekly matrix: every folder under libs/ x {stable, nightly}, then status.md, per-library shields and one issue per
 # failure group. Cell logic is scripts/matrix-cell.sh (run locally by scripts/matrix-local.sh); docs/ci.md.
 name: matrix
 on:
@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - id: l
-        run: echo "libs=$(grep -v '^#' libs.txt | grep . | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
+        run: echo "libs=$(ls libs | jq -R . | jq -sc .)" >> "$GITHUB_OUTPUT"
 
   cell:
     needs: plan
@@ -30,7 +30,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0
-      - uses: prefix-dev/setup-pixi@v0.10.2   # xmojo-public builds with pixi
+      - uses: prefix-dev/setup-pixi@v0.10.2   # xmojo builds with pixi
         with:
           pixi-version: v0.84.1
           run-install: false

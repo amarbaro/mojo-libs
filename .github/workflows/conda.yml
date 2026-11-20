@@ -1,0 +1,33 @@
+# On a tag <name>-v<version> (for example json-v0.1.4, gguf-core-v0.1.5): build, test and publish libs/<name>/recipe.yaml
+# to prefix.dev through Repository Access (OIDC trusted publishing): register amarbaro/mojo-libs + this workflow under the
+# channel's Settings > Repository Access first. No stored key. Only the library named by the tag is built.
+name: conda
+on:
+  push:
+    tags: ["*-v*"]
+permissions:
+  contents: read
+  id-token: write
+env:
+  CHANNEL: amarbaro/amarbaro
+jobs:
+  package:
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v7
+      - name: library and version from the tag
+        shell: bash
+        run: |
+          lib=${GITHUB_REF_NAME%-v*}; ver=${GITHUB_REF_NAME##*-v}
+          [ -f "libs/$lib/recipe.yaml" ] || { echo "FAIL tag: libs/$lib/recipe.yaml does not exist (tag $GITHUB_REF_NAME)"; exit 1; }
+          rv=$(sed -n 's/^  version: //p' "libs/$lib/recipe.yaml" | head -1)
+          [ "$rv" = "$ver" ] || { echo "FAIL tag: $GITHUB_REF_NAME is version $ver, libs/$lib/recipe.yaml says $rv"; exit 1; }
+          echo "LIB=$lib" >> "$GITHUB_ENV"
+      - uses: prefix-dev/setup-pixi@v0.10.2
+        with:
+          pixi-version: v0.84.1
+          run-install: false
+      - name: build and test
+        run: pixi exec rattler-build build -r "libs/$LIB/recipe.yaml" -c https://prefix.dev/amarbaro/amarbaro -c https://conda.modular.com/max -c conda-forge --output-dir out
+      - name: publish
+        run: pixi exec rattler-build upload prefix --channel "$CHANNEL" out/linux-64/*.conda

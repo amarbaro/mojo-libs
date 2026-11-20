@@ -1,0 +1,13 @@
+# lib<TAB>sibling libraries it uses (scripts/deps-scan.sh --write); CI runs a library when one of these changes
+bento	aio gguf-core json posix safetensors systemd
+cv	gzip imkit json mmap tokenizers
+gguf	uregex
+json	proptest
+msgpack	proptest
+prometheus	pyformat
+safetensors	json
+subprocess	posix
+tls	aio
+tokenizers	json uregex
+toml	proptest
+uuid	hashlib

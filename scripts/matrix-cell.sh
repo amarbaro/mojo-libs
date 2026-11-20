@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# matrix-cell.sh LIB CHANNEL OUT: one cell of the weekly matrix. Clones the library, runs its scripts/ci.sh on the
+# matrix-cell.sh LIB CHANNEL OUT: one cell of the weekly matrix. Clones the monorepo (LIB = folder under libs/), runs its scripts/ci.sh on the
 # stable pin (channel stable) or on a nightly Mojo handed over through MOJO= (channel nightly), writes
 # OUT/LIB-CHANNEL.log and OUT/LIB-CHANNEL.json {lib, channel, status: pass|fail|na, error}.
 # na = the library's ci.sh has no MOJO= override, so a nightly cannot be selected (the only existing mechanism).
@@ -10,7 +10,7 @@ set -euo pipefail
 lib=${1:?usage: matrix-cell.sh LIB CHANNEL OUT}; ch=${2:?}; out=$(mkdir -p "${3:?}" && cd "$3" && pwd)
 root=$(cd "$(dirname "$0")/.." && pwd)
 case $ch in stable|nightly) ;; *) echo "FAIL args: channel $ch is not stable|nightly"; exit 2;; esac
-src=${MATRIX_SRC:-https://github.com/amarbaro/${lib%-public}.git}
+src=${MATRIX_SRC:-$root}   # the monorepo checkout; a source holding no libs/<LIB> is a standalone library repo (a URL works too)
 w=$out/work/$lib-$ch; log=$out/$lib-$ch.log; : > "$log"
 finish() {  # STATUS ERROR
   jq -n --arg lib "$lib" --arg ch "$ch" --arg st "$1" --arg err "$2" '{lib:$lib,channel:$ch,status:$st,error:$err}' > "$out/$lib-$ch.json"
@@ -19,6 +19,7 @@ finish() {  # STATUS ERROR
 rm -rf "$w"; mkdir -p "$(dirname "$w")"
 if [ -d "$src" ]; then git clone -q --no-hardlinks "$src" "$w" >>"$log" 2>&1; else git clone -q --depth 1 "$src" "$w" >>"$log" 2>&1; fi \
   || { finish fail "clone failed: $src"; exit 0; }
+[ ! -d "$w/libs/$lib" ] || w=$w/libs/$lib   # monorepo: the cell works inside the library's folder, siblings stay at ../<name>
 if [ "$ch" = nightly ] && ! grep -q MOJO "$w/scripts/ci.sh" 2>/dev/null; then
   echo "scripts/ci.sh has no MOJO= override" >> "$log"; finish na "no MOJO= override in scripts/ci.sh"; exit 0
 fi

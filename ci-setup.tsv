@@ -1,6 +1,10 @@
-# Per-library setup the shared CI cannot guess. Tab separated: library (libs.txt name), apt packages, pre command.
+# Per-library setup the shared CI cannot guess. Tab separated: library (libs.txt name; the mojo-<name>-public rows are for standalone checkouts), apt packages, pre command.
 # Read by scripts/ci-adopt.sh (caller files) and scripts/matrix-cell.sh (weekly matrix); one place, two users.
 mojo-imkit-public	fonts-dejavu-core fonts-noto-cjk libfreetype6 imagemagick libwebp7 libavif-bin dav1d ffmpeg	
 mojo-uregex-public		uv sync || { echo "FAIL setup: uv sync"; exit 1; }
 xmojo-public		pixi update
 mojo-tls-public	openssl	
+imkit	fonts-dejavu-core fonts-noto-cjk libfreetype6 imagemagick libwebp7 libavif-bin dav1d ffmpeg	
+uregex		uv sync || { echo "FAIL setup: uv sync"; exit 1; }
+xmojo		pixi update
+tls	openssl	
