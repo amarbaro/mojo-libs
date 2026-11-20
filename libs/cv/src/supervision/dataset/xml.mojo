@@ -6,6 +6,9 @@ A DOCTYPE or ENTITY raises, as defusedxml does.
 """
 
 
+from supervision.dataset.pos import pos_of
+
+
 struct XmlDoc(Movable):
     var tag: List[String]
     var text: List[String]
@@ -64,7 +67,7 @@ def _num(s: String, base: Int) raises -> Int:
 
 
 def _decode(raw: String) raises -> String:
-    if raw.find("&") < 0:
+    if "&" not in raw:
         return raw
     var out = String()
     var b = raw.as_bytes()
@@ -127,12 +130,12 @@ def parse_xml(text: String) raises -> XmlDoc:
             i = j
             continue
         if text.find("<!--", i) == i:
-            var e = text.find("-->", i)
+            var e = pos_of(text.find("-->", i))
             if e < 0:
                 raise Error("xml: unterminated comment")
             i = e + 3
         elif text.find("<![CDATA[", i) == i:
-            var e = text.find("]]>", i)
+            var e = pos_of(text.find("]]>", i))
             if e < 0:
                 raise Error("xml: unterminated CDATA")
             if len(stack) > 0 and open_text_ok[len(open_text_ok) - 1]:
@@ -141,14 +144,14 @@ def parse_xml(text: String) raises -> XmlDoc:
                 doc.has_text[top] = True
             i = e + 3
         elif text.find("<?", i) == i:
-            var e = text.find("?>", i)
+            var e = pos_of(text.find("?>", i))
             if e < 0:
                 raise Error("xml: unterminated processing instruction")
             i = e + 2
         elif text.find("<!", i) == i:
             raise Error("xml: DTD and entity declarations are forbidden")
         elif i + 1 < n and b[i + 1] == 47:
-            var e = text.find(">", i)
+            var e = pos_of(text.find(">", i))
             if e < 0 or len(stack) == 0:
                 raise Error("xml: unexpected closing tag")
             var name = String(String(text[byte = i + 2 : e]).strip())

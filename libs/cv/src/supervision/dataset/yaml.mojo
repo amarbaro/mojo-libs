@@ -8,6 +8,8 @@ default_flow_style=None)` byte for byte, including width-80 flow wrapping.
 Not supported: names containing a newline (raises).
 """
 
+from supervision.dataset.pos import pos_of
+
 comptime K_NULL = 0
 comptime K_BOOL = 1
 comptime K_INT = 2
@@ -437,14 +439,14 @@ def parse_yaml(text: String) raises -> YDoc:
         var rest = String(String(ln.text[byte = k + 1 :]).strip())
         i += 1
         if rest.startswith("&"):  # anchor: the node follows on the same or the next lines
-            var sp = rest.find(" ")
+            var sp = pos_of(rest.find(" "))
             rest = String(String(rest[byte = sp + 1 :]).strip()) if sp >= 0 else String()
         if rest.byte_length() > 0:
             if rest.startswith("{"):
                 while not _flow_balanced(rest) and i < len(ls):
                     rest += " " + ls[i].text
                     i += 1
-                var close = rest.rfind("}")
+                var close = pos_of(rest.rfind("}"))
                 doc.keys.append(key^)
                 doc.values.append(_flow_map(String(rest[byte = 1 : close if close > 0 else rest.byte_length()])))
                 continue
@@ -452,7 +454,7 @@ def parse_yaml(text: String) raises -> YDoc:
                 while not _flow_balanced(rest) and i < len(ls):
                     rest += " " + ls[i].text
                     i += 1
-                var close = rest.rfind("]")
+                var close = pos_of(rest.rfind("]"))
                 var inner = String(rest[byte = 1 : close if close > 0 else rest.byte_length()])
                 doc.keys.append(key^)
                 doc.values.append(YValue(V_SEQ, _str_scalar(""), _split_flow(inner), List[YScalar]()))

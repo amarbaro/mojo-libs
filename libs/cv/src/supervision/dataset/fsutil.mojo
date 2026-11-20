@@ -1,6 +1,7 @@
 """Files and paths for the dataset formats: pathlib-style helpers, byte IO, image sizes."""
 from std.os import listdir, makedirs
 from std.os.path import exists, isdir, isfile, realpath
+from supervision.dataset.pos import pos_of
 
 
 def norm_path(p: String) -> String:
@@ -28,14 +29,14 @@ def join(a: String, b: String) -> String:
 
 def name_of(p: String) -> String:
     var q = norm_path(p)
-    var i = q.rfind("/")
+    var i = pos_of(q.rfind("/"))
     return String(q[byte = i + 1 :]) if i >= 0 else q
 
 
 def suffix_of(p: String) -> String:
     """Path.suffix: from the last '.', none for '.hidden' or a trailing '.'."""
     var n = name_of(p)
-    var i = n.rfind(".")
+    var i = pos_of(n.rfind("."))
     if i <= 0 or i == n.byte_length() - 1:
         return String()
     return String(n[byte = i :])
@@ -49,7 +50,7 @@ def stem_of(p: String) -> String:
 
 def parent_of(p: String) -> String:
     var q = norm_path(p)
-    var i = q.rfind("/")
+    var i = pos_of(q.rfind("/"))
     if i < 0:
         return String(".")
     return String(q[byte = :i]) if i > 0 else String("/")

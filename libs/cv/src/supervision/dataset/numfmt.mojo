@@ -25,6 +25,6 @@ def py_float(s: String) raises -> Float64:
 
 
 def _repr(s: String) -> String:
-    if s.find("'") >= 0 and s.find('"') < 0:
+    if "'" in s and '"' not in s:
         return '"' + s + '"'
     return "'" + s.replace("'", "\\'") + "'"

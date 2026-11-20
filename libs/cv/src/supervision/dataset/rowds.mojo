@@ -8,6 +8,7 @@ from std.os import makedirs
 from supervision.dataset.coco import as_coco, from_coco
 from supervision.dataset.core import DetectionDataset
 from supervision.dataset.fsutil import list_files_rec, read_bytes, write_bytes
+from supervision.dataset.pos import pos_of
 from supervision.dataset.rowio import error_json, read_rows, row_args, row_op
 from supervision.detection.utils.converters import mask_to_rle
 from supervision.dataset.voc import as_pascal_voc, from_pascal_voc
@@ -53,7 +54,7 @@ def summary(ds: DetectionDataset) raises -> Json:
     for i in range(len(ds)):
         order.append(i)
         var p = ds.image_paths[i]
-        var k = p.rfind("/")
+        var k = pos_of(p.rfind("/"))
         names.append(String(p[byte = k + 1 :]) if k >= 0 else p)
     for i in range(1, len(order)):
         var j = i

@@ -6,7 +6,7 @@ from supervision.dataset.pyrandom import PyRandom
 def py_repr(s: String) -> String:
     """Python repr() of a str: single quotes unless it holds ' and no \"."""
     var q = "'"
-    if s.find("'") >= 0 and s.find('"') < 0:
+    if "'" in s and '"' not in s:
         q = '"'
     var out = String(q)
     for cp in s.codepoints():

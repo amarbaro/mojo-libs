@@ -1,5 +1,6 @@
 """Row binary for tests/cases/dataset_split.txt: shuffle, split, class utils (build/dataset_split)."""
 from json import Json
+from supervision.dataset.pos import pos_of
 from supervision.dataset.pyrandom import PyRandom
 from supervision.dataset.rowio import error_json, int_list, read_rows, row_args, row_op, str_list, strings_of
 from supervision.dataset.utils import (
@@ -8,13 +9,13 @@ from supervision.dataset.utils import (
 
 
 def _name(p: String) -> String:
-    var i = p.rfind("/")
+    var i = pos_of(p.rfind("/"))
     return String(p[byte = i + 1 :]) if i >= 0 else p
 
 
 def _stem_xml(p: String) -> String:
     var n = _name(p)
-    var d = n.rfind(".")
+    var d = pos_of(n.rfind("."))
     return (String(n[byte = :d]) if d > 0 else n) + ".xml"
 
 
