@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# CI entry point, same on a GitHub runner and locally: install, then the gate.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+command -v uv >/dev/null || { echo "FAIL setup: uv not installed"; exit 1; }
+if [ -z "${MOJO:-}" ]; then
+  uv sync || { echo "FAIL setup: uv sync"; exit 1; }
+  MOJO=.venv/bin/mojo
+fi
+export MOJO
+scripts/check.sh
