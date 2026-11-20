@@ -1,0 +1,83 @@
+# mojo-sqlite
+
+<!-- badges -->
+[![ci](https://github.com/amarbaro/mojo-sqlite/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-sqlite/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-sqlite)](https://github.com/amarbaro/mojo-sqlite/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-sqlite)](https://github.com/amarbaro/mojo-sqlite/blob/main/LICENSE)
+<!-- /badges -->
+
+<!-- install -->
+Install: `pixi add mojo-sqlite` once published. For now: `git clone https://github.com/amarbaro/mojo-sqlite`, then `mojo run -I mojo-sqlite/src app.mojo`.
+
+```mojo
+from sqlite import Database
+
+
+def main() raises:
+    var db = Database(":memory:")
+    db.exec("CREATE TABLE jobs(cmd TEXT, prio INTEGER); INSERT INTO jobs VALUES ('train', 10), ('eval', 20)")
+    var q = db.prepare("SELECT cmd, prio FROM jobs WHERE prio >= ?")  # prepare once, bind and run many times
+    q.bind(1, 15)
+    while q.step():
+        print(q.text(0), q.int(1))
+```
+<!-- /install -->
+
+SQLite for Mojo that returns the same rows as Python's `sqlite3`, byte for byte, and
+runs 2.7× faster on inserts and 4× to 5.5× faster on scans.
+
+Requires Mojo 1.2 and the system `libsqlite3.so.0` (any Linux distribution has it).
+The library is loaded at run time, so no linker flags are needed.
+
+## What you get
+
+- `Database`: open, `exec` for scripts, `prepare`, `begin`/`commit`/`rollback`,
+  `changes`, `last_insert_rowid`. Busy timeout 5 s by default.
+- `Statement`: `bind` for `Int`, `Int64`, `Float64`, `String`, BLOBs (`List[UInt8]`)
+  and `bind_null`, by position or by name (`:prio`, `@prio`, `$prio`); `step`, `run`,
+  `reset`; typed column reads, `is_null`, `type`, `name`.
+- `text_view(col)` and `blob_view(col)`: read in place from sqlite's buffer, no copy.
+- Errors carry sqlite's own message: `sqlite: UNIQUE constraint failed: u.k (rc 19)`.
+
+The API is in [docs/api.md](docs/api.md). The memory and speed design is in
+[docs/design.md](docs/design.md).
+
+## Performance
+
+`tests/bench.mojo` against `tools/bench_oracle.py`: 200,000 inserts through one prepared
+statement in a transaction, then a full scan, on an on-disk WAL database. Three runs each.
+
+| | insert | scan | peak RSS |
+|---|---|---|---|
+| Python `sqlite3` | 216 to 226 ms | 98 to 99 ms | 14.5 MB |
+| mojo-sqlite, `text()` | 80 to 82 ms | 25 to 29 ms | 15.4 MB |
+| mojo-sqlite, `text_view()` | 79 to 82 ms | 18 to 23 ms | 15.2 MB |
+
+The RSS difference is the Mojo runtime: an empty Mojo program uses 11.6 MB.
+
+## Limits
+
+- One connection per `Database`. Do not share a `Database` or `Statement` across threads.
+- Linux only: the library is loaded as `libsqlite3.so.0`.
+
+## Check
+
+```
+scripts/ci.sh
+```
+
+It runs `uv sync`, then `scripts/check.sh`. CI runs the same script on every push, on
+Ubuntu 24.04 (sqlite 3.45); it also passes on sqlite 3.54.
+
+Every SQL file in `tests/cases/` runs through this library and through Python
+`sqlite3` with the same system libsqlite3, and the outputs must be identical: integers,
+the exact bits of every float, text with tabs and newlines, NULL, BLOBs as hex, and
+which statements fail. Then `tests/api.mojo` covers lifetimes, bind slots, errors and
+statement reuse.
+
+## For coding agents
+
+[skills/mojo-sqlite/SKILL.md](skills/mojo-sqlite/SKILL.md) tells an agent how to use the
+library and what to avoid.
+
+## Licence
+
+Apache-2.0, see [LICENSE](LICENSE).
