@@ -1,7 +1,7 @@
 [project]
 name = "mojo-posix"
 version = "0.1.7"
-description = "POSIX processes, signals and sockets for Mojo: spawn with cwd/env/pgid, signalfd, poll"
+description = "POSIX processes, signals and sockets for Mojo: spawn with cwd/env/pgid, signalfd, poll; posix.subprocess (subprocess.run) and posix.systemd (sd_notify)"
 license = "Apache-2.0"
 requires-python = ">=3.11,<3.15"
 dependencies = ["mojo>=1.2.0,<1.3"]

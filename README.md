@@ -9,7 +9,7 @@ library's `scripts/ci.sh`. A tag `<name>-v<version>` publishes that one library'
 
 ## Install
 
-Every library is a conda package on [prefix.dev/amarbaro/amarbaro](https://prefix.dev/channels/amarbaro/amarbaro), named `mojo-<name>`; the import name is in each README.
+Every library is a conda package on [prefix.dev/amarbaro/amarbaro](https://prefix.dev/channels/amarbaro/amarbaro), named `mojo-<name>` (xmojo too: `mojo-xmojo`); the import name is in each README.
 
 ```
 pixi init app && cd app
@@ -41,7 +41,7 @@ Toolchains: Mojo 1.2 stable; the weekly matrix also builds every library on the 
 | [mojo-log](libs/log/) | Structured logging for Mojo: levels, key=value fields, text and JSON-lines, stderr/file/journald sinks | 0.1.1 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-mmap](libs/mmap/) | Memory-mapped files for Mojo: zero-copy Span views, read and write, madvise, msync | 0.1.3 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-msgpack](libs/msgpack/) | MessagePack encode and decode for Mojo, pure Mojo, zero-copy str and bin views | 0.1.1 | `mojo>=1.2.0,<1.3` | - |
-| [mojo-posix](libs/posix/) | POSIX processes, signals and sockets for Mojo: spawn with cwd/env/pgid, signalfd, poll | 0.1.6 | `mojo>=1.2.0,<1.3` | - |
+| [mojo-posix](libs/posix/) | POSIX processes, signals and sockets for Mojo: spawn with cwd/env/pgid, signalfd, poll; posix.subprocess (subprocess.run) and posix.systemd (sd_notify) | 0.1.7 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-prometheus](libs/prometheus/) | Prometheus metrics for Mojo: counters, gauges, histograms, summaries with labels, text exposition byte-identical with prometheus_client | 0.1.2 | `mojo>=1.2.0,<1.3` | mojo-pyformat >=0.2.0,<0.3 |
 | [mojo-proptest](libs/proptest/) | Property tests for Mojo: seeded generators, shrinking, a failure that names the seed and the minimal case | 0.2.0 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-pyformat](libs/pyformat/) | Python-exact number formatting for Mojo: {:.Nf}, {:,}, {:g}, {:%}, rounding on the exact binary value | 0.2.2 | `mojo>=1.2.0,<1.3` | - |
@@ -49,8 +49,8 @@ Toolchains: Mojo 1.2 stable; the weekly matrix also builds every library on the 
 | [mojo-semver](libs/semver/) | Semantic Versioning 2.0 for Mojo: parse, precedence, bump, match, identical to Python semver | 0.1.2 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-sqlite](libs/sqlite/) | SQLite bindings for Mojo, measured against Python sqlite3 | 0.1.5 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-struct](libs/struct/) | Pack and unpack binary data like CPython struct | 0.1.0 | `mojo>=1.2.0,<1.3` | - |
-| [mojo-subprocess](libs/subprocess/) | subprocess.run for Mojo: capture stdout/stderr, input, timeout, cwd/env, same results as Python | 0.1.2 | `mojo>=1.2.0,<1.3` | mojo-posix >=0.1.0,<0.2 |
-| [mojo-systemd](libs/systemd/) | sd_notify for Mojo: READY, STATUS, WATCHDOG, STOPPING to systemd | 0.1.4 | `mojo>=1.2.0,<1.3` | - |
+| [mojo-subprocess](libs/subprocess/) | Forwarding package: `import subprocess` re-exports posix.subprocess (subprocess.run with Python results) from mojo-posix | 0.1.2 | `mojo>=1.2.0,<1.3` | mojo-posix >=0.1.7,<0.2 |
+| [mojo-systemd](libs/systemd/) | Forwarding package: `import systemd` re-exports posix.systemd (sd_notify READY, STATUS, WATCHDOG, STOPPING) from mojo-posix | 0.1.4 | `mojo>=1.2.0,<1.3` | mojo-posix >=0.1.7,<0.2 |
 | [mojo-tls](libs/tls/) | TLS 1.3 and 1.2 client and server for Mojo, with X.509, in pure Mojo: no OpenSSL, no C library | 0.1.2 | `mojo>=1.2.0,<1.3` | mojo-aio |
 | [mojo-tokenizers](libs/tokenizers/) | Hugging Face tokenizer.json runtime for Mojo: byte-level BPE (GPT-2, Llama 3, Qwen) | 0.1.1 | `mojo>=1.2.0,<1.3` | mojo-json, mojo-uregex |
 | [mojo-toml](libs/toml/) | TOML 1.1 parser for Mojo, passes the full toml-test suite | 0.2.4 | `mojo>=1.2.0,<1.3` | - |
@@ -62,6 +62,10 @@ Toolchains: Mojo 1.2 stable; the weekly matrix also builds every library on the 
 | [mojo-zip](libs/zip/) | zipfile read/write for Mojo, pure Mojo: stored + deflate (zlib port), zip64, CRC, CPython zipfile behaviour | 0.1.0 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-zstd](libs/zstd/) | zstd and lz4 frame compression for Mojo, pure Mojo with no C library | 0.2.0 | `mojo>=1.2.0,<1.3` | - |
 <!-- /libs -->
+
+Merged libraries: `mojo-subprocess` and `mojo-systemd` live on in mojo-posix as `posix.subprocess` and `posix.systemd`; their packages
+only forward so old imports keep working. The supervision code (detection, annotators, metrics, datasets) is now part of
+[mojo-cv](libs/cv/) under `src/supervision`; the `mojo-supervision` 0.1.x packages on the channel come from the old repo.
 
 Tools (command-line programs, not libraries): [mojo-ablate](https://github.com/amarbaro/mojo-ablate), behavior steering for local models in Mojo: directions, rank-1 edit, TPE, BF16 bake.
 

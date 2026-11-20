@@ -7,6 +7,7 @@ msgpack	proptest
 prometheus	pyformat
 safetensors	json
 subprocess	posix
+systemd	posix
 tls	aio
 tokenizers	json uregex
 toml	proptest
