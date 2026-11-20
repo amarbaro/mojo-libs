@@ -79,7 +79,7 @@ t "report: shields endpoint JSON is valid (schemaVersion, label, message, color)
 
 # --- workflow shape
 LC=.github/workflows/lib-ci.yml
-t "lib-ci.yml: workflow_call with inputs mojo, apt, pre" 'python3 -I -c "import yaml; d=yaml.safe_load(open(\"$LC\")); i=d[True][\"workflow_call\"][\"inputs\"]; assert set(i)=={\"mojo\",\"apt\",\"pre\"}, i; assert i[\"mojo\"][\"default\"]==\"stable\""'
+t "lib-ci.yml: workflow_call with inputs lib, mojo, apt, pre" 'python3 -I -c "import yaml; d=yaml.safe_load(open(\"$LC\")); i=d[True][\"workflow_call\"][\"inputs\"]; assert set(i)=={\"lib\",\"mojo\",\"apt\",\"pre\"}, i; assert i[\"mojo\"][\"default\"]==\"stable\""'
 t "lib-ci.yml: pins the same action versions the libraries use today" 'grep -q "actions/checkout@v7" $LC && grep -q "astral-sh/setup-uv@v10.3.0" $LC'
 t "lib-ci.yml: ci.sh teed to ci.log under bash (pipefail)" 'grep -A1 "scripts/ci.sh 2>&1 | tee ci.log" $LC | grep -q "shell: bash"'
 t "lib-ci.yml and matrix-cell.sh install the nightly with the same command" 'a=$(grep -o "uv pip install.*mojo max" $LC | sed "s#\$RUNNER_TEMP/nightly#X#g"); b=$(grep -o "uv pip install.*mojo max" scripts/matrix-cell.sh | sed "s#\$out/nightly-venv#X#g"); [ -n "$a" ] && [ "$a" = "$b" ]'
@@ -98,6 +98,19 @@ t "matrix-cell: empty apt column, pre command runs before ci.sh" 'R=$T/mc; rm -r
   printf "#!/usr/bin/env bash\ntest -f pre-ran || { echo \"FAIL setup: pre did not run\"; exit 1; }\necho \"PASS ci\"\n" > "$R/s/fakelib/scripts/ci.sh"
   git -C "$R/s/fakelib" init -q && git -C "$R/s/fakelib" add -A && git -C "$R/s/fakelib" -c user.name=t -c user.email=t@t commit -q -m x
   MATRIX_SRC=$R/s/fakelib "$R/scripts/matrix-cell.sh" fakelib stable "$R/out" && [ "$(jq -r .status "$R/out/fakelib-stable.json")" = pass ]'
+
+# --- monorepo plan: a change selects the library and, transitively, every library that uses it (deps.tsv)
+t "deps.tsv matches the sibling references in libs/" 'scripts/deps-scan.sh --check'
+plan() {  # BASE-FILE-TO-TOUCH -> the plan after touching one file in a throwaway monorepo with a <- b <- c
+  R=$T/plan; rm -rf "$R"; mkdir -p "$R/scripts" "$R/libs/a" "$R/libs/b" "$R/libs/c"; cp scripts/ci-plan.sh "$R/scripts/"
+  printf '# x\nb\ta\nc\tb\n' > "$R/deps.tsv"; touch "$R/libs/a/f" "$R/libs/b/f" "$R/libs/c/f"
+  git -C "$R" init -q -b main; git -C "$R" add -A; git -C "$R" -c user.name=t -c user.email=t@t commit -qm base
+  echo x >> "$R/$1"; git -C "$R" add -A; git -C "$R" -c user.name=t -c user.email=t@t commit -qm change
+  "$R/scripts/ci-plan.sh" "$(git -C "$R" rev-parse HEAD~1)"; }
+t "plan: a change in libs/a runs a, b and c" '[ "$(plan libs/a/f)" = "[\"a\",\"b\",\"c\"]" ]'
+t "plan: a change in libs/c runs only c (negative control)" '[ "$(plan libs/c/f)" = "[\"c\"]" ]'
+t "plan: a change outside libs/ runs all" '[ "$(plan scripts/x)" = "[\"a\",\"b\",\"c\"]" ]'
+t "plan: a README-only change runs none" '[ "$(plan README.md)" = "[]" ]'
 
 # --- the badge step, run for real against a local bare repo instead of github.com
 badge() {  # CILOG -> prints the checks.json message pushed to the badges branch
