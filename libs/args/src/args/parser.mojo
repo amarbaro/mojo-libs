@@ -22,6 +22,14 @@ comptime ARG: UInt8 = 65  # a plain argument
 comptime OPT: UInt8 = 79  # something that looks like an option
 
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 def _repr(s: String) -> String:
     """Python repr() of a str."""
     var q = '"' if ("'" in s and '"' not in s) else "'"
@@ -370,7 +378,7 @@ struct ArgumentParser(Movable):
             return 1
         if len(b) == 1:
             return 0
-        var eq = s.find("=")
+        var eq = _pos(s.find("="))
         var head = String(s[byte=:eq]) if eq >= 0 else s
         var tail = String(s[byte = eq + 1 :]) if eq >= 0 else String()
         if eq >= 0:
