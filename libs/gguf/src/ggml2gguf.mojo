@@ -12,6 +12,7 @@ Not ported: a tensor whose data runs past the end of the input (the script write
 from std.sys import argv, exit
 from std.ffi import external_call
 from std.memory import bitcast
+from ggufx.pos import pos_of
 from ggufx.model import Out, open_fd, pread_into, pad_to, refuse_same_file
 from ggufx.quant import row, tensor_bytes
 from ggufx.tensor_lookup import map_tensor_name
@@ -420,7 +421,7 @@ def run() raises:
             i += 1
             continue
         var v = String()
-        var eq = arg.find("=")
+        var eq = pos_of(arg.find("="))
         if arg.startswith("--") and eq > 0:
             var b = arg.as_bytes()
             var head = String(unsafe_from_utf8=b[0 : eq])

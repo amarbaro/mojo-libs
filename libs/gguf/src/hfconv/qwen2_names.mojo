@@ -1,6 +1,9 @@
 """Hugging Face Qwen2 tensor name -> GGUF name; empty when the converter would refuse it
 ("Can not map tensor"). One small table, to be swapped for the generated tensor_map lookup."""
 
+from ggufx.pos import pos_of
+
+
 def _layer_stem(rest: String) -> String:
     if rest == "input_layernorm":
         return "attn_norm"
@@ -42,7 +45,7 @@ def qwen2_name(name: String) -> String:
     if not stem.startswith("model.layers."):
         return String()
     var tail = String(stem.removeprefix("model.layers."))
-    var dot = tail.find(".")
+    var dot = pos_of(tail.find("."))
     if dot <= 0:
         return String()
     var bid = String(unsafe_from_utf8=Span(tail.as_bytes())[0:dot])

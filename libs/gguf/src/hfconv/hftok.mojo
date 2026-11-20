@@ -12,6 +12,7 @@ from std.collections import Dict, Set
 from std.os.path import exists
 from uregex import Pattern
 from st.json import Json
+from ggufx.pos import pos_of
 from hfconv.chk_table import CHKTXT, FOLD_NFC, FOLD_NFD, FOLD_NFKC, FOLD_NFKD, FOLD_LOWER, fold_char
 
 comptime QUOTE = 34
@@ -387,7 +388,7 @@ struct Bpe(Movable):
             var b: String
             if j.kind(e) == QUOTE:
                 var s = j.string(e)
-                var sp = s.find(" ")
+                var sp = pos_of(s.find(" "))
                 a = substr(s, 0, sp)
                 b = substr(s, sp + 1, s.byte_length())
             else:

@@ -2,6 +2,7 @@
 becomes name / basename / finetune / version / size_label exactly as `Metadata.get_model_id_components`
 and `id_to_title` do, and `size_label` rounds a parameter count the way `size_label()` does."""
 from std.math import floor, pow
+from ggufx.pos import pos_of
 
 comptime BASENAME = 1
 comptime SIZE = 2
@@ -154,11 +155,11 @@ def components(model_id: String, total_params: Int) raises -> Comps:
     """Empty string means None."""
     if model_id.byte_length() == 0:
         return Comps(String(), String(), String(), String(), String(), String())
-    if model_id.find(" ") >= 0:
+    if " " in model_id:
         return Comps(model_id.copy(), String(), String(), String(), String(), String())
     var full = model_id.copy()
     var org = String()
-    var slash = model_id.find("/")
+    var slash = pos_of(model_id.find("/"))
     if slash >= 0:
         org = String(unsafe_from_utf8=Span(model_id.as_bytes())[0:slash])
         full = String(unsafe_from_utf8=Span(model_id.as_bytes())[slash + 1 : model_id.byte_length()])
@@ -197,7 +198,7 @@ def components(model_id: String, total_params: Int) raises -> Comps:
                 except:
                     ok = False
                 if ok:
-                    var unit = String(" KMBT").find(String(unsafe_from_utf8=Span(pb)[n - 1 : n]))
+                    var unit = pos_of(String(" KMBT").find(String(unsafe_from_utf8=Span(pb)[n - 1 : n])))
                     var label = value * pow(Float64(1000), Float64(unit))
                     var tp = Float64(total_params)
                     var far = (label - tp if label > tp else tp - label) > Float64(7 * total_params // 8)

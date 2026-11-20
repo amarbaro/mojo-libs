@@ -6,6 +6,7 @@ shortest repr (checked against both, 2026-10-12).
 from std.math import floor, isinf, isnan
 from std.memory import bitcast
 from .nonprint import nonprintable
+from .pos import pos_of
 
 
 def rep(ch: String, n: Int) -> String:
@@ -97,7 +98,7 @@ def py_title(s: String) -> String:
 def py_repr(s: String) -> String:
     """repr() of a Python str: quote choice, \\ \\' \\t \\n \\r, and \\xNN \\uNNNN \\UNNNNNNNN for what str.isprintable() rejects."""
     var q = "'"
-    if s.find("'") >= 0 and s.find('"') < 0:
+    if "'" in s and '"' not in s:
         q = '"'
     var out = q
     var b = s.as_bytes()
@@ -107,7 +108,7 @@ def py_repr(s: String) -> String:
         var step = 1 if cp < 0x80 else 2 if cp < 0x800 else 3 if cp < 0x10000 else 4
         if cp == 92:
             out += "\\\\"
-        elif cp == Int(ord(q)):
+        elif cp == Int(q.as_bytes()[0]):
             out += "\\" + q
         elif cp == 9:
             out += "\\t"
@@ -284,7 +285,7 @@ def np_float32(f: Float32) -> String:
         s = sub_str(s, 1, s.byte_length())
     var mant = s
     var ex = 0
-    var epos = s.find("e")
+    var epos = pos_of(s.find("e"))
     if epos >= 0:
         mant = sub_str(s, 0, epos)
         var e_neg = sub_str(s, epos + 1, epos + 2) == "-"
@@ -292,7 +293,7 @@ def np_float32(f: Float32) -> String:
             ex = ex * 10 + Int(c) - 48
         if e_neg:
             ex = -ex
-    var dot = mant.find(".")
+    var dot = pos_of(mant.find("."))
     var int_len = dot if dot >= 0 else mant.byte_length()
     var raw_digits = mant.replace(".", "")
     # value = int(digits) * 10^exp10, digits without leading or trailing zeros

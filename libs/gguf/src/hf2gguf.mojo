@@ -16,6 +16,7 @@ from std.sys import argv, exit
 from std.ffi import external_call, c_ssize_t
 from std.os.path import exists, isdir
 from std.memory import bitcast
+from ggufx.pos import pos_of
 from ggufx.model import Out, pad_to, CHUNK
 from st.json import Json
 from st.safetensors import Checkpoint, ST_F32
@@ -442,7 +443,7 @@ def convert(dir: String, outfile: String, outtype: String) raises:
     if nop.byte_length() > 0 and len(nop.split("/")) <= 2:
         ids.append(nop^)
     var base = dir.rstrip("/")
-    var slash = base.rfind("/")
+    var slash = pos_of(base.rfind("/"))
     ids.append(String(unsafe_from_utf8=Span(base.as_bytes())[slash + 1 : base.byte_length()]))
     for mid in ids:
         var c = components(mid, total)

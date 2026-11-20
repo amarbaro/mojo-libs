@@ -18,6 +18,7 @@ Rules ported from the script, in the order it applies them:
 from std.sys import argv, exit
 from std.ffi import external_call, c_ssize_t
 from std.os.path import exists, isdir
+from ggufx.pos import pos_of
 from ggufx.model import pad_to, CHUNK, open_fd, pread_into
 from st.json import Json
 from st.safetensors import Shard, StTensor, check_tensor, dtype_code, ST_F32
@@ -124,7 +125,7 @@ def mapped(name: String, qwen2_model: Bool, blocks: Int) raises -> String:
 
 def last_part(path: String) -> String:
     var base = path.rstrip("/")
-    return String(unsafe_from_utf8=Span(base.as_bytes())[base.rfind("/") + 1 : base.byte_length()])
+    return String(unsafe_from_utf8=Span(base.as_bytes())[pos_of(base.rfind("/")) + 1 : base.byte_length()])
 
 def convert(lora: String, base_dir: String, outfile: String, outtype: String) raises:
     var want: Int
@@ -302,7 +303,7 @@ def convert(lora: String, base_dir: String, outfile: String, outtype: String) ra
             fname += "-LoRA"
         path = outfile.rstrip("/") + "/" + fname + ".gguf"
     else:  # templated file name: {ftype} {outtype} {} take the lower-case type, {FTYPE} {OUTTYPE} the upper-case
-        var slash = outfile.rfind("/")
+        var slash = pos_of(outfile.rfind("/"))
         var head = String(unsafe_from_utf8=Span(outfile.as_bytes())[0 : slash + 1])
         var tail = String(unsafe_from_utf8=Span(outfile.as_bytes())[slash + 1 : outfile.byte_length()])
         var low = out_name.lower()
