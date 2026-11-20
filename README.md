@@ -23,7 +23,7 @@ Toolchains: Mojo 1.2 stable; the weekly matrix also builds every library on the 
 | library | what | version | toolchain | our deps |
 |---|---|---|---|---|
 | [mojo-aio](libs/aio/) | epoll event loop for Mojo: readiness events, timers, non-blocking TCP | 0.1.1 | `mojo>=1.2.0,<1.3` | - |
-| [mojo-amdgpu](libs/amdgpu/) | AMD GPU telemetry for Mojo from sysfs and hwmon, no ROCm needed: VRAM, busy, power, temperature, clocks, KFD holders | 0.1.4 | `mojo>=1.2.0,<1.3` | - |
+| [mojo-amdgpu](libs/amdgpu/) | AMD GPU telemetry for Mojo from sysfs and hwmon, no ROCm needed: VRAM, busy, power, temperature, clocks, KFD holders | 0.1.5 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-args](libs/args/) | Command-line parsing for Mojo with Python argparse behaviour: subcommands, typed flags, --help | 0.1.4 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-base64](libs/base64/) | Base16/32/64 encode/decode matching CPython base64 | 0.1.2 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-bench](libs/bench/) | Benchmark harness for Mojo with statistics: warmup, auto iteration count, median, MAD, p95, seeded bootstrap CI, compare | 0.1.1 | `mojo>=1.2.0,<1.3` | - |
@@ -35,7 +35,7 @@ Toolchains: Mojo 1.2 stable; the weekly matrix also builds every library on the 
 | [mojo-glob](libs/glob/) | Shell-style wildcards for Mojo: fnmatch and glob (recursive **, root_dir), identical to Python | 0.1.2 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-gzip](libs/gzip/) | gzip, zlib and raw deflate for Mojo through the system libz, plus crc32 and adler32 | 0.1.4 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-hashlib](libs/hashlib/) | Hashing and shell quoting for Mojo, byte-identical with Python hashlib and shlex | 0.1.4 | `mojo>=1.2.0,<1.3` | - |
-| [mojo-imkit](libs/imkit/) | Immediate-mode GUI for Mojo, composed on the GPU: SDL3 window, FreeType text, widgets as one draw list | 0.10.0 | `max==26.7.0` | - |
+| [mojo-imkit](libs/imkit/) | Immediate-mode GUI for Mojo, composed on the GPU: SDL3 window, FreeType text, widgets as one draw list | 0.11.0 | `max==26.7.0` | - |
 | [mojo-inotify](libs/inotify/) | Watch files and directories from Mojo with Linux inotify, pollable | 0.1.5 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-json](libs/json/) | JSON for Mojo, byte-identical with Python json | 0.1.4 | `mojo>=1.2.0,<1.3` | - |
 | [mojo-log](libs/log/) | Structured logging for Mojo: levels, key=value fields, text and JSON-lines, stderr/file/journald sinks | 0.1.1 | `mojo>=1.2.0,<1.3` | - |
