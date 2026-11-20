@@ -1,4 +1,4 @@
-"""Row binary for tests/cases/dataset_voc_seg.txt (build/dataset_voc_seg): the same driver, segmentation fixtures."""
+"""Row binary for tests/supervision/cases/dataset_voc_seg.txt (build/dataset_voc_seg): the same driver, segmentation fixtures."""
 from supervision.dataset.rowds import run
 
 

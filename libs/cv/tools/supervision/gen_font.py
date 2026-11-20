@@ -1,18 +1,18 @@
-"""Oracle for the font parser rows (tests/cases/font_ttf.txt): fontTools reads cv2's built-in "sans" face
-(tools/gen_font_blob.py) and states what supervision._cv.font.ttf must return.
+"""Oracle for the font parser rows (tests/supervision/cases/font_ttf.txt): fontTools reads cv2's built-in "sans" face
+(tools/supervision/gen_font_blob.py) and states what supervision._cv.font.ttf must return.
 
 ops: cmap (codepoint -> glyph id), hmetrics ((advance, lsb) from hmtx, default instance), vmetrics (hhea),
      shape (outline of one glyph: sorted unique on-curve endpoints, off-curve controls, bbox) at an optional wght.
 The shape rows compare sets, not sequences: stbtt starts a contour at a different point than fontTools and rounds
 implied on-curve midpoints with >>1, so composites and variation instances carry tol abs 1 (stbtt's integer delta pipeline).
 
-Run: .work/oracle-venv/bin/python -I tools/gen_font.py
+Run: .work/oracle-venv/bin/python -I tools/supervision/gen_font.py
 """
 import gzip
 import io
 import sys
 
-sys.path.insert(0, "tools")
+sys.path.insert(0, "tools/supervision")
 import cv2
 import numpy as np
 from fontTools.ttLib import TTFont
@@ -124,4 +124,4 @@ for size in (5, 17, 40, 64, 100):
         for ch in "AgQ%@8,.":
             rows.append(("glyph", {"cp": ord(ch), "size": size, "weight": weight}, cv_glyph(ch, size, weight)))
 
-write_rows("tests/cases/font_ttf.txt", "gen_font", 0, rows)
+write_rows("tests/supervision/cases/font_ttf.txt", "gen_font", 0, rows)

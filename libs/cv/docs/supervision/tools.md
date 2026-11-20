@@ -1,8 +1,8 @@
 # Detection tools (lane S4)
 
-Ports of `supervision/detection/tools/*` and `LineZone` onto the S0 `Detections`. Rows: `tests/cases/tools_*.txt`
-(468 rows, written by `tools/gen_tools.py` seed 4 from Python supervision itself). Build: `scripts/build_tools.sh`;
-run: `tests/run.sh tests/cases/tools_*.txt`.
+Ports of `supervision/detection/tools/*` and `LineZone` onto the S0 `Detections`. Rows: `tests/supervision/cases/tools_*.txt`
+(468 rows, written by `tools/supervision/gen_tools.py` seed 4 from Python supervision itself). Build: `scripts/supervision/build_tools.sh`;
+run: `tests/supervision/run.sh tests/supervision/cases/tools_*.txt`.
 
 | Python | Mojo | Rows |
 |---|---|---|

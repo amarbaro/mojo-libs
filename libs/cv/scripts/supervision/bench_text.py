@@ -1,4 +1,4 @@
-"""cv2 side of scripts/bench_text.mojo. Run: .work/oracle-venv/bin/python -I scripts/bench_text.py"""
+"""cv2 side of scripts/supervision/bench_text.mojo. Run: .work/oracle-venv/bin/python -I scripts/supervision/bench_text.py"""
 import time
 
 import cv2

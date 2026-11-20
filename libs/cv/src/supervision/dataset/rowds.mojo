@@ -1,7 +1,7 @@
-"""Row binary body for tests/cases/dataset_{coco,yolo,voc}.txt: load, save_roundtrip, split, merge.
+"""Row binary body for tests/supervision/cases/dataset_{coco,yolo,voc}.txt: load, save_roundtrip, split, merge.
 
 save_* ops write a directory, then a bundle file (`== <relpath> <nbytes>\\n` + bytes per file, sorted)
-and print {"out": <bundle path>}, which tests/run.sh compares byte for byte with the Python reference.
+and print {"out": <bundle path>}, which tests/supervision/run.sh compares byte for byte with the Python reference.
 """
 from json import Json
 from std.os import makedirs

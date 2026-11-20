@@ -1,4 +1,4 @@
-# Row driver for tests/cases/pixels_annotators.txt (built to build/pixels_annotators).
+# Row driver for tests/supervision/cases/pixels_annotators.txt (built to build/pixels_annotators).
 from json import parse, Json
 from mojocv.mat import Mat
 from supervision.detection.core import Detections

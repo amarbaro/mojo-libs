@@ -1,10 +1,10 @@
-"""Oracle rows for dataset/yaml.mojo + datayaml.mojo -> tests/cases/dataset_yaml.txt.
+"""Oracle rows for dataset/yaml.mojo + datayaml.mojo -> tests/supervision/cases/dataset_yaml.txt.
 
 Ops (all strings, byte-exact):
   dump         {"names": [...]}  -> yaml.dump text of {"nc", "names"} (save_data_yaml)
   class_names  {"text": yaml}    -> list[str] | {"error": msg}   (yolo._extract_class_names)
   pose_count   {"text": yaml}    -> int       | {"error": msg}   (yolo._extract_pose_value_count)
-Run: .work/oracle-venv/bin/python -I tools/gen_s3_yaml.py     (seed 7)
+Run: .work/oracle-venv/bin/python -I tools/supervision/gen_s3_yaml.py     (seed 7)
 """
 import io
 import os
@@ -18,7 +18,7 @@ import yaml
 from oracle import write_rows
 from supervision.dataset.formats import yolo
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 SEED = 7
 TRICKY = ["1", "true", "null", "yes", "a: b", "a b", "-x", "", "x#y", " lead", "tr ail ",
           "it's", 'q"d', "é", "ü ber", "a,b", "[x]", "{y}", "~", "0x1f", "1e3", ".5",
@@ -87,7 +87,7 @@ def main():
     for d in DOCS:
         rows.append(("class_names", {"text": d}, via_file(yolo._extract_class_names, d)))
         rows.append(("pose_count", {"text": d}, via_file(yolo._extract_pose_value_count, d)))
-    write_rows(ROOT / "tests/cases/dataset_yaml.txt", "gen_s3_yaml", SEED, rows)
+    write_rows(ROOT / "tests/supervision/cases/dataset_yaml.txt", "gen_s3_yaml", SEED, rows)
 
 
 main()

@@ -2,10 +2,10 @@
 """Stress rows for the dataset port: non-square images, float boxes, 11 images per format.
 
 H4's fixtures are 8x8 with integer boxes, so a width/height swap or a float32 rounding bug
-would pass them. This reuses tools/gen_datasets.py with other constants and writes
-tests/fixtures/dataset_s3/ plus tests/cases/dataset_s3_<fmt>.txt (same ops as H4's rows).
+would pass them. This reuses tools/supervision/gen_datasets.py with other constants and writes
+tests/supervision/fixtures/dataset_s3/ plus tests/supervision/cases/dataset_s3_<fmt>.txt (same ops as H4's rows).
 
-Run: .work/oracle-venv/bin/python tools/gen_s3_dataset.py        (seed 1234)
+Run: .work/oracle-venv/bin/python tools/supervision/gen_s3_dataset.py        (seed 1234)
 """
 import random
 import shutil
@@ -18,7 +18,7 @@ from oracle import write_rows
 
 SEED = 1234
 ROOT = g.ROOT
-OUT = ROOT / "tests" / "fixtures" / "dataset_s3"
+OUT = ROOT / "tests" / "supervision" / "fixtures" / "dataset_s3"
 
 
 def make_boxes(rng):
@@ -69,7 +69,7 @@ def main():
     summaries = g.run_oracle()
     g.verify_resave()
     for fmt in ("coco", "yolo", "voc"):
-        base = f"tests/fixtures/dataset_s3/{fmt}"
+        base = f"tests/supervision/fixtures/dataset_s3/{fmt}"
         inp, ref = f"{base}/in", f"{base}/ref"
         params = {"format": fmt}
         rows = [
@@ -81,9 +81,9 @@ def main():
         rows.append(("merge", {"input": f"{ref}/split_train", "params": dict(params, **{"with": f"{ref}/split_valid"}),
                                "tol": {}}, {"ref": f"{ref}/merge.bundle"}))
         if fmt == "yolo":
-            rows.append(("load", {"input": "tests/fixtures/dataset_s3/yolo_edge", "params": params, "tol": {}},
+            rows.append(("load", {"input": "tests/supervision/fixtures/dataset_s3/yolo_edge", "params": params, "tol": {}},
                          yolo_edge(summaries)))
-        write_rows(str(ROOT / "tests" / "cases" / f"dataset_s3_{fmt}.txt"), "gen_s3_dataset", SEED, rows)
+        write_rows(str(ROOT / "tests" / "supervision" / "cases" / f"dataset_s3_{fmt}.txt"), "gen_s3_dataset", SEED, rows)
 
 
 main()

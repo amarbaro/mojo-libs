@@ -1,4 +1,4 @@
-# Row driver for tests/cases/font_ttf.txt: one stdin row in, one JSON line out. Ops: cmap, hmetrics, vmetrics, shape, glyph.
+# Row driver for tests/supervision/cases/font_ttf.txt: one stdin row in, one JSON line out. Ops: cmap, hmetrics, vmetrics, shape, glyph.
 from json import Json, parse
 from mojocv.imgproc import rint
 from std.ffi import external_call

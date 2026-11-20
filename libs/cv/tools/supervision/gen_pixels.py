@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Oracle for the pixel rows: Python supervision and cv2 render references as PNG.
 
-Writes tests/fixtures/pixels/ inputs and reference PNGs, plus two row files in the
+Writes tests/supervision/fixtures/pixels/ inputs and reference PNGs, plus two row files in the
 BOSS CONTRACT format (`<op>\\t<args JSON>\\t<expected JSON>`):
-  tests/cases/pixels_annotators.txt  supervision annotators (Python oracle)
-  tests/cases/pixels_cv.txt          S5 _cv ops, one row per op vs cv2 (+ getTextSize numeric)
+  tests/supervision/cases/pixels_annotators.txt  supervision annotators (Python oracle)
+  tests/supervision/cases/pixels_cv.txt          S5 _cv ops, one row per op vs cv2 (+ getTextSize numeric)
 Args carry input, params and tol; expected carries the ref path. Every bar is stated
 in the row and never loosened to pass. PNG only: no JPEG fixtures.
 
 Run with the shared venv (H1 owns it):
-    .work/oracle-venv/bin/python tools/gen_pixels.py [--seed 5]
+    .work/oracle-venv/bin/python tools/supervision/gen_pixels.py [--seed 5]
 """
 
 import argparse
@@ -23,9 +23,9 @@ import supervision as sv
 from supervision.key_points.annotators import VertexAnnotator
 from supervision.key_points.core import KeyPoints
 
-ROOT = Path(__file__).resolve().parent.parent
-FIXTURES = ROOT / "tests" / "fixtures" / "pixels"
-CASES = ROOT / "tests" / "cases"
+ROOT = Path(__file__).resolve().parent.parent.parent
+FIXTURES = ROOT / "tests" / "supervision" / "fixtures" / "pixels"
+CASES = ROOT / "tests" / "supervision" / "cases"
 H, W = 240, 320
 
 # Fixed scene. The same numbers go into every row's params, so the Mojo side reads them, not regenerates them.
@@ -250,14 +250,14 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--seed", type=int, default=5)
     args = ap.parse_args()
-    header = f"# gen: tools/gen_pixels.py seed={args.seed}"
+    header = f"# gen: tools/supervision/gen_pixels.py seed={args.seed}"
 
     FIXTURES.mkdir(parents=True, exist_ok=True)
     CASES.mkdir(parents=True, exist_ok=True)
 
-    input_rel = "tests/fixtures/pixels/input.png"
-    input2_rel = "tests/fixtures/pixels/input2.png"
-    gray_rel = "tests/fixtures/pixels/input_gray.png"
+    input_rel = "tests/supervision/fixtures/pixels/input.png"
+    input2_rel = "tests/supervision/fixtures/pixels/input2.png"
+    gray_rel = "tests/supervision/fixtures/pixels/input_gray.png"
     write_png(input_rel, make_input(args.seed))
     write_png(input2_rel, make_input(args.seed + 1))
     # Render from the PNGs as written, so the input the Mojo side decodes is the one rendered here.
@@ -273,7 +273,7 @@ def main() -> int:
              "# bar per row in tol: integer-geometry draws exact (max_abs 0); blended or filtered output has a stated bar"]
     for name in BARS:
         out = render(name, scene)
-        rel = f"tests/fixtures/pixels/{name}.png"
+        rel = f"tests/supervision/fixtures/pixels/{name}.png"
         write_png(rel, out)
         lines.append(row(f"pixel_{name}",
                          {"input": input_rel, "params": params_for(name), "tol": BARS[name]},
@@ -286,7 +286,7 @@ def main() -> int:
                     **({"text_offset": tuple(kw["text_offset"])} if "text_offset" in kw else {}))
         dets = sv.Detections(xyxy=np.array(XYXY, dtype=np.float32), class_id=np.array(CLASS_ID), confidence=np.array(CONFIDENCE, dtype=np.float32))
         out = sv.LabelAnnotator(**pykw).annotate(scene.copy(), dets, labels=labels)
-        rel = f"tests/fixtures/pixels/label_{k}.png"
+        rel = f"tests/supervision/fixtures/pixels/label_{k}.png"
         write_png(rel, out)
         params = params_for("label")
         params["labels"], params["kwargs"] = labels, kw
@@ -299,7 +299,7 @@ def main() -> int:
                 "# S5 _cv ops vs cv2; bar per row in tol. Integer draws exact; AA text and blends have stated bars"]
     for name in CV_BARS:
         out, params = render_cv(name, scene, scene2, gray)
-        rel = f"tests/fixtures/pixels/cv_{name}.png"
+        rel = f"tests/supervision/fixtures/pixels/cv_{name}.png"
         write_png(rel, out)
         second = input2_rel if name == "add_weighted" else None
         row_args = {"input": gray_rel if name == "apply_colormap" else input_rel,
@@ -316,8 +316,8 @@ def main() -> int:
                         {"value": [int(tw), int(th), int(base)]}))
     (CASES / "pixels_cv.txt").write_text("\n".join(cv_lines) + "\n", encoding="utf-8")
 
-    print(f"wrote tests/cases/pixels_annotators.txt rows={len(BARS)}")
-    print(f"wrote tests/cases/pixels_cv.txt rows={len(CV_BARS) + 1}")
+    print(f"wrote tests/supervision/cases/pixels_annotators.txt rows={len(BARS)}")
+    print(f"wrote tests/supervision/cases/pixels_cv.txt rows={len(CV_BARS) + 1}")
     return 0
 
 

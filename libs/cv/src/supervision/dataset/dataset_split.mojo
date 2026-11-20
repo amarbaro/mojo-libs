@@ -1,4 +1,4 @@
-"""Row binary for tests/cases/dataset_split.txt: shuffle, split, class utils (build/dataset_split)."""
+"""Row binary for tests/supervision/cases/dataset_split.txt: shuffle, split, class utils (build/dataset_split)."""
 from json import Json
 from supervision.dataset.pos import pos_of
 from supervision.dataset.pyrandom import PyRandom

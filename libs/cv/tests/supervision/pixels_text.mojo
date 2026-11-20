@@ -1,5 +1,5 @@
-# Row driver for tests/cases/pixels_text.txt: cv2.putText / cv2.getTextSize (FONT_HERSHEY_SIMPLEX) vs src/supervision/_cv/font.
-# text_put prints {"out": png path} for tools/pixdiff.py, text_size prints {"value": [width, height, baseline]}.
+# Row driver for tests/supervision/cases/pixels_text.txt: cv2.putText / cv2.getTextSize (FONT_HERSHEY_SIMPLEX) vs src/supervision/_cv/font.
+# text_put prints {"out": png path} for tools/supervision/pixdiff.py, text_size prints {"value": [width, height, baseline]}.
 from json import Json, parse
 from supervision._cv.font.layout import TextEngine
 from supervision._cv.png import imread, imwrite

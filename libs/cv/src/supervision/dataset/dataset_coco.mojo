@@ -1,4 +1,4 @@
-"""Row binary for tests/cases/dataset_coco.txt (build/dataset_coco)."""
+"""Row binary for tests/supervision/cases/dataset_coco.txt (build/dataset_coco)."""
 from supervision.dataset.rowds import run
 
 

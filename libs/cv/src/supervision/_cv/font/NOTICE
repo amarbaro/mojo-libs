@@ -2,7 +2,7 @@ Third-party material in supervision._cv.font
 
 1. Rubik-sans.ttf.gz / rubik_data.mojo: the "Rubik for OpenCV Light" variable TrueType face (wght 300 to 900) that OpenCV 5.0
    ships as its built-in "sans" font (modules/imgproc/fonts/Rubik.ttf.gz), copied byte for byte from the cv2 5.0.0 wheel by
-   tools/gen_font_blob.py.
+   tools/supervision/gen_font_blob.py.
    Copyright 2015 The Rubik Project Authors (https://github.com/googlefonts/rubik)
    Licensed under the SIL Open Font License, Version 1.1 (https://scripts.sil.org/OFL), reproduced below. The font is
    redistributed unmodified; its name is unchanged.

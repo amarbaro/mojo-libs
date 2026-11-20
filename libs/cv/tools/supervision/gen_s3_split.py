@@ -1,4 +1,4 @@
-"""Oracle rows for dataset/pyrandom.mojo + utils.mojo -> tests/cases/dataset_split.txt.
+"""Oracle rows for dataset/pyrandom.mojo + utils.mojo -> tests/supervision/cases/dataset_split.txt.
 
 Ops:
   shuffle     {"seed","n"}                       -> permutation of range(n)  (random.Random(seed).shuffle)
@@ -6,7 +6,7 @@ Ops:
   merge_classes  {"lists": [[str]]}              -> merge_class_lists
   class_map   {"source","target"}                -> list[int] | {"error"}  (build_class_index_mapping)
   collision   {"paths","kind","by"}              -> null | {"error"}   (by: "name" or "stem_xml")
-Run: .work/oracle-venv/bin/python -I tools/gen_s3_split.py     (seed 11)
+Run: .work/oracle-venv/bin/python -I tools/supervision/gen_s3_split.py     (seed 11)
 """
 import random
 import sys
@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from oracle import write_rows
 from supervision.dataset import utils as u
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 SEED = 11
 
 
@@ -58,7 +58,7 @@ def main():
             key = (lambda p: Path(p).name) if by == "name" else (lambda p: f"{Path(p).stem}.xml")
             rows.append(("collision", {"paths": paths, "kind": "image", "by": by},
                          attempt(lambda: u.check_no_basename_collisions(paths, key, "image"))))
-    write_rows(ROOT / "tests/cases/dataset_split.txt", "gen_s3_split", SEED, rows)
+    write_rows(ROOT / "tests/supervision/cases/dataset_split.txt", "gen_s3_split", SEED, rows)
 
 
 main()

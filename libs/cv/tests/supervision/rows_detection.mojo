@@ -1,7 +1,7 @@
-"""Row driver for tests/cases/detection_*.txt (contract: tests/README.md).
+"""Row driver for tests/supervision/cases/detection_*.txt (contract: tests/supervision/README.md).
 
 Reads row lines (`op<TAB>args<TAB>expected`) on stdin, prints one JSON result per row. The same binary is
-copied to build/detection_{converters,detections,iou,nms} by tests/build.sh.
+copied to build/detection_{converters,detections,iou,nms} by tests/supervision/build.sh.
 """
 
 from std.ffi import external_call, c_ssize_t

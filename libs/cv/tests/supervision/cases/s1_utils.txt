@@ -1,4 +1,4 @@
-# gen: tools/gen_s1.py seed=20261104
+# gen: tools/supervision/gen_s1.py seed=20261104
 top_k	{"class_id":[50,47],"confidence":[0.01,0.99],"k":5}	[[47,50],[0.99,0.01]]
 top_k	{"class_id":[73],"confidence":[0.01],"k":7}	[[73],[0.01]]
 top_k	{"class_id":[],"confidence":[],"k":4}	[[],[]]

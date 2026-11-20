@@ -1,11 +1,11 @@
 """Oracle rows for detection core + utils (H2).
 
-Writes tests/cases/detection_{iou,nms,detections,converters}.txt.
+Writes tests/supervision/cases/detection_{iou,nms,detections,converters}.txt.
 Row format (boss contract, exchange/team.md):
   <op>\t<args JSON>\t<expected JSON>; '#' lines are comments; line 1 names this file.
 Floats compare abs+rel 1e-6. NaN is written as the string "nan".
 
-Run: PYTHONPATH=.work/supervision-develop/src .work/oracle-venv/bin/python tools/gen_detection.py
+Run: PYTHONPATH=.work/supervision-develop/src .work/oracle-venv/bin/python tools/supervision/gen_detection.py
 Seed: SEED below (numpy default_rng). One rng drives every family in a fixed order.
 """
 
@@ -40,9 +40,9 @@ from supervision.detection.utils.iou_and_nms import (
 )
 
 SEED = 1729
-ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "tests" / "cases"
-GEN = "tools/gen_detection.py"
+ROOT = Path(__file__).resolve().parent.parent.parent
+OUT = ROOT / "tests" / "supervision" / "cases"
+GEN = "tools/supervision/gen_detection.py"
 rng = np.random.default_rng(SEED)
 
 

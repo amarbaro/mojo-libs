@@ -15,5 +15,5 @@ Float rules that matter: boxes and confidences are float32 (round on load); `box
 
 Not ported: mask and oriented-box targets, small/medium/large buckets of P/R/F1/mAR, plots, pandas, `class_mapping`. Paths without oracle rows (UNVERIFIED): `micro` averaging, `class_agnostic`, `iscrowd`/`ignore` fields, `image_indices`, custom max-det limits, mAP per-class and per-size values.
 
-Gate: `tests/build_metrics.sh && tests/run.sh tests/cases/metrics_*.txt` (354 rows; `metrics_kp.txt` has 34: 17-point COCO sigmas and custom ones, visibility, crowds, areas, boxes of unlabelled targets, class-agnostic, empties). The keypoint input is `KpDets` plain arrays; `key_points/core.mojo` needed no new field.
+Gate: `tests/supervision/build_metrics.sh && tests/supervision/run.sh tests/supervision/cases/metrics_*.txt` (354 rows; `metrics_kp.txt` has 34: 17-point COCO sigmas and custom ones, visibility, crowds, areas, boxes of unlabelled targets, class-agnostic, empties). The keypoint input is `KpDets` plain arrays; `key_points/core.mojo` needed no new field.
 Trap: `input()` cuts lines near 1 KB in Mojo 1.2; read `/dev/stdin` whole.

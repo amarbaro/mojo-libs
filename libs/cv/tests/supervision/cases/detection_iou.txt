@@ -1,4 +1,4 @@
-# gen: tools/gen_detection.py seed=1729
+# gen: tools/supervision/gen_detection.py seed=1729
 box_iou	{"box_true":[0,0,10,10],"box_detection":[0,0,10,10],"overlap_metric":"IOU"}	1.0
 box_iou	{"box_true":[0,0,10,10],"box_detection":[0,0,10,10],"overlap_metric":"IOS"}	1.0
 box_iou	{"box_true":[0,0,10,10],"box_detection":[20,20,30,30],"overlap_metric":"IOU"}	0.0

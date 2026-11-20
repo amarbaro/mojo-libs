@@ -1,4 +1,4 @@
-"""Row binary for tests/cases/dataset_yaml.txt: YAML subset writer/reader (build/dataset_yaml)."""
+"""Row binary for tests/supervision/cases/dataset_yaml.txt: YAML subset writer/reader (build/dataset_yaml)."""
 from json import Json
 from supervision.dataset.datayaml import class_names, pose_value_count
 from supervision.dataset.rowio import error_json, read_rows, row_args, row_op, str_list, strings_of

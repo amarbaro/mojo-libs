@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """BOSS GATE for the pixel rows: rows parse, and regenerating gives sha1-identical files.
 
-Checks tests/cases/pixels_*.txt: line 1 is `# gen: tools/gen_pixels.py seed=<n>`, every
+Checks tests/supervision/cases/pixels_*.txt: line 1 is `# gen: tools/supervision/gen_pixels.py seed=<n>`, every
 other non-comment line has 3 tab columns, the last two are JSON, args carry input and tol.
-Then hashes tests/fixtures/pixels/* and tests/cases/pixels_*.txt, reruns the generator, and
+Then hashes tests/supervision/fixtures/pixels/* and tests/supervision/cases/pixels_*.txt, reruns the generator, and
 hashes again. Any difference is FAIL. Exit non-zero on failure.
 
-    .work/oracle-venv/bin/python tools/check_pixels.py
+    .work/oracle-venv/bin/python tools/supervision/check_pixels.py
 """
 
 import hashlib
@@ -15,9 +15,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-CASES = sorted((ROOT / "tests" / "cases").glob("pixels_*.txt"))
-FIXTURES = sorted((ROOT / "tests" / "fixtures" / "pixels").glob("*.png"))
+ROOT = Path(__file__).resolve().parent.parent.parent
+CASES = sorted((ROOT / "tests" / "supervision" / "cases").glob("pixels_*.txt"))
+FIXTURES = sorted((ROOT / "tests" / "supervision" / "fixtures" / "pixels").glob("*.png"))
 
 
 def fail(step: str, reason: str) -> None:
@@ -29,7 +29,7 @@ def parse_rows() -> int:
     total = 0
     for path in CASES:
         lines = path.read_text(encoding="utf-8").splitlines()
-        if not lines or not lines[0].startswith("# gen: tools/gen_pixels.py seed="):
+        if not lines or not lines[0].startswith("# gen: tools/supervision/gen_pixels.py seed="):
             fail("parse", f"{path.name} line 1 is not the # gen: header")
         for n, line in enumerate(lines[1:], start=2):
             if not line or line.startswith("#"):
@@ -65,7 +65,7 @@ def main() -> int:
     print(f"PASS parse: {rows} rows in {len(CASES)} files")
     before = digest()
     run = subprocess.run(
-        [sys.executable, str(ROOT / "tools" / "gen_pixels.py")],
+        [sys.executable, str(ROOT / "tools" / "supervision" / "gen_pixels.py")],
         cwd=ROOT, capture_output=True, text=True,
     )
     if run.returncode != 0:

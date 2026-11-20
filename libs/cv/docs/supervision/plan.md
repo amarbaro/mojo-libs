@@ -18,13 +18,13 @@ tracker_id, data; filtering, merge, area) first and logs `S0 READY <hash>` in ex
 commit, never edits it; changes go through a team.md request that lane A applies.
 
 ## Gates (oracle = Python supervision installed from the zip in .work/oracle-venv)
-- Numeric ops: same inputs through Python supervision, equal within 1e-6 (rows in tests/cases/*.txt).
+- Numeric ops: same inputs through Python supervision, equal within 1e-6 (rows in tests/supervision/cases/*.txt).
 - Dataset: load -> save round trip byte-equal to Python's output on fixture datasets.
 - Annotators/draw: pixel diff vs Python supervision (on cv2) per row, max abs diff and differing-pixel % recorded;
   bar per row stated in the row, never loosened to pass.
-- tests/run.sh runs all rows; every item: own rows + full suite -> .work/<item>-gate.txt.
+- tests/supervision/run.sh runs all rows; every item: own rows + full suite -> .work/<item>-gate.txt.
 
 ## Rules
-Mojo in src/, Python only in tools/ (oracle). One commit per green item, conventional subject + why body, no
+Mojo in src/, Python only in tools/supervision/ (oracle). One commit per green item, conventional subject + why body, no
 attribution trailer. 3 repair attempts then .work/<item>-failure.md. No push/merge/tag: boss merges.
 Estimate: ~6-9k Mojo LOC (XL+).

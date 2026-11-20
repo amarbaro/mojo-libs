@@ -1,5 +1,5 @@
 # putText speed on a 640x480 label scene: 12 labels per frame, 300 frames, one resident process, warm glyph cache.
-# Compare with `python -I scripts/bench_text.py` (cv2). Build: mojo build -O3 -I src -I $MOJO_CV scripts/bench_text.mojo
+# Compare with `python -I scripts/supervision/bench_text.py` (cv2). Build: mojo build -O3 -I src -I $MOJO_CV scripts/supervision/bench_text.mojo
 from std.time import perf_counter_ns
 from mojocv.mat import Mat
 from supervision._cv.font.layout import TextEngine

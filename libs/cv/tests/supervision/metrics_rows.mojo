@@ -1,4 +1,4 @@
-"""Row runner for tests/cases/metrics_*.txt: one JSON result per stdin row (tests/README.md)."""
+"""Row runner for tests/supervision/cases/metrics_*.txt: one JSON result per stdin row (tests/supervision/README.md)."""
 
 from supervision.detection.core import Detections
 from supervision.metrics.adapt import to_dets_list

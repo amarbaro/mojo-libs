@@ -1,4 +1,4 @@
-# Row driver for tests/cases/pixels_cv.txt (built to build/pixels_cv): one JSON line per row, {"out": path} for image rows.
+# Row driver for tests/supervision/cases/pixels_cv.txt (built to build/pixels_cv): one JSON line per row, {"out": path} for image rows.
 # cv_put_text_aa and cv_text_size run on supervision._cv.font (cv2 5.0's embedded Rubik through its stb_truetype path).
 from json import parse, Json
 from mojocv.imgproc import cvt_color

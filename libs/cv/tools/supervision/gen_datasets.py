@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Generate tests/fixtures/datasets/: tiny COCO, YOLO and VOC sets plus Python
+"""Generate tests/supervision/fixtures/datasets/: tiny COCO, YOLO and VOC sets plus Python
 supervision outputs (load -> save, split, merge) that the Mojo port must match byte-for-byte.
 
 Step 1 (stdlib only): writes inputs with seed SEED: 4 PNG images per format, 8x8 px each,
     and annotations in that format's layout.
 Step 2 (oracle, .work/oracle-venv): loads each input with Python supervision, saves it back,
     splits it, merges the halves, and writes every result under <fmt>/ref/.
-Step 3 writes tests/cases/dataset_<fmt>.txt: one row each for load (value), save roundtrip,
+Step 3 writes tests/supervision/cases/dataset_<fmt>.txt: one row each for load (value), save roundtrip,
     split and merge. File refs are bundles (`== <relpath> <nbytes>` header per file, sorted).
 
-Run: .work/oracle-venv/bin/python tools/gen_datasets.py
+Run: .work/oracle-venv/bin/python tools/supervision/gen_datasets.py
 Exit non-zero on any failure: `FAIL <step>: <reason>`.
 """
 
@@ -25,8 +25,8 @@ from datetime import datetime
 from pathlib import Path
 
 SEED = 42
-ROOT = Path(__file__).resolve().parent.parent
-OUT = ROOT / "tests" / "fixtures" / "datasets"
+ROOT = Path(__file__).resolve().parent.parent.parent
+OUT = ROOT / "tests" / "supervision" / "fixtures" / "datasets"
 W = H = 8
 N_IMAGES = 4
 CLASSES = ["cat", "dog"]
@@ -130,7 +130,7 @@ def _disc(cx: float, cy: float, r: float) -> list[float]:
 
 
 def write_seg_inputs() -> None:
-    """tests/fixtures/datasets/{coco,yolo,voc}_seg/in: polygon and RLE segmentation, sizes 24 x 24."""
+    """tests/supervision/fixtures/datasets/{coco,yolo,voc}_seg/in: polygon and RLE segmentation, sizes 24 x 24."""
     import numpy as np
     from supervision.detection.utils.converters import mask_to_rle
 
@@ -243,13 +243,13 @@ def summarize(ds) -> dict:
 
 
 def write_case_rows(summaries: dict) -> None:
-    """tests/cases/dataset_<fmt>.txt: load (value), save roundtrip, split, merge (ref bundles)."""
-    from oracle import write_rows  # tools/oracle.py, on sys.path as the script's directory
+    """tests/supervision/cases/dataset_<fmt>.txt: load (value), save roundtrip, split, merge (ref bundles)."""
+    from oracle import write_rows  # tools/supervision/oracle.py, on sys.path as the script's directory
 
-    cases = ROOT / "tests" / "cases"
+    cases = ROOT / "tests" / "supervision" / "cases"
     cases.mkdir(parents=True, exist_ok=True)
     for fmt in ("coco", "yolo", "voc", *SEG_FORMATS):
-        base = f"tests/fixtures/datasets/{fmt}"
+        base = f"tests/supervision/fixtures/datasets/{fmt}"
         inp = f"{base}/in"
         ref = f"{base}/ref"
         fmt_name = fmt.split("_")[0]
@@ -274,7 +274,7 @@ def write_case_rows(summaries: dict) -> None:
 def check_case_rows(path: Path) -> None:
     """Parse check: line 1 header, 3 tab columns, JSON args and expected, args carry tol."""
     lines = path.read_text(encoding="utf-8").splitlines()
-    if lines[0] != f"# gen: tools/gen_datasets.py seed={SEED}":
+    if lines[0] != f"# gen: tools/supervision/gen_datasets.py seed={SEED}":
         fail("parse", f"{path.name} line 1 is not the # gen: header")
     for n, line in enumerate(lines[1:], start=2):
         cols = line.split("\t")

@@ -21,7 +21,7 @@ def main() raises:
         print(k)                                           # True False True
 ```
 
-Runnable copy: `examples/quickstart.mojo`.
+Runnable copy: `examples/supervision/quickstart.mojo`.
 
 ## Modules
 
@@ -45,11 +45,11 @@ Image operations come from [mojo-cv](https://github.com/amarbaro/mojo-cv), JSON 
   Each row states its own bar.
 
 ```sh
-tests/build_all.sh     # builds the row drivers into build/
-tests/run.sh           # runs every row in tests/cases/
+tests/supervision/build_all.sh     # builds the row drivers into build/
+tests/supervision/run.sh           # runs every row in tests/supervision/cases/
 ```
 
-`tests/run.sh` needs only `python3` for numeric and dataset rows. The 148 pixel rows also need
+`tests/supervision/run.sh` needs only `python3` for numeric and dataset rows. The 148 pixel rows also need
 `opencv-python` and `numpy` to read the PNGs; point `ORACLE_PY` at a Python that has them.
 
 ## Limits

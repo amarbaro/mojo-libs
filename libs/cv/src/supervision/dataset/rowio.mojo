@@ -1,4 +1,4 @@
-"""Row-binary plumbing for tests/run.sh: stdin rows in, one JSON line per row out."""
+"""Row-binary plumbing for tests/supervision/run.sh: stdin rows in, one JSON line per row out."""
 from std.ffi import c_ssize_t, external_call
 from json import Json, parse
 

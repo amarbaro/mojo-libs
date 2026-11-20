@@ -1,7 +1,7 @@
 """Oracle rows for the S1 surface H2 does not cover (S1).
 
-Writes tests/cases/s1_detections.txt, s1_utils.txt. Row format: tests/README.md.
-Run: PYTHONPATH=.work/supervision-develop/src .work/oracle-venv/bin/python tools/gen_s1.py
+Writes tests/supervision/cases/s1_detections.txt, s1_utils.txt. Row format: tests/supervision/README.md.
+Run: PYTHONPATH=.work/supervision-develop/src .work/oracle-venv/bin/python tools/supervision/gen_s1.py
 Seed: SEED (numpy default_rng). Confidences are drawn distinct, so argsort ties never decide a row.
 """
 
@@ -27,7 +27,7 @@ from supervision.geometry.core import Position
 
 SEED = 20261104
 rng = np.random.default_rng(SEED)
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 
 
 def boxes(n, size=40.0):
@@ -265,7 +265,7 @@ def util_rows():
 
 
 def main():
-    out = ROOT / "tests" / "cases"
+    out = ROOT / "tests" / "supervision" / "cases"
     write_rows(out / "s1_detections.txt", "gen_s1", SEED, det_rows() + anchor_rows() + props_rows() + merge_rows() + select_rows() + error_rows())
     write_rows(out / "s1_utils.txt", "gen_s1", SEED, util_rows())
 

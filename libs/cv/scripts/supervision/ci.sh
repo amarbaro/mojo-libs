@@ -3,13 +3,13 @@
 # Needs mojo-json, mojo-cv and mojo-gzip sources: MOJO_JSON/MOJO_CV/MOJO_GZIP, else a sibling checkout, else a shallow clone into .work/deps.
 # Ends with "PASS n/m" (or "FAIL k/m"): the CI badge step parses that line.
 set -euo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 if [ -z "${MOJO:-}" ]; then
   command -v uv >/dev/null || { echo "FAIL setup: uv not installed"; exit 1; }
   uv sync -q || { echo "FAIL setup: uv sync"; exit 1; }
   MOJO=$PWD/.venv/bin/mojo
 fi
-export PATH="$(dirname "$MOJO"):$PATH"   # tests/build*.sh call a bare `mojo`
+export PATH="$(dirname "$MOJO"):$PATH"   # tests/supervision/build*.sh call a bare `mojo`
 "$MOJO" --version
 dep() {  # dep VAR LIB: export VAR = LIB's src directory
   local var=$1 lib=$2 d
@@ -26,8 +26,8 @@ if [ -z "${ORACLE_PY:-}" ]; then  # the pixel rows read PNGs with opencv and num
 fi
 m=3; ok=0
 gate() { local name=$1; shift; if "$@"; then ok=$((ok+1)); echo "ok $name"; else echo "FAIL $name"; echo "FAIL $((m-ok))/$m"; exit 1; fi; }
-gate selftest tests/selftest.sh
-gate build tests/build_all.sh
-gate rows tests/run.sh
+gate selftest tests/supervision/selftest.sh
+gate build tests/supervision/build_all.sh
+gate rows tests/supervision/run.sh
 echo "PASS $ok/$m"
 echo "PASS ci"

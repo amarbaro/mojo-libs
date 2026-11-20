@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Oracle rows for the detection tools (S4). Run: .work/oracle-venv/bin/python -I tools/gen_tools.py
-Row: <op>\t<args JSON>\t<expected JSON>; line 1 = '# gen: tools/gen_tools.py seed=<n>'.
+"""Oracle rows for the detection tools (S4). Run: .work/oracle-venv/bin/python -I tools/supervision/gen_tools.py
+Row: <op>\t<args JSON>\t<expected JSON>; line 1 = '# gen: tools/supervision/gen_tools.py seed=<n>'.
 Errors: expected {"error": "<PythonExceptionName>"}."""
 import json, os, random, sys
 
@@ -19,7 +19,7 @@ from supervision.detection.tools.smoother import DetectionsSmoother
 warnings.simplefilter("ignore")
 
 SEED = 4
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "tests", "cases")
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "tests", "supervision", "cases")
 
 
 def dump(x):
@@ -29,7 +29,7 @@ def dump(x):
 def write(name, rows):
     path = os.path.join(OUT, f"{name}.txt")
     with open(path, "w") as f:
-        f.write(f"# gen: tools/gen_tools.py seed={SEED}\n")
+        f.write(f"# gen: tools/supervision/gen_tools.py seed={SEED}\n")
         for op, args, exp in rows:
             f.write(f"{op}\t{dump(args)}\t{dump(exp)}\n")
     print(f"{name}: {len(rows)} rows")

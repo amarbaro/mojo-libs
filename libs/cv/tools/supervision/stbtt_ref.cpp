@@ -1,4 +1,4 @@
-// Reference driver around OpenCV 5.0.0's own stb_truetype.cpp (fetched by tools/stbtt_ref.sh): reads "codepoint size weight"
+// Reference driver around OpenCV 5.0.0's own stb_truetype.cpp (fetched by tools/supervision/stbtt_ref.sh): reads "codepoint size weight"
 // lines on stdin, prints the glyph bitmap exactly as drawing_text.cpp asks for it (scale = ScaleForPixelHeightNoDesc).
 #include <cstdio>
 #include <cstdlib>

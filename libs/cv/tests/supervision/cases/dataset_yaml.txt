@@ -1,4 +1,4 @@
-# gen: tools/gen_s3_yaml.py seed=7
+# gen: tools/supervision/gen_s3_yaml.py seed=7
 dump	{"names":[]}	"nc: 0\nnames: []\n"
 dump	{"names":["dog","person"]}	"nc: 2\nnames: [dog, person]\n"
 dump	{"names":["class_0","class_1","class_2","class_3","class_4","class_5","class_6","class_7","class_8","class_9","class_10","class_11","class_12","class_13","class_14","class_15","class_16","class_17","class_18","class_19","class_20","class_21","class_22","class_23","class_24","class_25","class_26","class_27","class_28","class_29"]}	"nc: 30\nnames: [class_0, class_1, class_2, class_3, class_4, class_5, class_6, class_7, class_8,\n  class_9, class_10, class_11, class_12, class_13, class_14, class_15, class_16, class_17,\n  class_18, class_19, class_20, class_21, class_22, class_23, class_24, class_25,\n  class_26, class_27, class_28, class_29]\n"

@@ -1,6 +1,6 @@
-"""Shared helpers for oracle generators (tools/gen_*.py).
+"""Shared helpers for oracle generators (tools/supervision/gen_*.py).
 
-Row format: see tests/README.md. One case per line:
+Row format: see tests/supervision/README.md. One case per line:
     <op>\t<args JSON>\t<expected JSON>
 """
 import json
@@ -41,7 +41,7 @@ def row(op, args, expected):
 def write_rows(path, gen, seed, rows):
     """Write a row file: line 1 is the gen header, then one row per line."""
     with open(path, "w", encoding="utf-8") as f:
-        f.write(f"# gen: tools/{gen}.py seed={seed}\n")
+        f.write(f"# gen: tools/supervision/{gen}.py seed={seed}\n")
         for op, args, expected in rows:
             f.write(row(op, args, expected) + "\n")
     print(f"wrote {len(rows)} rows to {path}", file=sys.stderr)

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Oracle rows for the metrics port (lane H3).
 
-Writes tests/cases/metrics_{map,pr,mar,cm}.txt in the boss row format:
+Writes tests/supervision/cases/metrics_{map,pr,mar,cm}.txt in the boss row format:
     <op>\t<args JSON>\t<expected JSON>
-Line 1 of each file: `# gen: tools/gen_metrics.py seed=<n>`.
+Line 1 of each file: `# gen: tools/supervision/gen_metrics.py seed=<n>`.
 Floats compare abs+rel 1e-6; NaN is written as "nan".
 
 Ops (detections are per-image lists; boxes rounded to 3 dp, so the args are exact):
@@ -18,7 +18,7 @@ Ops (detections are per-image lists; boxes rounded to 3 dp, so the args are exac
              KeyPointMeanAveragePrecision: [map50_95, map50, map75] for all, medium and large objects
 
 Oracle: Python supervision at .work/supervision-develop/src. Run with:
-  PYTHONPATH=.work/supervision-develop/src .work/oracle-venv/bin/python tools/gen_metrics.py
+  PYTHONPATH=.work/supervision-develop/src .work/oracle-venv/bin/python tools/supervision/gen_metrics.py
 """
 
 from __future__ import annotations
@@ -44,8 +44,8 @@ from supervision.metrics.detection import ConfusionMatrix
 
 SEED = 20261104
 N_RANDOM_SCENES = 25
-ROOT = Path(__file__).resolve().parents[1]
-OUT = ROOT / "tests" / "cases"
+ROOT = Path(__file__).resolve().parents[2]
+OUT = ROOT / "tests" / "supervision" / "cases"
 AVERAGING = {"macro": AveragingMethod.MACRO, "weighted": AveragingMethod.WEIGHTED}
 CLASSES = ["c0", "c1", "c2", "c3"]
 FILES = {"map": "metrics_map.txt", "pr": "metrics_pr.txt",
@@ -262,7 +262,7 @@ def main() -> None:
     for key, lines in rows.items():
         if not lines:
             fail(key, "no rows generated")
-        head = f"# gen: tools/gen_metrics.py seed={SEED}\n"
+        head = f"# gen: tools/supervision/gen_metrics.py seed={SEED}\n"
         (OUT / FILES[key]).write_text(head + "\n".join(lines) + "\n")
         total += len(lines)
         print(f"{FILES[key]}: {len(lines)} rows")
