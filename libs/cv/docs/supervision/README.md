@@ -1,8 +1,4 @@
-# mojo-supervision
-
-<!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-supervision/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-supervision/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-supervision)](https://github.com/amarbaro/mojo-supervision/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-supervision)](https://github.com/amarbaro/mojo-supervision/blob/main/LICENSE)
-<!-- /badges -->
+# supervision (a package of mojo-cv)
 
 Roboflow [supervision](https://github.com/roboflow/supervision) ported to Mojo. Every op is checked
 against Python supervision on the same inputs: 3308 recorded rows pass.
@@ -34,7 +30,7 @@ Runnable copy: `examples/supervision/quickstart.mojo`.
 | `draw`, `geometry`, `annotators`, `key_points` | drawing primitives, annotators, skeletons |
 | `classification`, `validators` | classification results, input checks |
 
-Image operations come from [mojo-cv](https://github.com/amarbaro/mojo-cv), JSON from
+Image operations come from the `mojocv` package of this repo, JSON from
 [mojo-json](https://github.com/amarbaro/mojo-json).
 
 ## How it is checked
@@ -54,8 +50,8 @@ tests/supervision/run.sh           # runs every row in tests/supervision/cases/
 
 ## Limits
 
-- Needs Mojo 1.2 (`uv sync`), with mojo-cv, mojo-json and mojo-gzip checked out next to this repo.
-  For other locations, set `MOJO_CV`, `MOJO_JSON` and `MOJO_GZIP` to their `src` directories.
+- Needs Mojo 1.2 (`uv sync`), with mojo-json and mojo-gzip checked out next to this repo (mojocv is in the same repo).
+  For other locations, set `MOJO_JSON` and `MOJO_GZIP` to their `src` directories.
 - Not on a package channel yet.
 - Pixel output is not bit-exact with OpenCV. The per-row bar says how far it may differ.
 
