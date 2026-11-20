@@ -382,11 +382,19 @@ def py_sum(xs: List[Float64]) -> Float64:
         total = t
     return total + c if c != 0 and isfinite(c) else total  # CPython: c is dropped once the sum overflowed
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 def _nb(s: String, up: Bool) -> String:
     """The `d.ddde+XX` text one unit in the last digit up or down, renormalised ("" when it reaches 0)."""
     var b = s.as_bytes()
     var neg = b[0] == 45
-    var epos = s.find("e")
+    var epos = _pos(s.find("e"))
     var digs = List[UInt8]()
     for i in range(1 if neg else 0, epos):
         if b[i] != 46:
@@ -468,7 +476,7 @@ def py_repr(x: Float64) -> String:
             pass
     var b = s.as_bytes()
     var neg = b[0] == 45
-    var epos = s.find("e")
+    var epos = _pos(s.find("e"))
     var digits = String()
     for i in range(1 if neg else 0, epos):
         if b[i] != 46:

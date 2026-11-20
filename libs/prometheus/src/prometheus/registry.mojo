@@ -12,6 +12,14 @@ comptime DEFAULT_BUCKETS: List[Float64] = [0.005, 0.01, 0.025, 0.05, 0.075, 0.1,
 comptime _TYPES: List[String] = ["counter", "gauge", "histogram", "summary"]
 
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 def _go_into(d: Float64, mut out: String):
     """prometheus_client floatToGoString, written straight into out; whole numbers skip every temporary."""
     if isnan(d):
@@ -22,7 +30,7 @@ def _go_into(d: Float64, mut out: String):
         out.write(Int(d), ".0")
     else:
         var s = py_repr(d)
-        var dot = s.find(".")
+        var dot = _pos(s.find("."))
         if d > 0 and dot > 6:
             var m = String(s[byte=0:1]) + "." + String(s[byte=1:dot]) + String(s[byte = dot + 1 :])
             var bb = m.as_bytes()
