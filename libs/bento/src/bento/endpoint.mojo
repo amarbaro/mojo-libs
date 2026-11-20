@@ -203,6 +203,14 @@ def validate(fields: List[Field], body: Json, mut args: Json, mut issues: Json):
 
 # ---------------------------------------------------------------- the service
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 def _json_response(status: Int, body: String) -> Response:
     return Response.text(status, body, "application/json")
 
@@ -212,7 +220,7 @@ def _error_response(e: Error) -> Response:
     if not msg.startswith(_HTTP):
         return _json_response(500, GENERIC_500)
     var rest = msg[byte = _HTTP.byte_length() :]
-    var colon = rest.find(":")
+    var colon = _pos(rest.find(":"))
     var status = 500
     try:
         status = Int(rest[byte=0:colon])

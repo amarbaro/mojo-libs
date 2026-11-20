@@ -19,6 +19,14 @@ comptime _TAG_INVALID = "a tag's name or version must consist of lowercase alpha
 comptime _TAG_LONG = "a tag's name or version must be at most 63 characters in length"
 
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 def _alnum(c: UInt8) -> Bool:
     return (c >= 48 and c <= 57) or (c >= 97 and c <= 122)
 
@@ -52,7 +60,7 @@ struct Tag(Copyable, Movable):
     @staticmethod
     def parse(s: String) raises -> Tag:
         """BentoML's `Tag.from_str`: `name` or `name:version`."""
-        var i = s.find(":")
+        var i = _pos(s.find(":"))
         if i < 0:
             return Tag(_tag_part(s), String())
         var name = String(s[byte=0:i])
