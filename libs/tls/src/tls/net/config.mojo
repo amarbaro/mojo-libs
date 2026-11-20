@@ -1,6 +1,14 @@
 """TlsConfig: the certificates a server offers (picked by SNI), ALPN protocols, timeouts and size limits."""
 
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 struct CertEntry(Copyable, Movable):
     var names: List[String]  # lower case; "*.example.com" matches one extra label
     var chain: List[List[UInt8]]  # DER certificates, leaf first
@@ -18,7 +26,7 @@ struct CertEntry(Copyable, Movable):
             if n == host:
                 return True
             if n.startswith("*."):
-                var dot = host.find(".")
+                var dot = _pos(host.find("."))
                 if dot > 0 and String(host[byte = dot :]) == String(n[byte = 1 :]):
                     return True
         return False

@@ -14,12 +14,20 @@ from tls.tls13.conn import EV_CLOSE, EV_DONE
 from mcommon import *
 
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 def first_line(b: List[UInt8]) -> String:
     var s = str_of(b)
-    var at = s.find("mojo-tls-ok")
+    var at = _pos(s.find("mojo-tls-ok"))
     if at < 0:
         return String("no-marker")
-    var end = s.find("\n", at)
+    var end = _pos(s.find("\n", at))
     return String(s[byte = at : end if end > 0 else s.byte_length()])
 
 

@@ -300,13 +300,21 @@ def _valid_dns(n: List[UInt8]) -> Bool:
     return True
 
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 def _listed(rule: String) -> Bool:
     return ("\n" + rule + "\n") in PSL
 
 
 def public_suffix(x: String) -> Bool:
     """`x` (lower case, no leading dot) is a public suffix: one label, or listed (exact or by wildcard rule, minus exceptions)."""
-    var dot = x.find(".")
+    var dot = _pos(x.find("."))
     if dot < 0:
         return True
     if _listed("!" + x):

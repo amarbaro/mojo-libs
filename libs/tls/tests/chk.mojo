@@ -2,6 +2,14 @@
 # Run from the repo root (vectors are read from tests/vectors/rfc8448.txt).
 
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 def hexd(s: String) -> List[UInt8]:
     var o = List[UInt8]()
     var hi = -1
@@ -57,7 +65,7 @@ struct Vec(Movable):
             var p = r.split(" | ")
             if len(p) != 4 or Int(String(p[0])) != sec:
                 continue
-            if String(p[1]).find(step) >= 0 and String(p[2]) == field:
+            if _pos(String(p[1]).find(step)) >= 0 and String(p[2]) == field:
                 if seen == nth:
                     return hexd(String(p[3]))
                 seen += 1
