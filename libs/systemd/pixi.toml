@@ -18,10 +18,13 @@ path = "src/systemd"
 name = "systemd"
 
 [package.host-dependencies]
+mojo-posix = { path = "../posix" }
 mojo-compiler = ">=1.2.0,<1.3"
 
 [package.build-dependencies]
+mojo-posix = { path = "../posix" }
 mojo-compiler = ">=1.2.0,<1.3"
 
 [package.run-dependencies]
+mojo-posix = { path = "../posix" }
 mojo-compiler = ">=1.2.0,<1.3"
