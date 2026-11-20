@@ -115,8 +115,8 @@ def blockiness(g: Mat[DType.uint8]) raises -> Mat[F64]:
         var acc = SIMD[DType.uint32, 16](0)
         var x = 0
         while x + 17 <= C:
-            var a = r.load[width=16](x)
-            var b = r.load[width=16](x + 1)
+            var a = r.unsafe_load[width=16](x)
+            var b = r.unsafe_load[width=16](x + 1)
             acc += (max(a, b) - min(a, b)).cast[DType.uint32]()
             x += 16
         var edge = Int64(acc[7]) + Int64(acc[15])
@@ -136,8 +136,8 @@ def blockiness(g: Mat[DType.uint8]) raises -> Mat[F64]:
         var acc = SIMD[DType.uint32, 32](0)
         var x = 0
         while x + 32 <= C:
-            var a = r0.load[width=32](x)
-            var b = r1.load[width=32](x)
+            var a = r0.unsafe_load[width=32](x)
+            var b = r1.unsafe_load[width=32](x)
             acc += (max(a, b) - min(a, b)).cast[DType.uint32]()
             x += 32
         var s = Int64(acc.reduce_add())
@@ -666,12 +666,20 @@ def batch(mut a: Args) raises -> Bool:
     return True
 
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 def _field(line: String, key: String, stop: String) -> String:
-    var s = line.find(key)
+    var s = _pos(line.find(key))
     if s < 0:
         return String()
     var b = s + key.byte_length()
-    var e = line.find(stop, b)
+    var e = _pos(line.find(stop, b))
     return String(line[byte=b:e]) if e >= 0 else String()
 
 
@@ -697,7 +705,7 @@ def dups(mut a: Args) raises -> Bool:
     var pp = List[UInt8]()
     for i in range(len(lines)):
         var l = String(lines[i])
-        if l.find('"dhash":"') < 0:
+        if _pos(l.find('"dhash":"')) < 0:
             continue
         idx.append(i)
         files.append(_field(l, '{"file":"', '","w":'))
@@ -732,7 +740,7 @@ def dups(mut a: Args) raises -> Bool:
         if at < n and idx[at] == i:
             if of[at].byte_length() > 0:
                 l = l.replace('"dupOf":[]', String('"dupOf":[', of[at], "]"))
-                l = l.replace('"flags":[]', '"flags":["duplicate"]').replace('"flags":["', '"flags":["duplicate","') if l.find('"flags":[]') < 0 else l.replace('"flags":[]', '"flags":["duplicate"]')
+                l = l.replace('"flags":[]', '"flags":["duplicate"]').replace('"flags":["', '"flags":["duplicate","') if _pos(l.find('"flags":[]')) < 0 else l.replace('"flags":[]', '"flags":["duplicate"]')
             at += 1
         if l.byte_length() > 0:
             out.write(l + "\n")

@@ -11,6 +11,14 @@ from mojocv.mat import Mat, load, save
 comptime DTS = [DType.uint8, DType.float32, DType.int32, DType.float64, DType.int16]
 
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 struct Args(Movable):
     """`mojo-cv OP OUT IN... [k=v]`; `reps=N` repeats the timed part and prints the best time."""
 
@@ -33,7 +41,7 @@ struct Args(Movable):
         self.kv = Dict[String, String]()
         for i in range(3, len(v)):
             var s = String(v[i])
-            var e = s.find("=")
+            var e = _pos(s.find("="))
             if e >= 0:
                 self.kv[String(s[byte=:e])] = String(s[byte=e + 1 :])
             else:

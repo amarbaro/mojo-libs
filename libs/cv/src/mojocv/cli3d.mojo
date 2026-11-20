@@ -18,6 +18,14 @@ from mojocv.cae import stress_measures, colormap
 from mojocv.octree import Octree, walk, walk_cells
 
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 def _f(kv: Dict[String, String], name: String, dflt: Float64) raises -> Float64:
     return Float64(kv[name]) if name in kv else dflt
 
@@ -115,7 +123,7 @@ def dispatch3d(args: List[String]) raises -> Bool:
     var ins = List[String]()
     var kv = Dict[String, String]()
     for i in range(2, len(args)):
-        var eq = args[i].find("=")
+        var eq = _pos(args[i].find("="))
         if eq > 0:
             kv[String(args[i][byte=:eq])] = String(args[i][byte=eq + 1 :])
         else:

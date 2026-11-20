@@ -11,17 +11,25 @@ from mojocv.mat import Mat
 from mojocv.nurbs import knots
 
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 def _real(x: Float64) raises -> String:
     if x != x or abs(x) > 1.0e300:
         raise Error("mojocv: step: coordinates must be finite")
     var s = String(x)
-    var e = s.find("e")
+    var e = _pos(s.find("e"))
     if e >= 0:
         var mant = String(s[byte=:e])
-        if mant.find(".") < 0:
+        if _pos(mant.find(".")) < 0:
             mant += "."
         return mant + "E" + String(s[byte = e + 1 :])
-    if s.find(".") < 0:
+    if _pos(s.find(".")) < 0:
         s += "."
     return s
 
@@ -343,9 +351,9 @@ def parse_p21(b: List[UInt8]) raises -> P21:
     if len(b) < 13 or String(StringSlice(unsafe_from_utf8=Span(b)[:13])) != tag:
         raise Error("mojocv: step: missing ISO-10303-21; header")
     var text = String(StringSlice(unsafe_from_utf8=Span(b)))
-    var d = text.find("DATA;")
-    var e = text.rfind("ENDSEC;")
-    if d < 0 or e < d or text.find("END-ISO-10303-21;") < 0 or text.find("FILE_SCHEMA") < 0:
+    var d = _pos(text.find("DATA;"))
+    var e = _pos(text.rfind("ENDSEC;"))
+    if d < 0 or e < d or _pos(text.find("END-ISO-10303-21;")) < 0 or _pos(text.find("FILE_SCHEMA")) < 0:
         raise Error("mojocv: step: missing HEADER FILE_SCHEMA, DATA section or END-ISO-10303-21;")
     p = d + 5
     while True:
