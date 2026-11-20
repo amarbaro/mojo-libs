@@ -6,7 +6,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${CASES:?FAIL setup: set CASES to the built case runner}"
 mkdir -p .work
-M=.venv/bin/mojo
+M=${MOJO:-.venv/bin/mojo}
 n=0
 for root in tests/fixtures/*/; do
   root=${root%/}
@@ -20,6 +20,6 @@ for root in tests/fixtures/*/; do
 done
 rm -rf .work/api; cp -r tests/fixtures/edge .work/api
 $M run -I src tests/api.mojo || { echo "FAIL api: tests/api.mojo"; exit 1; }
-$M run -I src examples/quickstart.mojo > /dev/null || { echo "FAIL example: examples/quickstart.mojo"; exit 1; }
+$M run -I src examples/quickstart.mojo tests/fixtures/sys > /dev/null || { echo "FAIL example: examples/quickstart.mojo"; exit 1; }
 echo "fixtures: $n"
 echo "PASS all"
