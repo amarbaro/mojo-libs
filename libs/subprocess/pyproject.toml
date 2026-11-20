@@ -11,5 +11,5 @@ Homepage = "https://github.com/amarbaro/mojo-subprocess"
 Repository = "https://github.com/amarbaro/mojo-subprocess"
 
 [tool.mojo]
-packages = ["subprocess"]  # src/posix is a vendored copy of mojo-posix for a clone build
+packages = ["subprocess"]  # ../posix is the sibling library
 deps = ["mojo-posix >=0.1.0,<0.2"]

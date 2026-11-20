@@ -23,7 +23,7 @@ Names follow prometheus_client's classic validation (`PROMETHEUS_LEGACY_NAME_VAL
 
 **Speed** (1,000 labelled children, 7800X3D, pinned core, load average 6.5): `inc` 7 ns (kind-checked), `observe` 25 ns, exposition 3.8 ms; prometheus_client 255 ns, 625 ns and 79 ms.
 
-Floats print exactly as Python's `repr`: Mojo 1.2's own float printing is not round-trip safe, so the vendored `src/pyformat` (mojo-pyformat 0.2) supplies `py_repr`.
+Floats print exactly as Python's `repr`: Mojo 1.2's own float printing is not round-trip safe, so the sibling library `../pyformat` (mojo-pyformat 0.2) supplies `py_repr`.
 
 - API: [docs/api.md](docs/api.md) · design: [docs/design.md](docs/design.md) · agent skill: [skills/mojo-prometheus/SKILL.md](skills/mojo-prometheus/SKILL.md)
 - License: Apache-2.0

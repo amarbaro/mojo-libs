@@ -55,4 +55,4 @@ Unigram `prepend_scheme: first`. `NFC` is accepted but not applied (feed NFC tex
 | `scripts/bench.sh` | the table above, 3 runs, peak RSS |
 | `scripts/ci.sh` | install and gate |
 
-Vendored: `src/json` (mojo-json), `src/uregex` (mojo-uregex), see [docs/vendored.md](docs/vendored.md). Apache-2.0.
+Uses the sibling libraries `../json` (mojo-json) and `../uregex` (mojo-uregex). Apache-2.0.

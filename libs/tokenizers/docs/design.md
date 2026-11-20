@@ -2,7 +2,7 @@
 
 **One file, one Dict per job.** `src/tokenizers/tokenizer.mojo` holds the loader, both models and decode. `src/json` parses the file
 into a flat node array and the loader walks it without building a document tree; `src/uregex` runs the pre-tokenizer pattern
-(`\p{L}`, lookahead `\s+(?!\S)`, `(?i:...)`, `\p{N}{1,3}` are all it needs). Both are vendored unedited (`docs/vendored.md`).
+(`\p{L}`, lookahead `\s+(?!\S)`, `(?i:...)`, `\p{N}{1,3}` are all it needs). Both are the sibling libraries `../json` and `../uregex`.
 
 **BPE.** A merge `a b` becomes one `Dict[Int, Int]` entry: key `(id(a) << 32) | id(b)`, value `(rank << 32) | id(ab)`. No strings are built
 while merging. A pre-token starts as one id per byte (a 256-entry table), then a binary min-heap of `(rank << 32) | position` plus a

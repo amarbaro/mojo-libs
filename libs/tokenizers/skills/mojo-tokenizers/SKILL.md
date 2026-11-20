@@ -19,7 +19,7 @@ normalizer or pre-tokenizer outside the list in `docs/api.md` raises at load; it
 
 ## Install
 
-From a clone: `mojo run -I src app.mojo`. `src/json` and `src/uregex` are vendored inside (`docs/vendored.md`); nothing else is needed.
+From the monorepo: `mojo run -I src -I ../json/src -I ../uregex/src app.mojo`; `json` and `uregex` are the sibling folders.
 The runnable example is `examples/quickstart.mojo` (no arguments, no files).
 
 ## The calls
