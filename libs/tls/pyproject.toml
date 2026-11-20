@@ -7,7 +7,7 @@ requires-python = ">=3.11,<3.16"
 dependencies = ["mojo>=1.2.0,<1.3"]
 
 [tool.mojo]
-deps = ["mojo-aio"]  # pinned for source builds in scripts/deps.sh
+deps = ["mojo-aio"]  # sibling libraries in this monorepo, linked by scripts/deps.sh
 
 [dependency-groups]
 dev = ["cryptography"]  # test oracles only

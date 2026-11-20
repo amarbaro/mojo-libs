@@ -4,7 +4,7 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$root"
 MOJO="${MOJO:-$root/.venv/bin/mojo}"
-AIO="${AIO:-$PWD/.work/deps/mojo-aio/src}"
+AIO="${AIO:-$PWD/../aio/src}"
 mkdir -p .work/real-bin
 for b in real_server real_client; do
   rm -f ".work/real-bin/$b"

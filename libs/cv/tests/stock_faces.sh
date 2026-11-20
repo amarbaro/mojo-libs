@@ -10,7 +10,7 @@ M=$P/mojo-faces
 D=${MCV_FACES_MODEL:-$HOME/Models/deep-live-cam-models/buffalo_l/buffalo_l/det_10g.onnx}
 DBS=${DOAR_BIO_STOCK:-$HOME/Projects/gpu-media/doar-bio-stock}/upload
 mkdir -p .work .bin
-.venv/bin/mojo build -O3 -I src -I "$P/mojo-faces/src" -I "$P/mojo-imkit/src" -I "$P/mojo-mmap/src" src/stockfaces.mojo -o .bin/mcv-faces 2> .work/build_faces.log || { tail -20 .work/build_faces.log; echo "FAIL build: src/stockfaces.mojo"; exit 1; }
+.venv/bin/mojo build -O3 -I src -I "$P/mojo-faces/src" -I "$PWD/../imkit/src" -I "$PWD/../mmap/src" src/stockfaces.mojo -o .bin/mcv-faces 2> .work/build_faces.log || { tail -20 .work/build_faces.log; echo "FAIL build: src/stockfaces.mojo"; exit 1; }
 for f in "$M/.work/det/ref.txt" "$D" "$DBS/db044-"*.jpg "$DBS/db000-"*.jpg; do [ -f "$f" ] || { echo "FAIL input: $f missing"; exit 1; }; done
 awk '$1 == "n" {print $2}' "$M/.work/det/ref.txt" > .work/det55.txt
 gpu-wait run --timeout 600 -- .bin/mcv-faces "$D" .work/faces_gpu.txt .work/det55.txt boxes=1 gpu=16 > /dev/null 2>&1 || { echo "FAIL run: mcv-faces gpu"; exit 1; }

@@ -4,7 +4,7 @@
 # `openssl s_client -tls1_2` (the same server answers TLS 1.2). Prints PASS example / FAIL <step>: <reason>.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-MOJO="${MOJO:-$PWD/.venv/bin/mojo}"; AIO="${AIO:-$PWD/.work/deps/mojo-aio/src}"
+MOJO="${MOJO:-$PWD/.venv/bin/mojo}"; AIO="${AIO:-$PWD/../aio/src}"
 W=.work/example; rm -rf "$W"; mkdir -p "$W"
 for b in server client; do
   timeout 300 "$MOJO" build -I src -I "$AIO" "examples/$b.mojo" -o "$W/$b" > "$W/$b.build" 2>&1 || { echo "FAIL build $b: $(grep -m3 error "$W/$b.build")"; exit 1; }

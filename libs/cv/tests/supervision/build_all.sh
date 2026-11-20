@@ -3,8 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 mkdir -p build .work
-J=${MOJO_JSON:-$HOME/Projects/mojo/mojo-json/src}
-G=${MOJO_GZIP:-$HOME/Projects/mojo/mojo-gzip/src}
+J=${MOJO_JSON:-$PWD/../json/src}
+G=${MOJO_GZIP:-$PWD/../gzip/src}
 tests/supervision/build.sh; tests/supervision/build_metrics.sh; scripts/supervision/build_tools.sh
 for f in tests/supervision/cases/*.txt; do
   s=$(basename "$f" .txt); [ -x "build/$s" ] && continue

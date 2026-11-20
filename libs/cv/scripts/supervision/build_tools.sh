@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 MOJO=${MOJO:-mojo}
-JSON_SRC=${JSON_SRC:-$HOME/Projects/mojo/mojo-json/src}
+JSON_SRC=${JSON_SRC:-$PWD/../json/src}
 mkdir -p build
 for stem in slicer slicer_merge line sinks smoother zone; do
   "$MOJO" build -O1 -I src -I tools/supervision/drivers -I "$JSON_SRC" "tools/supervision/drivers/tools_$stem.mojo" -o "build/tools_$stem" \

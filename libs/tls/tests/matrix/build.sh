@@ -3,7 +3,7 @@
 set -euo pipefail
 root="$(cd "$(dirname "$0")/../.." && pwd)"; cd "$root"
 MOJO="${MOJO:-$PWD/.venv/bin/mojo}"
-AIO="${AIO:-$PWD/.work/deps/mojo-aio/src}"
+AIO="${AIO:-$PWD/../aio/src}"
 mkdir -p .work/matrix-bin
 for b in ${@:-msrv mcli}; do
   rm -f ".work/matrix-bin/$b"

@@ -28,11 +28,10 @@ export PATH="$PWD/.venv/bin:$PATH"   # tests/supervision/build*.sh call a bare `
 dep() {  # dep VAR LIB: export VAR = LIB's src directory
   local var=$1 lib=$2 d
   [ -z "${!var:-}" ] || return 0
-  for d in "../$lib-public" "../$lib" ".work/deps/$lib"; do [ -d "$d/src" ] && { export "$var=$PWD/$d/src"; return 0; }; done
-  git clone -q --depth 1 "https://github.com/amarbaro/$lib.git" ".work/deps/$lib" || { echo "FAIL setup: clone $lib"; exit 1; }
-  export "$var=$PWD/.work/deps/$lib/src"
+  d="../$lib"; [ -d "$d/src" ] || { echo "FAIL setup: $d/src missing (sibling library in the monorepo)"; exit 1; }
+  export "$var=$PWD/$d/src"
 }
-dep MOJO_JSON mojo-json; dep MOJO_GZIP mojo-gzip
+dep MOJO_JSON json; dep MOJO_GZIP gzip
 export ORACLE_PY=${ORACLE_PY:-$PWD/.venv/bin/python}   # the pixel rows read PNGs with opencv and numpy
 mkdir -p build
 m=3; ok=0

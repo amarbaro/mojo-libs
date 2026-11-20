@@ -8,9 +8,8 @@ v=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml); c=$(sed -n 's/^- \[v\([
 command -v uv >/dev/null || { echo "FAIL setup: uv not installed"; exit 1; }
 uv sync || { echo "FAIL setup: uv sync"; exit 1; }
 if [[ ! -e lib/json ]]; then
-  git clone -q --depth 1 --branch v0.1.0 https://github.com/amarbaro/mojo-json .work/deps/mojo-json \
-    || { echo "FAIL setup: clone mojo-json v0.1.0"; exit 1; }
-  mkdir -p lib && ln -s ../.work/deps/mojo-json/src/json lib/json
+  [[ -d ../json/src/json ]] || { echo "FAIL setup: ../json/src/json missing"; exit 1; }
+  mkdir -p lib && ln -s ../../json/src/json lib/json
 fi
 python3 -c 'import platform; print("oracle python", platform.python_version())'
 scripts/check.sh

@@ -12,4 +12,4 @@ dev = ["numpy>=2.0", "pyyaml>=6.0", "tqdm>=4.66", "requests>=2.32", "tokenizers>
 
 [tool.mojo]
 packages = ["ggufx", "hfconv", "st"]  # one conda package carries all three .mojoc files
-deps = ["mojo-uregex"]  # pinned for source builds in scripts/deps.sh
+deps = ["mojo-uregex"]  # sibling libraries in this monorepo, linked by scripts/deps.sh

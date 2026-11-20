@@ -6,7 +6,7 @@ set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 MOJO="${MOJO:-$PWD/.venv/bin/mojo}"
-AIO="${AIO:-$PWD/.work/deps/mojo-aio/src}"
+AIO="${AIO:-$PWD/../aio/src}"
 W="$root/.work/check"; mkdir -p "$W"
 fail=0
 bad() { echo "FAIL $1: $2"; fail=1; }

@@ -1,18 +1,11 @@
 # Sourced by the other scripts, from the repository root: sets MOJO, HASHLIB_SRC and PYTHON.
-# mojo-hashlib comes from a sibling checkout, else a pinned clone under .work/deps.
+# hashlib is the sibling library in this monorepo.
 if [ -z "${MOJO:-}" ]; then
   if [ -x .venv/bin/mojo ]; then MOJO=.venv/bin/mojo; else MOJO=mojo; fi
 fi
 if [ -z "${HASHLIB_SRC:-}" ]; then
-  if [ -d ../mojo-hashlib-public/src ]; then HASHLIB_SRC=../mojo-hashlib-public/src
-  elif [ -d ../mojo-hashlib/src ]; then HASHLIB_SRC=../mojo-hashlib/src
-  else
-    if [ ! -d .work/deps/mojo-hashlib ]; then
-      mkdir -p .work/deps
-      git clone -q --depth 1 --branch v0.1.2 https://github.com/amarbaro/mojo-hashlib .work/deps/mojo-hashlib || { echo "FAIL setup: clone mojo-hashlib"; exit 1; }
-    fi
-    HASHLIB_SRC=.work/deps/mojo-hashlib/src
-  fi
+  if [ -d ../hashlib/src ]; then HASHLIB_SRC=../hashlib/src
+  else echo "FAIL setup: ../hashlib/src missing"; exit 1; fi
 fi
 # The CPython oracle needs 3.14 (uuid6/7/8 exist there only): the system python3, else uv's managed one.
 if [ -z "${PYTHON:-}" ]; then
