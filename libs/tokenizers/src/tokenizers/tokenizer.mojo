@@ -12,6 +12,14 @@ comptime GPT2_RE = "'s|'t|'re|'ve|'m|'ll|'d| ?\\p{L}+| ?\\p{N}+| ?[^\\s\\p{L}\\p
 comptime SP = "▁"
 
 
+def _pos(r: Int) -> Int:
+    return r
+
+
+def _pos(r: Optional[Int]) -> Int:
+    return r.or_else(-1)
+
+
 def _s(j: Json, i: Int, key: Bool = False) -> String:
     """The text of node i (its member name when key), "" when absent or not a string."""
     if i < 0 or (not key and j.n[i].kind != STR):
@@ -244,7 +252,7 @@ struct Tokenizer(Movable):
                 var a = _s(j, k)
                 var b = String()
                 if j.n[k].kind == STR:
-                    var sp = a.find(" ")
+                    var sp = _pos(a.find(" "))
                     b = String(a[byte = sp + 1 :])
                     var l = String(a[byte=0:sp])
                     a = l^
