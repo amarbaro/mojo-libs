@@ -1,19 +1,30 @@
 # CI for the libraries: one shared workflow, one weekly matrix
 
-Every library calls one reusable workflow, and one Monday run builds every library on stable and nightly Mojo.
+One root workflow runs the libraries a change touches, and one Monday run builds every library on stable and nightly Mojo.
+Every library lives in `libs/<name>/` of this repository; a library finds another as the sibling folder `../<name>`.
 
 ## Parts
 
 ```
-library repo                         mojo-libs
-.github/workflows/ci.yml  --uses-->  .github/workflows/lib-ci.yml   (push + PR gate, badge)
-(caller, templates/ci.yml)
+.github/workflows/ci.yml     plan (scripts/ci-plan.sh: changed libs + dependents from deps.tsv)
+  push main + PR             -> lib x N  --uses-->  .github/workflows/lib-ci.yml  with lib: <name>  (working-directory libs/<name>)
+                             -> ci (the one required status)
 
-                                     .github/workflows/matrix.yml   (Mondays + dispatch)
-                                       plan -> cell (lib x stable|nightly) -> report
-                                       report: status.md + shields -> orphan `status` branch
-                                               one issue per failure group
+.github/workflows/conda.yml  tag <name>-v<version> -> rattler-build libs/<name>/recipe.yaml -> prefix.dev amarbaro/amarbaro (OIDC)
+
+.github/workflows/matrix.yml (Mondays + dispatch)
+  plan (ls libs) -> cell (lib x stable|nightly, inside the monorepo clone) -> report
+  report: status.md + shields -> orphan `status` branch, one issue per failure group
 ```
+
+| file | job |
+|---|---|
+| `deps.tsv` | which library uses which sibling; `scripts/deps-scan.sh --write` rebuilds it from `../<name>/src` references and `[tool.mojo] deps`, `--check` fails when stale |
+| `scripts/ci-plan.sh [BASE]` | JSON list of libraries to test: changed folders plus their dependents; a change outside `libs/` selects all |
+| `scripts/ci-all.sh [LIB...]` | local run of every `libs/*/scripts/ci.sh`, one PASS/FAIL row each, exit 1 on any FAIL (`JOBS=n`) |
+
+`lib-ci.yml` without `lib` still works as a standalone library's caller target (`templates/ci.yml`, `scripts/ci-adopt*.sh`); those stay until the
+old repositories are archived.
 
 | file | job |
 |---|---|
@@ -28,7 +39,7 @@ library repo                         mojo-libs
 | `scripts/error-line.sh LOG [--key]` | the first error line; `--key` strips paths, line:col, addresses |
 | `scripts/test-ci.sh` | the tests (no network, no Mojo) |
 
-`LIBS_DIR` points the scripts at the library checkouts (default: the parent of this repo; a worktree lane sets it).
+`LIBS_DIR` still points the standalone-caller scripts (`ci-adopt-all.sh`) at library checkouts; the monorepo scripts do not use it.
 
 ## Choices that are easy to get wrong
 
@@ -42,7 +53,7 @@ library repo                         mojo-libs
   Unix sockets under the clone, and a socket path holds 107 bytes.
   The cell installs `mojo max` from `whl.modular.com/nightly/simple/` into a separate venv
   (same date for both, m.ledger/tooling 2026-10-21). `lib-ci.yml` and `matrix-cell.sh` carry the same install line; a test keeps them equal.
-- **Remote name = checkout name minus `-public`** (`mojo-json-public` -> `amarbaro/mojo-json`). libs.txt names checkouts.
+- **Names are the folders under `libs/`** (`json`, `gguf-core`, `xmojo`); libs.txt and `ci-setup.tsv` use them. The `mojo-<name>-public` rows in `ci-setup.tsv` serve the standalone callers only.
 - **A caller needs `permissions: contents: write`** or the badge push is refused (a reusable workflow's token is capped by the caller).
 - **Job name changes.** The old per-library jobs were `check`, `gate`, `conformance`; the status context becomes `ci / ci`. A branch protection that
   requires the old name must be updated at rollout (not checked: this lane makes no GitHub reads of repo settings).
