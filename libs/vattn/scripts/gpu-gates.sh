@@ -21,6 +21,6 @@ done
 bench/parity.sh "${cases[@]}"
 M=${MOJO:-.venv/bin/mojo}
 { echo "tree $(scripts/gpu-tree.sh)"; echo "commit $(git rev-parse --short HEAD)"; echo "mojo $($M --version)"
-  echo "gpu $(cat /sys/class/drm/card*/device/product_name 2>/dev/null | head -1 || echo unknown)"; echo "date $(date -u +%F)"
+  echo "gfx_target_version $(awk '$1 == "gfx_target_version" && $2 > 0 { print $2; exit }' /sys/class/kfd/kfd/topology/nodes/*/properties)"; echo "date $(date -u +%F)"
   echo "cases ${cases[*]}"; } > gpu-gates.receipt
 echo "PASS gpu-gates (receipt: gpu-gates.receipt, commit it)"
