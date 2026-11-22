@@ -13,9 +13,9 @@ def main() raises:
     if len(args) < 2:
         print("usage: av1obu_info FILE")
         return
-    var f = open(args[1], "r")
-    var data = f.read_bytes()
-    f.close()
+    var data: List[UInt8]
+    with open(args[1], "r") as f:
+        data = f.read_bytes()
     var payload = List[UInt8]()
     if args[1].endswith(".obu"):  # raw OBUs (aomenc via ffmpeg -f obu)
         payload = data^
