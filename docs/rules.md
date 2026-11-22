@@ -11,3 +11,7 @@
   output differ from 3.14.10 -> an oracle Python is pinned to the exact patch (`uv python find 3.14.10`, `.python-version`), never a minor.
 - A before/after check of a cv fix ran the same binary twice: `tests/supervision/build_all.sh` skips a binary that exists -> delete
   `build/<stem>` (or check its mtime) before calling a rebuild a proof.
+- cv's yolo split went red on GitHub only: supervision lists images in readdir order, and ext4 orders by a per-fs hash
+  -> a port and its oracle list a directory sorted (Mojo `sort`, oracle patched in gen_datasets.py), never readdir order.
+- A readdir A/B on a 3-image fixture passed by chance -> an order test uses a fixture large enough that a different
+  order changes the result (s3: 11 images), and clears driver output dirs (build/ds-out) between runs.
