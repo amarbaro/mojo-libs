@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# GPU parity gate: generate cases, run vattn_fwd, compare with the fp64 reference. Needs a gfx1100 GPU.
+# GPU parity gate: rebuild (scripts/ci.sh), generate cases, run vattn_fwd, compare with the fp64 reference, then write
+# gpu-gates.receipt bound to the committed tree (scripts/gpu-tree.sh). Needs a gfx1100 GPU. Commit the receipt: the
+# conda workflow publishes a vattn tag only when the receipt's key matches the tagged tree.
 # Usage: scripts/gpu-gates.sh   (wrap in `gpu-wait run --vram 4 --timeout 600 --` on a shared box)
 set -euo pipefail
 cd "$(dirname "$0")/.."
+P="src tests bench tools scripts/ci.sh scripts/gpu-gates.sh scripts/gpu-tree.sh"
+git diff --quiet HEAD -- $P && [ -z "$(git ls-files --others --exclude-standard -- $P)" ] \
+  || { echo "FAIL tree: uncommitted changes under $P; commit first, the receipt names a committed tree"; exit 1; }
+bash scripts/ci.sh || { echo "FAIL ci: scripts/ci.sh"; exit 1; }   # fresh binaries of this tree, never a stale .work/run_vattn
 uv sync --group oracle || { echo "FAIL setup: uv sync"; exit 1; }
 export PATH="$PWD/.venv/bin:$PATH"
-[ -x .work/run_vattn ] || { echo "FAIL setup: run scripts/ci.sh first"; exit 1; }
 cases=()
 for c in "129 4 3" "1000 2 2" "4097 2 2"; do
   set -- $c
@@ -14,4 +19,8 @@ for c in "129 4 3" "1000 2 2" "4097 2 2"; do
   cases+=("$d")
 done
 bench/parity.sh "${cases[@]}"
-echo "PASS gpu-gates"
+M=${MOJO:-.venv/bin/mojo}
+{ echo "tree $(scripts/gpu-tree.sh)"; echo "commit $(git rev-parse --short HEAD)"; echo "mojo $($M --version)"
+  echo "gpu $(cat /sys/class/drm/card*/device/product_name 2>/dev/null | head -1 || echo unknown)"; echo "date $(date -u +%F)"
+  echo "cases ${cases[*]}"; } > gpu-gates.receipt
+echo "PASS gpu-gates (receipt: gpu-gates.receipt, commit it)"

@@ -22,6 +22,11 @@ jobs:
           [ -f "libs/$lib/recipe.yaml" ] || { echo "FAIL tag: libs/$lib/recipe.yaml does not exist (tag $GITHUB_REF_NAME)"; exit 1; }
           rv=$(sed -n 's/^  version: //p' "libs/$lib/recipe.yaml" | head -1)
           [ "$rv" = "$ver" ] || { echo "FAIL tag: $GITHUB_REF_NAME is version $ver, libs/$lib/recipe.yaml says $rv"; exit 1; }
+          if [ -x "libs/$lib/scripts/gpu-tree.sh" ]; then  # GPU-gated library: CI has no GPU, the receipt proves a local run
+            key=$("libs/$lib/scripts/gpu-tree.sh")
+            grep -qx "tree $key" "libs/$lib/gpu-gates.receipt" 2>/dev/null \
+              || { echo "FAIL gpu receipt: libs/$lib/gpu-gates.receipt is missing or not for this tree ($key); run scripts/gpu-gates.sh, commit the receipt, retag"; exit 1; }
+          fi
           echo "LIB=$lib" >> "$GITHUB_ENV"
       - uses: prefix-dev/setup-pixi@v0.10.2
         with:
