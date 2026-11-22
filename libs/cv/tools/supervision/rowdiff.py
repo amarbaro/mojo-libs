@@ -54,7 +54,30 @@ def check_pixels(actual, expected, args):
         cmd = ["cmp", "-s", ref, out]
     r = subprocess.run(cmd, capture_output=True, text=True)
     detail = (r.stdout + r.stderr).strip().splitlines()
+    if r.returncode == 1 and cmd[0] == "cmp" and ref.endswith(".bundle"):
+        return False, bundle_diff(ref, out)
     return r.returncode == 0, detail[-1] if detail else f"exit {r.returncode}"
+
+
+def bundle_diff(ref, out):
+    """First file of two bundles (`== <relpath> <nbytes>` headers) that differs, named."""
+    def files(path):
+        data, parts, i = open(path, "rb").read(), {}, 0
+        while i < len(data):
+            j = data.index(b"\n", i)
+            _, name, n = data[i:j].decode().split(" ")
+            parts[name] = data[j + 1 : j + 1 + int(n)]
+            i = j + 1 + int(n)
+        return parts
+    e, a = files(ref), files(out)
+    if e.keys() != a.keys():
+        return f"bundle files differ: only ref {sorted(e.keys() - a.keys())}, only actual {sorted(a.keys() - e.keys())}"
+    for name in sorted(e):
+        if e[name] != a[name]:
+            el, al = e[name].splitlines(), a[name].splitlines()
+            k = next((k for k in range(min(len(el), len(al))) if el[k] != al[k]), min(len(el), len(al)))
+            return f"bundle {name} line {k + 1}: ref {el[k:k + 1]!r} actual {al[k:k + 1]!r}"
+    return "bundles differ in framing only"
 
 
 def main():

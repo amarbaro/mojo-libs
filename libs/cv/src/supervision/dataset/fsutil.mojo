@@ -69,12 +69,14 @@ def lower_suffix_ok(p: String, exts: List[String]) -> Bool:
 
 
 def list_files_with_extensions(directory: String, exts: List[String]) raises -> List[String]:
-    """Files of `directory` whose suffix matches, in readdir order (Path.glob('*'))."""
+    """Files of `directory` whose suffix matches, sorted. Path.glob('*') gives readdir order, which differs per
+    filesystem (ext4 hashes names with a per-fs seed); sorted is one such order and the same on every machine."""
     var out = List[String]()
     for n in listdir(directory):
         var full = join(directory, String(n))
         if isfile(full) and lower_suffix_ok(full, exts):
             out.append(full)
+    sort(out)
     return out^
 
 

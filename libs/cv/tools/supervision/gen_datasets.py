@@ -307,6 +307,14 @@ def run_oracle() -> dict:
 
     coco_fmt.datetime = _PinnedDatetime
 
+    # YOLO and VOC list images in readdir order, which differs per filesystem (ext4 hashes names with a
+    # per-fs seed) and decides the split: pin it to sorted, as the Mojo port lists them.
+    from supervision.dataset.formats import pascal_voc as voc_fmt, yolo as yolo_fmt
+
+    for mod in (yolo_fmt, voc_fmt):
+        listed = mod.list_files_with_extensions
+        mod.list_files_with_extensions = lambda *a, _f=listed, **k: sorted(_f(*a, **k))
+
     def save_all(ds, fmt: str, tag: str) -> None:
         d = OUT / fmt / "ref" / tag
         shutil.rmtree(d, ignore_errors=True)

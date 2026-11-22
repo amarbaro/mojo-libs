@@ -8,6 +8,9 @@ BUILD_DIR=${BUILD_DIR:-build}
 PY=${ORACLE_PY:-.work/oracle-venv/bin/python}; [ -x "$PY" ] || PY=python3
 OUT=${BUILD_DIR:-build}/tests-out
 mkdir -p "$OUT"
+# The dataset drivers write into build/ds-out (rowds.mojo OUT_ROOT) without clearing it: a stale
+# file from an earlier run would land in the next bundle.
+rm -rf build/ds-out
 
 if [ $# -gt 0 ]; then files=("$@"); else
   shopt -s nullglob; files=(tests/supervision/cases/*.txt); shopt -u nullglob
