@@ -1,11 +1,11 @@
 # mojo-aio
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-aio/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-aio/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-aio)](https://github.com/amarbaro/mojo-aio/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-aio)](https://github.com/amarbaro/mojo-aio/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-aio/badges/checks.json)](https://github.com/amarbaro/mojo-aio/actions/workflows/ci.yml)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--aio-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-aio)
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-aio` (import `aio`). From source: `git clone https://github.com/amarbaro/mojo-aio`, then `mojo run -I mojo-aio/src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-aio` (import `aio`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/aio`, then `mojo run -I mojo-aio/src app.mojo`.
 Toolchains: Mojo 1.2 stable, and the nightly 1.3.0.dev2026110805 in the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) matrix (36 libraries on stable, 35 on nightly).
 
 ```mojo
@@ -47,7 +47,7 @@ Requires Mojo 1.2 on Linux.
 | `accept(fd)` | next connection (TCP_NODELAY) or -1 |
 | `read(fd, buf)`, `write(fd, span)` | bytes, 0 at EOF, -1 not ready, -2 error; no SIGPIPE |
 
-[docs/design.md](docs/design.md) explains the choices, [docs/api.md](docs/api.md) lists every call. Used by [mojo-bento](https://github.com/amarbaro/mojo-bento)'s HTTP server.
+[docs/design.md](docs/design.md) explains the choices, [docs/api.md](docs/api.md) lists every call. Used by [mojo-bento](https://github.com/amarbaro/mojo-libs/tree/main/libs/bento)'s HTTP server.
 
 **Limits:** Linux only (epoll). `wait()` and the timer heap belong to one thread; only `ready()` is meant for several threads, paired with `ONESHOT`. Per-connection I/O returns codes (-1 not ready, -2 gone) instead of raising.
 

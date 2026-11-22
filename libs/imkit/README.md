@@ -1,7 +1,7 @@
 # mojo-imkit
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-imkit/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-imkit/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-imkit)](https://github.com/amarbaro/mojo-imkit/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-imkit)](https://github.com/amarbaro/mojo-imkit/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--imkit-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-imkit)
 <!-- /badges -->
 
 The gallery example (`examples/gallery.mojo`), rendered on the GPU by `scripts/gallery.sh`, in the amarbaro themes and the three built-ins:

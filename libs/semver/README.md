@@ -1,7 +1,7 @@
 # mojo-semver
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-semver/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-semver/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-semver)](https://github.com/amarbaro/mojo-semver/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-semver)](https://github.com/amarbaro/mojo-semver/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-semver/badges/checks.json)](https://github.com/amarbaro/mojo-semver/actions/workflows/ci.yml)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--semver-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-semver)
 <!-- /badges -->
 
 Semantic Versioning 2.0.0 for Mojo, with the exact rules of Python [semver](https://pypi.org/project/semver/) 3.0: strict parse, precedence, `match`, the `bump_*` family. No regex engine and no dependencies; 212 lines of code (`mojo-loc`).

@@ -1,7 +1,7 @@
 # mojo-vattn
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-vattn/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-vattn/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-vattn)](https://github.com/amarbaro/mojo-vattn/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-vattn)](https://github.com/amarbaro/mojo-vattn/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--vattn-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-vattn)
 <!-- /badges -->
 
 A flash-attention forward kernel in Mojo for the self-attention of video diffusion transformers

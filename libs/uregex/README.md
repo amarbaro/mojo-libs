@@ -1,11 +1,11 @@
 # mojo-uregex
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-uregex/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-uregex/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-uregex)](https://github.com/amarbaro/mojo-uregex/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-uregex)](https://github.com/amarbaro/mojo-uregex/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-uregex/badges/checks.json)](https://github.com/amarbaro/mojo-uregex/actions/workflows/ci.yml)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--uregex-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-uregex)
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-uregex` once published. For now: `git clone https://github.com/amarbaro/mojo-uregex`, then `mojo run -I mojo-uregex/src app.mojo`.
+Install: `pixi add mojo-uregex` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/uregex`, then `mojo run -I mojo-uregex/src app.mojo`.
 
 ```mojo
 from uregex import findall

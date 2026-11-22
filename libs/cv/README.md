@@ -1,7 +1,7 @@
 # mojo-cv
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-cv/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-cv/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-cv)](https://github.com/amarbaro/mojo-cv/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-cv)](https://github.com/amarbaro/mojo-cv/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--cv-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-cv)
 <!-- /badges -->
 
 
@@ -90,8 +90,8 @@ cv2's BFMatcher).
 
 [Roboflow supervision](https://github.com/roboflow/supervision) ported to Mojo: `src/supervision/`, imported as
 `from supervision...`. Every op is checked against Python supervision on the same inputs: 3308 recorded rows pass in
-`scripts/ci.sh`. It uses mojocv for image operations and [mojo-json](https://github.com/amarbaro/mojo-json) and
-[mojo-gzip](https://github.com/amarbaro/mojo-gzip) (sibling checkouts, or `MOJO_JSON` and `MOJO_GZIP` pointing at their `src`).
+`scripts/ci.sh`. It uses mojocv for image operations and [mojo-json](https://github.com/amarbaro/mojo-libs/tree/main/libs/json) and
+[mojo-gzip](https://github.com/amarbaro/mojo-libs/tree/main/libs/gzip) (sibling checkouts, or `MOJO_JSON` and `MOJO_GZIP` pointing at their `src`).
 
 ```mojo
 from supervision.detection.utils.iou_and_nms import box_iou, box_non_max_suppression

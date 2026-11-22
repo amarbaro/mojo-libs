@@ -1,11 +1,11 @@
 # mojo-json
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-json/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-json/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-json)](https://github.com/amarbaro/mojo-json/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-json)](https://github.com/amarbaro/mojo-json/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--json-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-json)
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-json` once published. For now: `git clone https://github.com/amarbaro/mojo-json`, then `mojo run -I mojo-json/src app.mojo`.
+Install: `pixi add mojo-json` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/json`, then `mojo run -I mojo-json/src app.mojo`.
 
 ```mojo
 from json import Json, parse

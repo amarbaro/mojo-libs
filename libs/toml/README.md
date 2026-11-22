@@ -1,11 +1,11 @@
 # mojo-toml
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-toml/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-toml/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-toml)](https://github.com/amarbaro/mojo-toml/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-toml)](https://github.com/amarbaro/mojo-toml/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--toml-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-toml)
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-toml` once published. For now: `git clone https://github.com/amarbaro/mojo-toml`, then `mojo run -I mojo-toml/src app.mojo`.
+Install: `pixi add mojo-toml` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/toml`, then `mojo run -I mojo-toml/src app.mojo`.
 
 ```mojo
 from toml import parse

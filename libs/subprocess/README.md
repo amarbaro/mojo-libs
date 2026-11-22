@@ -1,7 +1,7 @@
 # mojo-subprocess
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-subprocess/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-subprocess/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-subprocess)](https://github.com/amarbaro/mojo-subprocess/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-subprocess)](https://github.com/amarbaro/mojo-subprocess/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-subprocess/badges/checks.json)](https://github.com/amarbaro/mojo-subprocess/actions/workflows/ci.yml)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--subprocess-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-subprocess)
 <!-- /badges -->
 
 Python's `subprocess.run` for Mojo: run a program, capture stdout and stderr, feed it input, with timeout, cwd, env and check. Large outputs on both pipes are drained together, so nothing deadlocks. 164 lines of code (`mojo-loc`) on top of mojo-posix (vendored in `src/posix`).

@@ -1,11 +1,11 @@
 # mojo-pyformat
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-pyformat/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-pyformat/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-pyformat)](https://github.com/amarbaro/mojo-pyformat/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-pyformat)](https://github.com/amarbaro/mojo-pyformat/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--pyformat-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-pyformat)
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-pyformat` once published. For now: `git clone https://github.com/amarbaro/mojo-pyformat`, then `mojo run -I mojo-pyformat/src app.mojo`.
+Install: `pixi add mojo-pyformat` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/pyformat`, then `mojo run -I mojo-pyformat/src app.mojo`.
 
 ```mojo
 from pyformat import fmt, fmt_fixed, fmt_g, fmt_int

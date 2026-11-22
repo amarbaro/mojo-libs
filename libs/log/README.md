@@ -1,11 +1,11 @@
 # mojo-log
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-log/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-log/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-log)](https://github.com/amarbaro/mojo-log/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-log)](https://github.com/amarbaro/mojo-log/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-log/badges/checks.json)](https://github.com/amarbaro/mojo-log/actions/workflows/ci.yml)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--log-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-log)
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-log` (import `mlog`). From source: `git clone https://github.com/amarbaro/mojo-log`, then `mojo run -I mojo-log/src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-log` (import `mlog`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/log`, then `mojo run -I mojo-log/src app.mojo`.
 Toolchains: Mojo 1.2 stable, and the nightly 1.3.0.dev2026110805 in the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) matrix (36 libraries on stable, 35 on nightly).
 
 ```mojo

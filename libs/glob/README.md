@@ -1,7 +1,7 @@
 # mojo-glob
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-glob/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-glob/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-glob)](https://github.com/amarbaro/mojo-glob/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-glob)](https://github.com/amarbaro/mojo-glob/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-glob/badges/checks.json)](https://github.com/amarbaro/mojo-glob/actions/workflows/ci.yml)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--glob-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-glob)
 <!-- /badges -->
 
 Shell-style wildcards for Mojo: `fnmatch` and `glob` with the exact behaviour of Python's `fnmatch` and `glob` modules (3.14) on POSIX: `*`, `?`, `[seq]`, `[!seq]` over Unicode codepoints, hidden names skipped, recursive `**`, `root_dir`. Pure Mojo, 365 lines of code (`mojo-loc`).

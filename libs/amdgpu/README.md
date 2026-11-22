@@ -1,11 +1,11 @@
 # mojo-amdgpu
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-amdgpu/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-amdgpu/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-amdgpu)](https://github.com/amarbaro/mojo-amdgpu/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-amdgpu)](https://github.com/amarbaro/mojo-amdgpu/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--amdgpu-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-amdgpu)
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-amdgpu` (import `amdgpu`). From source: `git clone https://github.com/amarbaro/mojo-amdgpu`, then `mojo run -I mojo-amdgpu/src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-amdgpu` (import `amdgpu`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/amdgpu`, then `mojo run -I mojo-amdgpu/src app.mojo`.
 
 ```mojo
 from amdgpu import Gpu, VRAM_USED, GPU_BUSY, TEMP_JUNCTION, POWER_UW

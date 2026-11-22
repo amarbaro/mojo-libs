@@ -1,7 +1,7 @@
 # mojo-xxhash
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-xxhash/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-xxhash/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-xxhash)](https://github.com/amarbaro/mojo-xxhash/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-xxhash)](https://github.com/amarbaro/mojo-xxhash/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-xxhash/badges/checks.json)](https://github.com/amarbaro/mojo-xxhash/actions/workflows/ci.yml)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--xxhash-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-xxhash)
 <!-- /badges -->
 
 xxHash for Mojo in pure Mojo: XXH32, XXH64, XXH3-64 and XXH3-128, seeded, one-shot and streaming, identical to the reference implementation (0.8.x). 405 lines of code (`mojo-loc`), no C library.

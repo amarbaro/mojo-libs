@@ -1,5 +1,5 @@
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-csv/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-csv/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-csv)](https://github.com/amarbaro/mojo-csv/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-csv)](https://github.com/amarbaro/mojo-csv/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-csv/badges/checks.json)](https://github.com/amarbaro/mojo-csv/actions/workflows/ci.yml)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--csv-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-csv)
 <!-- /badges -->
 
 # mojo-csv

@@ -1,11 +1,11 @@
 # mojo-gguf-core
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-gguf-core/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-gguf-core/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-gguf-core)](https://github.com/amarbaro/mojo-gguf-core/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-gguf-core)](https://github.com/amarbaro/mojo-gguf-core/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--gguf--core-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-gguf-core)
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-gguf-core` once published. For now: `git clone https://github.com/amarbaro/mojo-gguf-core`, then `mojo run -I mojo-gguf-core/src app.mojo`.
+Install: `pixi add mojo-gguf-core` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/gguf-core`, then `mojo run -I mojo-gguf-core/src app.mojo`.
 
 ```mojo
 from gguf import Gguf, Writer, T_UINT32, T_FLOAT32

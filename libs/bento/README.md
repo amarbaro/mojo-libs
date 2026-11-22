@@ -1,7 +1,7 @@
 # mojo-bento
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-bento/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-bento/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-bento)](https://github.com/amarbaro/mojo-bento/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-bento)](https://github.com/amarbaro/mojo-bento/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--bento-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-bento)
 <!-- /badges -->
 
 
@@ -32,9 +32,9 @@ def main() raises:
 ## Install
 
 Requires Mojo 1.2 (`uv sync` installs it) and Linux x86-64. bento imports six libraries by the same author:
-[mojo-aio](https://github.com/amarbaro/mojo-aio), [mojo-gguf-core](https://github.com/amarbaro/mojo-gguf-core),
-[mojo-json](https://github.com/amarbaro/mojo-json), [mojo-posix](https://github.com/amarbaro/mojo-posix),
-[mojo-safetensors](https://github.com/amarbaro/mojo-safetensors) and [mojo-systemd](https://github.com/amarbaro/mojo-systemd).
+[mojo-aio](https://github.com/amarbaro/mojo-libs/tree/main/libs/aio), [mojo-gguf-core](https://github.com/amarbaro/mojo-libs/tree/main/libs/gguf-core),
+[mojo-json](https://github.com/amarbaro/mojo-libs/tree/main/libs/json), [mojo-posix](https://github.com/amarbaro/mojo-libs/tree/main/libs/posix),
+[mojo-safetensors](https://github.com/amarbaro/mojo-libs/tree/main/libs/safetensors) and [mojo-systemd](https://github.com/amarbaro/mojo-libs/tree/main/libs/systemd).
 
 | Way | Command |
 |---|---|

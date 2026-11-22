@@ -1,11 +1,11 @@
 # mojo-posix
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-posix/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-posix/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-posix)](https://github.com/amarbaro/mojo-posix/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-posix)](https://github.com/amarbaro/mojo-posix/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--posix-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-posix)
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-posix` once published. For now: `git clone https://github.com/amarbaro/mojo-posix`, then `mojo run -I mojo-posix/src app.mojo`.
+Install: `pixi add mojo-posix` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/posix`, then `mojo run -I mojo-posix/src app.mojo`.
 
 ```mojo
 from posix import block_signals, signal_fd, spawn, reap, PollSet, SIGCHLD

@@ -1,7 +1,7 @@
 # mojo-gguf
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-gguf/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-gguf/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-gguf)](https://github.com/amarbaro/mojo-gguf/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-gguf)](https://github.com/amarbaro/mojo-gguf/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--gguf-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-gguf)
 <!-- /badges -->
 
 
@@ -31,7 +31,7 @@ mojo build -I src -I lib src/quantize.mojo -o quantize
 ## Install
 
 Requires Mojo 1.2 (`uv sync` installs it) and Linux x86-64, no linker flags. The tokenizer converter imports
-[mojo-uregex](https://github.com/amarbaro/mojo-uregex): `scripts/deps.sh` fetches it into `lib/`, pinned to a commit.
+[mojo-uregex](https://github.com/amarbaro/mojo-libs/tree/main/libs/uregex): `scripts/deps.sh` fetches it into `lib/`, pinned to a commit.
 
 | Way | Command |
 |---|---|

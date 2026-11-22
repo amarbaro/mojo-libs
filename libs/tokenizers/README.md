@@ -1,13 +1,13 @@
 # mojo-tokenizers
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-tokenizers/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-tokenizers/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-tokenizers)](https://github.com/amarbaro/mojo-tokenizers/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-tokenizers)](https://github.com/amarbaro/mojo-tokenizers/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--tokenizers-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-tokenizers)
 <!-- /badges -->
 
 Hugging Face `tokenizer.json` runtime for Mojo: byte-level BPE (GPT-2, Llama 3, Qwen), WordPiece (BERT) and Unigram (T5, XLM-R). Ids are identical to the Python
 `tokenizers` crate's on 6 real tokenizer files x 2000 generated texts, and encoding runs 2 to 4 times faster than the crate through Python.
 
-Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-tokenizers` (import `tokenizers`). From source: `git clone https://github.com/amarbaro/mojo-tokenizers`, then `mojo run -I mojo-tokenizers/src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-tokenizers` (import `tokenizers`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/tokenizers`, then `mojo run -I mojo-tokenizers/src app.mojo`.
 Toolchains: Mojo 1.2 stable, and the nightly 1.3.0.dev2026110805 in the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) matrix (36 libraries on stable, 35 on nightly).
 
 ```mojo

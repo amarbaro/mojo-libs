@@ -1,11 +1,11 @@
 # mojo-safetensors
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-safetensors/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-safetensors/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-safetensors)](https://github.com/amarbaro/mojo-safetensors/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-safetensors)](https://github.com/amarbaro/mojo-safetensors/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--safetensors-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-safetensors)
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-safetensors` once published. For now: `git clone https://github.com/amarbaro/mojo-safetensors`, then `mojo run -I mojo-safetensors/src app.mojo`. It also needs mojo-json: put its `src` on another `-I`.
+Install: `pixi add mojo-safetensors` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/safetensors`, then `mojo run -I mojo-safetensors/src app.mojo`. It also needs mojo-json: put its `src` on another `-I`.
 
 ```mojo
 from std.os import remove
@@ -31,7 +31,7 @@ implementation (`huggingface/safetensors` 0.6.2):
 - checkpoints: three real ones list identically
 321 lines.
 
-Requires Mojo 1.2 on Linux and [mojo-json](https://github.com/amarbaro/mojo-json) v0.1.0.
+Requires Mojo 1.2 on Linux and [mojo-json](https://github.com/amarbaro/mojo-libs/tree/main/libs/json) v0.1.0.
 Builds on Mojo 1.2 nightly too.
 
 ## What you get

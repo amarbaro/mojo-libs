@@ -1,7 +1,7 @@
 # mojo-mmap
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-mmap/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-mmap/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-mmap)](https://github.com/amarbaro/mojo-mmap/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-mmap)](https://github.com/amarbaro/mojo-mmap/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-mmap/badges/checks.json)](https://github.com/amarbaro/mojo-mmap/actions/workflows/ci.yml)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--mmap-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-mmap)
 <!-- /badges -->
 
 Memory-mapped files for Mojo. A file becomes one zero-copy `Span[UInt8]`, read-only or shared and writable, with `madvise` and `msync`. 71 lines of code (`mojo-loc`), Linux, no dependencies beyond libc.

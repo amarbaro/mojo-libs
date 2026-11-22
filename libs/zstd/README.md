@@ -1,11 +1,11 @@
 # mojo-zstd
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-zstd/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-zstd/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-zstd)](https://github.com/amarbaro/mojo-zstd/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-zstd)](https://github.com/amarbaro/mojo-zstd/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-zstd/badges/checks.json)](https://github.com/amarbaro/mojo-zstd/actions/workflows/ci.yml)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--zstd-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-zstd)
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-zstd` (import `lz4` and `zstd`). From source: `git clone https://github.com/amarbaro/mojo-zstd`, then `mojo run -I mojo-zstd/src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-zstd` (import `lz4` and `zstd`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/zstd`, then `mojo run -I mojo-zstd/src app.mojo`.
 Toolchains: Mojo 1.2 stable, and the nightly 1.3.0.dev2026110805 in the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) matrix (36 libraries on stable, 35 on nightly).
 
 ```mojo

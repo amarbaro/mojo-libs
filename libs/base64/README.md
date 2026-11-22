@@ -1,7 +1,7 @@
 # mojo-base64
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-base64/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-base64/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-base64)](https://github.com/amarbaro/mojo-base64/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-base64)](https://github.com/amarbaro/mojo-base64/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--base64-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-base64)
 <!-- /badges -->
 
 Base16, Base32, Base32hex and Base64 byte codecs for Mojo. Allocating calls

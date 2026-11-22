@@ -1,7 +1,7 @@
 # mojo-uuid
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-uuid/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-uuid/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-uuid)](https://github.com/amarbaro/mojo-uuid/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--uuid-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-uuid)
 <!-- /badges -->
 
 UUID values, parsing, formatting, and v3/v4/v5/v6/v7/v8 generation for Mojo.

@@ -1,11 +1,11 @@
 # mojo-hashlib
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-hashlib/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-hashlib/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-hashlib)](https://github.com/amarbaro/mojo-hashlib/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-hashlib)](https://github.com/amarbaro/mojo-hashlib/blob/main/LICENSE)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--hashlib-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-hashlib)
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-hashlib` once published. For now: `git clone https://github.com/amarbaro/mojo-hashlib`, then `mojo run -I mojo-hashlib/src app.mojo`.
+Install: `pixi add mojo-hashlib` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/hashlib`, then `mojo run -I mojo-hashlib/src app.mojo`.
 
 ```mojo
 from hashlib import Sha256, quote, join, split

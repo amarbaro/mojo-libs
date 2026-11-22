@@ -1,11 +1,11 @@
 # mojo-tls
 
 <!-- badges -->
-[![ci](https://github.com/amarbaro/mojo-tls/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-tls/actions/workflows/ci.yml) [![latest release](https://img.shields.io/github/v/release/amarbaro/mojo-tls)](https://github.com/amarbaro/mojo-tls/releases/latest) [![license](https://img.shields.io/github/license/amarbaro/mojo-tls)](https://github.com/amarbaro/mojo-tls/blob/main/LICENSE) [![checks](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/amarbaro/mojo-tls/badges/checks.json)](https://github.com/amarbaro/mojo-tls/actions/workflows/ci.yml)
+[![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--tls-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-tls)
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-tls` (import `tls`). From source: `git clone https://github.com/amarbaro/mojo-tls`, `mojo-tls/scripts/deps.sh` (fetches the one dependency, [mojo-aio](https://github.com/amarbaro/mojo-aio)), then `mojo run -I mojo-tls/src -I mojo-tls/.work/deps/mojo-aio/src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-tls` (import `tls`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/tls`, `mojo-tls/scripts/deps.sh` (fetches the one dependency, [mojo-aio](https://github.com/amarbaro/mojo-libs/tree/main/libs/aio)), then `mojo run -I mojo-tls/src -I mojo-tls/.work/deps/mojo-aio/src app.mojo`.
 Toolchain: Mojo 1.2 stable.
 <!-- /install -->
 
@@ -25,7 +25,7 @@ Firefox, Chromium and Vivaldi in both directions (see Checks).
 | Key exchange | x25519, secp256r1 (P-256), secp384r1 (P-384), x448 (TLS 1.3) |
 | Certificates | ECDSA P-256 / P-384, RSA 2048+ (PKCS#1 v1.5 and PSS); chain building to the system roots or a PEM file, name and IP matching, Public Suffix List, name constraints |
 | TLS 1.3 features | session resumption (`psk_dhe_ke`, one ticket per connection), client certificates, HelloRetryRequest, KeyUpdate, ALPN, SNI, `record_size_limit` |
-| Server | `TlsServer` on [mojo-aio](https://github.com/amarbaro/mojo-aio): TLS 1.3 and 1.2 on one port, certificates by SNI (exact, `*.x`, default), `require_client_cert` |
+| Server | `TlsServer` on [mojo-aio](https://github.com/amarbaro/mojo-libs/tree/main/libs/aio): TLS 1.3 and 1.2 on one port, certificates by SNI (exact, `*.x`, default), `require_client_cert` |
 | Engines | `Client13`, `Server13`, `Client12`, `Server12` are sans-IO: bytes in, bytes and events out. Bring your own socket |
 
 ## What it is not
