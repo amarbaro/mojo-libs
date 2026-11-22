@@ -32,3 +32,5 @@
 - Commits from 2026-11-04 carried a tool co-author trailer and put a bot in the GitHub contributor list -> the global git
   gate (~/iTools/git-hooks, core.hooksPath) refuses such commits and pushes, failing closed; a history found with them
   is rewritten (git filter-repo, trees compared) before anything else.
+- I told modular "-O0..-O2 are correct" from x86-64 runs only; on arm64 -O2 miscompiled too -> a compiler-bug claim names
+  the platform it was measured on, and a workaround is stated only for platforms that ran it.
