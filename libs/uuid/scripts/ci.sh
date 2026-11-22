@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-if [ -z "${MOJO:-}" ]; then
-  uv sync -q || { echo 'FAIL setup: uv sync'; exit 1; }
-  MOJO=.venv/bin/mojo
-fi
+uv sync -q || { echo 'FAIL setup: uv sync'; exit 1; }
+MOJO=${MOJO:-.venv/bin/mojo}
 . scripts/env.sh
 mkdir -p .work/t
 "$MOJO" --version

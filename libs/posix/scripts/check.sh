@@ -19,5 +19,6 @@ for c in $(python3 -I tools/oracle.py --list); do
   n=$((n+1))
 done
 echo "scenarios: $n, each twice; failures: $fail"
+[ "$n" -gt 0 ] || { echo "FAIL check: no scenarios (tools/oracle.py --list printed none)"; exit 1; }
 [ "$fail" -eq 0 ] || { echo "FAIL check: $fail"; exit 1; }
 echo "PASS all"

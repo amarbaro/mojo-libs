@@ -5,10 +5,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v uv >/dev/null || { echo "FAIL setup: uv not installed"; exit 1; }
 uv python install 3.14 || { echo "FAIL setup: python 3.14"; exit 1; }
-if [ -z "${MOJO:-}" ]; then
-  uv sync -q --python 3.14 || { echo "FAIL setup: uv sync"; exit 1; }
-  MOJO=.venv/bin/mojo
-fi
+uv sync -q --python 3.14 || { echo "FAIL setup: uv sync"; exit 1; }
+MOJO=${MOJO:-.venv/bin/mojo}
 "$MOJO" --version
 # the oracle is Python 3.14 on every channel: 3.12 words errors differently (MOJO= used to skip this and fall back)
 ORACLE_PY=$(uv python find 3.14) || { echo "FAIL setup: python 3.14 not found"; exit 1; }; export ORACLE_PY
