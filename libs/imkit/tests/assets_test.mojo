@@ -68,13 +68,13 @@ def main() raises:
           "refused: bad signature, 16-bit, palette, interlaced, truncated", fails)
     check(not refuses(good.copy(), 24, 8), "an untouched IHDR is accepted", fails)
     # bad input must raise a png: error, and before a size-driven allocation (20000 x 20000 would ask for 1.6 GB)
-    check(error_of(good.copy(), [(11, UInt8(12))]).find("IHDR") >= 0 and error_of(good.copy(), [(11, UInt8(14))]).find("IHDR") >= 0,
+    check("IHDR" in error_of(good.copy(), [(11, UInt8(12))]) and "IHDR" in error_of(good.copy(), [(11, UInt8(14))]),
           "refused: an IHDR chunk that is not 13 bytes", fails)
-    check(error_of(good.copy(), [(18, UInt8(0x4E)), (19, UInt8(0x20)), (22, UInt8(0x4E)), (23, UInt8(0x20))]).find("too large") >= 0,
+    check("too large" in error_of(good.copy(), [(18, UInt8(0x4E)), (19, UInt8(0x20)), (22, UInt8(0x4E)), (23, UInt8(0x20))]),
           "refused before allocating: 20000 x 20000 pixels", fails)
-    check(error_of(good.copy(), [(16, UInt8(0xFF)), (17, UInt8(0xFF)), (18, UInt8(0xFF)), (19, UInt8(0xFF))]).find("too large") >= 0,
+    check("too large" in error_of(good.copy(), [(16, UInt8(0xFF)), (17, UInt8(0xFF)), (18, UInt8(0xFF)), (19, UInt8(0xFF))]),
           "refused before allocating: 4 G pixels wide", fails)
-    check(error_of(good.copy(), [(8, UInt8(0xFF)), (9, UInt8(0xFF)), (10, UInt8(0xFF)), (11, UInt8(0xFF))]).find("truncated") >= 0,
+    check("truncated" in error_of(good.copy(), [(8, UInt8(0xFF)), (9, UInt8(0xFF)), (10, UInt8(0xFF)), (11, UInt8(0xFF))]),
           "refused: a chunk length past the end of the file", fails)
     # image_decode: a JPEG (tests/fixtures/pic.jpg, `magick rgb.png -quality 90 -sampling-factor 2x2`, golden pic.raw from `magick pic.jpg
     # -depth 8 rgba:pic.raw`) goes to jpeg_decode, a PNG to png_decode, a WebP signature and a stranger raise with their own message

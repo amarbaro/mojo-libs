@@ -7,7 +7,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 F=.work/avif; M=${MOJO:-.venv/bin/mojo}
 timeout 300 "$M" build -I src tests/av1obu_info.mojo -o .work/av1obu_info 2> .work/av1obu_info.log || { grep -A6 -m3 error .work/av1obu_info.log | cut -c1-240; echo "FAIL build: tests/av1obu_info.mojo"; exit 1; }
-exp() { timeout 30 ffmpeg -v trace -i "$1" -c copy -bsf:v trace_headers -f null - 2>&1 | sed 's/^\[[^]]*\] //' | awk '
+exp() { timeout 30 ffmpeg -v trace -i "$1" -map 0:v:0 -c copy -bsf:v trace_headers -f null - 2>&1 | sed 's/^\[[^]]*\] //' | awk '
   $2=="seq_profile"{p=$NF} $2=="max_frame_width_minus_1"{w=$NF+1} $2=="max_frame_height_minus_1"{h=$NF+1}
   $2=="tile_cols_log2"{c=$NF} $2=="tile_rows_log2"{r=$NF} $2=="base_q_idx" && q==""{q=$NF}
   $2=="high_bitdepth"{hb=$NF} $2=="twelve_bit"{tb=$NF} $2=="mono_chrome"{mo=$NF} $2=="subsampling_x"{sx=$NF} $2=="subsampling_y"{sy=$NF}
