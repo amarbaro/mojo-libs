@@ -26,3 +26,6 @@
 - Mojo 1.3 nightly -O3 drops digits from an append-`u % 10`-then-reverse loop over UInt64 (log `_int`); -O0 and 1.2
   are correct -> integer-to-text fills a pre-sized buffer from the back; a nightly-only output diff gets an -O0/-O3
   A/B before any oracle theory.
+- `gpu-wait run` does not pass the caller's environment: a nightly run as `MOJO=... gpu-wait run -- ci.sh` silently
+  used the stable pin and "passed" (imkit, vattn) -> pass toolchain overrides with `--env MOJO=...`, and check the log
+  names the toolchain under test before counting a result.
