@@ -15,3 +15,14 @@
   -> a port and its oracle list a directory sorted (Mojo `sort`, oracle patched in gen_datasets.py), never readdir order.
 - A readdir A/B on a 3-image fixture passed by chance -> an order test uses a fixture large enough that a different
   order changes the result (s3: 11 images), and clears driver output dirs (build/ds-out) between runs.
+- 15 ci.sh ran `uv sync` only when MOJO was unset; on the nightly matrix the oracle died, check.sh counted 0 scenarios
+  and printed PASS, every mutant survived -> setup that a gate needs runs on every toolchain path, and a gate that
+  counts its cases fails on zero (a skip is never a pass).
+- A test client wrote 4 MiB before reading against a server that pauses reads at max_out; it passed wherever kernel
+  buffers held the backlog -> bound a test peer's in-flight bytes to what the protocol guarantees, and reproduce
+  buffer-size flakes in `unshare -rn` with small tcp_rmem/tcp_wmem.
+- aio timers asserted a 2 ms worst-case lateness on a shared runner -> a timing gate on CI asserts order and a
+  median, plus a generous cap; one preemption must not decide it.
+- Mojo 1.3 nightly -O3 drops digits from an append-`u % 10`-then-reverse loop over UInt64 (log `_int`); -O0 and 1.2
+  are correct -> integer-to-text fills a pre-sized buffer from the back; a nightly-only output diff gets an -O0/-O3
+  A/B before any oracle theory.

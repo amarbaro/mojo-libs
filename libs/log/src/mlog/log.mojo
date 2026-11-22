@@ -40,19 +40,19 @@ def _int(n: Int, mut out: List[UInt8]):
     var u = UInt64(n) if n >= 0 else UInt64(0) - UInt64(n)
     if n < 0:
         out.append(45)
-    var a = len(out)
+    # Count digits, then fill from the back. Mojo 1.3 nightly -O3 drops digits from an append-then-reverse loop.
+    var i = len(out) + 1
+    var t = u
+    while t >= 10:
+        t //= 10
+        i += 1
+    out.resize(i, 0)
     while True:
-        out.append(UInt8(48 + Int(u % 10)))
+        i -= 1
+        out[i] = UInt8(48 + Int(u % 10))
         u //= 10
         if u == 0:
             break
-    var b = len(out) - 1
-    while a < b:
-        var t = out[a]
-        out[a] = out[b]
-        out[b] = t
-        a += 1
-        b -= 1
 
 
 def _pad(n: Int, w: Int, mut out: List[UInt8]):
