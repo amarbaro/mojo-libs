@@ -46,7 +46,8 @@ print(resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss)' .work/stream $F/z
   [[ $(cat .work/stream.out) == "$($O crc $F/zeros)" ]] || { echo "FAIL stream: $(cat .work/stream.out)"; exit 1; }
   (( rss < 30000 )) || { echo "FAIL stream: peak RSS ${rss} KB for 50 MB inflated, want < 30000"; exit 1; }
   echo "stream: 50 MB inflated chunk by chunk, peak RSS ${rss} KB"
-  $M run -I src tests/api.mojo || { echo "FAIL api: tests/api.mojo"; exit 1; }
-  $M run -I src examples/quickstart.mojo > /dev/null || { echo "FAIL example: examples/quickstart.mojo"; exit 1; }
+  # build, then run: under `mojo run` (Mojo 1.3) the JIT has already loaded the zlib inside libLLVM, and DEEPBIND cannot help
+  $M build -I src tests/api.mojo -o .work/api 2>.work/build.err && .work/api || { echo "FAIL api: tests/api.mojo"; cat .work/build.err; exit 1; }
+  $M build -I src examples/quickstart.mojo -o .work/quickstart 2>.work/build.err && .work/quickstart > /dev/null || { echo "FAIL example: examples/quickstart.mojo"; exit 1; }
 fi
 echo "PASS all"
