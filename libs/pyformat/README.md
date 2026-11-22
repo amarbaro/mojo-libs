@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-pyformat` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/pyformat`, then `mojo run -I mojo-pyformat/src app.mojo`.
+Install: `pixi add mojo-pyformat` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/pyformat`, then `mojo run -I src app.mojo`.
 
 ```mojo
 from pyformat import fmt, fmt_fixed, fmt_g, fmt_int

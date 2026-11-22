@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-systemd` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/systemd`, then `mojo run -I mojo-systemd/src app.mojo`.
+Install: `pixi add mojo-systemd` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/systemd`, then `mojo run -I src app.mojo`.
 
 ```mojo
 from systemd import ready, status, watchdog, watchdog_usec

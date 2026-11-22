@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-gguf-core` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/gguf-core`, then `mojo run -I mojo-gguf-core/src app.mojo`.
+Install: `pixi add mojo-gguf-core` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/gguf-core`, then `mojo run -I src app.mojo`.
 
 ```mojo
 from gguf import Gguf, Writer, T_UINT32, T_FLOAT32

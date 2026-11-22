@@ -9,7 +9,7 @@ member comments) with CPython's `zipfile` behaviour. No C library and no FFI: th
 bytes it writes are the bytes `zlib` writes at every level.
 
 <!-- install -->
-Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-zip` (import `zipfile` and `deflate`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/zip`, then `mojo run -I mojo-zip/src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-zip` (import `zipfile` and `deflate`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/zip`, then `mojo run -I src app.mojo`.
 Toolchains: Mojo 1.2 stable, and the nightly 1.3.0.dev2026110805 in the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) matrix.
 
 ```mojo

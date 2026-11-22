@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-inotify` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/inotify`, then `mojo run -I mojo-inotify/src app.mojo`.
+Install: `pixi add mojo-inotify` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/inotify`, then `mojo run -I src app.mojo`.
 
 ```mojo
 from std.os import remove

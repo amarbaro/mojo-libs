@@ -14,7 +14,7 @@ Also tested on the 1.3 nightly of 2026-11-03.
 From a clone, with a mojo-hashlib checkout beside it (`scripts/env.sh` clones the pinned tag otherwise):
 
 ```sh
-mojo run -I src -I ../mojo-hashlib/src examples/quickstart.mojo
+mojo run -I src -I ../hashlib/src examples/quickstart.mojo
 ```
 
 ```mojo

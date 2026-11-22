@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-hashlib` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/hashlib`, then `mojo run -I mojo-hashlib/src app.mojo`.
+Install: `pixi add mojo-hashlib` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/hashlib`, then `mojo run -I src app.mojo`.
 
 ```mojo
 from hashlib import Sha256, quote, join, split

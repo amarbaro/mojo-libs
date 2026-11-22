@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-tls` (import `tls`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/tls`, `mojo-tls/scripts/deps.sh` (fetches the one dependency, [mojo-aio](https://github.com/amarbaro/mojo-libs/tree/main/libs/aio)), then `mojo run -I mojo-tls/src -I mojo-tls/.work/deps/mojo-aio/src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-tls` (import `tls`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/tls`, then `mojo run -I src -I ../aio/src app.mojo` (the one dependency, [mojo-aio](https://github.com/amarbaro/mojo-libs/tree/main/libs/aio), is the sibling folder).
 Toolchain: Mojo 1.2 stable.
 <!-- /install -->
 

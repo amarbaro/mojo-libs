@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-args` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/args`, then `mojo run -I mojo-args/src app.mojo`.
+Install: `pixi add mojo-args` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/args`, then `mojo run -I src app.mojo`.
 
 ```mojo
 from args import ArgumentParser

@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-posix` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/posix`, then `mojo run -I mojo-posix/src app.mojo`.
+Install: `pixi add mojo-posix` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/posix`, then `mojo run -I src app.mojo`.
 
 ```mojo
 from posix import block_signals, signal_fd, spawn, reap, PollSet, SIGCHLD

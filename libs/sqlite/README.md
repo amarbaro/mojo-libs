@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-sqlite` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/sqlite`, then `mojo run -I mojo-sqlite/src app.mojo`.
+Install: `pixi add mojo-sqlite` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/sqlite`, then `mojo run -I src app.mojo`.
 
 ```mojo
 from sqlite import Database

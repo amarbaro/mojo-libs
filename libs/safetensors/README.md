@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-safetensors` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/safetensors`, then `mojo run -I mojo-safetensors/src app.mojo`. It also needs mojo-json: put its `src` on another `-I`.
+Install: `pixi add mojo-safetensors` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/safetensors`, then `mojo run -I src app.mojo`. It also needs mojo-json: put its `src` on another `-I`.
 
 ```mojo
 from std.os import remove

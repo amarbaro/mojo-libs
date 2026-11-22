@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-amdgpu` (import `amdgpu`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/amdgpu`, then `mojo run -I mojo-amdgpu/src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-amdgpu` (import `amdgpu`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/amdgpu`, then `mojo run -I src app.mojo`.
 
 ```mojo
 from amdgpu import Gpu, VRAM_USED, GPU_BUSY, TEMP_JUNCTION, POWER_UW

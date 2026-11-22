@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-aio` (import `aio`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/aio`, then `mojo run -I mojo-aio/src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-aio` (import `aio`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/aio`, then `mojo run -I src app.mojo`.
 Toolchains: Mojo 1.2 stable, and the nightly 1.3.0.dev2026110805 in the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) matrix (36 libraries on stable, 35 on nightly).
 
 ```mojo
