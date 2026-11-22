@@ -7,9 +7,9 @@ from systemd import notify, ready, status, watchdog, stopping, reloading, watchd
 def main() raises:
     for line in open(argv()[1], "r").read().splitlines():
         var cmd = String(line)
-        var sp = cmd.find(" ")
-        var op = cmd if sp < 0 else String(cmd[byte=:sp])
-        var arg = "" if sp < 0 else String(cmd[byte=sp + 1 :]).replace("\\n", "\n")
+        var parts = cmd.split(" ", maxsplit=1)
+        var op = String(parts[0])
+        var arg = "" if len(parts) < 2 else String(parts[1]).replace("\\n", "\n")
         if op == "usec":
             print("usec", watchdog_usec())
             continue

@@ -2,6 +2,7 @@
 # copy IN OUT -> rewrites IN through Writer ("ok" or "error"); the gate compares OUT with the reference
 # dir DIR     -> "SHARD NAME DTYPE SHAPE NBYTES" per tensor in Checkpoint order; or "error"
 # tools/oracle.py prints the same with the reference implementation.
+from std.os.path import basename
 from std.sys import argv
 from safetensors import SafeTensors, Writer, Checkpoint, TensorInfo
 
@@ -48,7 +49,7 @@ def main() raises:
             var c = Checkpoint(String(a[2]))
             for si in range(len(c.shards)):
                 ref s = c.shards[si]
-                var base = s.path[byte = s.path.rfind("/") + 1 :]
+                var base = basename(s.path)
                 for t in s.tensors:
                     out.append(String(base) + " " + t.name + " " + t.dtype + " " + shape(t) + " " + String(t.nbytes()))
     except e:
