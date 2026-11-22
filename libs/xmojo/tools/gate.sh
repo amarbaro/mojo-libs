@@ -13,7 +13,7 @@ for f in tests/test_*.mojo; do
   "${MOJO:-mojo}" run -I src "$f" || fail+=("$f")
 done
 [ ${#fail[@]} -eq 0 ] || { echo "FAIL gate: ${#fail[@]} test files: ${fail[*]}"; exit 1; }
-mojo build -I src tools/xmldump.mojo -o .work/xmldump
+"${MOJO:-mojo}" build -I src tools/xmldump.mojo -o .work/xmldump
 python3 tools/oracle.py 2000 1
 python3 tools/oracle.py 2000 7
 python3 tools/oracle.py 200 1 --negative
