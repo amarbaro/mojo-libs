@@ -29,3 +29,6 @@
 - `gpu-wait run` does not pass the caller's environment: a nightly run as `MOJO=... gpu-wait run -- ci.sh` silently
   used the stable pin and "passed" (imkit, vattn) -> pass toolchain overrides with `--env MOJO=...`, and check the log
   names the toolchain under test before counting a result.
+- Commits from 2026-11-04 carried a tool co-author trailer and put a bot in the GitHub contributor list -> the global git
+  gate (~/iTools/git-hooks, core.hooksPath) refuses such commits and pushes, failing closed; a history found with them
+  is rewritten (git filter-repo, trees compared) before anything else.
