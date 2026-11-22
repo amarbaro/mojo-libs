@@ -4,7 +4,7 @@
 # (run scripts/check.sh once first), or the path given as $1.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-.venv/bin/mojo build -I src -I lib tests/bench.mojo -o .work/bench 2>.work/build.err || { echo "FAIL build: tests/bench.mojo"; cat .work/build.err; exit 1; }
+"${MOJO:-.venv/bin/mojo}" build -I src -I lib tests/bench.mojo -o .work/bench 2>.work/build.err || { echo "FAIL build: tests/bench.mojo"; cat .work/build.err; exit 1; }
 IN=${1:-.work/fx/s_many.safetensors}
 [[ -e $IN ]] || { echo "FAIL setup: $IN missing (run scripts/check.sh first)"; exit 1; }
 run() {

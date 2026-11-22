@@ -12,14 +12,14 @@ if [ ! -x .venv4/bin/python ]; then
     || { echo "FAIL setup: cv2 4.8.1 environment (.venv4) for the HOG rows"; exit 1; }
 fi
 mkdir -p .work .bin
-.venv/bin/mojo build -I src examples/quickstart.mojo -o .work/quickstart 2>.work/build.err \
+"${MOJO:-.venv/bin/mojo}" build -I src examples/quickstart.mojo -o .work/quickstart 2>.work/build.err \
   || { echo "FAIL build: examples/quickstart.mojo"; grep error .work/build.err | head -20; exit 1; }
 .work/quickstart > /dev/null || { echo "FAIL example: examples/quickstart.mojo"; exit 1; }
 tests/run.sh || { echo "FAIL 2d: tests/run.sh"; exit 1; }
 .venv/bin/python -I tools/fastpath_check.py > .work/fastpath.log || { echo "FAIL fastpath: tools/fastpath_check.py"; tail -5 .work/fastpath.log; exit 1; }
 tests/run3d.sh || { echo "FAIL 3d: tests/run3d.sh"; exit 1; }
 .venv/bin/python -I tools/malformed_check.py > .work/malformed.log || { echo "FAIL malformed: tools/malformed_check.py"; grep BAD .work/malformed.log | head -5; exit 1; }
-.venv/bin/mojo run -I src tests/ransac_iters.mojo > .work/ransac.log 2>&1 || { echo "FAIL ransac_iters: tests/ransac_iters.mojo"; tail -2 .work/ransac.log; exit 1; }
+"${MOJO:-.venv/bin/mojo}" run -I src tests/ransac_iters.mojo > .work/ransac.log 2>&1 || { echo "FAIL ransac_iters: tests/ransac_iters.mojo"; tail -2 .work/ransac.log; exit 1; }
 .venv/bin/python -I tools/stereo_check.py > .work/stereo.log || { echo "FAIL stereo: tools/stereo_check.py"; grep BAD .work/stereo.log | head -5; exit 1; }
 # supervision package (src/supervision): the row harness self-test, every row driver, then every row file against the
 # Python supervision / cv2 oracle. Needs mojo-json and mojo-gzip sources: MOJO_JSON/MOJO_GZIP, else a sibling checkout,

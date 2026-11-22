@@ -6,11 +6,11 @@ cd "$(dirname "$0")/.."
 mkdir -p .work
 # every tool must still build against the current API
 for t in tools/xmldump.mojo tools/bench.mojo; do
-  mojo build -I src "$t" -o .work/gate-build || { echo "FAIL gate: $t does not build"; exit 1; }
+  "${MOJO:-mojo}" build -I src "$t" -o .work/gate-build || { echo "FAIL gate: $t does not build"; exit 1; }
 done
 fail=()
 for f in tests/test_*.mojo; do
-  mojo run -I src "$f" || fail+=("$f")
+  "${MOJO:-mojo}" run -I src "$f" || fail+=("$f")
 done
 [ ${#fail[@]} -eq 0 ] || { echo "FAIL gate: ${#fail[@]} test files: ${fail[*]}"; exit 1; }
 mojo build -I src tools/xmldump.mojo -o .work/xmldump

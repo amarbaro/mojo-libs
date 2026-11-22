@@ -8,7 +8,7 @@ v=$(sed -n 's/^version = "\(.*\)"/\1/p' pyproject.toml); c=$(sed -n 's/^- \[v\([
 command -v uv >/dev/null || { echo "FAIL setup: uv not installed"; exit 1; }
 uv sync || { echo "FAIL setup: uv sync"; exit 1; }
 mkdir -p .work
-M=.venv/bin/mojo
+M=${MOJO:-.venv/bin/mojo}
 build() { # name source [mojo flags...]
   local out=".work/$1" src=$2; shift 2
   $M build --target-accelerator amdgpu:gfx1100 -I src "$@" "$src" -o "$out" 2>.work/build.err || { echo "FAIL build: $src $*"; cat .work/build.err; exit 1; }

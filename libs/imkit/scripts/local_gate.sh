@@ -8,7 +8,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p .work
 for t in anim_test ui_test window_test audio_test; do
-  .venv/bin/mojo build -I src "tests/$t.mojo" -o ".work/$t" > ".work/$t.build.log" 2>&1 || { echo "FAIL build $t: .work/$t.build.log"; exit 1; }
+  "${MOJO:-.venv/bin/mojo}" build -I src "tests/$t.mojo" -o ".work/$t" > ".work/$t.build.log" 2>&1 || { echo "FAIL build $t: .work/$t.build.log"; exit 1; }
 done
 .work/anim_test || { echo "FAIL anim_test: spring table"; exit 1; }
 # shellcheck disable=SC2086

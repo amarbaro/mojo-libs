@@ -3,7 +3,7 @@
 # survives, or a sed that changes nothing, fails this script. Needs a display for the window mutant (window_test, ~2 s).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-M=.venv/bin/mojo
+M=${MOJO:-.venv/bin/mojo}
 export IMKIT_FONT="${IMKIT_FONT:-/usr/share/fonts/TTF/Roboto-Medium.ttf}"
 mutant() {  # name file sed-expression test [gpu]: a GPU test runs under GPU_WRAP
   local name=$1 file=$2 expr=$3 test=$4 d=.work/mutant

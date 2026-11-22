@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 r=${1:?usage: style-assets.sh RENDERS CUTS}; c=${2:?}
 icons="home search settings user play folder bell close"
 mkdir -p .work/atlas
-.venv/bin/mojo build -I src tools/pack_atlas.mojo -o .work/pack_atlas > .work/pack.build.log 2>&1 || { echo "FAIL build pack_atlas: .work/pack.build.log"; exit 1; }
+"${MOJO:-.venv/bin/mojo}" build -I src tools/pack_atlas.mojo -o .work/pack_atlas > .work/pack.build.log 2>&1 || { echo "FAIL build pack_atlas: .work/pack.build.log"; exit 1; }
 n=0
 for f in "$r"/bg-*.png; do
   s=$(basename "$f" .png); s=${s#bg-}; d=assets/styles/$s; mkdir -p "$d"

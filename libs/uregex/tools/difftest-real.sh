@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 CORPUS=${1:?usage: tools/difftest-real.sh CORPUS_FILE}
 DT=${DIFFTEST:-$HOME/iTools/bin/difftest}
 mkdir -p .work/difftest
-[ -x .work/uregex-cli ] || ./.venv/bin/mojo build tools/uregex-cli.mojo -I src -o .work/uregex-cli
+[ -x .work/uregex-cli ] || "${MOJO:-.venv/bin/mojo}" build tools/uregex-cli.mojo -I src -o .work/uregex-cli
 fails=(); n=0
 for name in $(./.venv/bin/python3 -c 'import sys; sys.path.insert(0,"tools"); from difftest import TOKENIZER_PATTERNS as P; print(" ".join(P))'); do
   n=$((n + 1))

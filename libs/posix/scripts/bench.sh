@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p .work/t
-.venv/bin/mojo build -I src tests/bench.mojo -o .work/t/bench 2>.work/build.err || { echo "FAIL build: tests/bench.mojo"; cat .work/build.err; exit 1; }
+"${MOJO:-.venv/bin/mojo}" build -I src tests/bench.mojo -o .work/t/bench 2>.work/build.err || { echo "FAIL build: tests/bench.mojo"; cat .work/build.err; exit 1; }
 for mode in spawn stream poll; do
   for run in 1 2 3; do
     for who in mojo python; do

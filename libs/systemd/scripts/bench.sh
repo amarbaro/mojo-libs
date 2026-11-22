@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p .work; PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python
-.venv/bin/mojo build -O3 -I src tests/bench.mojo -o .work/bench 2>.work/build.err || { echo "FAIL build: tests/bench.mojo"; cat .work/build.err; exit 1; }
+"${MOJO:-.venv/bin/mojo}" build -O3 -I src tests/bench.mojo -o .work/bench 2>.work/build.err || { echo "FAIL build: tests/bench.mojo"; cat .work/build.err; exit 1; }
 export NOTIFY_SOCKET=$PWD/.work/notify.sock; rm -f "$NOTIFY_SOCKET"
 $PY -I tools/bench_sink.py "$NOTIFY_SOCKET" > .work/sink.out & sink=$!; trap 'kill $sink 2>/dev/null || true' EXIT
 for _ in $(seq 50); do grep -q READY .work/sink.out 2>/dev/null && break; sleep 0.1; done

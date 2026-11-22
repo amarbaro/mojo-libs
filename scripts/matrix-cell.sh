@@ -2,7 +2,7 @@
 # matrix-cell.sh LIB CHANNEL OUT: one cell of the weekly matrix. Clones the monorepo (LIB = folder under libs/), runs its scripts/ci.sh on the
 # stable pin (channel stable) or on a nightly Mojo handed over through MOJO= (channel nightly), writes
 # OUT/LIB-CHANNEL.log and OUT/LIB-CHANNEL.json {lib, channel, status: pass|fail|na, error}.
-# na = the library's ci.sh has no MOJO= override, so a nightly cannot be selected (the only existing mechanism).
+# na = no script of the library reads ${MOJO...} (scripts/, tools/, pixi.toml), so a nightly cannot be selected.
 # Env: MATRIX_SRC clone source (default https://github.com/amarbaro/<LIB minus -public>.git; a directory works too),
 #      NIGHTLY_MOJO an installed nightly mojo (default: install one into OUT/nightly-venv),
 #      CELL_TIMEOUT seconds for setup+ci (default 2400). apt rows of ci-setup.tsv run only when CI is set.
@@ -20,8 +20,8 @@ rm -rf "$w"; mkdir -p "$(dirname "$w")"
 if [ -d "$src" ]; then git clone -q --no-hardlinks "$src" "$w" >>"$log" 2>&1; else git clone -q --depth 1 "$src" "$w" >>"$log" 2>&1; fi \
   || { finish fail "clone failed: $src"; exit 0; }
 [ ! -d "$w/libs/$lib" ] || w=$w/libs/$lib   # monorepo: the cell works inside the library's folder, siblings stay at ../<name>
-if [ "$ch" = nightly ] && ! grep -q MOJO "$w/scripts/ci.sh" 2>/dev/null; then
-  echo "scripts/ci.sh has no MOJO= override" >> "$log"; finish na "no MOJO= override in scripts/ci.sh"; exit 0
+if [ "$ch" = nightly ] && ! grep -rqsF '${MOJO' "$w/scripts" "$w/tools" "$w/pixi.toml"; then
+  echo "no script reads \${MOJO}" >> "$log"; finish na "no \${MOJO} override in scripts/, tools/ or pixi.toml"; exit 0
 fi
 # awk, not `read`: tab is IFS whitespace, so `read` collapses an empty apt column and files the pre command under apt
 apt=$(awk -F'\t' -v l="$lib" '$1 == l { print $2 }' "$root/ci-setup.tsv"); pre=$(awk -F'\t' -v l="$lib" '$1 == l { print $3 }' "$root/ci-setup.tsv")

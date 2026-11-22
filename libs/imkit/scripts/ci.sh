@@ -27,7 +27,7 @@ fi
 export IMKIT_CJK
 echo "cjk $IMKIT_CJK"
 mkdir -p .work
-M=.venv/bin/mojo
+M=${MOJO:-.venv/bin/mojo}
 $M precompile src/imkit -o .work/imkit.mojoc 2>.work/build.err || { echo "FAIL precompile: src/imkit"; grep error .work/build.err | head -20; exit 1; }
 # every test and the example build, including the three that need a GPU, a display or libSDL3 to run
 for t in tests/font_test tests/assets_test tests/anim_test tests/ui_cpu_test tests/ui_test tests/window_test tests/audio_test examples/quickstart examples/gallery; do

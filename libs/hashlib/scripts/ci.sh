@@ -7,7 +7,7 @@ command -v python3 >/dev/null || { echo "FAIL setup: python3 (the oracle) not fo
 uv sync || { echo "FAIL setup: uv sync"; exit 1; }
 python3 -c 'import sys; print("oracle python", sys.version.split()[0])'
 mkdir -p .work
-M=.venv/bin/mojo
+M=${MOJO:-.venv/bin/mojo}
 $M build -I src tests/cases.mojo -o .work/cases || { echo "FAIL build: tests/cases.mojo"; exit 1; }
 CASES=.work/cases scripts/check.sh
 $M run -I src tests/api.mojo || { echo "FAIL api: tests/api.mojo"; exit 1; }

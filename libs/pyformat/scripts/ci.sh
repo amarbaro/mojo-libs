@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 command -v uv >/dev/null || { echo "FAIL setup: uv not installed"; exit 1; }
 uv sync || { echo "FAIL setup: uv sync"; exit 1; }
 python3 -c 'import sys; print("oracle python", sys.version.split()[0])'
-M=.venv/bin/mojo
+M=${MOJO:-.venv/bin/mojo}
 mkdir -p .work
 $M build -I src tests/cases.mojo -o .work/cases || { echo "FAIL build: tests/cases.mojo"; exit 1; }
 CASES=.work/cases scripts/check.sh
