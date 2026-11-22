@@ -7,3 +7,7 @@
 - subprocess carried a vendored `src/posix` older than `libs/posix` (no `spawn_pair`, a 107 byte `sun_path` limit) -> a library does not vendor
   a sibling; it includes `../<name>/src`.
 - `uv sync` in a library rewrites its `uv.lock` -> CI runs inside a clone and a local run restores the lock files before committing.
+- args and zip went red on ubuntu-26.04: `uv python find 3.14` and `uv sync` took the system CPython 3.14.4, whose argparse and zipfile
+  output differ from 3.14.10 -> an oracle Python is pinned to the exact patch (`uv python find 3.14.10`, `.python-version`), never a minor.
+- A before/after check of a cv fix ran the same binary twice: `tests/supervision/build_all.sh` skips a binary that exists -> delete
+  `build/<stem>` (or check its mtime) before calling a rebuild a proof.
