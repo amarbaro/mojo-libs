@@ -66,10 +66,20 @@ def main() raises:
     elif mode == "slow":
         var s = tls_connect[FakeCrypto]("localhost", port, [], "127.0.0.1", 4096)
         var data = payload(n * 1024, 5)
-        for off in range(0, len(data), 65536):
-            s.write(List[UInt8](Span(data)[off : min(off + 65536, len(data))]))
-        sleep(0.6)
+        # At most 320 KiB in flight (net_server max_out 256 KiB + one chunk): the server queues past max_out and pauses
+        # reading, while the bytes it has not read stay within one chunk, which any socket buffer holds. Writing all
+        # 4 MiB before reading would need kernel buffers larger than the backlog, else both sides block.
         var got = List[UInt8]()
+        var off = 0
+        while off < len(data):
+            var end = min(off + 65536, len(data))
+            s.write(List[UInt8](Span(data)[off:end]))
+            off = end
+            if off == 320 * 1024:
+                sleep(0.6)  # the server sits paused here; reading below resumes it
+            while off - len(got) > 256 * 1024 and off < len(data):
+                if s.read(got) == 0:
+                    break
         while len(got) < len(data):
             if s.read(got) == 0:
                 break
