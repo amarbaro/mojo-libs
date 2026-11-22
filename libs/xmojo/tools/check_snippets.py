@@ -3,7 +3,7 @@
 """Every ```mojo block with a `def main` in README.md, AGENTS.md and skills/**/*.md must compile
 and run against src/. Blocks are written to .work/snippets/ (a directory with no packages, so
 nothing shadows -I src). Run inside the pixi env; exits non-zero with FAIL k/N."""
-import pathlib, re, subprocess, sys
+import os, pathlib, re, subprocess, sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 OUT = ROOT / ".work/snippets"
@@ -22,7 +22,7 @@ for name, code in blocks:
     f = OUT / (name + ".mojo")
     f.write_text(code)
     try:
-        r = subprocess.run(["mojo", "run", "-I", str(ROOT / "src"), str(f)], capture_output=True, text=True, timeout=300)
+        r = subprocess.run([os.environ.get("MOJO", "mojo"), "run", "-I", str(ROOT / "src"), str(f)], capture_output=True, text=True, timeout=300)
         ok = r.returncode == 0
     except subprocess.TimeoutExpired:
         ok, r = False, None
