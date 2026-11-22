@@ -143,7 +143,7 @@ def kvs(rest: StringSlice) -> Dict[String, String]:
         return d^
     for a in rest.split(","):
         var s = String(a)
-        var eq = s.find("=")
+        var eq = s.split("=")[0].byte_length()
         d[String(s[byte = 0 : eq])] = String(s[byte = eq + 1 :])
     return d^
 
@@ -164,7 +164,7 @@ def run_write(tokens: List[String]) -> String:
         if t.startswith("new:"):
             for a in String(t[byte = 4 :]).split(","):
                 var s = String(a)
-                var eq = s.find("=")
+                var eq = s.split("=")[0].byte_length()
                 var k = String(s[byte = 0 : eq])
                 var v = String(s[byte = eq + 1 :])
                 if k == "ct":
@@ -186,7 +186,7 @@ def run_write(tokens: List[String]) -> String:
         w.filecount_limit = cl
     try:
         for op in ops:
-            var colon = op.find(":")
+            var colon = op.split(":")[0].byte_length()
             var head = String(op[byte = 0 : colon])
             var a = kvs(String(op[byte = colon + 1 :]))
             if head == "str":

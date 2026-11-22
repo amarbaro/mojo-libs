@@ -66,7 +66,8 @@ def main() raises:
             print("check none")
         except e:
             var s = String(e)
-            print("check raised", String(s[byte = s.find("status ") + 7 : s.byte_length() - 1]))
+            var t = String(s.split("status ")[1])
+            print("check raised", String(t[byte = 0 : t.byte_length() - 1]))
         print("check_output", d(check_output([SH, "-c", "echo ok"])))
         print("check_output_err", d(check_output([SH, "-c", "echo out; echo to-stderr >&2"])))
         try:
