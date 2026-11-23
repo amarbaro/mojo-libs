@@ -1,0 +1,4 @@
+# the same budget one cycle and ten points tighter: it must fail (exit 1)
+cycles 11947920
+cause mem 40
+cause issue wait 48

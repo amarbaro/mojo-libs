@@ -1,0 +1,6 @@
+# budget at the frozen capture's own numbers (evm_k, 11947921 cycles over 16 traced waves, mem 50.6 %, issue wait 47.4 %): G2.5 `wavewait budget`
+# capture: gpu-wait run --shared ... -- env ATT_INNER=1 ATT_KERNEL=evm_k wavewait/tools/att-capture.sh RUN -- .bin/mojo-cv evm OUT 256x384x40-float32.mcv gpu=1;
+# then wavewait/tools/from-att.sh RUN tests/cases_gpu/att/evm_k (blob_0.bin and pcmap.tsv, committed, so the walk is repeatable)
+cycles 11947921
+cause mem 51
+cause issue wait 48
