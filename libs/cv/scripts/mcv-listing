@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# mcv-listing: a local listing draft per stock item from the rows of mcv-stockgroup (plan R14a: a draft with estimate provenance).
+#   mcv-listing draft DIR [--out OUT] [--file NAME]   one OUT/item-NNN.json per item of DIR/cv-groups.json (OUT default DIR/listing)
+#                                                     and OUT/index.json. --file NAME: only the item of that photo; an empty frame
+#                                                     (cloth without a subject) gives NO draft: stderr NODRAFT, exit 4, nothing written.
+#   mcv-listing check DIR FILE                        schema and recomputation of one draft against DIR/cv.jsonl: PASS or FAIL (exit 1)
+# Draft: {schema: "listing-draft/1", status: "draft_local", item, t0, t1, photos: [{file, view, view_label, sharp, hand, box}] (the
+#   sharpest photo of every view), cover, size, size_reason, matte, warnings, pending}.
+#   size: null without a usable tape, else {w_cm, h_cm, text: "~13 x 5 cm (tape est.)", range_cm: {w, h}, confidence: {tape_conf,
+#   level}, provenance}. The photo that sizes an item is its sharpest one with a tape scale, a subject box and hand < 0.02 (a box
+#   with more hand in it is the one to distrust, docs/stockgroup.md). Size = box / px_per_cm. The range is +-10 % of the tape scale
+#   (5 % between camera distances, the cm peak within 7 %); no ruler of known length has checked the absolute value, so every size is
+#   an ESTIMATE and says so. Without a tape: size null and size_reason (no_tape, hand_in_frame, no_box), never a guess.
+#   matte: {applied: false}: R7 is not merged, the crop is the subject box. pending: what a person fills before anything is listed
+#   (title, brand and model, condition, price, review).
+# Local only: it reads two files and writes under OUT. It posts nothing, calls no network tool and never writes groups.json (the
+#   driver's own item labels). A draft stays a draft until Mario reviews it.
+set -euo pipefail
+fail() { echo "FAIL $1: $2" >&2; exit "${3:-1}"; }
+usage() { sed -n '2,/^# Local only/{/^# Local only/!p}' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+[ $# -ge 2 ] || usage
+cmd=$1 dir=$2; shift 2
+[ -s "$dir/cv.jsonl" ] && [ -s "$dir/cv-groups.json" ] || fail input "$dir has no cv.jsonl and cv-groups.json (run mcv-stockgroup first)" 2
+
+DRAFT='
+  def r1: (. * 10 | round) / 10;
+  ($rows | map(select(.group == $g.group))) as $R
+  | ($R | map(.view) | unique) as $views
+  | [ $views[] as $v | $R | map(select(.view == $v and .view_rank == 0)) | .[0] ] as $best
+  | ($R | map(select(.px_per_cm != null and .box != null and .hand < 0.02)) | sort_by(-.sharp) | .[0]) as $sz
+  | ($best | map(select(.hand < 0.02)) | sort_by(-.sharp) | .[0] // ($best | sort_by(-.sharp) | .[0])) as $cover
+  | ($labels | split(",") | map(select(. != ""))) as $L
+  | {schema: "listing-draft/1", status: "draft_local", item: $g.group, t0: $g.t0, t1: $g.t1,
+     photos: ($best | map({file, view, view_label: ($L[.view] // "extra"), sharp, hand, box})),
+     cover: $cover.file,
+     size: (if $sz == null then null else
+        ((($sz.box[2] - $sz.box[0]) / $sz.px_per_cm) as $w | (($sz.box[3] - $sz.box[1]) / $sz.px_per_cm) as $h
+        | {w_cm: ($w | r1), h_cm: ($h | r1), text: "~\($w | round) x \($h | round) cm (tape est.)",
+           range_cm: {w: [($w * 0.9 | r1), ($w * 1.1 | r1)], h: [($h * 0.9 | r1), ($h * 1.1 | r1)]},
+           confidence: {tape_conf: $sz.tape_conf, level: (if $sz.tape_conf >= 0.2 then "tape" else "weak tape" end)},
+           provenance: {method: "tape", photo: $sz.file, px_per_cm: $sz.px_per_cm, box: $sz.box, scale_error: "+-10 %, unchecked against a ruler"}}) end),
+     size_reason: (if $sz != null then null
+        elif ($R | map(select(.px_per_cm != null)) | length) == 0 then "no_tape"
+        elif ($R | map(select(.px_per_cm != null and .hand < 0.02)) | length) == 0 then "hand_in_frame" else "no_box" end),
+     matte: {applied: false, reason: "R7 not merged: the crop is the subject box"},
+     warnings: ([(if $cover.hand >= 0.02 then "cover_has_hand" else empty end), (if ($views | length) < 2 then "single_view" else empty end)]),
+     pending: ["title", "brand_model", "condition", "price", "review"]}'
+
+case $cmd in
+  draft)
+    out=$dir/listing file=""
+    while [ $# -gt 0 ]; do case $1 in --out) out=$2; shift 2;; --file) file=$2; shift 2;; *) usage;; esac; done
+    case ${out##*/} in groups.json) fail out "never write the driver's groups.json" 2;; esac
+    labels=${MCV_QA_VIEWS:-front,back}
+    if [ -n "$file" ]; then
+      row=$(jq -c --arg f "${file##*/}" 'select(.file == $f)' "$dir/cv.jsonl")
+      [ -n "$row" ] || fail input "no row for $file in $dir/cv.jsonl" 2
+      if [ "$(jq -r .empty <<< "$row")" = true ]; then echo "NODRAFT mcv-listing: $file is an empty frame (no subject, clean cloth)" >&2; exit 4; fi
+      groups=$(jq -c --argjson g "$(jq .group <<< "$row")" 'map(select(.group == $g))' "$dir/cv-groups.json")
+    else groups=$(jq -c . "$dir/cv-groups.json"); fi
+    mkdir -p "$out"; n=0
+    for g in $(jq -r '.[].group' <<< "$groups"); do
+      jq -S -n --slurpfile rows "$dir/cv.jsonl" --argjson g "$(jq -c --argjson g "$g" '.[] | select(.group == $g)' "$dir/cv-groups.json")" --arg labels "$labels" "$DRAFT" > "$out/item-$(printf %03d "$g").json"
+      n=$((n + 1))
+    done
+    [ -n "$file" ] || jq -c -n --argjson n "$n" --argjson e "$(jq -s 'map(select(.empty)) | length' "$dir/cv.jsonl")" '{drafts: $n, empty_frames_skipped: $e, status: "draft_local"}' > "$out/index.json"
+    echo "PASS draft: $n item(s) -> $out";;
+  check)
+    [ $# -eq 1 ] && [ -s "$1" ] || usage
+    msg=$(jq -r --slurpfile rows "$dir/cv.jsonl" '
+      def need(c; m): if c then . else error(m) end;
+      def row($f): $rows | map(select(.file == $f)) | .[0];
+      . as $d
+      | need(.schema == "listing-draft/1"; "schema is not listing-draft/1")
+      | need(.status == "draft_local"; "status is not draft_local")
+      | need((.item | type) == "number"; "item is not a number")
+      | need((.photos | type) == "array" and (.photos | length) > 0 and (.photos | all(.file | type == "string")); "photos missing")
+      | need(.photos | all(row(.file) != null and row(.file).empty == false); "a photo is not a shot of the shoot or is an empty frame")
+      | need((.pending | type) == "array" and (["title", "condition", "price", "review"] - .pending | length) == 0; "pending lacks title, condition, price or review")
+      | need(.matte.applied == false; "matte claim without R7")
+      | need((.size == null) == (.size_reason != null); "size and size_reason disagree")
+      | if .size == null then . else
+          row(.size.provenance.photo) as $p
+          | need($p != null and $p.px_per_cm != null and $p.box_cm != null and $p.hand < 0.02; "size photo has no tape, no box or a hand")
+          | need((.size.text | test("^~[0-9]+ x [0-9]+ cm \\(tape est\\.\\)$")); "size text is not ~N x M cm (tape est.)")
+          | need(((.size.w_cm - $p.box_cm[0]) | fabs) <= 0.06 and ((.size.h_cm - $p.box_cm[1]) | fabs) <= 0.06; "size differs from the row box_cm by more than 0.06 cm")
+          | (($p.box[2] - $p.box[0]) / $p.px_per_cm) as $w | (($p.box[3] - $p.box[1]) / $p.px_per_cm) as $h
+          | need(.size.text == "~\($w | round) x \($h | round) cm (tape est.)"; "size text is not rounded from the row box and px_per_cm")
+          | need(.size.range_cm.w[0] < .size.w_cm and .size.w_cm < .size.range_cm.w[1] and .size.range_cm.h[0] < .size.h_cm and .size.h_cm < .size.range_cm.h[1]; "range does not hold the estimate")
+          | need(.size.confidence.tape_conf == $p.tape_conf; "confidence is not the row tape_conf")
+          | need(.size.provenance.px_per_cm == $p.px_per_cm; "provenance px_per_cm is not the row value")
+        end
+      | "ok"' "$1" 2>&1 || true)
+    if [ "$msg" = ok ]; then echo "PASS check $1"; else echo "FAIL check $1: ${msg#jq: error*: }" >&2; exit 1; fi;;
+  *) usage;;
+esac
