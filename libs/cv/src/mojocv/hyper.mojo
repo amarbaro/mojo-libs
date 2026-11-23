@@ -523,6 +523,25 @@ def lpq(src: Mat[U8], win: Int) raises -> Tuple[Mat[U8], Mat[F64]]:
     return (codes^, hist^)
 
 
+def evm_blur(stack: Mat[F32], sigma: Float64) -> Mat[F32]:
+    """The spatial half of evm, shared with the GPU twin (gpu.mojo): each frame (one channel) blurred by a Gaussian of `sigma`;
+    sigma <= 0 returns a copy."""
+    if sigma <= 0.0:
+        return Mat[F32](copy=stack)
+    var rows = stack.rows
+    var cols = stack.cols
+    var t_n = stack.ch
+    var sm = Mat[F32](rows, cols, t_n, False)
+    for t in range(t_n):
+        var fr = Mat[F32](rows, cols, 1, False)
+        for i in range(rows * cols):
+            fr.data[i] = stack.data[i * t_n + t]
+        var b = gaussian_blur[F32](fr, 0, sigma)
+        for i in range(rows * cols):
+            sm.data[i * t_n + t] = b.data[i]
+    return sm^
+
+
 def evm(stack: Mat[F32], alpha: Float64, lo: Float64, hi: Float64, sigma: Float64) raises -> Mat[F32]:
     """Eulerian video magnification (Wu et al. 2012) of a grey clip stored as one channel per frame: each frame blurred by a
     Gaussian of `sigma` (0 = none), per pixel two first-order IIR low-passes with coefficients hi > lo (started on frame 0),
@@ -534,24 +553,26 @@ def evm(stack: Mat[F32], alpha: Float64, lo: Float64, hi: Float64, sigma: Float6
         raise Error("mojocv: evm: need 0 < lo < hi <= 1")
     var rows = stack.rows
     var cols = stack.cols
-    var sm = Mat[F32](copy=stack) if sigma <= 0.0 else Mat[F32](rows, cols, t_n, False)
-    if sigma > 0.0:
-        for t in range(t_n):
-            var fr = Mat[F32](rows, cols, 1, False)
-            for i in range(rows * cols):
-                fr.data[i] = stack.data[i * t_n + t]
-            var b = gaussian_blur[F32](fr, 0, sigma)
-            for i in range(rows * cols):
-                sm.data[i * t_n + t] = b.data[i]
-    var o = Mat[F32](rows, cols, t_n, False)
-    for i in range(rows * cols):
-        var l1 = Float64(sm.data[i * t_n])
-        var l2 = l1
+    var st = Mat[F64](rows, cols, 2)
+    return evm_run(stack, evm_blur(stack, sigma), st, True, alpha, lo, hi)
+
+
+def evm_run(orig: Mat[F32], sm: Mat[F32], mut st: Mat[F64], init: Bool, alpha: Float64, lo: Float64, hi: Float64) -> Mat[F32]:
+    """The temporal half of evm and its state: `orig` and its blurred copy `sm` hold T frames as channels; st (rows x cols x 2,
+    float64) is L_hi, L_lo per pixel. init starts both on the first frame of `sm` (the batch op); otherwise they continue from
+    st, so T steps of one frame equal one step of T frames, bit for bit. st is left at the last frame."""
+    var t_n = orig.ch
+    var o = Mat[F32](orig.rows, orig.cols, t_n, False)
+    for i in range(orig.rows * orig.cols):
+        var l1 = Float64(sm.data[i * t_n]) if init else st.data[2 * i]
+        var l2 = l1 if init else st.data[2 * i + 1]
         for t in range(t_n):
             var s = Float64(sm.data[i * t_n + t])
             l1 += hi * (s - l1)
             l2 += lo * (s - l2)
-            o.data[i * t_n + t] = Float32(Float64(stack.data[i * t_n + t]) + alpha * (l1 - l2))
+            o.data[i * t_n + t] = Float32(Float64(orig.data[i * t_n + t]) + alpha * (l1 - l2))
+        st.data[2 * i] = l1
+        st.data[2 * i + 1] = l2
     return o^
 
 
@@ -656,6 +677,20 @@ def run(mut a: Args) raises -> Bool:
         while a.again():
             o = evm(s, a.f("alpha", 20.0), a.f("lo", 0.05), a.f("hi", 0.4), a.f("sigma", 0.0))
         save(o, a.out)
+    elif a.op == "evmStep":  # evmStep OUT FRAME [STATE]: one frame in, the magnified frame (OUT) and the state (OUT.1, float64 x2) out
+        _need(a, 1)
+        var f = load[F32](a.ins[0])
+        var lo = a.f("lo", 0.05)
+        var hi = a.f("hi", 0.4)
+        if f.ch != 1 or not (0.0 < lo and lo < hi and hi <= 1.0):
+            raise Error("mojocv: evmStep: one float32 channel and 0 < lo < hi <= 1")
+        var st = load[F64](a.ins[1]) if len(a.ins) > 1 else Mat[F64](f.rows, f.cols, 2)
+        if st.rows != f.rows or st.cols != f.cols or st.ch != 2:
+            raise Error("mojocv: evmStep: STATE must be float64 rows x cols x 2")
+        var o = Mat[F32](0, 0)
+        o = evm_run(f, evm_blur(f, a.f("sigma", 0.0)), st, len(a.ins) < 2, a.f("alpha", 20.0), lo, hi)
+        save(o, a.out)
+        save(st, a.out + ".1")
     else:
         return False
     return True

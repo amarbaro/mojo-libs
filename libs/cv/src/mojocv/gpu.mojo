@@ -14,6 +14,7 @@ from mojocv.mat import Mat, load, save
 from mojocv.core import Args, peek_code
 from mojocv.imgproc import cvt_code, Taps, _fx_taps
 from mojocv.stream import run as run_stream
+from mojocv.hyper import evm_blur
 
 comptime U8 = DType.uint8
 comptime U = MutPointer[UInt8, MutUntrackedOrigin]
@@ -21,6 +22,7 @@ comptime S = MutPointer[Int16, MutUntrackedOrigin]
 comptime L = MutPointer[Int64, MutUntrackedOrigin]
 comptime F = MutPointer[Float32, MutUntrackedOrigin]
 comptime I = MutPointer[Int32, MutUntrackedOrigin]
+comptime D = MutPointer[Float64, MutUntrackedOrigin]
 comptime P = SIMD[DType.int32, 8]
 comptime THREADS = 256
 
@@ -201,6 +203,25 @@ def resize_f32_k(src: F, dst: F, txi: I, txw: F, tyi: I, tyw: F, p: P):
     dst[unsafe_offset=Int(e)] = res
 
 
+def evm_k(orig: F, sm: F, o: F, st: D, p: P, alpha: Float64, lo: Float64, hi: Float64):
+    """hyper.evm_run, one thread per pixel: the two IIR low-passes over the pixel's T frames in float64, in the CPU's order.
+    p: pixels T init (1: both start on the first frame of sm; 0: continue from st). st holds L_hi, L_lo per pixel and is left at the last frame."""
+    var e = Int32(global_idx.x)
+    if e >= p[0]:
+        return
+    var t_n = Int(p[1])
+    var b = Int(e) * t_n
+    var l1 = Float64(sm[unsafe_offset=b]) if p[2] == 1 else st[unsafe_offset=2 * Int(e)]
+    var l2 = l1 if p[2] == 1 else st[unsafe_offset=2 * Int(e) + 1]
+    for t in range(t_n):
+        var s = Float64(sm[unsafe_offset=b + t])
+        l1 += hi * (s - l1)
+        l2 += lo * (s - l2)
+        o[unsafe_offset=b + t] = Float32(Float64(orig[unsafe_offset=b + t]) + alpha * (l1 - l2))
+    st[unsafe_offset=2 * Int(e)] = l1
+    st[unsafe_offset=2 * Int(e) + 1] = l2
+
+
 def _u(b: DeviceBuffer[DType.uint8]) -> U:
     return U(unsafe_from_address=Int(b.unsafe_ptr()))
 
@@ -326,6 +347,26 @@ struct Gpu:
         self.ctx.enqueue_copy(dst_ptr=r.data.unsafe_ptr(), src_buf=o)
         self.ctx.synchronize()
         return r^
+
+    def evm(self, orig: Mat[DType.float32], sm: Mat[DType.float32], mut st: Mat[DType.float64], init: Bool, alpha: Float64, lo: Float64, hi: Float64) raises -> Mat[DType.float32]:
+        """hyper.evm_run on the card: upload the frames and the state, one thread per pixel, download both."""
+        var n = orig.size()
+        var np_ = orig.rows * orig.cols
+        var da = self.ctx.enqueue_create_buffer[DType.float32](n)
+        var db = self.ctx.enqueue_create_buffer[DType.float32](n)
+        var dc = self.ctx.enqueue_create_buffer[DType.float32](n)
+        var ds = self.ctx.enqueue_create_buffer[DType.float64](np_ * 2)
+        self.ctx.enqueue_copy(dst_buf=da, src_ptr=orig.data.unsafe_ptr())
+        self.ctx.enqueue_copy(dst_buf=db, src_ptr=sm.data.unsafe_ptr())
+        self.ctx.enqueue_copy(dst_buf=ds, src_ptr=st.data.unsafe_ptr())
+        var p = P(Int32(np_), Int32(orig.ch), Int32(1 if init else 0), 0, 0, 0, 0, 0)
+        self.ctx.enqueue_function[evm_k](F(unsafe_from_address=Int(da.unsafe_ptr())), F(unsafe_from_address=Int(db.unsafe_ptr())), F(unsafe_from_address=Int(dc.unsafe_ptr())), D(unsafe_from_address=Int(ds.unsafe_ptr())), p, alpha, lo, hi, grid_dim=ceildiv(np_, THREADS), block_dim=THREADS)
+        var o = Mat[DType.float32](orig.rows, orig.cols, orig.ch, False)
+        self.ctx.enqueue_copy(dst_ptr=o.data.unsafe_ptr(), src_buf=dc)
+        self.ctx.enqueue_copy(dst_ptr=st.data.unsafe_ptr(), src_buf=ds)
+        self.ctx.synchronize()
+        _ = (da.unsafe_ptr(), db.unsafe_ptr(), dc.unsafe_ptr(), ds.unsafe_ptr())
+        return o^
 
     def resize_u8(self, src: Mat[U8], dw: Int, dh: Int) raises -> Mat[U8]:
         """cv2 INTER_LINEAR for uint8 ch 1, 3, 4: the CPU's own tap tables (_fx_taps), weights as int32."""
@@ -470,6 +511,42 @@ def _run_fs2(mut a: Args) raises -> Bool:
         return False
 
 
+def _run_evm(mut a: Args) raises -> Bool:
+    """gpu=1 on evm (float32 clip, 2 or more frames) and evmStep (one float32 frame, STATE float64 x2 or absent): the spatial blur is
+    the CPU's (hyper.evm_blur, same values), the temporal filter runs on the card. False: the CPU op runs and raises its own errors."""
+    if peek_code(a.ins[0]) != 1:
+        return False
+    var x = load[DType.float32](a.ins[0])
+    var lo = a.f("lo", 0.05)
+    var hi = a.f("hi", 0.4)
+    var step = a.op == "evmStep"
+    if x.size() == 0 or not (0.0 < lo and lo < hi and hi <= 1.0) or (x.ch < 2 if not step else x.ch != 1):
+        return False
+    var st = Mat[DType.float64](x.rows, x.cols, 2)
+    if step and len(a.ins) > 1:
+        if peek_code(a.ins[1]) != 3:
+            return False
+        st = load[DType.float64](a.ins[1])
+        if st.rows != x.rows or st.cols != x.cols or st.ch != 2:
+            return False
+    try:
+        var g = Gpu()
+        var sm = evm_blur(x, a.f("sigma", 0.0))
+        var o = Mat[DType.float32](0, 0)
+        while a.again():
+            if not step:
+                st = Mat[DType.float64](x.rows, x.cols, 2)
+            o = g.evm(x, sm, st, not step or len(a.ins) < 2, a.f("alpha", 20.0), lo, hi)
+        print("GPU-ARM evm float32")
+        save(o, a.out)
+        if step:
+            save(st, a.out + ".1")
+        return True
+    except e:
+        print("gpu: no device (" + String(e) + "), CPU path")
+        return False
+
+
 def run(mut a: Args) raises -> Bool:
     """gpu=1 on cvtColor (bgr2gray, rgb2gray), Sobel (ksize 3, scale 1, dx or dy), boxDown, sharpness; crop on both. Returns False
     (the CPU op runs) for anything else, for no gpu=1 and for no accelerator."""
@@ -478,6 +555,8 @@ def run(mut a: Args) raises -> Bool:
     var want = a.i("gpu", 0) == 1
     if want and (a.op == "absdiff" or a.op == "resize"):
         return _run_fs2(a)
+    if want and (a.op == "evm" or a.op == "evmStep") and len(a.ins) > 0:
+        return _run_evm(a)
     if a.op == "crop":
         var m = load[U8](a.ins[0])
         var x0 = a.i("x", 0)

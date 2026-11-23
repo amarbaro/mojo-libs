@@ -1,0 +1,19 @@
+# fs-evm (R3c stateful EVM twin): hyper.mojo evm and evmStep against the numpy oracle (tools/oracle_cv2.py evm, float64) and the
+# closed-form gain of the planted clip (fs-h2 p2/evm: 40 frames of 64 x 96, 0.1 cycles per frame, 2 levels in a 24 x 16 patch).
+# Run by tests/cases_gpu/fs_suite.py rows (run_gpu.sh fs3); gpu=1 rows must print GPU-ARM and equal their CPU run (the runner's twin check).
+# parity with numpy float64: bytes equal on these clips (measured 0.0 for CPU and GPU), so the bar is `exact`; the sigma row carries the
+# blur, which is float32 against cv2's (measured 4.73e-4 on this clip, bar 1e-3), not hyper.txt's number borrowed
+ev_sin_cpu     evm fs3_evm_sin alpha=20 lo=0.05 hi=0.4 => exact
+ev_sin_gpu     evm fs3_evm_sin alpha=20 lo=0.05 hi=0.4 gpu=1 => exact
+ev_sin_a5_gpu  evm fs3_evm_sin alpha=5 lo=0.05 hi=0.4 gpu=1 => exact
+ev_sin_sig_gpu evm fs3_evm_sin alpha=20 lo=0.05 hi=0.4 sigma=1.5 gpu=1 => max:0.001
+# benign control: a static clip does not change, byte for byte, on both arms
+ev_static_cpu  evm fs3_evm_static alpha=20 lo=0.05 hi=0.4 => exact
+ev_static_gpu  evm fs3_evm_static alpha=20 lo=0.05 hi=0.4 gpu=1 => exact
+# the stateful claim: 40 evmStep calls (state in a file) equal one evm call on the 40 frames, bytewise, on both arms
+ev_chain_cpu   evmChain fs3_evm_sin alpha=20 lo=0.05 hi=0.4 => exact, exact
+ev_chain_gpu   evmChain fs3_evm_sin alpha=20 lo=0.05 hi=0.4 gpu=1 => exact, exact
+# the planted signal comes out with the closed-form gain
+ev_gain_cpu    evmGain fs3_evm_sin alpha=20 lo=0.05 hi=0.4 => gain:0.02
+ev_gain_gpu    evmGain fs3_evm_sin alpha=20 lo=0.05 hi=0.4 gpu=1 => gain:0.02
+ev_gain_a5_gpu evmGain fs3_evm_sin alpha=5 lo=0.05 hi=0.4 gpu=1 => gain:0.02
