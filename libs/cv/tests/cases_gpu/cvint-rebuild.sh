@@ -5,7 +5,7 @@
 #   siglip40/embeds.f32         CPU embeddings of 40 of them (shuf, seed 40), the input of siglip_top.sh
 #   labels/all.f32              text embeddings of the 18 categories and 142 tags of data/siglip (siglip_top.sh)
 #   siglip-full/embeds.f32      CPU embeddings of N (default 240, a multiple of the 16-picture GPU batch) of them (shuf, seed 240), picture list in siglip-full/list.txt
-#   siglip-gpu.f32              the GPU runner's embeddings of the same decoded 224 px pictures (one shared gpu-wait job)
+#   siglip-gpu.f32              the GPU runner's fp32 embeddings of the same decoded 224 px pictures (one shared gpu-wait job)
 #   MANIFEST.sha256, README     hashes of the above and what each is; a rerun with the same library list gives the same picks, the embeddings are
 #                               rewritten (the CPU runner is deterministic on one machine; the siglip checks compare arms and numpy, not these bytes)
 # JPEG and PNG decode stay on the CPU (scripts/decode-siglip.sh). No timing is claimed. Exit 0 PASS, 1 FAIL, 3 BLOCK (a missing precondition).
@@ -30,8 +30,9 @@ scripts/siglip-embed.sh --cpu -j 3 "$D/siglip-full/list.txt" "$D/siglip-full"
 for d in siglip40 siglip-full; do
   [ ! -s "$D/$d/decode-failed.txt" ] || { echo "FAIL decode: $(wc -l < "$D/$d/decode-failed.txt") pictures of $d did not decode: see $D/$d/decode-failed.txt"; exit 1; }
 done
-# GPU rows of the same decoded pictures, one shared job
-gpu-wait run --shared --vram 2 --timeout 300 --mem 8 --label cvint-gpu -- env -u HSA_OVERRIDE_GFX_VERSION "$bin" gimage "$MODEL" "$D/siglip-full/ppms.txt" "$D/siglip-gpu.f32" > "$D/siglip-gpu.log" 2>&1 \
+# GPU rows of the same decoded pictures, one shared job, on the fp32 arm (GARM=32): siglip_gpu.sh holds them to cosine 0.99999 and 1e-4
+# against the CPU rows, which is the fp32 bar; gimage defaults to the fp16 GEMM arm since d2c8e546 and then reaches only cosine 0.99997, max abs 1.07e-3 (measured here)
+gpu-wait run --shared --vram 2 --timeout 300 --mem 8 --label cvint-gpu -- env -u HSA_OVERRIDE_GFX_VERSION GARM=32 "$bin" gimage "$MODEL" "$D/siglip-full/ppms.txt" "$D/siglip-gpu.f32" > "$D/siglip-gpu.log" 2>&1 \
   || { tail -5 "$D/siglip-gpu.log"; echo "FAIL gpu embeddings: see $D/siglip-gpu.log"; exit 1; }
 # labels, the way scripts/siglip-labels.sh makes them
 jq -c '.normalizer.normalizers = [.normalizer.normalizers[4], .normalizer.normalizers[5]] | .model.byte_fallback = false' "$TOK/tokenizer.json" > "$D/labels/tokenizer_pre.json"
