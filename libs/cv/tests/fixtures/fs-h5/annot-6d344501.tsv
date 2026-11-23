@@ -1,0 +1,42 @@
+idx	class	text	desc	clickable	x1	y1	x2	y2
+0	View			true	0	0	1200	2608
+1	View			false	0	0	1200	2608
+2	View			false	0	0	1200	2608
+3	View			false	0	0	1200	2608
+4	View			false	0	0	1200	2608
+5	View			true	0	0	1200	2608
+6	View			false	0	0	1200	2548
+7	View			false	0	0	1200	2548
+8	View			false	0	0	1200	2548
+9	View			false	0	233	1200	2548
+10	View		Security	true	42	233	312	539
+11	View		Instagram	true	324	233	594	539
+12	View		Brave	true	606	233	876	539
+13	View		Messenger unread from 1	true	888	233	1158	539
+14	View		Bitwarden	true	42	539	312	845
+15	View			true	882	539	1164	845
+16	View		Folder	true	882	539	1164	845
+17	ImageView			false	933	574	1113	753
+18	ImageView			false	882	707	1164	865
+19	View		ZArchiver	true	42	845	312	1151
+20	View			true	600	845	1164	1457
+21	View		Folder	true	600	845	1164	1457
+22	ImageView			false	639	880	1125	1365
+23	View		Baro	true	669	910	797	1037
+24	View		ABStore	true	818	910	946	1037
+25	View		ABSend	true	669	1059	797	1186
+26	View		ABCam	true	967	910	1095	1037
+27	View		ABDoc	true	818	1059	946	1186
+28	ImageView			false	741	1319	1023	1477
+29	View			true	36	1457	318	2069
+30	ImageView		Folder	true	36	1457	318	2069
+31	View		F-Droid	true	113	1531	241	1659
+32	View		Aurora Store	true	113	1671	241	1799
+33	View			true	600	1763	1164	2069
+34	ImageView		Bus	true	600	1763	1164	2069
+35	View		Ticket Storage	true	666	1824	794	1952
+36	View		NVV Mobil	true	818	1824	946	1952
+37	SeekBar		page 2 of 3 pages	false	500	2112	700	2163
+38	View			true	0	2234	1200	2540
+39	View		Phone	true	324	2206	594	2512
+40	View		Camera	true	606	2206	876	2512
