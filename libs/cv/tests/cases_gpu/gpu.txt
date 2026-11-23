@@ -1,0 +1,27 @@
+# the CPU rows of the GPU ops, run again with gpu=1 (same oracle: cv2 5.0 / numpy, same tolerance): GPU output must equal the CPU output.
+# tests/run_gpu.sh runs them in one gpu-wait job; without a GPU the same rows pass on the CPU fallback. f32 rows: the kernels are uint8, the CPU op answers.
+gpu_sharp_hdg              sharpness hdg gpu=1 => eqnan:1e-6
+gpu_sharp_smg              sharpness smg gpu=1 => eqnan:1e-6
+gpu_sharp_st_blurg         sharpness st_blurg gpu=1 => eqnan:1e-6
+gpu_sharp_st_noiseg        sharpness st_noiseg gpu=1 => eqnan:1e-6
+gpu_sharp_st_jpg8g         sharpness st_jpg8g gpu=1 => eqnan:1e-6
+gpu_sharp_st_jpg95g        sharpness st_jpg95g gpu=1 => eqnan:1e-6
+gpu_sharp_st_bandg         sharpness st_bandg gpu=1 => eqnan:1e-6
+gpu_sharp_st_gradg         sharpness st_gradg gpu=1 => eqnan:1e-6
+gpu_sharp_st_blowng        sharpness st_blowng gpu=1 => eqnan:1e-6
+gpu_sharp_st_fogg          sharpness st_fogg gpu=1 => eqnan:1e-6
+gpu_sharp_st_flatg         sharpness st_flatg gpu=1 => eqnan:1e-6
+gpu_sharp_tile8            sharpness hdg tile=8 thr=40 gpu=1 => eqnan:1e-6
+gpu_sharp_tiny             sharpness st_tinyg tile=2 thr=1 gpu=1 => eqnan:1e-6
+gpu_box_hdg_f1             boxDown hdg f=1 gpu=1 => exact
+gpu_box_hdg_f2             boxDown hdg f=2 gpu=1 => exact
+gpu_box_hdg_f3             boxDown hdg f=3 gpu=1 => exact
+gpu_box_hdg_f7             boxDown hdg f=7 gpu=1 => exact
+gpu_box_smg_f5             boxDown smg f=5 gpu=1 => exact
+gpu_box_tiny_f3            boxDown st_tinyg f=3 gpu=1 => exact
+gpu_sobel_dx_hdg      Sobel hdg dx=1 dy=0 ksize=3 gpu=1 => exact
+gpu_sobel_f32_dxx     Sobel f32 dx=2 dy=0 ksize=3 gpu=1 => max:0.05
+gpu_cvt_gray_hd       cvtColor hd code=bgr2gray gpu=1 => exact
+gpu_cvt_rgb2gray_odd  cvtColor odd code=rgb2gray gpu=1 => exact
+gpu_cvt_gray_f32      cvtColor f32 code=bgr2gray gpu=1 => max:0.01
+gpu_sobel_dy_hdg      Sobel hdg dx=0 dy=1 ksize=3 gpu=1 => exact

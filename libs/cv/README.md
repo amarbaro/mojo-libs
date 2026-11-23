@@ -9,7 +9,8 @@ OpenCV-style computer vision written from scratch in Mojo, on the CPU: filters, 
 ORB, optical flow, camera calibration and pose, stereo, plus 3D helpers (octree diffs, phase correlation, NURBS fits,
 GLB and STEP export). Every op is run row by row against an oracle on the same input, cv2 5.0 for the 2D ops and numpy,
 brute force or a closed form for the 3D ones: 408 and 161 rows, all passing in `scripts/ci.sh`. It is a library and a command-line
-tool, not a cv2 replacement: there is no Python binding and no GPU code.
+tool, not a cv2 replacement: there is no Python binding, and the only GPU code is a twin of five per-image ops
+(grey, area shrink, sharpness, Sobel, crop) that gives the CPU's output byte for byte ([docs/gpu.md](docs/gpu.md)).
 
 The repo ships two Mojo packages: `mojocv` (`src/mojocv`, this page) and `supervision` (`src/supervision`), Roboflow
 supervision ported to Mojo and checked against Python supervision on 3308 rows; see [supervision](#supervision) below.
