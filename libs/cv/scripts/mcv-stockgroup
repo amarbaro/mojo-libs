@@ -80,7 +80,9 @@ jq -c --rawfile g "$work/grp.tsv" --rawfile tt "$work/times.tsv" '
   | (.file | split("/") | last) as $n | $G[$n] as $g
   | {file: $n, t: $T[$n], sharp: .lapvar, box: .box, group: (if $g.group < 0 then null else $g.group end),
      view: (if $g.group < 0 then null else $g.view end), view_rank: (if $g.group < 0 then null else $g.rank end),
-     dup_of: (if $g.dup == "-" then null else $g.dup end), empty: .empty, boxShare: .boxShare, clip: {lo: .lo, hi: .hi},
+     dup_of: (if $g.dup == "-" then null else $g.dup end), empty: .empty, hand: .hand, px_per_cm: .tapePxCm, tape_conf: .tapeConf,
+     box_cm: (if .box == null or .tapePxCm == null then null else [((.box[2] - .box[0]) / .tapePxCm * 100 | round / 100), ((.box[3] - .box[1]) / .tapePxCm * 100 | round / 100)] end),
+     boxShare: .boxShare, clip: {lo: .lo, hi: .hi},
      gap: (if $g.gap < 0 then null else $g.gap end), cos: (if $g.cos < -0.5 then null else $g.cos end),
      p_same: (if $g.p < 0 then null else $g.p end), w: .w, h: .h, tenengrad: .tenengrad, dhash: .dhash}' "$work/photo.jsonl" > "$work/cv.jsonl"
 jq -s '[.[] | select(.group != null)] | group_by(.group) | map(sort_by(.t) | {group: .[0].group, n: length, t0: .[0].t, t1: .[-1].t,

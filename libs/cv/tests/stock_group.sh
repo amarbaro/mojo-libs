@@ -15,7 +15,10 @@ hand=(-fill 'rgb(224,172,150)' -draw 'rectangle 380,330 639,479')
 magick "${cloth[@]}" "${yellow[@]}" "${disc[@]}" -depth 8 "ppm:$w/disc.ppm"
 magick "${cloth[@]}" "${yellow[@]}" "${disc[@]}" "${hand[@]}" -depth 8 "ppm:$w/hand.ppm"
 magick "${cloth[@]}" "${yellow[@]}" -depth 8 "ppm:$w/empty.ppm"
-for n in disc hand empty; do printf '%s\t%s\n' "$w/$n.ppm" "$n"; done > "$w/batch.tsv"
+# a tape measure: 1 mm ticks every 6 px, 1 cm ticks every 60 px, so 60 px per cm
+ticks=(); for ((x = 3; x < 640; x += 6)); do if ((x % 60 == 3)); then ticks+=(-draw "line $x,58 $x,84"); else ticks+=(-draw "line $x,74 $x,84"); fi; done
+magick "${cloth[@]}" "${yellow[@]}" -fill black -stroke black "${ticks[@]}" "${disc[@]}" -depth 8 "ppm:$w/tape.ppm"
+for n in disc hand empty tape; do printf '%s\t%s\n' "$w/$n.ppm" "$n"; done > "$w/batch.tsv"
 "$bin" stockPhoto "$w/photo.jsonl" "$w/batch.tsv"
 fail=0
 chk() { if eval "$2"; then echo "PASS $1"; else echo "FAIL $1: $2"; fail=1; fi; }
@@ -30,6 +33,9 @@ done
 chk "empty cloth: no box" "[ \"\$(row empty | jq -r '.box')\" = null ]"
 chk "empty cloth: empty = true" "[ \"\$(row empty | jq -r '.empty')\" = true ]"
 chk "disc: empty = false" "[ \"\$(row disc | jq -r '.empty')\" = false ]"
+pxcm=$(row tape | jq -r '.tapePxCm')
+chk "tape: $pxcm px per cm within 3 % of 60" "awk 'BEGIN { exit !($pxcm > 58.2 && $pxcm < 61.8) }'"
+chk "no tick pattern: no scale or low confidence" "[ \"\$(row disc | jq -r '.tapeConf < 0.1')\" = true ]"
 chk "sharpness positive" "[ \"\$(row disc | jq '.lapvar > 0')\" = true ]"
 # grouping: embeddings from fixed seeds
 .venv/bin/python -I - "$w" <<'EOF'

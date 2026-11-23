@@ -9,7 +9,7 @@ VAAPI JPEG), `mojo-cv stockPhoto` (CPU, parallel), EXIF time (exiftool), SigLIP 
 ## Row
 
 ```
-{file, t, sharp, box, group, view, view_rank, dup_of, empty, boxShare, clip:{lo,hi}, gap, cos, p_same, w, h, tenengrad, dhash}
+{file, t, sharp, box, group, view, view_rank, dup_of, empty, hand, px_per_cm, tape_conf, box_cm, boxShare, clip:{lo,hi}, gap, cos, p_same, w, h, tenengrad, dhash}
 ```
 
 | field | meaning |
@@ -30,16 +30,29 @@ VAAPI JPEG), `mojo-cv stockPhoto` (CPU, parallel), EXIF time (exiftool), SigLIP 
 ## The subject box misses the 0.7 bar on hands
 
 Nine photos with hands, boxes labelled by eye off a grid (`tests/stock_hand_boxes.tsv`, about 5 % of the frame of slack): mean IoU
-0.55, 3 of 9 at IoU >= 0.7. The brief asked for 0.7 on each: NOT met. The first version (union of every large region, tape rule
+0.56, 4 of 9 at IoU >= 0.7. The brief asked for 0.7 on each: NOT met. The first version (union of every large region, tape rule
 "half the frame wide") scored mean 0.38, 2 of 9. What still fails: a watch lying between fingers that is itself skin-coloured (the
-box shrinks to the strap), and a hand blob under 1.5 % beside the watch. `tests/stock_group.sh` records 0.50 as the floor.
+box shrinks to the strap), a thumb in shadow that the skin range misses, and a hanging watch whose dial and strap are two regions
+more than 10 % of the long edge apart. Looser skin growth was tried and swallows the cloth (mean 0.16 and lower). `hand` in every
+row is the share of the picture covered by the hand mask: a box with `hand` > 0.02 (31 of 194 photos) is the one to distrust or to
+replace by the whole frame. `tests/stock_group.sh` records 0.50 as the floor.
+
+## Tape scale: `px_per_cm`, `box_cm`
+
+The tape measure gives the scale. The profile of the grey gradient along the tape is high-passed and autocorrelated at a long edge
+of 1024 px; the 1 mm tick period is the strongest lag in 4..20 px and ten times it is refined to the 1 cm peak (numerals, long
+ticks) within 7 %, parabola-interpolated, then multiplied back to the photo's own size. `tape_conf` is that peak over lag 0.
+`box_cm` = box size over `px_per_cm`. A planted tape (ticks every 6 and 60 px) reads 59.9997 px per cm. On the 194 photos 174 have
+a tape; the 1 mm period is 4 px and the cm peaks sit at multiples of 38 to 40 px for the landscape series (45 photos at 38, 30 at
+42, 27 at 41), and at 93, 120, 148 px for the closer photos. A photo without a tape, or with its tape cut by a hand, gets `null`.
+The scale moves by about 5 % as the camera moves; no ruler of known length was available to check the absolute value.
 
 `stockPhoto` (`src/mojocv/stockphoto.mojo`), on the picture shrunk to a long edge near 256: the tape (hue 20-36, S >= 140,
-V >= 130, a yellow region at least 15 % of the long edge and 4 times longer than wide) and hands (YCrCb skin range Y >= 70,
+V >= 130, a yellow region at least 15 % of the long edge and 3 times longer than wide) and hands (YCrCb skin range Y >= 70,
 Cr 133-173, Cb 77-127, opened by 19 px, kept when the blob touches the frame edge and covers >= 1.5 % of the picture, or covers
 >= 8 %) are masked out and dilated by 6 px. The cloth is the median grey of the rest and the subject is what departs from it by
 more than max(25, 4 robust sigma). The box is the foreground region with the most area near the middle of the frame, plus every
-region of at least 8 % of its area within 6 % of the long edge of the box so far.
+region of at least 4 % of its area within 10 % of the long edge of the box so far.
 
 ## Items, views and near-duplicates
 
