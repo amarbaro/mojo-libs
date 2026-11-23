@@ -4,17 +4,23 @@
 # runs the CPU rows again with gpu=1. `mojo-cv OP OUT IN... gpu=1` takes the GPU for the ops below; a parameter the kernel does
 # not cover, or no accelerator, leaves the CPU path in charge (it is the default and the fallback). Timings include the
 # upload and the download: that is the op as a caller meets it (docs/gpu.md).
+# fs-gpu2 (R3a, R3b): absdiff (uint8 and float32) and bilinear resize (uint8 ch 1, 3, 4: cv2's 11-bit fixed point, byte for byte;
+# float32 ch 1, 3, 4: the CPU's tap order, measured tolerance). A GPU run prints `GPU-ARM OP ...` so a receipt shows the arm ran.
+# The stream ops (stream.mojo) are dispatched from run() below: main.mojo has one owner, this file another.
 from std.math import ceildiv
 from max.gpu import global_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args, peek_code
-from mojocv.imgproc import cvt_code
+from mojocv.imgproc import cvt_code, Taps, _fx_taps
+from mojocv.stream import run as run_stream
 
 comptime U8 = DType.uint8
 comptime U = MutPointer[UInt8, MutUntrackedOrigin]
 comptime S = MutPointer[Int16, MutUntrackedOrigin]
 comptime L = MutPointer[Int64, MutUntrackedOrigin]
+comptime F = MutPointer[Float32, MutUntrackedOrigin]
+comptime I = MutPointer[Int32, MutUntrackedOrigin]
 comptime P = SIMD[DType.int32, 8]
 comptime THREADS = 256
 
@@ -128,6 +134,73 @@ def crop_k(src: U, dst: U, p: P):
     dst[unsafe_offset=Int(e)] = src[unsafe_offset=Int(((p[4] + y) * p[1] + p[3] + x) * ch + k)]
 
 
+def absdiff_u8_k(a: U, b: U, dst: U, n: Int32):
+    """|a - b| per byte (the CPU's max - min)."""
+    var e = Int32(global_idx.x)
+    if e < n:
+        var x = Int32(a[unsafe_offset=Int(e)])
+        var y = Int32(b[unsafe_offset=Int(e)])
+        dst[unsafe_offset=Int(e)] = UInt8(x - y if x > y else y - x)
+
+
+def absdiff_f32_k(a: F, b: F, dst: F, n: Int32):
+    """max - min per float32, the CPU's formula."""
+    var e = Int32(global_idx.x)
+    if e < n:
+        var x = a[unsafe_offset=Int(e)]
+        var y = b[unsafe_offset=Int(e)]
+        dst[unsafe_offset=Int(e)] = max(x, y) - min(x, y)
+
+
+def resize_u8_k(src: U, dst: U, tx: I, ty: I, p: P):
+    """cv2's uint8 INTER_LINEAR, 11-bit weights: horizontal two-tap sum (exact in int32), then ((b0 * (h0 >> 4)) >> 16 +
+    (b1 * (h1 >> 4)) >> 16 + 2) >> 2, the CPU's _resize_lin_u8 per output sample. tx, ty: i0, i1, w0, w1 per output column or row.
+    p: rows cols ch dh dw."""
+    var e = Int32(global_idx.x)
+    var ch = p[2]
+    var dw = p[4]
+    if e >= p[3] * dw * ch:
+        return
+    var k = e % ch
+    var x = (e // ch) % dw
+    var y = e // (ch * dw)
+    var r0 = Int(tx[unsafe_offset=Int(x) * 4])
+    var r1 = Int(tx[unsafe_offset=Int(x) * 4 + 1])
+    var a0 = tx[unsafe_offset=Int(x) * 4 + 2]
+    var a1 = tx[unsafe_offset=Int(x) * 4 + 3]
+    var ya = Int(ty[unsafe_offset=Int(y) * 4])
+    var yb = Int(ty[unsafe_offset=Int(y) * 4 + 1])
+    var b0 = ty[unsafe_offset=Int(y) * 4 + 2]
+    var b1 = ty[unsafe_offset=Int(y) * 4 + 3]
+    var sn = Int(p[1] * ch)
+    var c = Int(k)
+    var h0 = a0 * Int32(src[unsafe_offset=ya * sn + r0 * Int(ch) + c]) + a1 * Int32(src[unsafe_offset=ya * sn + r1 * Int(ch) + c])
+    var h1 = a0 * Int32(src[unsafe_offset=yb * sn + r0 * Int(ch) + c]) + a1 * Int32(src[unsafe_offset=yb * sn + r1 * Int(ch) + c])
+    var v = (((b0 * (h0 >> 4)) >> 16) + ((b1 * (h1 >> 4)) >> 16) + 2) >> 2
+    dst[unsafe_offset=Int(e)] = UInt8(min(max(v, 0), 255))
+
+
+def resize_f32_k(src: F, dst: F, txi: I, txw: F, tyi: I, tyw: F, p: P):
+    """The CPU's float path for linear taps: rows first (two taps, in order), then columns. p: rows cols ch dh dw."""
+    var e = Int32(global_idx.x)
+    var ch = p[2]
+    var dw = p[4]
+    if e >= p[3] * dw * ch:
+        return
+    var k = Int(e % ch)
+    var x = Int((e // ch) % dw)
+    var y = Int(e // (ch * dw))
+    var sn = Int(p[1] * ch)
+    var res = Float32(0)
+    for qx in range(2):
+        var cx = Int(txi[unsafe_offset=x * 2 + qx])
+        var v = Float32(0)
+        for qy in range(2):
+            v += src[unsafe_offset=Int(tyi[unsafe_offset=y * 2 + qy]) * sn + cx * Int(ch) + k] * tyw[unsafe_offset=y * 2 + qy]
+        res += v * txw[unsafe_offset=x * 2 + qx]
+    dst[unsafe_offset=Int(e)] = res
+
+
 def _u(b: DeviceBuffer[DType.uint8]) -> U:
     return U(unsafe_from_address=Int(b.unsafe_ptr()))
 
@@ -231,6 +304,93 @@ struct Gpu:
         self._down(o, b)
         return o^
 
+    def absdiff_u8(self, a: Mat[U8], b: Mat[U8]) raises -> Mat[U8]:
+        var n = a.size()
+        var da = self._up(a)
+        var db = self._up(b)
+        var o = self.ctx.enqueue_create_buffer[DType.uint8](n)
+        self.ctx.enqueue_function[absdiff_u8_k](_u(da), _u(db), _u(o), Int32(n), grid_dim=ceildiv(n, THREADS), block_dim=THREADS)
+        var r = Mat[U8](a.rows, a.cols, a.ch, False)
+        self._down(r, o)
+        return r^
+
+    def absdiff_f32(self, a: Mat[DType.float32], b: Mat[DType.float32]) raises -> Mat[DType.float32]:
+        var n = a.size()
+        var da = self.ctx.enqueue_create_buffer[DType.float32](n)
+        var db = self.ctx.enqueue_create_buffer[DType.float32](n)
+        var o = self.ctx.enqueue_create_buffer[DType.float32](n)
+        self.ctx.enqueue_copy(dst_buf=da, src_ptr=a.data.unsafe_ptr())
+        self.ctx.enqueue_copy(dst_buf=db, src_ptr=b.data.unsafe_ptr())
+        self.ctx.enqueue_function[absdiff_f32_k](F(unsafe_from_address=Int(da.unsafe_ptr())), F(unsafe_from_address=Int(db.unsafe_ptr())), F(unsafe_from_address=Int(o.unsafe_ptr())), Int32(n), grid_dim=ceildiv(n, THREADS), block_dim=THREADS)
+        var r = Mat[DType.float32](a.rows, a.cols, a.ch, False)
+        self.ctx.enqueue_copy(dst_ptr=r.data.unsafe_ptr(), src_buf=o)
+        self.ctx.synchronize()
+        return r^
+
+    def resize_u8(self, src: Mat[U8], dw: Int, dh: Int) raises -> Mat[U8]:
+        """cv2 INTER_LINEAR for uint8 ch 1, 3, 4: the CPU's own tap tables (_fx_taps), weights as int32."""
+        var xi = List[Int]()
+        var xw = List[Float32]()
+        var yi = List[Int]()
+        var yw = List[Float32]()
+        _fx_taps(src.cols, dw, True, xi, xw)
+        _fx_taps(src.rows, dh, False, yi, yw)
+        var hx = List[Int32](length=dw * 4, fill=0)
+        var hy = List[Int32](length=dh * 4, fill=0)
+        for d in range(dw):
+            hx[4 * d] = Int32(xi[2 * d])
+            hx[4 * d + 1] = Int32(xi[2 * d + 1])
+            hx[4 * d + 2] = Int32(xw[2 * d])
+            hx[4 * d + 3] = Int32(xw[2 * d + 1])
+        for d in range(dh):
+            hy[4 * d] = Int32(yi[2 * d])
+            hy[4 * d + 1] = Int32(yi[2 * d + 1])
+            hy[4 * d + 2] = Int32(yw[2 * d])
+            hy[4 * d + 3] = Int32(yw[2 * d + 1])
+        var n = dw * dh * src.ch
+        var a = self._up(src)
+        var tx = self.ctx.enqueue_create_buffer[DType.int32](dw * 4)
+        var ty = self.ctx.enqueue_create_buffer[DType.int32](dh * 4)
+        self.ctx.enqueue_copy(dst_buf=tx, src_ptr=hx.unsafe_ptr())
+        self.ctx.enqueue_copy(dst_buf=ty, src_ptr=hy.unsafe_ptr())
+        var b = self.ctx.enqueue_create_buffer[DType.uint8](n)
+        var p = P(Int32(src.rows), Int32(src.cols), Int32(src.ch), Int32(dh), Int32(dw), 0, 0, 0)
+        self.ctx.enqueue_function[resize_u8_k](_u(a), _u(b), I(unsafe_from_address=Int(tx.unsafe_ptr())), I(unsafe_from_address=Int(ty.unsafe_ptr())), p, grid_dim=ceildiv(n, THREADS), block_dim=THREADS)
+        var o = Mat[U8](dh, dw, src.ch, False)
+        self._down(o, b)
+        _ = (len(hx), len(hy))
+        return o^
+
+    def resize_f32(self, src: Mat[DType.float32], dw: Int, dh: Int) raises -> Mat[DType.float32]:
+        """The CPU's float path for INTER_LINEAR (Taps kind 1): rows then columns, float32."""
+        var tx = Taps(src.cols, dw, Float64(src.cols) / Float64(dw), 1)
+        var ty = Taps(src.rows, dh, Float64(src.rows) / Float64(dh), 1)
+        var hxi = List[Int32](length=dw * 2, fill=0)
+        var hyi = List[Int32](length=dh * 2, fill=0)
+        for i in range(dw * 2):
+            hxi[i] = Int32(tx.idx[i])
+        for i in range(dh * 2):
+            hyi[i] = Int32(ty.idx[i])
+        var n = dw * dh * src.ch
+        var a = self.ctx.enqueue_create_buffer[DType.float32](src.size())
+        self.ctx.enqueue_copy(dst_buf=a, src_ptr=src.data.unsafe_ptr())
+        var bxi = self.ctx.enqueue_create_buffer[DType.int32](dw * 2)
+        var byi = self.ctx.enqueue_create_buffer[DType.int32](dh * 2)
+        var bxw = self.ctx.enqueue_create_buffer[DType.float32](dw * 2)
+        var byw = self.ctx.enqueue_create_buffer[DType.float32](dh * 2)
+        self.ctx.enqueue_copy(dst_buf=bxi, src_ptr=hxi.unsafe_ptr())
+        self.ctx.enqueue_copy(dst_buf=byi, src_ptr=hyi.unsafe_ptr())
+        self.ctx.enqueue_copy(dst_buf=bxw, src_ptr=tx.w.unsafe_ptr())
+        self.ctx.enqueue_copy(dst_buf=byw, src_ptr=ty.w.unsafe_ptr())
+        var b = self.ctx.enqueue_create_buffer[DType.float32](n)
+        var p = P(Int32(src.rows), Int32(src.cols), Int32(src.ch), Int32(dh), Int32(dw), 0, 0, 0)
+        self.ctx.enqueue_function[resize_f32_k](F(unsafe_from_address=Int(a.unsafe_ptr())), F(unsafe_from_address=Int(b.unsafe_ptr())), I(unsafe_from_address=Int(bxi.unsafe_ptr())), F(unsafe_from_address=Int(bxw.unsafe_ptr())), I(unsafe_from_address=Int(byi.unsafe_ptr())), F(unsafe_from_address=Int(byw.unsafe_ptr())), p, grid_dim=ceildiv(n, THREADS), block_dim=THREADS)
+        var o = Mat[DType.float32](dh, dw, src.ch, False)
+        self.ctx.enqueue_copy(dst_ptr=o.data.unsafe_ptr(), src_buf=b)
+        self.ctx.synchronize()
+        _ = (len(hxi), len(hyi), len(tx.w), len(ty.w))
+        return o^
+
 
 def crop_cpu(src: Mat[U8], x0: Int, y0: Int, w: Int, h: Int) -> Mat[U8]:
     var o = Mat[U8](h, w, src.ch, False)
@@ -240,10 +400,84 @@ def crop_cpu(src: Mat[U8], x0: Int, y0: Int, w: Int, h: Int) -> Mat[U8]:
     return o^
 
 
+def _run_fs2(mut a: Args) raises -> Bool:
+    """gpu=1 on absdiff (uint8, float32; two inputs of one shape) and resize (interp 1: uint8 ch 1, 3, 4 with both sides >= 2,
+    float32 ch 1, 3, 4). False: the CPU op runs (any other dtype, interp, channel count, shape, or no accelerator)."""
+    var code = peek_code(a.ins[0])
+    if code != 0 and code != 1:
+        return False
+    if a.op == "absdiff":
+        if len(a.ins) != 2 or peek_code(a.ins[1]) != code:
+            return False
+        try:
+            if code == 0:
+                var x = load[U8](a.ins[0])
+                var y = load[U8](a.ins[1])
+                if not x.same_shape(y) or x.size() == 0:
+                    return False
+                var g = Gpu()
+                var o = Mat[U8](0, 0)
+                while a.again():
+                    o = g.absdiff_u8(x, y)
+                print("GPU-ARM absdiff uint8")
+                save(o, a.out)
+            else:
+                var x = load[DType.float32](a.ins[0])
+                var y = load[DType.float32](a.ins[1])
+                if not x.same_shape(y) or x.size() == 0:
+                    return False
+                var g = Gpu()
+                var o = Mat[DType.float32](0, 0)
+                while a.again():
+                    o = g.absdiff_f32(x, y)
+                print("GPU-ARM absdiff float32")
+                save(o, a.out)
+            return True
+        except e:
+            print("gpu: no device (" + String(e) + "), CPU path")
+            return False
+    # resize
+    if a.i("interp", 1) != 1:
+        return False
+    try:
+        if code == 0:
+            var m = load[U8](a.ins[0])
+            var dw = a.i("w", m.cols)
+            var dh = a.i("h", m.rows)
+            if not (m.ch == 1 or m.ch == 3 or m.ch == 4) or m.cols < 2 or m.rows < 2 or dw < 1 or dh < 1:
+                return False
+            var g = Gpu()
+            var o = Mat[U8](0, 0)
+            while a.again():
+                o = g.resize_u8(m, dw, dh)
+            print("GPU-ARM resize uint8")
+            save(o, a.out)
+        else:
+            var m = load[DType.float32](a.ins[0])
+            var dw = a.i("w", m.cols)
+            var dh = a.i("h", m.rows)
+            if not (m.ch == 1 or m.ch == 3 or m.ch == 4) or m.cols < 1 or m.rows < 1 or dw < 1 or dh < 1:
+                return False
+            var g = Gpu()
+            var o = Mat[DType.float32](0, 0)
+            while a.again():
+                o = g.resize_f32(m, dw, dh)
+            print("GPU-ARM resize float32")
+            save(o, a.out)
+        return True
+    except e:
+        print("gpu: no device (" + String(e) + "), CPU path")
+        return False
+
+
 def run(mut a: Args) raises -> Bool:
     """gpu=1 on cvtColor (bgr2gray, rgb2gray), Sobel (ksize 3, scale 1, dx or dy), boxDown, sharpness; crop on both. Returns False
     (the CPU op runs) for anything else, for no gpu=1 and for no accelerator."""
+    if run_stream(a):
+        return True
     var want = a.i("gpu", 0) == 1
+    if want and (a.op == "absdiff" or a.op == "resize"):
+        return _run_fs2(a)
     if a.op == "crop":
         var m = load[U8](a.ins[0])
         var x0 = a.i("x", 0)
@@ -258,6 +492,7 @@ def run(mut a: Args) raises -> Bool:
                 var g = Gpu()
                 while a.again():
                     o = g.crop(m, x0, y0, w, h)
+                print("GPU-ARM crop")
                 save(o, a.out)
                 return True
             except e:
@@ -307,6 +542,7 @@ def run(mut a: Args) raises -> Bool:
                 else:
                     o = g.box_down(m, a.i("f", 2))
             save(o, a.out)
+        print("GPU-ARM " + a.op)
         return True
     except e:
         print("gpu: no device (" + String(e) + "), CPU path")
