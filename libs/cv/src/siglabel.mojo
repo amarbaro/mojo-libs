@@ -6,9 +6,9 @@ from std.math import exp, sqrt
 from std.os import getenv, stat
 from std.os.path import exists
 from std.sys import argv
-from faces.gpu.net import GpuNet
-from faces.nn import Arr, run
-from faces.onnx import Model
+from gpunet.gpu.net import GpuNet
+from gpunet.nn import Arr, run
+from gpunet.onnx import Model
 from max.gpu.host import DeviceContext
 from tokenizers import Tokenizer
 

@@ -10,14 +10,14 @@ from std.os import stat
 from std.os.path import exists
 from std.time import perf_counter_ns
 from std.memory import bitcast
-from faces.onnx import Model
+from gpunet.onnx import Model
 from faces.image import load_rgb
 from faces.detect import detect, decode, Face
-from faces.nn import Arr
+from gpunet.nn import Arr
 from mojocv.imgproc import resize
 from mojocv.mat import Mat, load
 from mojocv.stockcheck import _load_ppm
-from faces.gpu.net import GpuNet
+from gpunet.gpu.net import GpuNet
 from faces.gpu.detect import detect_gpu
 from max.gpu.host import DeviceContext
 
