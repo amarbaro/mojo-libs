@@ -15,6 +15,7 @@ from mojocv.core import Args, peek_code
 from mojocv.imgproc import cvt_code, Taps, _fx_taps
 from mojocv.stream import run as run_stream
 from mojocv.hyper import evm_blur
+from mojocv.screen import run as run_screen
 
 comptime U8 = DType.uint8
 comptime U = MutPointer[UInt8, MutUntrackedOrigin]
@@ -550,7 +551,7 @@ def _run_evm(mut a: Args) raises -> Bool:
 def run(mut a: Args) raises -> Bool:
     """gpu=1 on cvtColor (bgr2gray, rgb2gray), Sobel (ksize 3, scale 1, dx or dy), boxDown, sharpness; crop on both. Returns False
     (the CPU op runs) for anything else, for no gpu=1 and for no accelerator."""
-    if run_stream(a):
+    if run_stream(a) or run_screen(a):
         return True
     var want = a.i("gpu", 0) == 1
     if want and (a.op == "absdiff" or a.op == "resize"):

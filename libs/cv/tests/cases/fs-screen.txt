@@ -1,0 +1,32 @@
+# fs-screen (R13a stuck state, R13b and R20a one screen parser): src/mojocv/screen.mojo against the labelled truth of the fs-h2 p2 set
+# (tests/fixtures/fs-h2/p2/p2.json, decoded into fs3_*.mcv by `fs_suite.py prep3`). Judged by tests/cases_gpu/fs_suite.py (run_gpu.sh fs3).
+# Three scores per picture, each its own row: box (IoU against the labelled box, 0.95 = one pixel on the smallest widget), role and
+# clickable flag, text (NFC, exact; the clipped body line is compared on its visible prefix minus the straddling glyph, see
+# fs_suite.modal_truth). `extra:0` = no element that no label explains.
+# modal_A: a dialog (title, body line, two buttons, umlauts)
+sc_modal_box     screenParse fs3_modal_A => elems:box:0.95
+sc_modal_role    screenParse fs3_modal_A => elems:role
+sc_modal_click   screenParse fs3_modal_A => elems:click
+sc_modal_text    screenParse fs3_modal_A => elems:text
+sc_modal_extra   screenParse fs3_modal_A => elems:extra:0
+# the same dialog over another background (the pair's B frame)
+sc_modalB_box    screenParse fs3_modal_B => elems:box:0.95
+sc_modalB_text   screenParse fs3_modal_B => elems:text
+sc_modalB_extra  screenParse fs3_modal_B => elems:extra:0
+# planted: the OK button covered; the parse must report the three left and no fourth
+sc_occ_box       screenParse fs3_modal_occ => elems:box:0.95
+sc_occ_text      screenParse fs3_modal_occ => elems:text
+sc_occ_extra     screenParse fs3_modal_occ => elems:extra:0
+# controls: a blank screen gives an empty list; a different app (a search field, no dialog) yields neither dialog nor button
+sc_blank_empty   screenParse fs3_blank => elems:empty
+sc_wrongapp      screenParse fs3_cursor_A => elems:none:12
+# stuck: a modal over a changing background is stuck, a playing video is progress, a blinking cursor is not progress
+st_modal_flags   screenStuck fs3_modal_A fs3_modal_B => stuck:flags
+st_modal_bbox    screenStuck fs3_modal_A fs3_modal_B => stuck:bbox
+st_modal_dialog  screenStuck fs3_modal_A fs3_modal_B => stuck:dialog:0.95
+st_video_flags   screenStuck fs3_video_A fs3_video_B => stuck:flags
+st_video_bbox    screenStuck fs3_video_A fs3_video_B => stuck:bbox
+st_video_nodlg   screenStuck fs3_video_A fs3_video_B => stuck:dialog:0.95
+st_cursor_flags  screenStuck fs3_cursor_A fs3_cursor_B => stuck:flags
+st_cursor_bbox   screenStuck fs3_cursor_A fs3_cursor_B => stuck:bbox
+st_cursor_nodlg  screenStuck fs3_cursor_A fs3_cursor_B => stuck:dialog:0.95

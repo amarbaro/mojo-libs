@@ -1,0 +1,8 @@
+# fs-dense (R7 b: dense SigLIP patch-token features for the matte): NO ROWS, on purpose. Plan 5.1 and 8: the falsifier comes first, the planted disc and
+# the nine labelled hand photos, before any upsampler, and dense features wait for R6 (the SigLIP towers in libs/gpunet). As of the P2 run of lane S2:
+#   - the nine labelled hand photos do not exist (.work/fs/labels/hands/, receipt H2-p2-hands BLOCK); nothing was made up;
+#   - R6 has not landed in the tree this lane branched from (no libs/gpunet/tests/check_zoo.sh);
+#   - the planted disc and its mask-labelled references exist (fs-h2 p2/mattes: disc, disc_hole, disc_empty), the numpy side needs no code of ours.
+# `tests/cases_gpu/fs_suite.py r7` reports exactly this and exits 3 (BLOCK). src/mojocv/dense.mojo is not created until rows can be written here.
+# Rows to add when both exist: matte against the mask labels (IoU and boundary distance on the disc, the hole and the hands), planted missing edge and hole,
+# empty cloth gives no mask, and the numpy oracle for the upsampler.
