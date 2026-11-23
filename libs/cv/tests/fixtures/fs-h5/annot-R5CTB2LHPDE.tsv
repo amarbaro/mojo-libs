@@ -1,0 +1,20 @@
+idx	class	text	desc	clickable	x1	y1	x2	y2
+0	FrameLayout			false	0	0	1080	2640
+1	View			false	0	0	1080	2640
+2	LinearLayout			false	0	0	1080	2640
+3	FrameLayout			false	0	0	1080	2640
+4	ViewGroup			false	0	0	1080	2640
+5	FrameLayout			false	0	0	1080	2640
+6	FrameLayout			false	0	0	1080	2640
+7	FrameLayout			false	0	0	1080	2640
+8	ViewGroup			false	0	0	1080	2186
+9	LinearLayout		Page 1 of 2.	false	41	0	1039	2162
+10	FrameLayout			false	41	0	1039	240
+11	ViewGroup			true	41	240	1039	2009
+12	FrameLayout			false	0	2084	1080	2186
+13	LinearLayout			false	490	2110	590	2160
+14	FrameLayout		Page 1 of 2., Default page	true	490	2110	540	2160
+15	ImageView			false	490	2110	540	2160
+16	FrameLayout		Page 2 of 2.	true	540	2110	590	2160
+17	ImageView			false	540	2110	590	2160
+18	RelativeLayout			false	0	2186	1080	2640
