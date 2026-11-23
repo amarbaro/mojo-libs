@@ -2,6 +2,7 @@
 # fixed at compile time. Ops are generic over dt; the file format below carries dt so both sides agree.
 from std.sys.info import size_of
 from std.memory import unsafe_memcpy
+from std.os import SEEK_END
 
 comptime MAGIC = "MCV1"
 
@@ -69,7 +70,10 @@ def _u32(b: List[UInt8], at: Int) -> Int:
 
 def load[dt: DType](path: String) raises -> Mat[dt]:
     """Read an .mcv file: "MCV1", u32 rows, u32 cols, u16 ch, u16 dtype code, then the raw little-endian data."""
-    var b = open(path, "r").read_bytes()
+    var f = open(path, "r")
+    var size = Int(f.seek(0, SEEK_END))  # the exact size: read_bytes() of an unknown size grows its list by reallocation (6.4 GB live at peak for 8 loads of 150 MB)
+    _ = f.seek(0)
+    var b = f.read_bytes(size)
     if len(b) < 16 or String(StringSlice(unsafe_from_utf8=Span(b)[:4])) != MAGIC:
         raise Error("mojocv: not an MCV1 file: " + path)
     var code = Int(b[14]) | Int(b[15]) << 8
@@ -89,7 +93,7 @@ def load[dt: DType](path: String) raises -> Mat[dt]:
         n *= f
     if len(b) != 16 + n:
         raise Error(String("mojocv: ", path, " has ", len(b) - 16, " data bytes, wanted ", n))
-    var m = Mat[dt](rows, cols, ch)
+    var m = Mat[dt](rows, cols, ch, False)  # every element is overwritten below: no zero fill first
     var dst = m.ptr().unsafe_bitcast[UInt8]()
     unsafe_memcpy(dest=dst, src=b.unsafe_ptr() + 16, count=n)
     return m^
