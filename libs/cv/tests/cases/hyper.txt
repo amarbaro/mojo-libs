@@ -1,0 +1,36 @@
+# hyper: face and micro-expression ops from the 2023-2026 papers (src/mojocv/hyper.mojo; cards in mojo-cv-papers)
+# flowDecomp: residual flow (max), then the 2 x 3 affine parameters (max)
+fd_all           flowDecomp ff_flow => max:0.0001, max:0.000001
+fd_mask          flowDecomp ff_flow ff_mask => max:0.0001, max:0.000001
+fd_trim          flowDecomp ff_flow iters=4 thr=0.3 => max:0.0001, max:0.000001
+fd_trim_mask     flowDecomp ff_flow ff_mask iters=3 thr=0.2 => max:0.0001, max:0.000001
+fstrain          flowStrain ff_flow => max:0.00001, max:0.00001
+fstrain_gt       flowStrain ff_gt => max:0.00001, max:0.00001
+onset3           onsetFlow smg smg2 smg3 => max:0.03
+onset_win9       onsetFlow smg smg2 levels=2 winsize=9 iters=2 => frac:0.05:0.995
+epe_all          flowEpe ff_flow ff_gt => max:0.000001
+epe_mask         flowEpe ff_flow ff_gt ff_mask => max:0.000001
+epe_self         flowEpe ff_gt ff_gt => max:0.000001
+freg             flowReg ff_img ff_flow thr=40 => max:0.000001
+freg_tight       flowReg ff_img ff_gt thr=8 => max:0.000001
+downup_x4        downUp sm f=4 => max:2
+downup_x2g       downUp smg f=2 => max:2
+downup_x8_area   downUp hd f=8 down=4 up=2 => max:2
+homog4           getPerspectiveTransform hom_src hom_dst => max:0.000001
+homog4_inv       getPerspectiveTransform hom_dst hom_src => max:0.000001
+warp_face_inv    warpPerspective hd hom_inv w=256 h=256 inv=1 => max:1
+warp_face_fwd    warpPerspective hd hom_fwd w=256 h=256 => max:1
+warp_big_border  warpPerspective sm hom_inv w=300 h=300 inv=1 bval=17 => max:1
+eq2p_front       eq2persp eq_img fov=90 w=320 h=240 => max:1
+eq2p_yaw_pitch   eq2persp eq_img fov=70 yaw=137 pitch=-35 w=320 h=240 => max:1
+eq2p_seam        eq2persp eq_img fov=100 yaw=180 pitch=20 w=256 h=256 => max:1
+eq2p_pole        eq2persp eq_img fov=110 yaw=10 pitch=80 w=256 h=200 => max:1
+p2eq_front       persp2eq sm fov=90 w=512 h=256 => max:1
+p2eq_turned      persp2eq sm fov=75 yaw=-60 pitch=25 w=512 h=256 => max:1
+lpq7             lpq smg win=7 => exact, max:0.000000000001
+lpq3             lpq smg win=3 => exact, max:0.000000000001
+lpq9_hd          lpq hdg win=9 => exact, max:0.000000000001
+lpq_tiny         lpq st_tinyg win=5 => exact, max:0.000000000001
+evm_grat         evm evm_grat alpha=20 lo=0.05 hi=0.4 => max:0.001
+evm_edge         evm evm_edge alpha=10 lo=0.05 hi=0.3 => max:0.001
+evm_edge_blur    evm evm_edge alpha=10 lo=0.05 hi=0.3 sigma=1.5 => max:0.01

@@ -673,6 +673,155 @@ def clipRegion(i, kv):
     return np.array([_largest(g >= kv_i(kv, "hi", 252)) + _largest(g <= kv_i(kv, "lo", 3))])
 
 
+# ---- hyper (papers 2023-2026): cv2 where cv2 has the op, numpy definitions otherwise --------------------------
+def _fit_affine(flow, use):
+    h, w = flow.shape[:2]
+    yy, xx = np.mgrid[0:h, 0:w].astype(np.float64)
+    X = np.stack([(xx - (w - 1) / 2).ravel(), (yy - (h - 1) / 2).ravel(), np.ones(h * w)], 1)
+    f = flow.reshape(-1, 2).astype(np.float64)
+    u = use.ravel()
+    p = np.linalg.lstsq(X[u], f[u], rcond=None)[0]  # (3, 2): columns are the u and v parameters
+    return X, f, p
+
+
+@op()
+def flowDecomp(i, kv):
+    flow = i[0]
+    base = (i[1] != 0) if len(i) > 1 else np.ones(flow.shape[:2], bool)
+    use = base.copy()
+    for it in range(kv_i(kv, "iters", 1)):
+        X, f, p = _fit_affine(flow, use)
+        res = f - X @ p
+        use = base & (np.hypot(res[:, 0], res[:, 1]).reshape(flow.shape[:2]) <= kv_f(kv, "thr", 1.0))
+    h, w = flow.shape[:2]
+    par = np.array([[p[0, 0], p[1, 0], p[2, 0] - p[0, 0] * (w - 1) / 2 - p[1, 0] * (h - 1) / 2],
+                    [p[0, 1], p[1, 1], p[2, 1] - p[0, 1] * (w - 1) / 2 - p[1, 1] * (h - 1) / 2]])
+    return [res.reshape(flow.shape).astype(np.float32), par]
+
+
+@op()
+def flowStrain(i, kv):
+    u, v = i[0][..., 0].astype(np.float64), i[0][..., 1].astype(np.float64)
+    uy, ux = np.gradient(u)
+    vy, vx = np.gradient(v)
+    exy = 0.5 * (uy + vx)
+    return [np.sqrt(ux ** 2 + vy ** 2 + 2 * exy ** 2).astype(np.float32), np.hypot(u, v).astype(np.float32)]
+
+
+@op()
+def onsetFlow(i, kv):
+    out = [cv2.calcOpticalFlowFarneback(i[0], f, None, kv_f(kv, "pyrScale", 0.5), kv_i(kv, "levels", 3), kv_i(kv, "winsize", 15),
+                                        kv_i(kv, "iters", 3), kv_i(kv, "polyN", 5), kv_f(kv, "polySigma", 1.2), 0) for f in i[1:]]
+    return np.concatenate(out, 2)
+
+
+@op()
+def flowEpe(i, kv):
+    e = np.hypot(*(i[0].astype(np.float64) - i[1].astype(np.float64)).transpose(2, 0, 1))
+    if len(i) > 2:
+        e = e[i[2] != 0]
+    return np.array([[e.mean(), (e > 1).mean(), float(e.size)]])
+
+
+@op()
+def flowReg(i, kv):
+    img, fl = i[0], i[1].astype(np.float64)
+    g = np.hypot(cv2.Sobel(img, cv2.CV_32F, 1, 0, ksize=3).astype(np.float64), cv2.Sobel(img, cv2.CV_32F, 0, 1, ksize=3).astype(np.float64))
+    t = np.abs(fl[:, 1:] - fl[:, :-1])[:-1].sum(2) + np.abs(fl[1:] - fl[:-1])[:, :-1].sum(2)
+    m = g[:-1, :-1] < kv_f(kv, "thr", 40.0)
+    return np.array([[t[m].sum() / max(m.sum(), 1), m.sum() / ((img.shape[0] - 1) * (img.shape[1] - 1)), g.mean()]])
+
+
+@op()
+def downUp(i, kv):
+    h, w = i[0].shape[:2]
+    f = kv_i(kv, "f", 4)
+    sw, sh = max(1, (w + f // 2) // f), max(1, (h + f // 2) // f)
+    return cv2.resize(cv2.resize(i[0], (sw, sh), interpolation=INTERP[kv_i(kv, "down", 4)]), (w, h), interpolation=INTERP[kv_i(kv, "up", 2)])
+
+
+@op()
+def getPerspectiveTransform(i, kv):
+    return cv2.getPerspectiveTransform(i[0].astype(np.float32), i[1].astype(np.float32))
+
+
+@op()
+def warpPerspective(i, kv):
+    h, w = i[0].shape[:2]
+    fl = cv2.INTER_LINEAR | (cv2.WARP_INVERSE_MAP if kv_i(kv, "inv", 0) else 0)
+    return cv2.warpPerspective(i[0], i[1], (kv_i(kv, "w", w), kv_i(kv, "h", h)), flags=fl, borderMode=cv2.BORDER_CONSTANT, borderValue=(kv_f(kv, "bval", 0.0),) * 4)
+
+
+def _rot(kv):
+    ya, pa = np.radians(kv_f(kv, "yaw", 0.0)), np.radians(kv_f(kv, "pitch", 0.0))
+    return np.sin(ya), np.cos(ya), np.sin(pa), np.cos(pa)
+
+
+@op()
+def eq2persp(i, kv):
+    src, w, h = i[0], kv_i(kv, "w", 640), kv_i(kv, "h", 480)
+    sy, cy, sp, cp = _rot(kv)
+    f = 0.5 * w / np.tan(np.radians(kv_f(kv, "fov", 90.0)) / 2)
+    u, v = np.meshgrid(np.arange(w, dtype=np.float64), np.arange(h, dtype=np.float64))
+    x, y = (u - (w - 1) / 2) / f, (v - (h - 1) / 2) / f
+    y1, z1 = y * cp + sp, -y * sp + cp
+    x2, z2 = x * cy + z1 * sy, -x * sy + z1 * cy
+    lon, lat = np.arctan2(x2, z2), np.arcsin(y1 / np.sqrt(x2 ** 2 + y1 ** 2 + z2 ** 2))
+    H, W = src.shape[:2]
+    mx = ((lon / (2 * np.pi) + 0.5) * W - 0.5).astype(np.float32)
+    my = ((lat / np.pi + 0.5) * H - 0.5).astype(np.float32)
+    pad = np.concatenate([src[:, -1:], src, src[:, :1]], 1)  # wrap in longitude
+    return cv2.remap(pad, mx + 1, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+
+
+@op()
+def persp2eq(i, kv):
+    src, w, h = i[0], kv_i(kv, "w", 1024), kv_i(kv, "h", 512)
+    sy, cy, sp, cp = _rot(kv)
+    f = 0.5 * src.shape[1] / np.tan(np.radians(kv_f(kv, "fov", 90.0)) / 2)
+    ii, jj = np.meshgrid(np.arange(w, dtype=np.float64), np.arange(h, dtype=np.float64))
+    lon, lat = ((ii + 0.5) / w - 0.5) * 2 * np.pi, ((jj + 0.5) / h - 0.5) * np.pi
+    dx, dy, dz = np.cos(lat) * np.sin(lon), np.sin(lat), np.cos(lat) * np.cos(lon)
+    x1, z1 = dx * cy - dz * sy, dx * sy + dz * cy
+    y2, z2 = dy * cp - z1 * sp, dy * sp + z1 * cp
+    ok = z2 > 1e-9
+    zs = np.where(ok, z2, 1.0)
+    mx = np.where(ok, f * x1 / zs + (src.shape[1] - 1) / 2, -10.0).astype(np.float32)
+    my = np.where(ok, f * y2 / zs + (src.shape[0] - 1) / 2, -10.0).astype(np.float32)
+    return cv2.remap(src, mx, my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT, borderValue=(0,) * 4)
+
+
+@op()
+def lpq(i, kv):
+    g, win = i[0].astype(np.float64), kv_i(kv, "win", 7)
+    r, a = win // 2, 1.0 / win
+    d = np.arange(-r, r + 1, dtype=np.float64)
+    DY, DX = np.meshgrid(d, d, indexing="ij")
+    code = 0
+    win_view = np.lib.stride_tricks.sliding_window_view(g, (win, win))  # [y, x, dy, dx], dy, dx = 0..win-1
+    for k, (fx, fy) in enumerate([(a, 0), (0, a), (a, a), (a, -a)]):
+        ph = 2 * np.pi * (fx * DX + fy * DY)
+        code = code + ((np.einsum("yxab,ab->yx", win_view, np.cos(ph)) > 1e-9).astype(np.int64) << (2 * k))
+        code = code + ((np.einsum("yxab,ab->yx", win_view, np.sin(ph)) > 1e-9).astype(np.int64) << (2 * k + 1))
+    return [code.astype(np.uint8), (np.bincount(code.ravel(), minlength=256) / code.size).reshape(1, 256)]
+
+
+@op()
+def evm(i, kv):
+    x = i[0].astype(np.float64)
+    s = x.copy()
+    if kv_f(kv, "sigma", 0.0) > 0:
+        s = np.stack([cv2.GaussianBlur(np.ascontiguousarray(i[0][..., t]), (0, 0), kv_f(kv, "sigma", 0.0)).astype(np.float64) for t in range(x.shape[2])], 2)
+    lo, hi, al = kv_f(kv, "lo", 0.05), kv_f(kv, "hi", 0.4), kv_f(kv, "alpha", 20.0)
+    l1 = l2 = s[..., 0].copy()
+    out = np.empty_like(x)
+    for t in range(x.shape[2]):
+        l1 = l1 + hi * (s[..., t] - l1)
+        l2 = l2 + lo * (s[..., t] - l2)
+        out[..., t] = x[..., t] + al * (l1 - l2)
+    return out.astype(np.float32)
+
+
 # ---- fixtures ---------------------------------------------------------------------------------------------
 def scene(seed, h=1080, w=1920):
     """A deterministic 1080p test picture with the statistics the ops care about: flat panels with sharp edges, a
@@ -950,6 +1099,29 @@ def make_fixtures(d):
     for k in range(11):  # copies of rows 0..10 with k bits flipped: planted near-duplicates at distance k
         fx["ham_bits"][50 + k] = fx["ham_bits"][k]
         fx["ham_bits"][50 + k, :k] ^= 1
+    # hyper: a face-sized flow (affine head motion + a mouth-corner blob), landmarks, an equirectangular picture, clips for
+    # magnification; own seed so the fixtures above do not move
+    Hr = np.random.default_rng(41)
+    gy, gx = np.mgrid[0:96, 0:128].astype(np.float32)
+    head = np.stack([0.02 * (gx - 64) - 0.015 * (gy - 48) + 2.0, 0.015 * (gx - 64) + 0.01 * (gy - 48) - 1.0], -1)
+    blob = np.exp(-(((gx - 40) / 8) ** 2 + ((gy - 60) / 6) ** 2))[..., None] * np.array([1.5, -1.0], np.float32)
+    fx["ff_flow"] = (head + blob + Hr.normal(0, 0.01, (96, 128, 2))).astype(np.float32)
+    fx["ff_gt"] = (head + Hr.normal(0, 0.3, (96, 128, 2))).astype(np.float32)
+    fx["ff_mask"] = ((((gx - 40) / 20) ** 2 + ((gy - 60) / 15) ** 2) > 1).astype(np.uint8) * 255
+    fx["ff_img"] = fx["smg"][100:196, 100:228].copy()
+    fx["smg3"] = cv2.warpAffine(fx["smg2"], np.float32([[1, 0, 1.5], [0, 1, -1.0]]), (480, 270), borderMode=cv2.BORDER_REFLECT)
+    pts = np.array([[500, 300], [900, 330], [880, 760], [520, 740]], np.float64)
+    can = np.array([[0, 0], [255, 0], [255, 255], [0, 255]], np.float64)
+    fx["hom_src"], fx["hom_dst"] = pts, can
+    fx["hom_inv"] = cv2.getPerspectiveTransform(can.astype(np.float32), pts.astype(np.float32))  # canonical -> picture
+    fx["hom_fwd"] = cv2.getPerspectiveTransform(pts.astype(np.float32), can.astype(np.float32))  # picture -> canonical
+    fx["eq_img"] = cv2.resize(fx["hd"], (1024, 512), interpolation=cv2.INTER_AREA)
+    tt, xs = np.arange(32), np.arange(80, dtype=np.float64)[None, :, None]
+    ys = np.arange(48, dtype=np.float64)[:, None, None]
+    grat = 128 + 60 * np.sin(2 * np.pi * (xs - 0.4 * np.sin(2 * np.pi * tt / 16)[None, None, :]) / 20) + 5 * np.sin(ys / 7)
+    edge = 60 + 130 / (1 + np.exp(-(xs - 40 - 1.0 * np.sin(2 * np.pi * tt / 16)[None, None, :]) / 1.5)) + 3 * np.sin(ys / 5)
+    fx["evm_grat"] = (grat + Hr.normal(0, 0.5, grat.shape)).astype(np.float32)
+    fx["evm_edge"] = (edge + Hr.normal(0, 0.5, edge.shape)).astype(np.float32)
     os.makedirs(os.path.join(d, "stock"), exist_ok=True)  # the same planted failures as image files, for scripts/mcv-stockcheck
     for n in ["hd", "hd2", *st]:
         if fx[n].shape[0] > 64:

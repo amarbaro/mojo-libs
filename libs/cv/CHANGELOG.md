@@ -2,6 +2,7 @@
 
 Full notes in `docs/releases/`. Newest first. Format: the release-note template.
 
+- Unreleased: `hyper` ops from 2023-2026 face and micro-expression papers (facial flow decomposition, optical strain, onset flow, EPE, Sobel-masked flow loss, downscale protocol, landmark homography, equirectangular remap, LPQ, Eulerian magnification), [docs/hyper.md](docs/hyper.md)
 - Unreleased: mojo-supervision merged in as the second package (`src/supervision`, 3308 rows against Python supervision); one `scripts/ci.sh` runs both suites; the supervision history is kept
 - [v0.1.5](docs/releases/v0.1.5.md) (2026-11-08): uint8 linear resize bit exact with cv2, Line2 first endpoint
 - [v0.1.4](docs/releases/v0.1.4.md) (2026-11-08): packaging: compiler pin to build minor
