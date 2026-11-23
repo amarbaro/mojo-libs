@@ -83,7 +83,7 @@ asc = [i for i, t in enumerate(p) if t.isascii()]; non = [i for i, t in enumerat
 ba = [i for i in asc if a[i] != b[i]]; bn = [i for i in non if a[i] != b[i]]
 print(f"tokenizer ids vs HF SiglipTokenizer: ASCII prompts {len(asc) - len(ba)} of {len(asc)} equal; non-ASCII prompts {len(non) - len(bn)} of {len(non)} equal")
 if ba: print("FAIL tokenizer: ASCII prompt rows differ:", ba[:10]); sys.exit(1)
-if bn: print(f"BLOCK tokenizer native languages: {len(bn)} of {len(non)} non-ASCII prompts get other ids (libs/tokenizers has no byte fallback, siglabel canon lowercases ASCII only; the byte fallback lives in libs/tokenizers, not an S1 path; canon in siglabel.mojo lowercases ASCII only)"); sys.exit(3)
+if bn: print(f"BLOCK tokenizer native languages: {len(bn)} of {len(non)} non-ASCII prompts get other ids (libs/tokenizers has no byte fallback and is not an S1 path; canon in siglabel.mojo lowercases ASCII only)"); sys.exit(3)
 EOF2
     case $? in 0) ;; 3) block "native-language token ids differ from HF on non-ASCII prompts (see tokenizer line)";; *) fail "tokenizer ids differ on ASCII prompts";; esac
   fi

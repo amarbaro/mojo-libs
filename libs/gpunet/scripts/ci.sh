@@ -25,7 +25,7 @@ same() {  # same ROOT: every file under ROOT/src/gpunet equals the source (non-i
   for f in $FILES; do
     local want; want=$(git -C "$F" show "$SHA:src/faces/$f") || return 2
     if [ "$f" = gpu/net.mojo ]; then  # the one recorded divergence (IMPORT.md, Divergences): the non-import difference must equal patches/net-embed-gather.diff
-      diff <(grep -Ev "$IMP" <<< "$want") <(grep -Ev "$IMP" "$r/src/gpunet/$f") | cmp -s - "$G/patches/net-embed-gather.diff" || { echo "differs (beyond the recorded patch): $f"; return 1; }
+      { diff <(grep -Ev "$IMP" <<< "$want") <(grep -Ev "$IMP" "$r/src/gpunet/$f") || true; } | cmp -s - "$G/patches/net-embed-gather.diff" || { echo "differs (beyond the recorded patch): $f"; return 1; }
     else
       diff <(grep -Ev "$IMP" <<< "$want") <(grep -Ev "$IMP" "$r/src/gpunet/$f") > /dev/null || { echo "differs (not import lines): $f"; return 1; }
     fi
@@ -34,10 +34,12 @@ same() {  # same ROOT: every file under ROOT/src/gpunet equals the source (non-i
 }
 same "$G" || { echo "FAIL import: a file differs from faces $SHA"; exit 1; }
 T=$(mktemp -d "$G/.work/ci.XXXXXX"); trap 'rm -rf "$T"' EXIT
-for k in code import; do   # planted failures: one edited code line, one import line changed; each must be caught
-  mkdir -p "$T/$k"; cp -r src "$T/$k/"
-  if [ $k = code ]; then sed -i '0,/^    var /s//    var /; 0,/ + /s// - /' "$T/$k/src/gpunet/nn.mojo"; else sed -i '0,/^from gpunet\.onnx import/s//from gpunet.onnx2 import/' "$T/$k/src/gpunet/nn.mojo"; fi
-  cmp -s src/gpunet/nn.mojo "$T/$k/src/gpunet/nn.mojo" && { echo "FAIL plant: the $k plant changed nothing"; exit 1; }
+for k in code import netcode; do   # planted failures: one edited code line, one import line changed, one edit of net.mojo beside its recorded patch; each must be caught
+  mkdir -p "$T/$k"; cp -r src "$T/$k/"; pf=nn.mojo
+  if [ $k = code ]; then sed -i '0,/^    var /s//    var /; 0,/ + /s// - /' "$T/$k/src/gpunet/nn.mojo"
+  elif [ $k = netcode ]; then pf=gpu/net.mojo; sed -i '0,/Int32(n)/s//Int32(n + 1)/' "$T/$k/src/gpunet/gpu/net.mojo"
+  else sed -i '0,/^from gpunet\.onnx import/s//from gpunet.onnx2 import/' "$T/$k/src/gpunet/nn.mojo"; fi
+  cmp -s "src/gpunet/$pf" "$T/$k/src/gpunet/$pf" && { echo "FAIL plant: the $k plant changed nothing"; exit 1; }
   same "$T/$k" > /dev/null 2>&1 && { echo "FAIL plant: planted $k edit not caught"; exit 1; }
 done
 echo "ok import: 6 files equal faces $SHA except import lines (gpu/net.mojo: plus the recorded patch); planted code and import edits caught"
