@@ -12,7 +12,8 @@
 ## Why MAX is a dependency
 `max.algorithm.parallelize` is the only thing taken from MAX (`core.mojo`, `desc3d.mojo`, `phasecorr.mojo`). `par()` wraps it with the worker
 count measured on this CPU: 8 workers on the 8 physical cores (a dispatch costs about 8 us), 16 only for regions that run for milliseconds (with
-16 every call waits about 215 us for a sleeping SMT sibling). The pin is `max==26.7.0` next to `mojo==1.2.0`; the library is CPU only, no GPU code.
+16 every call waits about 215 us for a sleeping SMT sibling). The pin is `max==26.7.0` next to `mojo==1.2.0`. The CPU path is the
+reference; GPU twins of a few ops (`src/mojocv/gpu.mojo`, `gpu=1`, [gpu.md](gpu.md)) equal it or fall back to it.
 
 ## Memory and speed
 - Hot loops work on raw pointers into the `List` storage with SIMD blocks, and the scalar tail handles what the block cannot. A block must
@@ -33,5 +34,5 @@ cv2 5.0 for the 2D ops (cv2 4.8.1 for the HOG rows: 5.0 dropped `HOGDescriptor`)
 Inputs are generated from fixed seeds in `tools/oracle_cv2.py` and `tools/oracle3d.py`. Python lives only in `tools/`, as subprocess oracles.
 
 ## Rejected
-No Python binding (the tools talk through `.mcv` files) and no GPU path: the aim is exactness against the oracle, not speed records.
+No Python binding (the tools talk through `.mcv` files). A GPU twin exists only where it equals the CPU oracle or states its tolerance.
 Differences from cv2 that remain are listed per op in [2d.md](2d.md).

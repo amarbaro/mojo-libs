@@ -119,7 +119,8 @@ not bit-exact with OpenCV: each pixel row states its own bar.
 ## Limits
 
 - Needs Mojo 1.2 and MAX 26.7 (see Install). Linux x86-64 is what CI and the numbers cover.
-- No GPU path and no Python binding. The input and output of the command-line tool is `.mcv`, not PNG or JPEG.
+- No Python binding. The input and output of the command-line tool is `.mcv`, not PNG or JPEG. A few ops have MAX GPU
+  twins (`gpu=1`, [docs/gpu.md](docs/gpu.md)); every other op, and any op without an accelerator, runs on the CPU.
 - Not every cv2 function exists; the ones that do are the lists above. Missing and different behaviour is in
   [docs/2d.md](docs/2d.md): cvtColor to YUV, anisotropic or even erode kernels, and so on.
 - The speed table is one run on one machine; several 3D ops have no cv2 equivalent to compare with.
