@@ -12,6 +12,11 @@
 #   edge >= 1.5 % or >= 8 %) masked out, background = median grey of the rest, subject = |grey - median| > max(25, 4 robust sigma).
 #   items: EM on (log10 gap, cosine); views: cosine >= 0.95 or dHash <= 6 bits. k=v goes to stockPhoto/stockGroup (tape= kmad= vcos= ...).
 # Embeddings are SigLIP on the GPU (scripts/siglip-embed.sh, gpu-wait); JPEG decode is CPU only (vips, ImageMagick for ICC files).
+# Env: MCV_LIST=FILE  the photos are the paths in FILE, in that order (live capture), not DIR/work; DIR then only receives the output.
+#      MCV_RAW=DIR    originals for the EXIF time (default DIR/raw).
+#      MCV_CACHE=DIR  per-photo cache keyed by the sha256 of the bytes (stockPhoto row per k=v set, time, embedding): a rerun over
+#                     the same pictures decodes and embeds nothing, and a prefix run reproduces the rows of the whole run.
+#      MCV_EMBED_ARGS=--cpu  passed to siglip-embed.sh (the CPU runner: no GPU job, e.g. in a replay check).
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 bin=$root/.bin/mojo-cv
@@ -20,18 +25,32 @@ dir=$(realpath -- "$1"); shift
 [ -d "$dir" ] || { echo "FAIL input: $dir is not a directory" >&2; exit 2; }
 [ -x "$bin" ] && [ -x "$root/.bin/mcv-labels" ] || { echo "FAIL setup: $bin or .bin/mcv-labels missing (mojo build -O3 -I src src/main.mojo -o .bin/mojo-cv; scripts/build-labels.sh)" >&2; exit 1; }
 img=$dir; [ -d "$dir/work" ] && img=$dir/work
-raw=$dir/raw
+raw=${MCV_RAW:-$dir/raw}
 work=$root/.work/stockgroup.$$; mkdir -p "$work/d"; trap 'rm -rf "$work"' EXIT
-find "$img" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | sort > "$work/list"
+if [ -n "${MCV_LIST:-}" ]; then  # live capture: the shots in arrival order (scripts/mcv-capture-qa), from anywhere
+  while IFS= read -r f; do [ -z "$f" ] || { [ -f "$f" ] && realpath -- "$f"; } || { echo "FAIL input: '$f' in $MCV_LIST is not a file" >&2; exit 2; }; done < "$MCV_LIST" > "$work/list"
+else
+  find "$img" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | sort > "$work/list"
+fi
 n=$(wc -l < "$work/list"); [ "$n" -gt 0 ] || { echo "FAIL input: no photos in $img" >&2; exit 1; }
 export MAGICK_THREAD_LIMIT=1
 step() { printf '%s %s\n' "$(date +%T)" "$*" >&2; }
+kv=(); for a in "$@"; do kv+=("$a"); done
+
+# per-photo cache keyed by the sha256 of the picture bytes (MCV_CACHE=DIR, default: this run only): stockPhoto row (and the k=v
+# thresholds it was made with), time stamp, SigLIP embedding. A second run over the same pictures decodes and embeds nothing.
+cache=${MCV_CACHE:-$work/cache}; ck=$(printf '%s' "$*" | sha256sum | cut -c1-8); pc_dir=$cache/photo-$ck
+mkdir -p "$pc_dir" "$cache/t" "$cache/emb"
+tr '\n' '\0' < "$work/list" | xargs -0 sha256sum | cut -d' ' -f1 | paste - "$work/list" > "$work/sl.tsv"
+miss() { while IFS=$'\t' read -r s f; do [ -s "$1/$s$2" ] || printf '%s\t%s\n' "$s" "$f"; done < "$work/sl.tsv"; }  # miss DIR SUFFIX: rows not cached
 
 # 1 decode (CPU, N at a time) -> batch.tsv (decoded path, photo path)
 #   and 2 per-photo numbers (sharpness, exposure, subject box, hashes): one cpu-room job with its own cores and RAM cap (rules.md 27)
-step "decode + stockPhoto, $n photos"
-awk -v w="$work/d" '{ n = split($0, a, "/"); printf "%s\t%s/%d_%s\n", $0, w, NR, a[n] }' "$work/list" > "$work/dec.tsv"
-pc=$(( n < $(nproc) / 2 ? n : $(nproc) / 2 ))
+miss "$pc_dir" .json > "$work/unc.tsv"; nu=$(wc -l < "$work/unc.tsv")
+step "decode + stockPhoto, $nu of $n photos (rest cached)"
+if [ "$nu" -gt 0 ]; then
+awk -F'\t' -v w="$work/d" '{ n = split($2, a, "/"); printf "%s\t%s/%d_%s\n", $2, w, NR, a[n] }' "$work/unc.tsv" > "$work/dec.tsv"
+pc=$(( nu < $(nproc) / 2 ? nu : $(nproc) / 2 ))
 cat > "$work/cpu.sh" <<'EOS'
 #!/usr/bin/env bash
 # cpu.sh WORK DEC_SH BIN PC [k=v...]
@@ -40,18 +59,25 @@ work=$1 dec=$2 bin=$3 pc=$4; shift 4
 export MAGICK_THREAD_LIMIT=1
 xargs -P "$pc" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r s d <<< "$1"; "$2" "$s" "$d" 2>&1 | head -2 || true' _ {} "$dec" < "$work/dec.tsv"
 while IFS=$'\t' read -r s d; do p=$d.mcv; [ -f "$d.ppm" ] && p=$d.ppm; printf '%s\t%s\n' "$p" "$s"; done < "$work/dec.tsv" > "$work/batch.tsv"
-"$bin" stockPhoto "$work/photo.jsonl" "$work/batch.tsv" "$@"
+"$bin" stockPhoto "$work/photo.new.jsonl" "$work/batch.tsv" "$@"
 EOS
-kv=(); for a in "$@"; do kv+=("$a"); done
 gpu-wait run --room cpu --cores "$pc" --mem "$(( 2 * pc ))" --timeout "${MCV_CPU_TIMEOUT:-1800}" --label stockgroup-cpu -- bash "$work/cpu.sh" "$work" "$root/scripts/decode-stock.sh" "$bin" "$pc" "${kv[@]}" > "$work/cpu.log" 2>&1 \
   || { tail -3 "$work/cpu.log" >&2; echo "FAIL photo: decode + stockPhoto job" >&2; exit 1; }
-[ "$(wc -l < "$work/photo.jsonl")" -eq "$n" ] || { echo "FAIL count: stockPhoto wrote $(wc -l < "$work/photo.jsonl") lines for $n photos" >&2; exit 1; }
-bad=$(jq -r 'select(.error != null) | (.file | split("/") | last) + ": " + .error' "$work/photo.jsonl" | head -3 || true)
+[ "$(wc -l < "$work/photo.new.jsonl")" -eq "$nu" ] || { echo "FAIL count: stockPhoto wrote $(wc -l < "$work/photo.new.jsonl") lines for $nu photos" >&2; exit 1; }
+bad=$(jq -r 'select(.error != null) | (.file | split("/") | last) + ": " + .error' "$work/photo.new.jsonl" | head -3 || true)
 [ -z "$bad" ] || { echo "FAIL photo: $bad" >&2; exit 1; }
+paste "$work/unc.tsv" "$work/photo.new.jsonl" | while IFS=$'\t' read -r s _ row; do printf '%s\n' "$row" > "$pc_dir/$s.tmp$$" && mv "$pc_dir/$s.tmp$$" "$pc_dir/$s.json"; done
+fi
+awk -F'\t' -v c="$pc_dir" '{ print c "/" $1 ".json" }' "$work/sl.tsv" | xargs -d '\n' cat \
+  | jq -c -n --rawfile l "$work/list" '[inputs] as $r | ($l | split("\n") | map(select(length > 0))) as $L | range(0; $L | length) as $i | $r[$i] | .file = $L[$i]' > "$work/photo.jsonl"
+[ "$(wc -l < "$work/photo.jsonl")" -eq "$n" ] || { echo "FAIL count: $(wc -l < "$work/photo.jsonl") photo rows for $n photos" >&2; exit 1; }
 
 # 3 time stamps: EXIF of the raw original, else of the photo, else the file name
-step "exif"
-while IFS= read -r f; do b=${f##*/}; if [ -f "$raw/$b" ]; then echo "$raw/$b"; else echo "$f"; fi; done < "$work/list" > "$work/exif.list"
+miss "$cache/t" "" > "$work/unt.tsv"; nt=$(wc -l < "$work/unt.tsv")
+step "exif, $nt of $n photos (rest cached)"
+if [ "$nt" -gt 0 ]; then
+cut -f2 "$work/unt.tsv" > "$work/unt.list"
+while IFS= read -r f; do b=${f##*/}; if [ -f "$raw/$b" ]; then echo "$raw/$b"; else echo "$f"; fi; done < "$work/unt.list" > "$work/exif.list"
 tr '\n' '\0' < "$work/exif.list" | xargs -0 exiftool -q -T -FileName -DateTimeOriginal -SubSecTimeOriginal > "$work/exif.tsv" 2>/dev/null || true
 awk -F'\t' -v OFS='\t' 'FNR == NR { split($0, a, "/"); nm[a[length(a)]] = 1; next }
   { name = $1; t = ""
@@ -59,18 +85,30 @@ awk -F'\t' -v OFS='\t' 'FNR == NR { split($0, a, "/"); nm[a[length(a)]] = 1; nex
     else if (match(name, /[0-9]{8}_[0-9]{6}/)) { s = substr(name, RSTART, 15); t = mktime(substr(s,1,4) " " substr(s,5,2) " " substr(s,7,2) " " substr(s,10,2) " " substr(s,12,2) " " substr(s,14,2)) }
     if (t == "") { print "FAIL time: no EXIF time and no timestamp in the name of " name > "/dev/stderr"; bad = 1; next }
     printf "%s\t%.3f\n", name, t }
-  END { exit bad }' "$work/list" "$work/exif.tsv" > "$work/times.tsv" || exit 1
+  END { exit bad }' "$work/unt.list" "$work/exif.tsv" > "$work/times.unt.tsv" || exit 1
+[ "$(wc -l < "$work/times.unt.tsv")" -eq "$nt" ] || { echo "FAIL time: $(wc -l < "$work/times.unt.tsv") time stamps for $nt photos" >&2; exit 1; }
+paste "$work/unt.tsv" "$work/times.unt.tsv" | while IFS=$'\t' read -r s _ _ t; do printf '%s\n' "$t" > "$cache/t/$s.tmp$$" && mv "$cache/t/$s.tmp$$" "$cache/t/$s"; done
+fi
+while IFS=$'\t' read -r s f; do read -r t < "$cache/t/$s"; printf '%s\t%s\n' "${f##*/}" "$t"; done < "$work/sl.tsv" > "$work/times.tsv"
 [ "$(wc -l < "$work/times.tsv")" -eq "$n" ] || { echo "FAIL time: $(wc -l < "$work/times.tsv") time stamps for $n photos" >&2; exit 1; }
 
-# 4 SigLIP embeddings on the GPU, in list order
-step "siglip-embed (GPU)"
-"$root/scripts/siglip-embed.sh" "$work/list" "$work/emb" > "$work/emb.log" 2>&1 || { tail -3 "$work/emb.log" >&2; echo "FAIL embed: siglip-embed.sh" >&2; exit 1; }
+# 4 SigLIP embeddings on the GPU, in list order (only the uncached pictures)
+miss "$cache/emb" .f32 > "$work/une.tsv"; ne=$(wc -l < "$work/une.tsv")
+step "siglip-embed (GPU), $ne of $n photos (rest cached)"
+if [ "$ne" -gt 0 ]; then
+cut -f2 "$work/une.tsv" > "$work/une.list"
+"$root/scripts/siglip-embed.sh" ${MCV_EMBED_ARGS:-} "$work/une.list" "$work/emb" > "$work/emb.log" 2>&1 || { tail -3 "$work/emb.log" >&2; echo "FAIL embed: siglip-embed.sh" >&2; exit 1; }
+[ "$(stat -c %s "$work/emb/embeds.f32")" -eq $(( ne * 3072 )) ] || { echo "FAIL embed: embeds.f32 is not $ne x 768 float32" >&2; exit 1; }
+split -b 3072 -d -a 6 "$work/emb/embeds.f32" "$work/emb/part."
+i=0; while IFS=$'\t' read -r s _; do mv "$work/emb/part.$(printf %06d $i)" "$cache/emb/$s.f32"; i=$((i + 1)); done < "$work/une.tsv"
+fi
+cut -f1 "$work/sl.tsv" | sed "s|.*|$cache/emb/&.f32|" | xargs -d '\n' cat > "$work/embeds.all.f32"
 
 # 5 items, views, near-duplicates
 step "stockGroup"
 jq -r '[(.file | split("/") | last), .lapvar, (if .empty then 1 else 0 end), .dhash] | @tsv' "$work/photo.jsonl" \
   | awk -F'\t' -v OFS='\t' 'FNR == NR { t[$1] = $2; next } { print $1, t[$1], $2, $3, $4 }' "$work/times.tsv" - > "$work/in.tsv"
-"$bin" stockGroup "$work/grp.tsv" "$work/in.tsv" "$work/emb/embeds.f32" "${kv[@]}" >&2
+"$bin" stockGroup "$work/grp.tsv" "$work/in.tsv" "$work/embeds.all.f32" "${kv[@]}" >&2
 [ "$(wc -l < "$work/grp.tsv")" -eq "$n" ] || { echo "FAIL count: stockGroup wrote $(wc -l < "$work/grp.tsv") rows for $n photos" >&2; exit 1; }
 
 # 6 one row per photo, then the items
