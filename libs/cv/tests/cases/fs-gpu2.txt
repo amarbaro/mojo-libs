@@ -1,0 +1,44 @@
+# fs-gpu2 (R3a absdiff, R3b bilinear resize): the GPU twins of src/mojocv/gpu.mojo against cv2 5.0 and against the CPU run of the same row.
+# Run by tests/cases_gpu/fs_suite.py rows, which also runs the row without gpu=1 and requires the GPU output byte for byte equal
+# (float32: within 1e-6), and that a gpu=1 row prints GPU-ARM; a row id fb_* must not (a parameter the kernels do not cover: the
+# CPU answer, reported). tests/run.sh runs the same file against cv2 alone.
+# R3a absdiff: uint8 1, 3 and 4 channels, odd and 1 x 1 shapes, float32
+gpu2_ad_hd       absdiff hd hd2 gpu=1 => exact
+gpu2_ad_hdg      absdiff hdg hdg2 gpu=1 => exact
+gpu2_ad_odd      absdiff odd odd2 gpu=1 => exact
+gpu2_ad_one      absdiff one one2 gpu=1 => exact
+gpu2_ad_g1       absdiff g1 g2 gpu=1 => exact
+gpu2_ad_h2       absdiff fs2_A fs2_Bt gpu=1 => exact
+gpu2_ad_h2_c4    absdiff fs2_A4 fs2_BB4 gpu=1 => exact
+gpu2_ad_same     absdiff fs2_A fs2_C gpu=1 => exact
+gpu2_ad_f32      absdiff f32 f32b gpu=1 => max:0.001
+gpu2_ad_f32_big  absdiff sm_lab_f sm_luv_f gpu=1 => max:0.001
+fb_ad_i16        absdiff i16 i16b gpu=1 => exact
+fb_ad_f64        absdiff f64 f64 gpu=1 => exact
+# R3b resize, interp 1 (the default): uint8 fixed point, byte for byte; both signs of the scale, 1/3/4 channels, 2x (the half path)
+gpu2_rs_hd_half  resize hd w=960 h=540 gpu=1 => exact
+gpu2_rs_hd_third resize hd w=640 h=360 gpu=1 => exact
+gpu2_rs_hd_odd   resize hd w=777 h=431 gpu=1 => exact
+gpu2_rs_sm_up    resize sm w=913 h=401 gpu=1 => exact
+gpu2_rs_sm_tall  resize sm w=100 h=1000 gpu=1 => exact
+gpu2_rs_g_down   resize hdg w=777 h=333 gpu=1 => exact
+gpu2_rs_g_up     resize smg w=1000 h=600 gpu=1 => exact
+gpu2_rs_odd_up   resize odd w=29 h=17 gpu=1 => exact
+gpu2_rs_g1_up    resize g1 w=40 h=33 gpu=1 => exact
+gpu2_rs_h2_down  resize fs2_A w=320 h=224 gpu=1 => exact
+gpu2_rs_h2_400   resize fs2_A w=400 h=280 gpu=1 => exact
+gpu2_rs_h2_up    resize fs2_A w=1280 h=896 gpu=1 => exact
+gpu2_rs_h2_c4    resize fs2_A4 w=400 h=280 gpu=1 => exact
+gpu2_rs_h2_c4up  resize fs2_A4 w=1280 h=896 gpu=1 => exact
+gpu2_rs_1x       resize sm w=480 h=270 gpu=1 => exact
+gpu2_rs_2x2      resize odd w=2 h=2 gpu=1 => exact
+# R3b resize float32: the CPU's tap order, cv2's tolerance and the measured GPU-CPU difference
+gpu2_rf_small    resize f32 w=40 h=20 gpu=1 => max:0.01
+gpu2_rf_big_down resize sm_lab_f w=240 h=135 gpu=1 => max:0.01
+gpu2_rf_big_up   resize sm_lab_f w=913 h=401 gpu=1 => max:0.01
+gpu2_rf_h2       resize fs2_Af w=333 h=222 gpu=1 => max:0.01
+# uncovered parameters: CPU answer, no GPU line
+fb_rs_cubic      resize sm w=700 h=333 interp=2 gpu=1 => max:2
+fb_rs_area       resize hd w=640 h=360 interp=4 gpu=1 => max:1
+fb_rs_nearest    resize odd w=29 h=17 interp=0 gpu=1 => exact
+fb_rs_one        resize one w=5 h=3 gpu=1 => exact

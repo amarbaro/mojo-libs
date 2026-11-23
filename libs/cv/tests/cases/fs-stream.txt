@@ -1,0 +1,58 @@
+# fs-stream (R4 stream front end): src/mojocv/stream.mojo against the numpy oracle in tests/cases_gpu/fs_suite.py.
+# streamDirty writes the tile maxima (OUT) and the dirty mask (OUT.1): both exact. streamRun writes the per-frame table
+# (decision 0 key 1 skip 2 delta, dirty tiles, tiles, largest change among clean tiles) and the reference after the last frame.
+# Frames fs2_* come from the fs-h2 set (fs_suite.py prep): A, Bt (one changed 64 px tile), B16 (one 16 px cell), BB (the bottom
+# right 16 px cell, a border tile), C (A again), Aq* (A as JPEG, decoder one) and Aq*c (the same file, decoder two).
+# planted: one changed tile, on both grids, inside and on the border
+st_plant_t16        streamDirty fs2_A fs2_Bt tile=16 thr=16 => exact, exact
+st_plant_t64        streamDirty fs2_A fs2_Bt tile=64 thr=16 => exact, exact
+st_plant_px16       streamDirty fs2_A fs2_B16 tile=16 thr=16 => exact, exact
+st_plant_px16_t64   streamDirty fs2_A fs2_B16 tile=64 thr=16 => exact, exact
+st_plant_border16   streamDirty fs2_A fs2_BB tile=16 thr=16 => exact, exact
+st_plant_border_t64 streamDirty fs2_A fs2_BB tile=64 thr=16 => exact, exact
+st_plant_border_t8  streamDirty fs2_A fs2_BB tile=8 thr=16 => exact, exact
+# partial tiles on both axes: 637 x 445 crops, tiles 16 / 48 / 64 / 100 (the grid keeps the remainder)
+st_part_t16         streamDirty fs2_oddA fs2_oddBB tile=16 thr=16 => exact, exact
+st_part_t48         streamDirty fs2_oddA fs2_oddBB tile=48 thr=16 => exact, exact
+st_part_t64         streamDirty fs2_oddA fs2_oddBB tile=64 thr=16 => exact, exact
+st_part_t100        streamDirty fs2_oddA fs2_oddBB tile=100 thr=16 => exact, exact
+st_part_tile1       streamDirty fs2_oddA fs2_oddBB tile=1 thr=16 => exact, exact
+# thresholds: the compare is strict (max > thr); thr at the largest change is clean, one below is dirty
+st_thr_211          streamDirty fs2_A fs2_Bt tile=64 thr=211 => exact, exact
+st_thr_210          streamDirty fs2_A fs2_Bt tile=64 thr=210 => exact, exact
+st_thr_0            streamDirty fs2_A fs2_B16 tile=16 thr=0 => exact, exact
+# four channels and one channel and other fixtures
+st_c4               streamDirty fs2_A4 fs2_BB4 tile=16 thr=16 => exact, exact
+st_c1               streamDirty fs2_Ag fs2_Ag tile=16 thr=16 => exact, exact
+st_gray_sm          streamDirty smg smg2 tile=16 thr=16 => exact, exact
+st_color_sm         streamDirty sm sm2 tile=32 thr=8 => exact, exact
+st_hd               streamDirty hd hd2 tile=64 thr=16 => exact, exact
+st_one_px           streamDirty one one2 tile=16 thr=0 => exact, exact
+# control: identical frames give zero tiles; one JPEG file through two decoders gives zero tiles (decoder noise is not motion)
+ctl_same            streamDirty fs2_A fs2_C tile=16 thr=16 => exact, exact
+ctl_same_t64        streamDirty fs2_A fs2_C tile=64 thr=16 => exact, exact
+ctl_jpeg_q30        streamDirty fs2_Aq30 fs2_Aq30c tile=16 thr=16 => exact, exact
+ctl_jpeg_q50        streamDirty fs2_Aq50 fs2_Aq50c tile=16 thr=16 => exact, exact
+ctl_jpeg_q75        streamDirty fs2_Aq75 fs2_Aq75c tile=16 thr=16 => exact, exact
+ctl_jpeg_q85        streamDirty fs2_Aq85 fs2_Aq85c tile=16 thr=16 => exact, exact
+ctl_jpeg_q95        streamDirty fs2_Aq95 fs2_Aq95c tile=16 thr=16 => exact, exact
+# the JPEG sweep against the lossless source: every tile of the test texture is dirty at thr 16 (codec noise 130..150), so the
+# plan's "sweep gives zero tiles" holds for decodes of one setting only; the op reports the noise, it does not hide it
+st_jpeg_vs_lossless_q95 streamDirty fs2_A fs2_Aq95 tile=64 thr=16 => exact, exact
+st_jpeg_vs_lossless_q30 streamDirty fs2_A fs2_Aq30 tile=64 thr=16 => exact, exact
+# keyframe state: first frame key, identical frames skip, a changed tile is a delta, a scene cut is a key, the gap forces a key
+run_skip_delta      streamRun fs2_A fs2_C fs2_C fs2_Bt fs2_Bt fs2_B16 tile=16 thr=16 keyfrac=0.5 maxgap=30 => exact, exact
+run_gap             streamRun fs2_A fs2_C fs2_C fs2_C fs2_C fs2_C fs2_C tile=16 thr=16 keyfrac=0.5 maxgap=3 => exact, exact
+run_cut             streamRun fs2_A fs2_C hd fs2_A fs2_Bt tile=16 thr=16 keyfrac=0.5 maxgap=30 => exact, exact
+run_cut_share       streamRun fs2_A fs2_Bt fs2_A tile=16 thr=16 keyfrac=0.01 maxgap=30 => exact, exact
+run_nocut           streamRun fs2_A fs2_Bt fs2_A tile=16 thr=16 keyfrac=0 maxgap=0 => exact, exact
+run_jpeg_noise      streamRun fs2_A fs2_Aq95 fs2_Aq95c tile=16 thr=16 keyfrac=0.5 maxgap=30 => exact, exact
+run_jpeg_decoders   streamRun fs2_Aq75 fs2_Aq75c fs2_Aq75c fs2_Aq75 tile=16 thr=16 keyfrac=0.5 maxgap=30 => exact, exact
+run_partial         streamRun fs2_oddA fs2_oddBB fs2_oddA fs2_oddBB tile=48 thr=16 keyfrac=0.9 maxgap=30 => exact, exact
+run_gray            streamRun smg smg2 smg smg3 tile=32 thr=10 keyfrac=0.5 maxgap=30 => exact, exact
+run_reshape         streamRun fs2_A fs2_oddA fs2_oddA fs2_A tile=16 thr=16 keyfrac=0.5 maxgap=30 => exact, exact
+# activity under the threshold is reported (the fourth column): A to B16 is 177 at thr 200, clean and counted as skip
+run_subthr          streamRun fs2_A fs2_B16 fs2_Bt tile=16 thr=200 keyfrac=0.5 maxgap=30 => exact, exact
+# a drift of 6 per frame stays under thr 16 for two frames (skip, the reference keeps A, the column shows 6 then 12), crosses at the third
+run_drift           streamRun fs2_A fs2_D1 fs2_D2 fs2_D3 fs2_D4 tile=16 thr=16 keyfrac=0.5 maxgap=30 => exact, exact
+run_drift_delta     streamRun fs2_A fs2_D1 fs2_D2 fs2_D3 fs2_D4 tile=16 thr=16 keyfrac=0 maxgap=0 => exact, exact
