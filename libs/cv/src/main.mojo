@@ -11,11 +11,12 @@ from mojocv.stockphoto import run as run_stockphoto
 from mojocv.stockgroup import run as run_stockgroup
 from mojocv.regions import run as run_regions
 from mojocv.ruler import run as run_ruler
+from mojocv.hyper import run as run_hyper
 
 
 def main() raises:
     var a = Args()
-    var ok = run_core(a) or run_imgproc(a) or run_features(a) or run_video(a) or run_calib3d(a) or run_granulo(a) or run_stockcheck(a) or run_stockphoto(a) or run_stockgroup(a) or run_regions(a) or run_ruler(a)
+    var ok = run_core(a) or run_imgproc(a) or run_features(a) or run_video(a) or run_calib3d(a) or run_granulo(a) or run_stockcheck(a) or run_stockphoto(a) or run_stockgroup(a) or run_regions(a) or run_ruler(a) or run_hyper(a)
     if not ok:
         var v = List[String]()
         var av = argv()
