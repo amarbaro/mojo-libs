@@ -1,0 +1,221 @@
+{
+ "evm": {
+  "amp_levels": 2.0,
+  "dtype": "uint8",
+  "frames": 40,
+  "freq_cycles_per_frame": 0.1,
+  "layout": "T,H,W",
+  "measured_peak_to_peak_in_patch": 4,
+  "note": "planted signal for R3c gain check; expected gain is measured against the stated amp, not tuned",
+  "outside_patch_constant": true,
+  "patch_yx_slices": [
+   [
+    32,
+    56
+   ],
+   [
+    24,
+    40
+   ]
+  ],
+  "size_hw": [
+   64,
+   96
+  ],
+  "static_control": "evm/static.npy (all 128)"
+ },
+ "mattes": {
+  "center_xy": [
+   128,
+   128
+  ],
+  "hole_xyxy": [
+   118,
+   118,
+   124,
+   124
+  ],
+  "items": {
+   "disc": {
+    "bbox_xyxy_disc": [
+     68,
+     68,
+     188,
+     188
+    ],
+    "counts": {
+     "0": 54232,
+     "1": 10580,
+     "2": 724
+    },
+    "empty": false,
+    "image": "mattes/disc.png",
+    "labels": {
+     "0": "background",
+     "1": "disc",
+     "2": "boundary_band_2px"
+    },
+    "mask": "mattes/disc.mask.png"
+   },
+   "disc_empty": {
+    "bbox_xyxy_disc": null,
+    "counts": {
+     "0": 65536,
+     "1": 0,
+     "2": 0
+    },
+    "empty": true,
+    "image": "mattes/disc_empty.png",
+    "labels": {
+     "0": "background",
+     "1": "disc",
+     "2": "boundary_band_2px"
+    },
+    "mask": "mattes/disc_empty.mask.png"
+   },
+   "disc_hole": {
+    "bbox_xyxy_disc": [
+     68,
+     68,
+     188,
+     188
+    ],
+    "counts": {
+     "0": 54268,
+     "1": 10544,
+     "2": 724
+    },
+    "empty": false,
+    "image": "mattes/disc_hole.png",
+    "labels": {
+     "0": "background",
+     "1": "disc",
+     "2": "boundary_band_2px"
+    },
+    "mask": "mattes/disc_hole.mask.png"
+   }
+  },
+  "note": "planted disc, synthetic; R7 falsifier stays BLOCK until the nine labelled hand photos are supplied",
+  "radius_px": 60,
+  "size": [
+   256,
+   256
+  ]
+ },
+ "pil": "13.0.0",
+ "stuck": {
+  "blinking_cursor": {
+   "changed_bbox_xyxy": [
+    44,
+    48,
+    47,
+    64
+   ],
+   "cursor_box_xyxy": [
+    44,
+    48,
+    47,
+    64
+   ],
+   "expect_dialog_stuck": true,
+   "expect_progress": false,
+   "field_box_xyxy": [
+    40,
+    40,
+    300,
+    72
+   ],
+   "pair": [
+    "stuck/cursor_A.png",
+    "stuck/cursor_B.png"
+   ]
+  },
+  "modal_over_changing_bg": {
+   "changed_bbox_xyxy": [
+    0,
+    0,
+    480,
+    320
+   ],
+   "dialog_box_xyxy": [
+    120,
+    100,
+    360,
+    220
+   ],
+   "dialog_changed_px": 0,
+   "elements": [
+    {
+     "box_xyxy": [
+      120,
+      100,
+      360,
+      220
+     ],
+     "clickable": false,
+     "role": "dialog",
+     "text": "Änderungen verwerfen?"
+    },
+    {
+     "box_xyxy": [
+      136,
+      146,
+      344,
+      162
+     ],
+     "clickable": false,
+     "role": "text",
+     "text": "Ungespeicherte Daten gehen verloren."
+    },
+    {
+     "box_xyxy": [
+      150,
+      180,
+      230,
+      208
+     ],
+     "clickable": true,
+     "role": "button",
+     "text": "Abbrechen"
+    },
+    {
+     "box_xyxy": [
+      250,
+      180,
+      330,
+      208
+     ],
+     "clickable": true,
+     "role": "button",
+     "text": "OK"
+    }
+   ],
+   "expect_dialog_stuck": true,
+   "expect_progress": false,
+   "pair": [
+    "stuck/modal_A.png",
+    "stuck/modal_B.png"
+   ]
+  },
+  "playing_video": {
+   "changed_bbox_xyxy": [
+    0,
+    0,
+    320,
+    240
+   ],
+   "expect_dialog_stuck": false,
+   "expect_progress": true,
+   "pair": [
+    "stuck/video_A.png",
+    "stuck/video_B.png"
+   ],
+   "video_box_xyxy": [
+    0,
+    0,
+    320,
+    240
+   ]
+  }
+ }
+}
