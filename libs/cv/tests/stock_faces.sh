@@ -13,7 +13,7 @@ mkdir -p .work .bin
 .venv/bin/mojo build -O3 -I src -I "$P/mojo-faces/src" -I "$PWD/../imkit/src" -I "$PWD/../mmap/src" src/stockfaces.mojo -o .bin/mcv-faces 2> .work/build_faces.log || { tail -20 .work/build_faces.log; echo "FAIL build: src/stockfaces.mojo"; exit 1; }
 for f in "$M/.work/det/ref.txt" "$D" "$DBS/db044-"*.jpg "$DBS/db000-"*.jpg; do [ -f "$f" ] || { echo "FAIL input: $f missing"; exit 1; }; done
 awk '$1 == "n" {print $2}' "$M/.work/det/ref.txt" > .work/det55.txt
-gpu-wait run --timeout 600 -- .bin/mcv-faces "$D" .work/faces_gpu.txt .work/det55.txt boxes=1 gpu=16 > /dev/null 2>&1 || { echo "FAIL run: mcv-faces gpu"; exit 1; }
+gpu-wait run ${GPU_WAIT_ARGS:---timeout 600} -- .bin/mcv-faces "$D" .work/faces_gpu.txt .work/det55.txt boxes=1 gpu=16 > /dev/null 2>&1 || { echo "FAIL run: mcv-faces gpu"; exit 1; }
 python3 -I "$M/tools/cmp_faces.py" "$M/.work/det/ref.txt" .work/faces_gpu.txt || { echo "FAIL match: mcv-faces vs insightface"; exit 1; }
 rm -rf .work/faces_in; mkdir -p .work/faces_in
 cp "$DBS/db044-"*.jpg "$DBS/db000-"*.jpg .work/faces_in/
@@ -35,7 +35,7 @@ magick "$src" -resize 1536x -colors 64 PNG8:.work/faces_in2/palette.png
 magick "$src" -resize 1536x -depth 16 PNG48:.work/faces_in2/depth16.png
 magick "$src" -resize 1536x -interlace PNG PNG24:.work/faces_in2/interlaced.png
 ls "$PWD"/.work/faces_in2/*.png > .work/faces_in2.list
-gpu-wait run --timeout 600 -- .bin/mcv-faces "$D" .work/faces_ctl.jsonl .work/faces_in2.list gpu=16 > /dev/null 2>&1 || { echo "FAIL run: mcv-faces control"; exit 1; }
+gpu-wait run ${GPU_WAIT_ARGS:---timeout 600} -- .bin/mcv-faces "$D" .work/faces_ctl.jsonl .work/faces_in2.list gpu=16 > /dev/null 2>&1 || { echo "FAIL run: mcv-faces control"; exit 1; }
 chk "control: mcv-faces alone refuses some of the 4 pngs" "$(jq -s '[.[] | select(.error != null)] | length > 0' .work/faces_ctl.jsonl)" true
 scripts/mcv-stockcheck --faces .work/faces_out2.jsonl @.work/faces_in2.list > .work/faces_out2.log || { cat .work/faces_out2.log; echo "FAIL stockcheck --faces on the 4 pngs"; exit 1; }
 chk "4 odd pngs: no face-stage error" "$(jq -s '[.[] | select(.file and (.faces.error != null or .faces == null))] | length' .work/faces_out2.jsonl)" 0

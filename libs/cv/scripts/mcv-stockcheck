@@ -75,7 +75,7 @@ EOS
   cat "$work"/sh/s.*.prep > "$work/prep.jsonl"
   t1=$(date +%s.%N)
   [ "$(wc -l < "$work/prep.jsonl")" -eq "$n" ] || { echo "FAIL faces: prep wrote $(wc -l < "$work/prep.jsonl") lines for $n images" >&2; exit 1; }
-  gpu-wait run --timeout "${MCV_FACES_TIMEOUT:-3600}" --mem 4 -- "$root/.bin/mcv-faces" "$model" "$work/faces.jsonl" "$work/list" gpu=16 cache="$fc" > "$work/faces.log" 2>&1 \
+  gpu-wait run ${GPU_WAIT_ARGS:---timeout ${MCV_FACES_TIMEOUT:-3600} --mem 4} -- "$root/.bin/mcv-faces" "$model" "$work/faces.jsonl" "$work/list" gpu=16 cache="$fc" > "$work/faces.log" 2>&1 \
     || { tail -3 "$work/faces.log" >&2; echo "FAIL faces: mcv-faces" >&2; exit 1; }
   t2=$(date +%s.%N)
   awk -v n="$n" -v a="$t0" -v b="$t1" -v c="$t2" 'BEGIN { printf "faces: CPU stage %.1f s incl. queue wait (%.1f img/s, %d shards), GPU stage %.1f s incl. queue wait (%.1f img/s)\n", b-a, n/(b-a), '"$jobs"', c-b, n/(c-b) }' >&2
@@ -88,7 +88,7 @@ EOS
     xargs -P "$jobs" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r src dst <<< "$1"; "$dec" "$src" "$dst" 2>&1 | head -2 || true' _ {} < "$work/fb.tsv" || true
     while IFS=$'\t' read -r src dst; do p=$dst.mcv; [ -f "$dst.ppm" ] && p=$dst.ppm; printf '%s\t%s\n' "$src" "$p"; done < "$work/fb.tsv" > "$work/fb.map"
     cut -f2 "$work/fb.map" > "$work/fb.paths"
-    gpu-wait run --timeout "${MCV_FACES_TIMEOUT:-3600}" --mem 4 -- "$root/.bin/mcv-faces" "$model" "$work/faces2.jsonl" "$work/fb.paths" gpu=16 > "$work/faces2.log" 2>&1 \
+    gpu-wait run ${GPU_WAIT_ARGS:---timeout ${MCV_FACES_TIMEOUT:-3600} --mem 4} -- "$root/.bin/mcv-faces" "$model" "$work/faces2.jsonl" "$work/fb.paths" gpu=16 > "$work/faces2.log" 2>&1 \
       || { tail -3 "$work/faces2.log" >&2; echo "FAIL faces: mcv-faces on the decoded retry list" >&2; exit 1; }
     # a retried picture takes its original name back; one that still fails keeps its first error line
     jq -c --slurpfile f2 "$work/faces2.jsonl" --rawfile m "$work/fb.map" '
