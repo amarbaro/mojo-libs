@@ -33,8 +33,35 @@ outputs identical in every row.
 | Sobel dx | 1080p grey | 0.216 | 0.360 | 0.6 |
 
 The ops that read a lot per pixel (the 9-tap sharpness, the f x f shrink) win; the one-pass ops (grey, Sobel) are bound by the copy of the
-picture and the CPU's vector code beats them. So `stockPhoto gpu=1` (photos of 4 MP or more, `gpumin=`) sends only the shrink and the
-sharpness to the GPU and keeps grey on the CPU. The per-photo gain is the 10 to 20 ms of those two ops, small against the decode that
-dominates the stock job: 3.0 s per 50 MP iPhone JPEG on the CPU (4 photos in 12.2 s, the ImageMagick path of a photo with an ICC
-profile; the VCN `jpeg_dec` ring is not used, it reset three times on these files). The GPU path pays for the shrink of a big
-batch, not for 1024 px photos, which stay on the CPU.
+picture and the CPU's vector code beats them. The per-photo gain of the winners is 10 to 20 ms, small against the decode that dominates
+the stock job: 3.0 s per 50 MP iPhone JPEG on the CPU (4 photos in 12.2 s, the ImageMagick path of a photo with an ICC profile; the VCN
+`jpeg_dec` ring is not used, it reset three times on these files). A batch stage on top of them did not pay (next section).
+
+## What did not pay: the GPU inside `stockPhoto`
+
+`stockPhoto gpu=1` (area shrink and sharpness of photos of 4 MP or more on the GPU, in a serial pass before the parallel CPU stage)
+was built, measured and deleted. Six 50 MP photos, 8 passes (48 photos), same output bytes: 9.5 s and 3.26 GB peak RSS on the CPU,
+20.8 s and 4.55 GB with the GPU pass. The pass loads each photo a second time, runs grey, hashes and clip shares serially and holds the
+MAX runtime (+1.3 GB), where the CPU stage spreads all of it over 8 cores; the 10 to 20 ms the kernels save per photo do not cover that.
+The kernels stay as `gpu=1` ops for callers that run one big picture at a time (the table above), not as a stage of the batch.
+A pinned staging buffer instead of a copy from the List's memory was tried as well and halved the GPU speed (sharpness 12.1 to 23.2 ms
+at 50 MP) without changing anything else, so it was reverted.
+
+## Profile with the trio
+
+- **heaptide (RAM)**, CPU path, 240 photos of 50 MP under `triwait --no-gpu`: no leak (direct 0 B, indirect 0 B), growth PASS (slope 0 B/s).
+  Peak live memory is one site: 6.44 GB in `List::_realloc <- FileHandle::read_bytes <- mat::load`, the whole `.mcv` read into a list that
+  grows by reallocation, then copied into the `Mat` (zero-filled first). Fix in `mat::load`: the exact file size, one read, no zero fill.
+  48 loads of 50 MP photos, two runs each way: peak RSS 4.05 and 4.54 GB before, 3.08 and 3.19 GB after (-1.0 to -1.4 GB); wall 8.96 and 7.77 s
+  before, 4.25 and 5.56 s after; output bytes identical. That is the only new allocation-site change; no new site appeared.
+- **heaptide on the GPU run: not possible here.** Under its `LD_PRELOAD` any process that uses the GPU dies with `Memory access fault by GPU
+  ... Page not present` (reproduced on a plain `mojo-cv sharpness ... gpu=1`, with or without a pinned staging buffer, and under
+  `triwait`), so there is no allocation-site diff for the GPU path. UNVERIFIED: "no new leak site on the GPU side".
+- **corewait**: the CPU window of the same triwait run read `cpu_s 8`, RSS 1207 to 1615 MB over the window.
+- **wavewait (GPU stalls) and `wavewait budget`: BLOCKED.** The ATT capture (`~/Projects/mojo/wavewait/tools/att-capture.sh`) was
+  refused twice by this session's permission classifier ("Destructive or Unwanted Actions": a profiler that attaches to the GPU and kills
+  its process group), so no stall table exists and no win is locked by a budget. To do it by hand:
+  `gpu-wait run --shared --vram 4 -- ~/Projects/mojo/wavewait/tools/att-capture.sh $PWD/.work/att/sharp -- $PWD/.bin/mojo-cv sharpness
+  $PWD/.work/att/o.mcv <50 MP grey .mcv> gpu=1 reps=5`, then `tools/from-att.sh`, `wavewait app`, `wavewait budget`.
+- VRAM peak: the sampler (`rocm-smi --showmeminfo vram`, parsed with awk) returned 0 on both runs, a parsing miss: UNVERIFIED. The runtime's
+  own reservation is about 0.5 GB per process (mojo-faces `docs/gpu.md`).

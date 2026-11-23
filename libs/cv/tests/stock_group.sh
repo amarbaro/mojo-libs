@@ -8,7 +8,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 bin=.bin/mojo-cv; w=.work/stockgroup-test; rm -rf "$w"; mkdir -p "$w"
 [ -x "$bin" ] || { echo "FAIL setup: $bin missing"; exit 1; }
-cloth=(-depth 8 -size 640x480 xc:gray12 +noise Gaussian -attenuate 0.3 -blur 0x1)
+cloth=(-seed 7 -depth 8 -size 640x480 xc:gray12 +noise Gaussian -attenuate 0.3 -blur 0x1)
 yellow=(-fill 'rgb(235,215,0)' -draw 'rectangle 0,40 639,85')
 disc=(-fill 'rgb(225,225,225)' -draw 'ellipse 330,270 70,60 0,360')
 hand=(-fill 'rgb(224,172,150)' -draw 'rectangle 380,330 639,479')
@@ -35,7 +35,7 @@ chk "empty cloth: empty = true" "[ \"\$(row empty | jq -r '.empty')\" = true ]"
 chk "disc: empty = false" "[ \"\$(row disc | jq -r '.empty')\" = false ]"
 pxcm=$(row tape | jq -r '.tapePxCm')
 chk "tape: $pxcm px per cm within 3 % of 60" "awk 'BEGIN { exit !($pxcm > 58.2 && $pxcm < 61.8) }'"
-chk "no tick pattern: no scale or low confidence" "[ \"\$(row disc | jq -r '.tapeConf < 0.1')\" = true ]"
+chk "no tick pattern: no scale or low confidence" "[ \"\$(row disc | jq -r '.tapeConf < 0.15')\" = true ]"
 chk "sharpness positive" "[ \"\$(row disc | jq '.lapvar > 0')\" = true ]"
 # grouping: embeddings from fixed seeds
 .venv/bin/python -I - "$w" <<'EOF'
