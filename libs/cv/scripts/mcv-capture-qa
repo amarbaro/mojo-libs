@@ -7,6 +7,17 @@
 #   mcv-capture-qa replay LIST STATE [k=v...]  the shots of LIST in order through `shot`, then close. The pictures are first run
 #                                            once through mcv-stockgroup (STATE/batch/cv.jsonl = the batch rows), which fills the
 #                                            cache: replay then reuses the identical embeddings (no GPU per shot).
+#   mcv-capture-qa sync SERIAL STATE [--polls N] [--gap S] [--dir D] [--since E | --new] [k=v...]   (plan R12b) read-only adb poll of the phone's camera
+#                                            folder (default /sdcard/DCIM/Camera): each new JPEG goes through `shot` once it is complete.
+#                                            Complete = listed with the same size on two polls S seconds apart (default 1 s, 1 poll) and
+#                                            pulled whole; a later name waits for every earlier one (delivery order = time order, no false
+#                                            `late`); hidden .pending files are never listed. Exit 3 (BLOCK) for no device or an offline
+#                                            device. Clock: STATE/sync/clock.json = phone seconds, offset to the host, round trip. Stamps:
+#                                            STATE/sync/sync.jsonl per shot {file, poll, bytes, t_seen, t_stable, t_pulled, t_verdict} (host
+#                                            seconds). Rerun = incremental: delivered names are not delivered again. MCV_ADB = the adb binary.
+#                                            --since E: only files whose phone mtime is E (phone seconds) or later; --new: E = the phone's now
+#                                            (the folder holds old pictures and videos). A shot the QA cannot process (no time in its EXIF
+#                                            or name) is a verdict raise [unprocessable], not a stop.
 # STATE: list (shots in arrival order), shots.jsonl (one verdict per shot), final.jsonl (finalized rows, as in cv.jsonl), fin,
 #   last.json (time and tape of the last shot), out/ (mcv-stockgroup output of the prefix), cache/ (MCV_CACHE default).
 # Verdict line: {file, t, verdict: ok|raise, raise: [truncated late hand defocus], notes: [empty no_box no_tape tape_lost], sharp, hand}.
@@ -16,13 +27,20 @@
 #   late = a time stamp earlier than the previous accepted shot. truncated = the picture does not decode without warnings.
 # A row in final.jsonl equals the same row of the batch run: stockGroup scores consecutive shots with fixed constants, so a prefix
 #   run reproduces every item that a later shot has closed. Env MCV_RAW (originals for EXIF), MCV_CACHE (per-photo cache).
+# Closed event (plan R12c): {event: closed, group, rows, views, view_labels, missing_view, arrival_views, merged_views, rank_changed}.
+#   MCV_QA_VIEWS=front,back is the view rule: the k-th view of an item (stockGroup numbers views by first appearance in time) takes the
+#   k-th label, further views are "extra", and an item that closes with fewer views than labels lists the labels it lacks in
+#   missing_view. The labels are an order convention of the shoot (front first, then back), not a classifier: view ids carry no
+#   front or back meaning. Unset = no rule (missing_view is empty). arrival_views = the most views any arrival row of the item showed,
+#   views = at close; merged_views = arrival_views - views when a later shot joined two views (transitive merge); rank_changed = rows whose
+#   view_rank or dup_of at close differs from their row at arrival. All are logged, none raises.
 # Observation only: reads pictures, writes under STATE and the cache. UI-style text never enters a verdict: only numbers and flags.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 bin=$root/.bin/mojo-cv; sg=$root/scripts/mcv-stockgroup
 hmax=${MCV_QA_HAND:-0.02}; smin=${MCV_QA_SHARP:-100}
 fail() { echo "FAIL $1: $2" >&2; exit "${3:-1}"; }
-usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '2,/^# STATE:/{/^# STATE:/!p}' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 [ $# -ge 1 ] || usage
 cmd=$1; shift
 
@@ -86,6 +104,44 @@ finalize() {  # STATE UPTO: rows fin..UPTO-1 of out/cv.jsonl become final
   sed -n "$((fin + 1)),${2}p" "$1/out/cv.jsonl" >> "$1/final.jsonl"; echo "$2" > "$1/fin"
 }
 
+item_info() {  # STATE GROUP -> the R12c fields of a closed item, from the rows at close (out/cv.jsonl) and at arrival (arrival.jsonl)
+  jq -c -n --argjson g "$2" --arg labels "${MCV_QA_VIEWS:-}" --slurpfile fin "$1/out/cv.jsonl" --slurpfile arr "$1/arrival.jsonl" '
+    ($labels | split(",") | map(select(. != ""))) as $L
+    | [$fin[] | select(.group == $g)] as $F | [$arr[] | select(.group == $g)] as $A
+    | ($F | map(.view) | unique | length) as $nv | (($A | map(.view) | max) + 1) as $na
+    | {views: $nv, view_labels: ([range(0; $nv)] | map($L[.] // "extra")), missing_view: $L[$nv:], arrival_views: $na,
+       merged_views: ([$na - $nv, 0] | max),
+       rank_changed: ([$A[] as $a | $F[] | select(.file == $a.file and (.view_rank != $a.view_rank or .dup_of != $a.dup_of))] | length)}'
+}
+
+now() { date +%s.%N; }
+
+sync_poll() {  # SERIAL STATE DIR POLL: one listing; complete files are pulled and sent through `shot`
+  local serial=$1 state=$2 dir=$3 k=$4 since=$5 mt sz nm old t0 t1 t2 t3 f blocked=0  # blocked: an earlier name is not complete, so later ones wait (order = time)
+  shift 5
+  local A=("${MCV_ADB:-adb}" -s "$serial")
+  while read -r sz mt nm; do  # `*` does not match the dot files the camera app writes while a shot is not finished
+    [[ $nm =~ \.[jJ][pP][eE]?[gG]$ ]] && [[ $sz =~ ^[0-9]+$ && $mt =~ ^[0-9]+$ ]] && [ "$mt" -ge "$since" ] || continue
+    grep -qxF "$nm" "$state/sync/done" && continue
+    old=$(awk -F'\t' -v n="$nm" '$1 == n { print $2 "\t" $3 }' "$state/sync/seen.tsv" | tail -1)
+    if [ -z "$old" ] || [ "${old%%$'\t'*}" != "$sz" ] || [ "$sz" = 0 ]; then
+      printf '%s\t%s\t%s\n' "$nm" "$sz" "$(now)" >> "$state/sync/seen.tsv"; blocked=1; continue  # first sight, still growing or empty: wait
+    fi
+    [ "$blocked" = 0 ] || continue
+    t0=${old#*$'\t'}; t1=$(now); f=$state/inbox/$nm
+    "${A[@]}" pull "$dir/$nm" "$f.part" > /dev/null 2>&1 || { rm -f "$f.part"; blocked=1; continue; }
+    t2=$(now)
+    if [ "$(stat -c %s "$f.part")" != "$sz" ]; then rm -f "$f.part"; blocked=1; continue; fi  # changed during the pull: wait for the next poll
+    mv "$f.part" "$f"
+    if out=$("$0" shot "$state" "$f" "$@" 2> "$state/sync/err"); then [ -z "$out" ] || printf '%s\n' "$out"
+    else tail -2 "$state/sync/err" >&2; jq -c -n --arg f "$nm" '{file: $f, t: null, verdict: "raise", raise: ["unprocessable"], notes: [], sharp: null, hand: null}' | tee -a "$state/shots.jsonl"; fi
+    t3=$(now)
+    echo "$nm" >> "$state/sync/done"
+    jq -c -n --arg f "$nm" --argjson poll "$k" --argjson b "$sz" --argjson a "$t0" --argjson s "$t1" --argjson p "$t2" --argjson v "$t3" \
+      '{file: $f, poll: $poll, bytes: $b, t_seen: $a, t_stable: $s, t_pulled: $p, t_verdict: $v}' >> "$state/sync/sync.jsonl"
+  done <<< "$("${A[@]}" shell "cd '$dir' && stat -c '%s %Y %n' *" 2> /dev/null | tr -d '\r' || true)"
+}
+
 init_state() { mkdir -p "$1/out"; : >> "$1/list"; : >> "$1/shots.jsonl"; : >> "$1/final.jsonl"; [ -f "$1/fin" ] || echo 0 > "$1/fin"; MCV_CACHE=${MCV_CACHE:-$1/cache}; export MCV_CACHE; }
 
 case $cmd in
@@ -113,13 +169,33 @@ case $cmd in
     new=$(jq -r '.group // "null"' <<< "$row")
     if [ "$new" != null ] && [ "$prev" != null ] && [ "$new" != "$prev" ]; then
       f0=$(cat "$state/fin"); finalize "$state" $((n - 1))
-      jq -c -n --argjson g "$prev" --argjson k $((n - 1 - f0)) '{event: "closed", group: $g, rows: $k}'
+      jq -c -n --argjson g "$prev" --argjson k $((n - 1 - f0)) --argjson i "$(item_info "$state" "$prev")" '{event: "closed", group: $g, rows: $k} + $i'
     fi;;
   close)
     [ $# -eq 1 ] || usage
     state=$1; [ -s "$state/out/cv.jsonl" ] || fail input "$state has no shots"
     f0=$(cat "$state/fin"); n=$(wc -l < "$state/list"); finalize "$state" "$n"
-    jq -c -n --argjson k $((n - f0)) '{event: "closed", group: "end", rows: $k}';;
+    lg=$(jq -s 'map(select(.group != null) | .group) | last // null' "$state/out/cv.jsonl")
+    jq -c -n --argjson k $((n - f0)) --argjson g "$lg" --argjson i "$(if [ "$lg" = null ]; then echo '{}'; else item_info "$state" "$lg"; fi)" \
+      '{event: "closed", group: "end", rows: $k, last_group: $g} + $i';;
+  sync)
+    [ $# -ge 2 ] || usage
+    serial=$1 state=$2; shift 2; polls=1 gap=1 dir=/sdcard/DCIM/Camera since=0 newonly=0
+    while [ $# -gt 0 ]; do
+      case $1 in --polls) polls=$2; shift 2;; --gap) gap=$2; shift 2;; --dir) dir=$2; shift 2;; --since) since=$2; shift 2;; --new) newonly=1; shift;; *) break;; esac
+    done
+    A=("${MCV_ADB:-adb}" -s "$serial"); st=$("${A[@]}" get-state 2>&1 || true)
+    case $st in device) ;; offline) echo "BLOCK sync: device $serial is offline" >&2; exit 3;; *) echo "BLOCK sync: no device $serial: ${st:0:80}" >&2; exit 3;; esac
+    init_state "$state"; mkdir -p "$state/inbox" "$state/sync"; touch "$state/sync/done" "$state/sync/seen.tsv"
+    h0=$(now); p=$("${A[@]}" shell date +%s | tr -d '\r'); h1=$(now)
+    [[ $p =~ ^[0-9]+$ ]] || fail clock "the phone's date is not a number: ${p:0:40}"
+    jq -c -n --argjson p "$p" --argjson a "$h0" --argjson b "$h1" '{phone: $p, offset_s: ($p - ($a + $b) / 2), rtt_s: ($b - $a)}' > "$state/sync/clock.json"
+    [ "$newonly" = 0 ] || since=$p
+    for ((k = 1; k <= polls; k++)); do
+      sync_poll "$serial" "$state" "$dir" "$k" "$since" "$@"
+      [ "$k" = "$polls" ] || sleep "$gap"
+    done
+    echo "PASS sync: $(wc -l < "$state/sync/done") delivered in all, $(awk -F'\t' '{ n[$1] = 1 } END { print length(n) }' "$state/sync/seen.tsv") seen";;
   replay)
     [ $# -ge 2 ] || usage
     list=$1 state=$2; shift 2; init_state "$state"
