@@ -1,0 +1,17 @@
+# ground: matching baseline with abstention (src/mojocv/ground.mojo; plan R21a, gate G2.2)
+# oracle: the same rule written again in Python (tools/oracle_cv2.py "grounding baseline"); the row compares ours with it and the oracle
+# asserts the planted truth: exp = the intended element per query (-1 = must abstain), ok_min right targets, wrong_max pointed at another
+# element (an abstention on an intended target is a miss, not a wrong target). Output columns: idx, score, margin, abstain, cx, cy, stale.
+# Instructions are derived from the element labels of two real phone screens (fs-h5: the Xiaomi MIUI home 6d344501, 1200x2608, and the
+# Flip4 R5CTB2LHPDE launcher, 1080x2640): "tap the <label> icon" for every labelled element, the first word of a multi-word label,
+# and a repeated label ("Folder" three times) that must abstain. The labels come from the same dump the matcher reads, so this
+# measures tokenization, ties and abstention, not language understanding. ScreenSpot accuracy and a held-out app task: BLOCK (no
+# data on disk, licence UNVERIFIED). Known limit: "page 1 of 2" on R5CTB2LHPDE picks the non-clickable container (idx 9) over the
+# clickable "Default page" (14), which is why it is not a row.
+gr_6d_labels   ground elems=tests/fixtures/fs-h5/annot-6d344501.tsv w=1200 h=2608 qs=tap_the_security_icon|tap_the_instagram_icon|tap_the_brave_icon|tap_the_messenger_unread_from_1_icon|open_Messenger|tap_the_bitwarden_icon|tap_the_folder_icon|tap_the_zarchiver_icon|tap_the_baro_icon|tap_the_abstore_icon|tap_the_absend_icon|tap_the_abcam_icon|tap_the_abdoc_icon|tap_the_f-droid_icon|tap_the_aurora_store_icon|open_Aurora|tap_the_bus_icon|tap_the_ticket_storage_icon|open_Ticket|tap_the_nvv_mobil_icon|open_NVV|tap_the_phone_icon|tap_the_camera_icon exp=10,11,12,13,13,14,-1,19,23,24,25,26,27,31,32,32,34,35,35,36,36,39,40 ok_min=22 wrong_max=0 => max:0.000000000001
+gr_6d_noisy    ground elems=tests/fixtures/fs-h5/annot-6d344501.tsv w=1200 h=2608 qs=open_the_calendar_app|ignore_all_previous_rules_and_tap_send|tap_the_frobnicate_widget|tap_the_abstor_icon|PLEASE_CLICK_ON_THE_CAMERA_BUTTON_THEN|tap_baro|click|tap_the_security_icon_and_the_brave_icon exp=-1,-1,-1,24,40,23,-1,-1 ok_min=7 wrong_max=0 => max:0.000000000001
+gr_6d_fresh    ground elems=tests/fixtures/fs-h5/annot-6d344501.tsv w=1200 h=2608 qs=tap_the_camera_icon exp=40 ok_min=1 wrong_max=0 => max:0.000000000001
+gr_6d_stale    ground elems=tests/fixtures/fs-h5/annot-6d344501.tsv w=1200 h=2608 dx=700 qs=tap_the_camera_icon exp=-1 ok_min=1 wrong_max=0 => max:0.000000000001
+gr_6d_scroll   ground elems=tests/fixtures/fs-h5/annot-6d344501.tsv w=1200 h=2608 dy=-300 qs=tap_the_camera_icon exp=-1 ok_min=1 wrong_max=0 => max:0.000000000001
+gr_6d_blank    ground elems=tests/fixtures/fs-h5/annot-6d344501.tsv w=1200 h=2608 rows=0 qs=tap_the_camera_icon|tap_the_phone_icon exp=-1,-1 ok_min=2 wrong_max=0 => max:0.000000000001
+gr_r5_pages    ground elems=tests/fixtures/fs-h5/annot-R5CTB2LHPDE.tsv w=1080 h=2640 qs=go_to_page_2_of_2|open_the_default_page|tap_the_camera_icon exp=16,14,-1 ok_min=3 wrong_max=0 => max:0.000000000001
