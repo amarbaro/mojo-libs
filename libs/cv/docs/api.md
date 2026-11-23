@@ -30,6 +30,7 @@ Same meaning as the cv2 function of the same name; the exactness of each is in `
 | `imgproc` | `gaussian_blur(src, ksize, sigma)`, `sobel`, `pyr_down`, `threshold(src, thresh, maxval, kind)`, `otsu`, `triangle`, `integral`, `morph[is_min](src, shape, k, iters)`, `cvt_color(src, code)`, `resize(src, w, h, interp)`, `warp_affine`, `remap`, `blob`, `components`, `canny`, `find_contours`, `good_features`, `draw_line`, `draw_rect`, `hog_detect`, `group_rects`, `grab_cut` |
 | `features` | `orb_detect(img, nfeatures, fast_t)`, `knn2(q, t)`, `ratio_test(k, ratio)` |
 | `video` | `corner_sub_pix`, `lk_flow` (pyramidal Lucas-Kanade), `farneback` |
+| `hyper` | `flow_decomp`, `flow_strain`, `flow_epe`, `flow_reg`, `down_up`, `perspective4`, `warp_perspective`, `eq2persp`, `persp2eq`, `lpq`, `evm` (face and micro-expression ops from recent papers, [hyper.md](hyper.md)) |
 | `calib3d` | `rodrigues_vec`, `project_points`, `undistort_points`, `init_undistort_rectify_map`, `estimate_affine`, `solve_pnp`, `solve_pnp_ransac`, `find_essential`, `recover_pose`, `stereo_rectify`, `stereo_sgm`, `find_chessboard`, `aruco_detect` (4x4_50) |
 
 ### 3D, time and CAD

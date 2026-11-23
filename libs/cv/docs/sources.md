@@ -17,6 +17,13 @@ OpenCV 5.0 semantics, so cv2 5.0 is the oracle for them; the 3D ops are checked 
   [doi:10.1016/j.isprsjprs.2006.03.005](https://doi.org/10.1016/j.isprsjprs.2006.03.005): the action-matrix variant
   of Nister 2004 used for `findEssentialMat`.
 
+## Face and micro-expression ops (`hyper`)
+
+- arXiv 2409.05396 (FacialFlowNet, decomposed facial flow), 2603.07043 (onset-referenced flow), 2601.06479 (SRFlow, Sobel-masked
+  regularisation, EPE), 2310.10022 (downscale protocol), 2607.15995 (four-landmark homography), 2611.16793 (equirectangular
+  remap), 2308.01700 and Ojansivu and Heikkila 2008 (LPQ), 2606.25542 and Wu et al. 2012 (Eulerian video magnification).
+  Cards and the verbatim quotes: `mojo-cv-papers/cards/`. Definitions the cards leave open: [hyper.md](hyper.md).
+
 ## 3D, time and CAD
 
 - Zobrist 1970; Meagher 1982 (octrees).
