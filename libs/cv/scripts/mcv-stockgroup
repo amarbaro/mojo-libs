@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# mcv-stockgroup DIR [k=v...]: the CV half of a stock database. DIR holds the photos (DIR/work/*.jpg, 1024 px copies, with the
+# originals in DIR/raw/ for the EXIF time; or the photos directly in DIR). Writes DIR/cv.jsonl, one row per photo, and DIR/cv-groups.json
+# (not groups.json: the driver's own item labels live there). cv.jsonl row:
+#   {file, t, sharp, box, group, view, view_rank, dup_of, empty, boxShare, clip:{lo,hi}, gap, cos, p_same, w, h, tenengrad, dhash}
+# t = EXIF DateTimeOriginal + SubSec (s, raw/ first, then the photo itself, then the IMG_YYYYMMDD_HHMMSS name); sharp = variance of the
+# Laplacian at the stockcheck analysis scale; box = [x0,y0,x1,y1] px of the photo (null: no subject; empty = a clean cloth, no subject);
+# group = item (null for an empty frame); view = distinct view inside the item; view_rank 0 = sharpest of its view; dup_of = the
+# rank-0 photo of the same view (CV near-duplicate). cv-groups.json: per item the photos, the time span and the best photo per view.
+# Thresholds (measured on the 194 photos of 2026-11-22, see the header of src/mojocv/stockgroup.mojo for the grouping model):
+#   subject box: yellow tape (hue 20-36, S>=140, V>=130, band >= half the long edge) and hands (YCrCb skin, 19 px open, touching the
+#   edge >= 1.5 % or >= 8 %) masked out, background = median grey of the rest, subject = |grey - median| > max(25, 4 robust sigma).
+#   items: EM on (log10 gap, cosine); views: cosine >= 0.95 or dHash <= 6 bits. k=v goes to stockPhoto/stockGroup (tape= kmad= vcos= ...).
+# Embeddings are SigLIP on the GPU (scripts/siglip-embed.sh, gpu-wait); JPEG decode is CPU only (vips, ImageMagick for ICC files).
+set -euo pipefail
+root=$(cd "$(dirname "$0")/.." && pwd)
+bin=$root/.bin/mojo-cv
+[ $# -ge 1 ] || { echo "FAIL usage: mcv-stockgroup DIR [k=v...]" >&2; exit 2; }
+dir=$(realpath -- "$1"); shift
+[ -d "$dir" ] || { echo "FAIL input: $dir is not a directory" >&2; exit 2; }
+[ -x "$bin" ] && [ -x "$root/.bin/mcv-labels" ] || { echo "FAIL setup: $bin or .bin/mcv-labels missing (mojo build -O3 -I src src/main.mojo -o .bin/mojo-cv; scripts/build-labels.sh)" >&2; exit 1; }
+img=$dir; [ -d "$dir/work" ] && img=$dir/work
+raw=$dir/raw
+work=$root/.work/stockgroup.$$; mkdir -p "$work/d"; trap 'rm -rf "$work"' EXIT
+find "$img" -maxdepth 1 -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \) | sort > "$work/list"
+n=$(wc -l < "$work/list"); [ "$n" -gt 0 ] || { echo "FAIL input: no photos in $img" >&2; exit 1; }
+export MAGICK_THREAD_LIMIT=1
+step() { printf '%s %s\n' "$(date +%T)" "$*" >&2; }
+
+# 1 decode (CPU, N at a time) -> batch.tsv (decoded path, photo path)
+#   and 2 per-photo numbers (sharpness, exposure, subject box, hashes): one cpu-room job with its own cores and RAM cap (rules.md 27)
+step "decode + stockPhoto, $n photos"
+awk -v w="$work/d" '{ n = split($0, a, "/"); printf "%s\t%s/%d_%s\n", $0, w, NR, a[n] }' "$work/list" > "$work/dec.tsv"
+pc=$(( n < $(nproc) / 2 ? n : $(nproc) / 2 ))
+cat > "$work/cpu.sh" <<'EOS'
+#!/usr/bin/env bash
+# cpu.sh WORK DEC_SH BIN PC [k=v...]
+set -euo pipefail
+work=$1 dec=$2 bin=$3 pc=$4; shift 4
+export MAGICK_THREAD_LIMIT=1
+xargs -P "$pc" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r s d <<< "$1"; "$2" "$s" "$d" 2>&1 | head -2 || true' _ {} "$dec" < "$work/dec.tsv"
+while IFS=$'\t' read -r s d; do p=$d.mcv; [ -f "$d.ppm" ] && p=$d.ppm; printf '%s\t%s\n' "$p" "$s"; done < "$work/dec.tsv" > "$work/batch.tsv"
+"$bin" stockPhoto "$work/photo.jsonl" "$work/batch.tsv" "$@"
+EOS
+kv=(); for a in "$@"; do kv+=("$a"); done
+gpu-wait run --room cpu --cores "$pc" --mem "$(( 2 * pc ))" --timeout "${MCV_CPU_TIMEOUT:-1800}" --label stockgroup-cpu -- bash "$work/cpu.sh" "$work" "$root/scripts/decode-stock.sh" "$bin" "$pc" "${kv[@]}" > "$work/cpu.log" 2>&1 \
+  || { tail -3 "$work/cpu.log" >&2; echo "FAIL photo: decode + stockPhoto job" >&2; exit 1; }
+[ "$(wc -l < "$work/photo.jsonl")" -eq "$n" ] || { echo "FAIL count: stockPhoto wrote $(wc -l < "$work/photo.jsonl") lines for $n photos" >&2; exit 1; }
+bad=$(jq -r 'select(.error != null) | (.file | split("/") | last) + ": " + .error' "$work/photo.jsonl" | head -3 || true)
+[ -z "$bad" ] || { echo "FAIL photo: $bad" >&2; exit 1; }
+
+# 3 time stamps: EXIF of the raw original, else of the photo, else the file name
+step "exif"
+while IFS= read -r f; do b=${f##*/}; if [ -f "$raw/$b" ]; then echo "$raw/$b"; else echo "$f"; fi; done < "$work/list" > "$work/exif.list"
+tr '\n' '\0' < "$work/exif.list" | xargs -0 exiftool -q -T -FileName -DateTimeOriginal -SubSecTimeOriginal > "$work/exif.tsv" 2>/dev/null || true
+awk -F'\t' -v OFS='\t' 'FNR == NR { split($0, a, "/"); nm[a[length(a)]] = 1; next }
+  { name = $1; t = ""
+    if ($2 ~ /^[0-9]{4}:[0-9]{2}:[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/) { split($2, d, /[: ]/); t = mktime(d[1] " " d[2] " " d[3] " " d[4] " " d[5] " " d[6]) + (($3 ~ /^[0-9]+$/) ? ("0." $3) + 0 : 0) }
+    else if (match(name, /[0-9]{8}_[0-9]{6}/)) { s = substr(name, RSTART, 15); t = mktime(substr(s,1,4) " " substr(s,5,2) " " substr(s,7,2) " " substr(s,10,2) " " substr(s,12,2) " " substr(s,14,2)) }
+    if (t == "") { print "FAIL time: no EXIF time and no timestamp in the name of " name > "/dev/stderr"; bad = 1; next }
+    printf "%s\t%.3f\n", name, t }
+  END { exit bad }' "$work/list" "$work/exif.tsv" > "$work/times.tsv" || exit 1
+[ "$(wc -l < "$work/times.tsv")" -eq "$n" ] || { echo "FAIL time: $(wc -l < "$work/times.tsv") time stamps for $n photos" >&2; exit 1; }
+
+# 4 SigLIP embeddings on the GPU, in list order
+step "siglip-embed (GPU)"
+"$root/scripts/siglip-embed.sh" "$work/list" "$work/emb" > "$work/emb.log" 2>&1 || { tail -3 "$work/emb.log" >&2; echo "FAIL embed: siglip-embed.sh" >&2; exit 1; }
+
+# 5 items, views, near-duplicates
+step "stockGroup"
+jq -r '[(.file | split("/") | last), .lapvar, (if .empty then 1 else 0 end), .dhash] | @tsv' "$work/photo.jsonl" \
+  | awk -F'\t' -v OFS='\t' 'FNR == NR { t[$1] = $2; next } { print $1, t[$1], $2, $3, $4 }' "$work/times.tsv" - > "$work/in.tsv"
+"$bin" stockGroup "$work/grp.tsv" "$work/in.tsv" "$work/emb/embeds.f32" "${kv[@]}" >&2
+[ "$(wc -l < "$work/grp.tsv")" -eq "$n" ] || { echo "FAIL count: stockGroup wrote $(wc -l < "$work/grp.tsv") rows for $n photos" >&2; exit 1; }
+
+# 6 one row per photo, then the items
+jq -c --rawfile g "$work/grp.tsv" --rawfile tt "$work/times.tsv" '
+  ($g | split("\n") | map(select(length > 0) | split("\t") | {(.[0]): {group: (.[1] | tonumber), view: (.[2] | tonumber), rank: (.[3] | tonumber), dup: .[4], gap: (.[5] | tonumber? // -1), cos: (.[6] | tonumber? // -1), p: (.[7] | tonumber? // -1)}}) | add) as $G
+  | ($tt | split("\n") | map(select(length > 0) | split("\t") | {(.[0]): (.[1] | tonumber)}) | add) as $T
+  | (.file | split("/") | last) as $n | $G[$n] as $g
+  | {file: $n, t: $T[$n], sharp: .lapvar, box: .box, group: (if $g.group < 0 then null else $g.group end),
+     view: (if $g.group < 0 then null else $g.view end), view_rank: (if $g.group < 0 then null else $g.rank end),
+     dup_of: (if $g.dup == "-" then null else $g.dup end), empty: .empty, boxShare: .boxShare, clip: {lo: .lo, hi: .hi},
+     gap: (if $g.gap < 0 then null else $g.gap end), cos: (if $g.cos < -0.5 then null else $g.cos end),
+     p_same: (if $g.p < 0 then null else $g.p end), w: .w, h: .h, tenengrad: .tenengrad, dhash: .dhash}' "$work/photo.jsonl" > "$work/cv.jsonl"
+jq -s '[.[] | select(.group != null)] | group_by(.group) | map(sort_by(.t) | {group: .[0].group, n: length, t0: .[0].t, t1: .[-1].t,
+    files: map(.file), views: (map(.view) | unique | length),
+    best: (group_by(.view) | map(sort_by(.view_rank) | .[0].file))})' "$work/cv.jsonl" > "$work/groups.json"
+[ "$(wc -l < "$work/cv.jsonl")" -eq "$n" ] || { echo "FAIL count: cv.jsonl has $(wc -l < "$work/cv.jsonl") rows for $n photos" >&2; exit 1; }
+cp "$work/cv.jsonl" "$dir/cv.jsonl.tmp" && mv "$dir/cv.jsonl.tmp" "$dir/cv.jsonl"
+cp "$work/groups.json" "$dir/cv-groups.json.tmp" && mv "$dir/cv-groups.json.tmp" "$dir/cv-groups.json"
+echo "PASS stockgroup: $n photos -> $dir/cv.jsonl ($(jq -s 'map(select(.group != null) | .group) | unique | length' "$dir/cv.jsonl") items, $(jq -s 'map(select(.empty)) | length' "$dir/cv.jsonl") empty frames, $(jq -s 'map(select(.dup_of != null)) | length' "$dir/cv.jsonl") near-duplicates) + cv-groups.json"
