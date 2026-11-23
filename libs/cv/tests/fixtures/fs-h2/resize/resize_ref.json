@@ -1,0 +1,47 @@
+{
+ "cases": [
+  {
+   "file": "resize/A_320x224_bilinear.png",
+   "png_sha256": "c350a931302b60bf81642f89eee9c1427f672bbe1b19727dc8c3df5dd0fda9bb",
+   "raw_rgb_sha256": "dd3c14fe058ce3c828a5b1b6160f0d6b4a908a124533eccb938e09ab3193974c",
+   "size": [
+    320,
+    224
+   ],
+   "source": "A"
+  },
+  {
+   "file": "resize/A_400x280_bilinear.png",
+   "png_sha256": "3248fedf8de5605b41966f668e9cf79c19cb8c6a78ee0be71caf8a5a2b604c89",
+   "raw_rgb_sha256": "17532c6c9ad6fefe3d5f58355f99e61c26e9713da761dce54895370280a6d14f",
+   "size": [
+    400,
+    280
+   ],
+   "source": "A"
+  },
+  {
+   "file": "resize/A_1280x896_bilinear.png",
+   "png_sha256": "b3163efc291f1c934ccf5a469c6b3ca04f6eeba6f84de6d0281f8239a918b706",
+   "raw_rgb_sha256": "ae5e59a45a3378553b1284107205bd50ac5a4ac0a9662f23c0ba276651a5ee2b",
+   "size": [
+    1280,
+    896
+   ],
+   "source": "A"
+  },
+  {
+   "file": "resize/B_changed_tile_400x280_bilinear.png",
+   "png_sha256": "e044bea40578572ccd939d75db761ad695b42ac3189f0c76e899c5e7bc464ad8",
+   "raw_rgb_sha256": "eb22e9b9f5f04002b2543fc1429f3347e5e4e1ab83f02d9a0d4fadf1f3a99bf6",
+   "size": [
+    400,
+    280
+   ],
+   "source": "B_changed_tile"
+  }
+ ],
+ "kind": "float",
+ "method": "PIL Image.resize BILINEAR, reducing_gap=None",
+ "pil": "13.0.0"
+}

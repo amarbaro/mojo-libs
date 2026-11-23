@@ -1,0 +1,12 @@
+{
+ "dtype": "uint8",
+ "exact": true,
+ "frames": [
+  "stream/A.png",
+  "stream/B_changed_tile.png",
+  "stream/B_px16.png",
+  "stream/B_border16.png"
+ ],
+ "kind": "integer",
+ "op": "absdiff"
+}
