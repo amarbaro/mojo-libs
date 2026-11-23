@@ -3,6 +3,8 @@ for gfx1100, and the CPU tensor type does what its name says."""
 from gpunet.onnx import Model, Node, Tensor
 from gpunet.nn import Arr, run, needed
 from gpunet.gpu.net import GpuNet
+from gpunet.text import SiglipText
+from gpunet.decode import Det, decode_scrfd
 
 
 def main() raises:
