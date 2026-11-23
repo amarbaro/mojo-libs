@@ -61,3 +61,27 @@ Hashes: `tests/fixtures/fs-h2/SHA256SUMS` covers all 52 files.
 - No Mojo run against these fixtures; this is a reference spec, not a pass.
 - JPEG decode is CPU PIL only. No GPU arm is referenced.
 - Resize tolerance is not set here; the float twin has no pass bar yet.
+
+## P2 extension: stuck states, planted disc, planted EVM signal (R13a, R13b with R20a, R7, R3c)
+
+Generator: `tools/fs-h2/gen_p2.sh` (run after P0 `gen.sh` and `gen_refs.sh`; refuses unless the P0 `SHA256SUMS` verifies). Output: `tests/fixtures/fs-h2/p2/`, hashed in `p2/SHA256SUMS` (15 files). Truth: `p2/p2.json`.
+
+| set | files | ground truth | used by |
+|---|---|---|---|
+| stuck states | `p2/stuck/modal_{A,B}.png` (dialog fixed, background changes), `video_{A,B}.png` (region changes), `cursor_{A,B}.png` (3 px cursor toggles) | `p2.json` `stuck`: dialog box, element list (role, box, text, clickable), changed bbox, expected stuck and progress flags | R13 stuck oracle: modal over changing background is stuck; playing video is not; blinking cursor is not progress |
+| dialog elements | the `modal_A.png` element list (title, body, two buttons, umlauts included) | exact draw boxes | R13b and R20a separate box, role, text, clickability |
+| planted disc | `p2/mattes/disc.png` + `.mask.png`, `disc_hole` (6x6 hole), `disc_empty` (background only, all-zero mask) | labels 0 background, 1 disc, 2 boundary band (2 px); counts; empty flag | R7 falsifier: planted disc before any upsampler; empty cloth gives no mask |
+| planted EVM signal | `p2/evm/planted_sin.npy` (40 frames, 64x96 uint8, 0.1 cycles/frame, 2 levels, 16x24 patch), `p2/evm/static.npy` (zero-change control) | `p2.json` `evm`: freq, amplitude, patch slices, measured peak to peak | R3c temporal gain check, static control must stay byte-equal |
+
+## Not done (BLOCK, not PASS)
+
+- **Nine labelled hand photos (R7):** NOT present. No labelled hand mask set exists in `~/Projects/ebay.de/.work/stock-20261122/` (only unlabelled `IMG_*.jpg` and `box-on-hand.png`). Not fabricated. Gate `H2-p2-hands` writes BLOCK until `.work/fs/labels/hands/` holds the nine labelled photos from Mario.
+- **Annotated screens per UI language (R20a):** not extended. The P0 set is still PARTIAL (auto OCR draft, unverified, no per-language balance recorded). No new captures were taken.
+- **Real labelled mattes:** still synthetic only (P0 status unchanged).
+- Mojo consumption of any P2 fixture: nothing run against `mojocv`. This doc is a fixture spec, not a pass.
+
+## Regenerate
+
+```
+cd <worktree>/libs/cv && bash tools/fs-h2/gen.sh && bash tools/fs-h2/gen_refs.sh && bash tools/fs-h2/gen_p2.sh
+```
