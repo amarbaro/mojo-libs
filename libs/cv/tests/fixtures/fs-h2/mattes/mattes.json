@@ -1,0 +1,138 @@
+{
+ "empty_bg": {
+  "boundary_band_px_2": 245,
+  "empty_cloth": true,
+  "image": "mattes/empty_bg.png",
+  "image_sha256": "5abf3177c89626968a768a163eae1a8a7e565ab844a5e1c1a039aa822e3de166",
+  "kind": "empty",
+  "labels": {
+   "0": "background",
+   "1": "cloth",
+   "2": "hanger"
+  },
+  "mask": "mattes/empty_bg.mask.png",
+  "mask_sha256": "f88c7a30f24f50497f073604a06e8b44fff037094c171eddd66cce86803381f2",
+  "pixel_counts": {
+   "0": 262051,
+   "2": 93
+  },
+  "size": [
+   512,
+   512
+  ]
+ },
+ "empty_hanger": {
+  "boundary_band_px_2": 245,
+  "empty_cloth": true,
+  "image": "mattes/empty_hanger.png",
+  "image_sha256": "fb26d23decd7800bb8aae24dd188502f9e76d437b62a41f851d835f52799c7d2",
+  "kind": "empty",
+  "labels": {
+   "0": "background",
+   "1": "cloth",
+   "2": "hanger"
+  },
+  "mask": "mattes/empty_hanger.mask.png",
+  "mask_sha256": "f88c7a30f24f50497f073604a06e8b44fff037094c171eddd66cce86803381f2",
+  "pixel_counts": {
+   "0": 262051,
+   "2": 93
+  },
+  "size": [
+   512,
+   512
+  ]
+ },
+ "jacket_sleeves": {
+  "boundary_band_px_2": 8075,
+  "empty_cloth": false,
+  "image": "mattes/jacket_sleeves.png",
+  "image_sha256": "e2209a0b4a06c6e988b51df609c9301c933a4515bf7cfe9ddea01b8423c78ed2",
+  "kind": "cloth",
+  "labels": {
+   "0": "background",
+   "1": "cloth",
+   "2": "hanger"
+  },
+  "mask": "mattes/jacket_sleeves.mask.png",
+  "mask_sha256": "ecb841804e0d809870d06c3fdc489642f91476981a024756f881e73341b0191e",
+  "pixel_counts": {
+   "0": 160992,
+   "1": 101059,
+   "2": 93
+  },
+  "size": [
+   512,
+   512
+  ]
+ },
+ "pants_gap": {
+  "boundary_band_px_2": 7281,
+  "empty_cloth": false,
+  "image": "mattes/pants_gap.png",
+  "image_sha256": "0fbd9a986c84015ca79d4d2796e3d13a0d59dc7d27c9ba4d25c1dba511b3c84e",
+  "kind": "cloth",
+  "labels": {
+   "0": "background",
+   "1": "cloth",
+   "2": "hanger"
+  },
+  "mask": "mattes/pants_gap.mask.png",
+  "mask_sha256": "87e9875057296d055cd56216d1c4bc88d59a951062e7bd2611f2b652ce1349f5",
+  "pixel_counts": {
+   "0": 192911,
+   "1": 69140,
+   "2": 93
+  },
+  "size": [
+   512,
+   512
+  ]
+ },
+ "shirt_lowcontrast": {
+  "boundary_band_px_2": 6494,
+  "empty_cloth": false,
+  "image": "mattes/shirt_lowcontrast.png",
+  "image_sha256": "f9352993df0d404141a4e91568922b80b608530418c69e692e0bd144add648f4",
+  "kind": "cloth",
+  "labels": {
+   "0": "background",
+   "1": "cloth",
+   "2": "hanger"
+  },
+  "mask": "mattes/shirt_lowcontrast.mask.png",
+  "mask_sha256": "c3141cc8714eff06230b9fb5f77d63139538f220fd54da436fcc7f86ef3c23fe",
+  "pixel_counts": {
+   "0": 181906,
+   "1": 80145,
+   "2": 93
+  },
+  "size": [
+   512,
+   512
+  ]
+ },
+ "shirt_thin": {
+  "boundary_band_px_2": 6494,
+  "empty_cloth": false,
+  "image": "mattes/shirt_thin.png",
+  "image_sha256": "ecb10800dcefa0cac4162fbd269458a5a3a1fd1540c78c541c584980075efeb5",
+  "kind": "cloth",
+  "labels": {
+   "0": "background",
+   "1": "cloth",
+   "2": "hanger"
+  },
+  "mask": "mattes/shirt_thin.mask.png",
+  "mask_sha256": "c3141cc8714eff06230b9fb5f77d63139538f220fd54da436fcc7f86ef3c23fe",
+  "pixel_counts": {
+   "0": 181906,
+   "1": 80145,
+   "2": 93
+  },
+  "size": [
+   512,
+   512
+  ]
+ }
+}

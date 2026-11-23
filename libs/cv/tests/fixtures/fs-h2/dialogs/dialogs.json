@@ -1,0 +1,222 @@
+{
+ "dlg_de_light": {
+  "elements": [
+   {
+    "box_xyxy": [
+     0,
+     0,
+     560,
+     57
+    ],
+    "clickable": false,
+    "role": "titlebar",
+    "text": ""
+   },
+   {
+    "box_xyxy": [
+     16,
+     19,
+     307,
+     49
+    ],
+    "clickable": false,
+    "role": "title",
+    "text": "Änderungen speichern?"
+   },
+   {
+    "box_xyxy": [
+     20,
+     86,
+     341,
+     111
+    ],
+    "clickable": false,
+    "role": "text",
+    "text": "Die Datei wurde geändert."
+   },
+   {
+    "box_xyxy": [
+     20,
+     130,
+     349,
+     155
+    ],
+    "clickable": false,
+    "role": "text",
+    "text": "Möchten Sie sie speichern?"
+   },
+   {
+    "box_xyxy": [
+     380,
+     188,
+     540,
+     240
+    ],
+    "clickable": true,
+    "role": "button",
+    "text": "Abbrechen"
+   },
+   {
+    "box_xyxy": [
+     215,
+     188,
+     368,
+     240
+    ],
+    "clickable": true,
+    "role": "button",
+    "text": "Verwerfen"
+   },
+   {
+    "box_xyxy": [
+     54,
+     188,
+     203,
+     240
+    ],
+    "clickable": true,
+    "role": "button",
+    "text": "Speichern"
+   }
+  ],
+  "font": "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+  "png": "dialogs/dlg_de_light.png",
+  "sha256": "fb87ca365cdd287bcc7acea3300aa30e3085364e046470cae865776f7ef58302",
+  "size": [
+   560,
+   260
+  ]
+ },
+ "dlg_en_dark": {
+  "elements": [
+   {
+    "box_xyxy": [
+     0,
+     0,
+     640,
+     52
+    ],
+    "clickable": false,
+    "role": "titlebar",
+    "text": ""
+   },
+   {
+    "box_xyxy": [
+     16,
+     22,
+     188,
+     40
+    ],
+    "clickable": false,
+    "role": "title",
+    "text": "Delete 3 items?"
+   },
+   {
+    "box_xyxy": [
+     20,
+     80,
+     284,
+     98
+    ],
+    "clickable": false,
+    "role": "text",
+    "text": "This cannot be undone."
+   },
+   {
+    "box_xyxy": [
+     20,
+     116,
+     410,
+     140
+    ],
+    "clickable": false,
+    "role": "text",
+    "text": "Files will be removed permanently."
+   },
+   {
+    "box_xyxy": [
+     488,
+     232,
+     620,
+     280
+    ],
+    "clickable": true,
+    "role": "button",
+    "text": "Cancel"
+   },
+   {
+    "box_xyxy": [
+     344,
+     232,
+     476,
+     280
+    ],
+    "clickable": true,
+    "role": "button",
+    "text": "Delete"
+   }
+  ],
+  "font": "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+  "png": "dialogs/dlg_en_dark.png",
+  "sha256": "9940809204c97083e2ba65396aac93d6593ae9e29f94366e7b21e78f5203ec7f",
+  "size": [
+   640,
+   300
+  ]
+ },
+ "dlg_small_light": {
+  "elements": [
+   {
+    "box_xyxy": [
+     0,
+     0,
+     420,
+     39
+    ],
+    "clickable": false,
+    "role": "titlebar",
+    "text": ""
+   },
+   {
+    "box_xyxy": [
+     16,
+     13,
+     128,
+     30
+    ],
+    "clickable": false,
+    "role": "title",
+    "text": "Übernehmen"
+   },
+   {
+    "box_xyxy": [
+     20,
+     65,
+     200,
+     83
+    ],
+    "clickable": false,
+    "role": "text",
+    "text": "Größe 42 ausgewählt"
+   },
+   {
+    "box_xyxy": [
+     301,
+     144,
+     400,
+     180
+    ],
+    "clickable": true,
+    "role": "button",
+    "text": "OK"
+   }
+  ],
+  "font": "/usr/share/fonts/noto/NotoSans-Regular.ttf",
+  "png": "dialogs/dlg_small_light.png",
+  "sha256": "09a491ab62b0e3e2c4f86eafe9164d685a28912d2e4604cbf26680931293bc1e",
+  "size": [
+   420,
+   200
+  ]
+ }
+}

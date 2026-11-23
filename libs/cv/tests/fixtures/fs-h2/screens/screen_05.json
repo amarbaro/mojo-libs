@@ -1,0 +1,250 @@
+{
+ "annotation": "auto-ocr draft (tesseract psm 11); roles/clickable heuristic; NOT human-verified",
+ "elements": [
+  {
+   "box_xyxy": [
+    868,
+    13,
+    984,
+    59
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:4>"
+  },
+  {
+   "box_xyxy": [
+    463,
+    126,
+    599,
+    145
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:12>"
+  },
+  {
+   "box_xyxy": [
+    463,
+    194,
+    601,
+    206
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:14>"
+  },
+  {
+   "box_xyxy": [
+    1277,
+    194,
+    1291,
+    200
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:1>"
+  },
+  {
+   "box_xyxy": [
+    1305,
+    196,
+    1418,
+    207
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:19>"
+  },
+  {
+   "box_xyxy": [
+    1277,
+    202,
+    1291,
+    208
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:1>"
+  },
+  {
+   "box_xyxy": [
+    462,
+    237,
+    1248,
+    251
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:119>"
+  },
+  {
+   "box_xyxy": [
+    462,
+    257,
+    852,
+    271
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:61>"
+  },
+  {
+   "box_xyxy": [
+    465,
+    315,
+    493,
+    326
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:4>"
+  },
+  {
+   "box_xyxy": [
+    1366,
+    315,
+    1436,
+    326
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:9>"
+  },
+  {
+   "box_xyxy": [
+    1122,
+    381,
+    1144,
+    403
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:2>"
+  },
+  {
+   "box_xyxy": [
+    512,
+    386,
+    617,
+    403
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:3>"
+  },
+  {
+   "box_xyxy": [
+    1096,
+    413,
+    1170,
+    427
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:11>"
+  },
+  {
+   "box_xyxy": [
+    507,
+    420,
+    512,
+    427
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:1>"
+  },
+  {
+   "box_xyxy": [
+    626,
+    451,
+    630,
+    455
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:1>"
+  },
+  {
+   "box_xyxy": [
+    779,
+    639,
+    795,
+    674
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:1>"
+  },
+  {
+   "box_xyxy": [
+    612,
+    676,
+    672,
+    687
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:9>"
+  },
+  {
+   "box_xyxy": [
+    462,
+    796,
+    503,
+    808
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:5>"
+  },
+  {
+   "box_xyxy": [
+    1288,
+    796,
+    1302,
+    802
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:1>"
+  },
+  {
+   "box_xyxy": [
+    1316,
+    798,
+    1418,
+    809
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:19>"
+  },
+  {
+   "box_xyxy": [
+    1288,
+    804,
+    1302,
+    810
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:1>"
+  },
+  {
+   "box_xyxy": [
+    462,
+    839,
+    524,
+    850
+   ],
+   "clickable": false,
+   "role": "text",
+   "text": "<redacted:10>"
+  }
+ ],
+ "name": "screen_05",
+ "sha256_of_private_capture": "cd8dae07322fe9acb8c4da4d58c3a238faa3001a04e5a1df4f09b150d21d5000",
+ "text_redacted": true
+}
