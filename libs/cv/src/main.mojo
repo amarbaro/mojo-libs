@@ -13,11 +13,12 @@ from mojocv.gpu import run as run_gpu
 from mojocv.regions import run as run_regions
 from mojocv.ruler import run as run_ruler
 from mojocv.hyper import run as run_hyper
+from mojocv.calib import run as run_calib
 
 
 def main() raises:
     var a = Args()
-    var ok = run_gpu(a) or run_core(a) or run_imgproc(a) or run_features(a) or run_video(a) or run_calib3d(a) or run_granulo(a) or run_stockcheck(a) or run_stockphoto(a) or run_stockgroup(a) or run_regions(a) or run_ruler(a) or run_hyper(a)
+    var ok = run_gpu(a) or run_core(a) or run_imgproc(a) or run_features(a) or run_video(a) or run_calib3d(a) or run_granulo(a) or run_stockcheck(a) or run_stockphoto(a) or run_stockgroup(a) or run_regions(a) or run_ruler(a) or run_hyper(a) or run_calib(a)
     if not ok:
         var v = List[String]()
         var av = argv()

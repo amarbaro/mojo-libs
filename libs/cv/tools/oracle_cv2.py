@@ -1126,8 +1126,143 @@ def make_fixtures(d):
     for n in ["hd", "hd2", *st]:
         if fx[n].shape[0] > 64:
             cv2.imwrite(os.path.join(d, "stock", n + ".png"), fx[n])
+    # calibration (R9): vote counts for the Dirichlet-multinomial rows, scorers for temperature, ECE and abstention; own seed so
+    # the fixtures above do not move. ok scorer: logits b, labels drawn from softmax(b); ov: logits 3 b, same labels
+    Cr = np.random.default_rng(97)
+    K = 7
+    al = Cr.uniform(0.2, 20.0, (200, K))
+    fx["cal_alpha"] = al
+    fx["cal_cnt"] = np.stack([Cr.multinomial(int(n), Cr.dirichlet(a)) for n, a in zip(Cr.integers(1, 40, 200), al)]).astype(np.float64)
+    fx["cal_alpha_edge"] = np.array([[0.05] * 4, [500.0] * 4, [0.05, 500.0, 0.3, 7.0], [1.0] * 4, [0.05] * 4, [30.0, 0.01, 2.0, 0.5]])
+    fx["cal_cnt_edge"] = np.array([[0, 0, 0, 0], [1000, 0, 0, 0], [0, 400, 0, 3], [250, 250, 250, 250], [3, 0, 0, 0], [20, 0, 11, 1]], np.float64)
+    pz = Cr.normal(0, 1.2, (300, K))
+    pt = np.exp(pz) / np.exp(pz).sum(1, keepdims=True)
+    fx["cal_vote_p"] = pt
+    fx["cal_vote_cnt"] = np.stack([Cr.multinomial(10, Cr.dirichlet(8.0 * p)) for p in pt]).astype(np.float64)
+    po = pt ** 3
+    fx["cal_vote_p_over"] = po / po.sum(1, keepdims=True)
+
+    def scorer(n, scale):
+        b = Cr.normal(0, 1.5, (n, K))
+        y = np.minimum((np.cumsum(_softmax(b, 1.0), 1) < Cr.random(n)[:, None]).sum(1), K - 1)
+        return scale * b, y.astype(np.int32).reshape(-1, 1)
+
+    fx["calf_z_ok"], fx["calf_y_ok"] = scorer(3000, 1.0)
+    fx["calt_z_ok"], fx["calt_y_ok"] = scorer(3000, 1.0)
+    fx["calf_z_ov"], fx["calf_y_ov"] = scorer(3000, 3.0)
+    fx["calt_z_ov"], fx["calt_y_ov"] = scorer(3000, 3.0)
+    fx["calf_y_shuf"] = Cr.permutation(fx["calf_y_ok"].reshape(-1)).astype(np.int32).reshape(-1, 1)
+    fx["cal_Tfit_ov"] = np.array([[_cal_temp(fx["calf_z_ov"], fx["calf_y_ov"].reshape(-1))[0]]])
+    fx["cal_thr_ok"] = np.array([[_cal_abstain(fx["calf_z_ok"], fx["calf_y_ok"].reshape(-1), 1.0, 0.2, None)[0]]])
     for n, a in fx.items():
         mcv.save(a, os.path.join(d, n + ".mcv"))
+
+
+# ---- calibration (src/mojocv/calib.mojo; rows in tests/cases/fs-calib.txt) --------------------------------------
+import math
+
+_lg = np.vectorize(math.lgamma, otypes=[np.float64])
+
+
+def _dm_rows(c, a):
+    n, A = c.sum(1), a.sum(1)
+    return -(_lg(n + 1) - _lg(c + 1).sum(1) + _lg(A) - _lg(n + A) + (_lg(c + a) - _lg(a)).sum(1))
+
+
+def _grid_min(f, lo, hi, n=801, stages=3):
+    """Minimum of f over x in [lo, hi] by nested grids: the oracle for the golden-section fits (x = log of the parameter)."""
+    for _ in range(stages):
+        xs = np.linspace(lo, hi, n)
+        v = np.array([f(x) for x in xs])
+        j = int(v.argmin())
+        step = (hi - lo) / (n - 1)
+        lo, hi = xs[j] - step, xs[j] + step
+    return xs[j], v[j]
+
+
+def _softmax(z, t):
+    e = np.exp((z - z.max(1, keepdims=True)) / t)
+    return e / e.sum(1, keepdims=True)
+
+
+def _nll(z, y, t):
+    return -np.log(np.maximum(_softmax(z, t)[np.arange(len(y)), y], 1e-300)).mean()
+
+
+def _cal_temp(z, y):
+    x, v = _grid_min(lambda x: _nll(z, y, math.exp(x)), math.log(0.05), math.log(20.0))
+    return math.exp(x), v, _nll(z, y, 1.0)
+
+
+def _cal_abstain(z, y, t, max_err, fixed):
+    p = _softmax(z, t)
+    conf, ok = p.max(1), (p.argmax(1) == y).astype(np.float64)
+    thr = 2.0
+    if fixed is not None:
+        thr = fixed
+    else:
+        for c in np.unique(conf):  # ascending: the first threshold that meets the error limit has the largest coverage
+            if 1.0 - ok[conf >= c].mean() <= max_err:
+                thr = float(c)
+                break
+    kept = conf >= thr
+    return thr, kept.mean(), (1.0 - ok[kept].mean()) if kept.any() else 0.0
+
+
+def _plant(kv, key, val, tol=0.0, log=False):
+    """The oracle asserts the planted truth a row names, so a pass means ours equals an oracle that equals the plant."""
+    if key in kv:
+        want, got = float(kv[key]), val
+        if log:
+            want, got = math.log(want), math.log(got)
+        if abs(got - want) > float(kv.get("tol", tol)):
+            raise SystemExit(f"planted {key}={kv[key]} but the oracle got {val}")
+
+
+@op()
+def calDm(i, kv):
+    return _dm_rows(i[0], i[1]).reshape(-1, 1)
+
+
+@op()
+def calFitDm(i, kv):
+    c, p = i[0], np.maximum(i[1], 1e-6)
+    f = lambda x: _dm_rows(c, math.exp(x) * p).mean()
+    x, v = _grid_min(f, math.log(0.01), math.log(10000.0))
+    _plant(kv, "expect_s", math.exp(x), log=True)
+    return np.array([[x, v, f(0.0)]])
+
+
+@op()
+def calTemp(i, kv):
+    t, v, v1 = _cal_temp(i[0], i[1].reshape(-1))
+    _plant(kv, "expect_T", t)
+    return np.array([[t, v, v1]])
+
+
+@op()
+def calEval(i, kv):
+    z, y = i[0], i[1].reshape(-1)
+    t = float(i[2].reshape(-1)[0]) if len(i) > 2 else kv_f(kv, "T", 1.0)
+    bins, p = kv_i(kv, "bins", 15), _softmax(z, t)
+    conf, ok = p.max(1), (p.argmax(1) == y).astype(np.float64)
+    b = np.clip(np.ceil(conf * bins).astype(int) - 1, 0, bins - 1)
+    ece = sum((b == k).mean() * abs(ok[b == k].mean() - conf[b == k].mean()) for k in range(bins) if (b == k).any())
+    flag = float(ece > kv_f(kv, "max_ece", 0.05) and conf.mean() > ok.mean())
+    _plant(kv, "expect", flag)
+    return np.array([[ece, _nll(z, y, t), ok.mean(), flag]])
+
+
+@op()
+def calAbstain(i, kv):
+    z, y = i[0], i[1].reshape(-1)
+    thr, cov, err = _cal_abstain(z, y, kv_f(kv, "T", 1.0), kv_f(kv, "max_err", 0.1), float(i[2].reshape(-1)[0]) if len(i) > 2 else None)
+    _plant(kv, "expect_cov", cov)
+    if "err_limit" in kv and err > float(kv["err_limit"]):
+        raise SystemExit(f"held-out error {err} above the limit {kv['err_limit']}")
+    if "cov_min" in kv and cov < float(kv["cov_min"]):
+        raise SystemExit(f"coverage {cov} below {kv['cov_min']}")
+    return np.array([[thr, cov, err]])
 
 
 # ---- driver -----------------------------------------------------------------------------------------------
