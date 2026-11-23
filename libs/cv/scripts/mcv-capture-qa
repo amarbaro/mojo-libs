@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+# mcv-capture-qa: per-shot QA of a live capture, and finalized item rows (plan R12a, gate tests/capture_replay.sh).
+#   mcv-capture-qa qa IMG [STATE] [k=v...]   verdict of one shot: file check, subject box, sharpness, hand; CPU only, no grouping
+#   mcv-capture-qa shot STATE IMG [k=v...]   qa + grouping: appends IMG to STATE, prints the verdict line, then one `closed` line
+#                                            when the shot starts a new item (the rows of the item before it are final)
+#   mcv-capture-qa close STATE               finalize the rows still open (end of the shoot)
+#   mcv-capture-qa replay LIST STATE [k=v...]  the shots of LIST in order through `shot`, then close. The pictures are first run
+#                                            once through mcv-stockgroup (STATE/batch/cv.jsonl = the batch rows), which fills the
+#                                            cache: replay then reuses the identical embeddings (no GPU per shot).
+# STATE: list (shots in arrival order), shots.jsonl (one verdict per shot), final.jsonl (finalized rows, as in cv.jsonl), fin,
+#   last.json (time and tape of the last shot), out/ (mcv-stockgroup output of the prefix), cache/ (MCV_CACHE default).
+# Verdict line: {file, t, verdict: ok|raise, raise: [truncated late hand defocus], notes: [empty no_box no_tape tape_lost], sharp, hand}.
+#   raise = act now (retake the shot); notes = logged, not an alert, because clean shots of the 194-photo shoot show them (20 shots
+#   without tape, 5 tape losses inside an item, 2 empty frames). Thresholds, measured on that shoot (docs/stockgroup.md): hand >= 0.02
+#   (MCV_QA_HAND; 31 of 194 shots are at or above it, every clean shot is under), sharp < 100 (MCV_QA_SHARP; lowest clean shot 151).
+#   late = a time stamp earlier than the previous accepted shot. truncated = the picture does not decode without warnings.
+# A row in final.jsonl equals the same row of the batch run: stockGroup scores consecutive shots with fixed constants, so a prefix
+#   run reproduces every item that a later shot has closed. Env MCV_RAW (originals for EXIF), MCV_CACHE (per-photo cache).
+# Observation only: reads pictures, writes under STATE and the cache. UI-style text never enters a verdict: only numbers and flags.
+set -euo pipefail
+root=$(cd "$(dirname "$0")/.." && pwd)
+bin=$root/.bin/mojo-cv; sg=$root/scripts/mcv-stockgroup
+hmax=${MCV_QA_HAND:-0.02}; smin=${MCV_QA_SHARP:-100}
+fail() { echo "FAIL $1: $2" >&2; exit "${3:-1}"; }
+usage() { sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+[ $# -ge 1 ] || usage
+cmd=$1; shift
+
+shot_t() {  # IMG -> seconds with milliseconds, EXIF of the original first (same rule as mcv-stockgroup)
+  local b=${1##*/} src=$1 dt sub s f=0 d
+  [ -f "${MCV_RAW:-/nonexistent}/$b" ] && src=$MCV_RAW/$b
+  IFS=$'\t' read -r dt sub <<< "$(exiftool -q -T -DateTimeOriginal -SubSecTimeOriginal "$src" 2>/dev/null || true)"
+  if [[ $dt =~ ^([0-9]{4}):([0-9]{2}):([0-9]{2})\ ([0-9]{2}):([0-9]{2}):([0-9]{2}) ]]; then
+    s=$(date -d "${BASH_REMATCH[1]}-${BASH_REMATCH[2]}-${BASH_REMATCH[3]} ${BASH_REMATCH[4]}:${BASH_REMATCH[5]}:${BASH_REMATCH[6]}" +%s)
+    [[ $sub =~ ^[0-9]+$ ]] && f=0.$sub
+  elif [[ $b =~ ([0-9]{8})_([0-9]{6}) ]]; then
+    d=${BASH_REMATCH[1]}; s=$(date -d "${d:0:4}-${d:4:2}-${d:6:2} ${BASH_REMATCH[2]:0:2}:${BASH_REMATCH[2]:2:2}:${BASH_REMATCH[2]:4:2}" +%s)
+  else fail time "no EXIF time and no time stamp in the name of $b"; fi
+  awk -v s="$s" -v f="$f" 'BEGIN { printf "%.3f", s + f }'
+}
+
+intact() {  # decodes to the last row without a warning (libvips fail=true on a JPEG, ImageMagick -regard-warnings otherwise)
+  [ -s "$1" ] || return 1
+  case ${1,,} in *.jpg|*.jpeg) VIPS_WARNING=0 vips avg "$1[fail=true]" >/dev/null 2>&1;; *) magick -regard-warnings "$1" null: >/dev/null 2>&1;; esac
+}
+
+photo_row() {  # IMG [k=v...] -> the stockPhoto row, from the cache or one cpu-room job
+  local img=$1 s c w; shift
+  s=$(sha256sum "$img" | cut -d' ' -f1); c=${MCV_CACHE:?}/photo-$(printf '%s' "$*" | sha256sum | cut -c1-8)/$s.json
+  if [ ! -s "$c" ]; then
+    mkdir -p "${c%/*}"; w=$root/.work/capture-qa.$$; mkdir -p "$w"
+    gpu-wait run --room cpu --cores 1 --mem 2 --timeout 300 --label capture-qa -- bash -c '
+      set -euo pipefail; d=$2/d; "$1/scripts/decode-stock.sh" "$3" "$d"; p=$d.mcv; [ -f "$d.ppm" ] && p=$d.ppm
+      printf "%s\t%s\n" "$p" "$3" > "$2/b.tsv"; "$1/.bin/mojo-cv" stockPhoto "$2/row.jsonl" "$2/b.tsv" "${@:4}"' _ "$root" "$w" "$img" "$@" > "$w/log" 2>&1 \
+      || { tail -3 "$w/log" >&2; rm -rf "$w"; fail photo "decode + stockPhoto of $img"; }
+    jq -e 'select(.error == null)' "$w/row.jsonl" > "$c.tmp$$" || { rm -rf "$w"; fail photo "stockPhoto error on $img"; }
+    mv "$c.tmp$$" "$c"; rm -rf "$w"
+  fi
+  cat "$c"
+}
+
+verdict() {  # ROWJSON T LASTJSON -> verdict line
+  jq -c -n --argjson r "$1" --argjson t "$2" --argjson last "$3" --argjson h "$hmax" --argjson s "$smin" '
+    ($r.hand // 0) as $h0 | ($last.t // null) as $lt | ($last.tape // null) as $pt
+    | [ (if $lt != null and $t < $lt then "late" else empty end),
+        (if $h0 >= $h then "hand" else empty end),
+        (if ($r.empty | not) and ($r.sharp // $r.lapvar) < $s then "defocus" else empty end) ] as $rs
+    | [ (if $r.empty then "empty" else empty end),
+        (if ($r.empty | not) and $r.box == null then "no_box" else empty end),
+        (if ($r.empty | not) and ($r.px_per_cm // $r.tapePxCm) == null then (if $pt == true then "tape_lost" else "no_tape" end) else empty end) ] as $ns
+    | {file: ($r.file | split("/") | last), t: $t, verdict: (if ($rs | length) > 0 then "raise" else "ok" end), raise: $rs, notes: $ns,
+       sharp: ($r.sharp // $r.lapvar), hand: $h0}'
+}
+
+truncated() { jq -c -n --arg f "${1##*/}" '{file: $f, t: null, verdict: "raise", raise: ["truncated"], notes: [], sharp: null, hand: null}'; }
+
+last_of() { local f=$1/last.json; if [ -f "$f" ]; then cat "$f"; else echo null; fi; }  # STATE -> last.json or null
+
+keep_last() {  # STATE ROWJSON T: remember the time, and the tape unless the frame is empty
+  jq -c -n --argjson r "$2" --argjson t "$3" --argjson old "$(last_of "$1")" \
+    '{t: $t, tape: (if $r.empty then ($old.tape // null) else (($r.px_per_cm // $r.tapePxCm) != null) end)}' > "$1/last.json.tmp" && mv "$1/last.json.tmp" "$1/last.json"
+}
+
+finalize() {  # STATE UPTO: rows fin..UPTO-1 of out/cv.jsonl become final
+  local fin; fin=$(cat "$1/fin"); [ "$2" -gt "$fin" ] || return 0
+  sed -n "$((fin + 1)),${2}p" "$1/out/cv.jsonl" >> "$1/final.jsonl"; echo "$2" > "$1/fin"
+}
+
+init_state() { mkdir -p "$1/out"; : >> "$1/list"; : >> "$1/shots.jsonl"; : >> "$1/final.jsonl"; [ -f "$1/fin" ] || echo 0 > "$1/fin"; MCV_CACHE=${MCV_CACHE:-$1/cache}; export MCV_CACHE; }
+
+case $cmd in
+  qa)
+    [ $# -ge 1 ] || usage
+    img=$1; shift; state=""; if [ $# -ge 1 ] && [[ $1 != *=* ]]; then state=$1; shift; fi
+    MCV_CACHE=${MCV_CACHE:-$root/.work/capture-qa-cache}; export MCV_CACHE
+    intact "$img" || { truncated "$img"; exit 0; }
+    row=$(photo_row "$img" "$@"); t=$(shot_t "$img")
+    last=null; [ -n "$state" ] && last=$(last_of "$state")
+    verdict "$row" "$t" "$last";;
+  shot)
+    [ $# -ge 2 ] || usage
+    state=$1 img=$(realpath -- "$2"); shift 2; init_state "$state"
+    [ -f "$img" ] || fail input "$img is not a file" 2
+    if ! intact "$img"; then truncated "$img" | tee -a "$state/shots.jsonl"; exit 0; fi
+    last=$(last_of "$state"); echo "$img" >> "$state/list"
+    MCV_LIST=$state/list "$sg" "$state/out" "$@" > "$state/out/log" 2>&1 || { tail -3 "$state/out/log" >&2; sed -i '$d' "$state/list"; fail group "mcv-stockgroup on the prefix"; }
+    n=$(wc -l < "$state/list"); row=$(sed -n "${n}p" "$state/out/cv.jsonl"); t=$(shot_t "$img")
+    printf '%s\n' "$row" >> "$state/arrival.jsonl"  # the row as it stood at arrival: replay logs what closing the item changed
+    verdict "$row" "$t" "$last" | tee -a "$state/shots.jsonl"
+    keep_last "$state" "$row" "$t"
+    # the new shot closes the previous item when its item differs from that of the last shot that had one
+    prev=$(sed -n "1,$((n - 1))p" "$state/out/cv.jsonl" | jq -s 'map(select(.group != null)) | last | .group // null')
+    new=$(jq -r '.group // "null"' <<< "$row")
+    if [ "$new" != null ] && [ "$prev" != null ] && [ "$new" != "$prev" ]; then
+      f0=$(cat "$state/fin"); finalize "$state" $((n - 1))
+      jq -c -n --argjson g "$prev" --argjson k $((n - 1 - f0)) '{event: "closed", group: $g, rows: $k}'
+    fi;;
+  close)
+    [ $# -eq 1 ] || usage
+    state=$1; [ -s "$state/out/cv.jsonl" ] || fail input "$state has no shots"
+    f0=$(cat "$state/fin"); n=$(wc -l < "$state/list"); finalize "$state" "$n"
+    jq -c -n --argjson k $((n - f0)) '{event: "closed", group: "end", rows: $k}';;
+  replay)
+    [ $# -ge 2 ] || usage
+    list=$1 state=$2; shift 2; init_state "$state"
+    [ ! -s "$state/list" ] || fail state "$state is not empty: replay needs a fresh STATE"
+    mkdir -p "$state/batch"; grep -v '^$' "$list" > "$state/replay.list"
+    MCV_LIST=$state/replay.list "$sg" "$state/batch" "$@" > "$state/batch/log" 2>&1 || { tail -3 "$state/batch/log" >&2; fail batch "mcv-stockgroup over the whole list"; }
+    while IFS= read -r f; do "$0" shot "$state" "$f" "$@"; done < "$state/replay.list" > "$state/replay.out"
+    "$0" close "$state" >> "$state/replay.out"
+    echo "PASS replay: $(wc -l < "$state/replay.list") shots, $(jq -s 'map(select(.verdict == "raise")) | length' "$state/shots.jsonl") raised, $(wc -l < "$state/final.jsonl") rows final -> $state";;
+  *) usage;;
+esac
