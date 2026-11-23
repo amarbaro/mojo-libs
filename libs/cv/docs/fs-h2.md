@@ -35,3 +35,29 @@ cd ~/Projects/mojo/mojo-libs/libs/cv && bash tools/fs-h2/gen.sh
 ```
 
 The screens step is a one-off OCR pass over private captures. It is not part of `gen.sh`, because `gen.sh` must not read private data.
+
+## Extension: absdiff, resize, stream tile truth (R3a, R3b, R4)
+
+Generator: `tools/fs-h2/gen_refs.sh` (run after `gen.sh`; refuses to run unless the P0 `SHA256SUMS` verifies). Deterministic, PIL 13 + numpy only.
+
+| set | files | ground truth | used by |
+|---|---|---|---|
+| 16 px and border tiles | `stream/B_px16.png` (changed 16 px cell at col 21, row 16), `stream/B_border16.png` (bottom-right 16 px cell, col 39, row 27) | `stream/absdiff_ref.json`: changed region asserted to be exactly the block | R4 border and 16 px cases |
+| tile dirty reference | `stream/absdiff_ref.json` | per pair: max abs diff, nonzero px, dirty tiles on the 64 px and 16 px grids at frozen threshold 16, per-tile max on the 64 px grid | R4 mask, R3a absdiff |
+| absdiff twin | `stream/absdiff_A_vs_B_changed_tile.png`, `stream/absdiff_twin.json` (kind integer, exact) | lossless PNG of |A - B| (max over channels) | R3a integer twin, byte-equal gate |
+| resize twin | `resize/{A_320x224,A_400x280,A_1280x896,B_changed_tile_400x280}_bilinear.png`, `resize/resize_ref.json` (kind float) | PIL BILINEAR, reducing_gap=None; raw RGB sha256 and PNG sha256 | R3b float twin; tolerance set by S2 from measurement |
+
+Hashes: `tests/fixtures/fs-h2/SHA256SUMS` covers all 52 files.
+
+### Measured on the fixtures (threshold 16, not tuned)
+
+- `A_vs_B_changed_tile`: 1 dirty tile on the 64 px grid (`[2,3]`), 16 dirty 16 px cells, 4096 changed px.
+- `A_vs_B_px16`: exactly one 16 px cell (`[16,21]`). `A_vs_B_border16`: exactly one (`[27,39]`).
+- `A_vs_C_same`: zero dirty tiles on both grids.
+- **JPEG sweep does not give zero tiles against the lossless source.** `A_vs_A_qN` (N = 30..95) has max abs diff 130 to 150 and flags all 70 of 64 px tiles and all 1120 of 16 px cells. This is codec noise on the high-frequency test texture (4:2:0), not motion. The plan's R4 contract ("a fixed JPEG-quality sweep gives zero tiles") therefore must compare two decodes of the same JPEG setting (`A_qN` vs `A_qN`, both CPU decoded), or a smoothed source, or a threshold measured on the accepted set. Not decided here: the threshold and the comparison pair are S2 and boss calls. The reference holds the measured numbers so either choice can be checked.
+
+### Not covered
+
+- No Mojo run against these fixtures; this is a reference spec, not a pass.
+- JPEG decode is CPU PIL only. No GPU arm is referenced.
+- Resize tolerance is not set here; the float twin has no pass bar yet.
