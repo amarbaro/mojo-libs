@@ -547,6 +547,17 @@ struct GpuNet(Movable):
                 for q in ints[node.inputs[0]]:
                     n *= q
                 ints[o] = List[Int](length=n, fill=t.i[0])
+            elif k == GATHER and node.inputs[0] not in ints and node.inputs[1] in vals:  # embedding lookup: ids are a device tensor (a graph input, floats)
+                var x = self._get(vals, node.inputs[0])
+                var ib = self._get(vals, node.inputs[1])
+                var row = numel(x.shape) // x.shape[0]
+                var n = numel(ib.shape) * row
+                var y = self.take(n)
+                self.ctx.enqueue_function[rows_k](fp(x.buf), fp(ib.buf), fp(y), Int32(n), Int32(row), grid_dim=grid(n), block_dim=THREADS)
+                var shp = ib.shape.copy()
+                for q in range(1, len(x.shape)):
+                    shp.append(x.shape[q])
+                vals[o] = Val(shp^, y)
             elif k == GATHER and node.inputs[0] not in ints:  # rows of a float table, ids on the host
                 var x = self._get(vals, node.inputs[0])
                 var ids = ints[node.inputs[1]].copy()

@@ -37,3 +37,14 @@ allowed `mojocv.mat.Mat`; the six files do not use it). Build flags: `-I libs/gp
 The faces modules `faces.{onnx,nn}` and `faces.gpu.{net,kernels,gemm16,gemm32}` are one-line re-export shims of this package until
 retirement (R1c). Faces and CV callers import `gpunet.*` directly. Mutant gates (faces `tests/check_gpu.sh`, `tests/check_siglip.sh`)
 mutate a copy of `libs/gpunet/src`.
+
+## Divergences from deea3f5 (P2)
+
+The import is byte-equal except import lines, with one recorded exception, checked by `scripts/ci.sh` against `patches/net-embed-gather.diff` (the
+non-import difference, `diff` normal format; any other edit of `net.mojo` fails the gate):
+
+- `gpu/net.mojo` (R6a): `Gather` whose indices are a device tensor (a graph input), for the SigLIP text tower's token embedding. The old branch took
+  indices from the host `ints` map only and raised `DictKeyError` for `input_ids`. The new branch reuses `rows_k` with the id buffer as the row index.
+
+New modules, not from faces: `src/gpunet/text.mojo` (SigLIP text tower to `text_embeds`), `src/gpunet/decode.mojo` (anchor-point SCRFD-family head and NMS,
+`Det`; the faces copy `faces/detect.mojo` keeps `Face`). Zoo gate: `tests/check_zoo.sh MODEL` (`siglip-v1-text`, `det_10g`), oracles in `tests/zoo/`.

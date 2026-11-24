@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # gpunet CI (gate G1.1): (1) IMPORT.md names mojo-faces deea3f5, the six files and the notices; (2) each imported file equals
-# `git -C mojo-faces show deea3f5:<path>` except its import lines, which differ only by faces. -> gpunet. (a planted edit and a
+# `git -C mojo-faces show deea3f5:<path>` except its import lines (and, for gpu/net.mojo, the recorded patches/net-embed-gather.diff), which differ only by faces. -> gpunet. (a planted edit and a
 # planted import change must fail this check); (3) tests/smoke.mojo builds for gfx1100 with only gpunet and mmap on the path and runs.
 # Roots: MOJO_PROJECTS (default ~/Projects/mojo) holds mojo-faces; the include paths are this tree's. MOJO picks the compiler.
 set -euo pipefail
@@ -24,19 +24,25 @@ same() {  # same ROOT: every file under ROOT/src/gpunet equals the source (non-i
   local r=$1 f
   for f in $FILES; do
     local want; want=$(git -C "$F" show "$SHA:src/faces/$f") || return 2
-    diff <(grep -Ev "$IMP" <<< "$want") <(grep -Ev "$IMP" "$r/src/gpunet/$f") > /dev/null || { echo "differs (not import lines): $f"; return 1; }
+    if [ "$f" = gpu/net.mojo ]; then  # the one recorded divergence (IMPORT.md, Divergences): the non-import difference must equal patches/net-embed-gather.diff
+      { diff <(grep -Ev "$IMP" <<< "$want") <(grep -Ev "$IMP" "$r/src/gpunet/$f") || true; } | cmp -s - "$G/patches/net-embed-gather.diff" || { echo "differs (beyond the recorded patch): $f"; return 1; }
+    else
+      diff <(grep -Ev "$IMP" <<< "$want") <(grep -Ev "$IMP" "$r/src/gpunet/$f") > /dev/null || { echo "differs (not import lines): $f"; return 1; }
+    fi
     diff <(grep -E "$IMP" <<< "$want" | sed -E 's/\bfaces\.gpu\./gpunet.gpu./g; s/\bfaces\.(onnx|nn)\b/gpunet.\1/g') <(grep -E "$IMP" "$r/src/gpunet/$f") > /dev/null || { echo "differs (import lines): $f"; return 1; }
   done
 }
 same "$G" || { echo "FAIL import: a file differs from faces $SHA"; exit 1; }
 T=$(mktemp -d "$G/.work/ci.XXXXXX"); trap 'rm -rf "$T"' EXIT
-for k in code import; do   # planted failures: one edited code line, one import line changed; each must be caught
-  mkdir -p "$T/$k"; cp -r src "$T/$k/"
-  if [ $k = code ]; then sed -i '0,/^    var /s//    var /; 0,/ + /s// - /' "$T/$k/src/gpunet/nn.mojo"; else sed -i '0,/^from gpunet\.onnx import/s//from gpunet.onnx2 import/' "$T/$k/src/gpunet/nn.mojo"; fi
-  cmp -s src/gpunet/nn.mojo "$T/$k/src/gpunet/nn.mojo" && { echo "FAIL plant: the $k plant changed nothing"; exit 1; }
+for k in code import netcode; do   # planted failures: one edited code line, one import line changed, one edit of net.mojo beside its recorded patch; each must be caught
+  mkdir -p "$T/$k"; cp -r src "$T/$k/"; pf=nn.mojo
+  if [ $k = code ]; then sed -i '0,/^    var /s//    var /; 0,/ + /s// - /' "$T/$k/src/gpunet/nn.mojo"
+  elif [ $k = netcode ]; then pf=gpu/net.mojo; sed -i '0,/Int32(n)/s//Int32(n + 1)/' "$T/$k/src/gpunet/gpu/net.mojo"
+  else sed -i '0,/^from gpunet\.onnx import/s//from gpunet.onnx2 import/' "$T/$k/src/gpunet/nn.mojo"; fi
+  cmp -s "src/gpunet/$pf" "$T/$k/src/gpunet/$pf" && { echo "FAIL plant: the $k plant changed nothing"; exit 1; }
   same "$T/$k" > /dev/null 2>&1 && { echo "FAIL plant: planted $k edit not caught"; exit 1; }
 done
-echo "ok import: 6 files equal faces $SHA except import lines; planted code and import edits caught"
+echo "ok import: 6 files equal faces $SHA except import lines (gpu/net.mojo: plus the recorded patch); planted code and import edits caught"
 
 # (3) builds and runs with only gpunet and mmap
 MOJO=${MOJO:-}
