@@ -74,7 +74,7 @@ EOF2
   # tokenizer: the ids of libs/tokenizers + siglabel.mojo against the HF ids; ASCII prompts gate, the rest is counted
   "$MOJO" build -O3 -I "$G/src" -I "$G/../cv/src" -I "$G/../mmap/src" -I "$G/../tokenizers/src" -I "$G/../uregex/src" -I "$G/../json/src" -I "$G/../gzip/src" "$G/../cv/src/siglabel.mojo" -o "$W/mcv-labels" 2> "$W/mcv-labels.err" || { grep -m3 -A3 "error:" "$W/mcv-labels.err"; fail "build siglabel.mojo"; }
   if [ -x "$W/mcv-labels" ]; then
-    jq -c '.normalizer.normalizers = [.normalizer.normalizers[4], .normalizer.normalizers[5]] | .model.byte_fallback = false' "$TOK/tokenizer.json" > "$W/tokenizer_pre.json"
+    jq -c '.normalizer.normalizers = [.normalizer.normalizers[4], .normalizer.normalizers[5]]' "$TOK/tokenizer.json" > "$W/tokenizer_pre.json"
     "$W/mcv-labels" tok "$W/tokenizer_pre.json" "$Z/siglip-v1-text.prompts" "$W/mojo.ids"
     python3 -I - "$Z/siglip-v1-text.prompts" "$Z/siglip-v1-text.ids" "$W/mojo.ids" << 'EOF2'
 import sys
@@ -83,7 +83,7 @@ asc = [i for i, t in enumerate(p) if t.isascii()]; non = [i for i, t in enumerat
 ba = [i for i in asc if a[i] != b[i]]; bn = [i for i in non if a[i] != b[i]]
 print(f"tokenizer ids vs HF SiglipTokenizer: ASCII prompts {len(asc) - len(ba)} of {len(asc)} equal; non-ASCII prompts {len(non) - len(bn)} of {len(non)} equal")
 if ba: print("FAIL tokenizer: ASCII prompt rows differ:", ba[:10]); sys.exit(1)
-if bn: print(f"BLOCK tokenizer native languages: {len(bn)} of {len(non)} non-ASCII prompts get other ids (libs/tokenizers has no byte fallback and is not an S1 path; canon in siglabel.mojo lowercases ASCII only)"); sys.exit(3)
+if bn: print(f"FAIL tokenizer native languages: {len(bn)} of {len(non)} non-ASCII prompts get other ids"); sys.exit(1)
 EOF2
     case $? in 0) ;; 3) block "native-language token ids differ from HF on non-ASCII prompts (see tokenizer line)";; *) fail "tokenizer ids differ on ASCII prompts";; esac
   fi

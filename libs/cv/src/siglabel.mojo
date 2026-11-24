@@ -17,11 +17,30 @@ comptime EOS = 1
 comptime IMG = 224
 
 
+def lower_cp(c: Int) -> Int:
+    """Python str.lower() for Latin-1, Latin Extended-A, Romanian comma letters, Greek and Cyrillic capitals."""
+    if (c >= 0xC0 and c <= 0xDE and c != 0xD7) or (c >= 0x391 and c <= 0x3AB and c != 0x3A2) or (c >= 0x410 and c <= 0x42F):
+        return c + 32
+    if c >= 0x400 and c <= 0x40F:
+        return c + 80
+    if c == 0x178:
+        return 0xFF
+    if (c >= 0x100 and c <= 0x137) or (c >= 0x14A and c <= 0x177) or (c >= 0x218 and c <= 0x21B):
+        return c | 1
+    if (c >= 0x139 and c <= 0x148) or (c >= 0x179 and c <= 0x17E):
+        return c + 1 if c % 2 == 1 else c
+    return c
+
+
 def canon(text: String) -> String:
-    """SiglipTokenizer.canonicalize_text for ASCII: lower case, drop the 32 punctuation marks, one space between words."""
+    """SiglipTokenizer.canonicalize_text: lower case (lower_cp beyond ASCII), drop the 32 punctuation marks, one space between words."""
+    var low = String()
+    for ch in text.codepoints():
+        var cp = Int(ch.to_u32())
+        low += "i̇" if cp == 0x130 else chr(lower_cp(cp))  # İ: Python lower() keeps the dot as U+0307
     var out = List[UInt8]()
     var gap = False
-    for b in text.as_bytes():
+    for b in low.as_bytes():
         var c = b
         if c >= 65 and c <= 90:
             c += 32
