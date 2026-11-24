@@ -17,7 +17,7 @@ mkdir -p .work .bin
 .work/quickstart > /dev/null || { echo "FAIL example: examples/quickstart.mojo"; exit 1; }
 cases=()
 for f in tests/cases/*.txt; do
-  case ${f##*/} in fs-stream.txt) continue;; real.txt) [ -f tests/real/frame0.mcv ] || continue;; esac
+  case ${f##*/} in fs-stream.txt|fs-screen.txt) continue;; real.txt) [ -f tests/real/frame0.mcv ] || continue;; esac
   cases+=("$f")
 done
 tests/run.sh "${cases[@]}" || { echo "FAIL 2d: tests/run.sh"; exit 1; }
@@ -28,6 +28,10 @@ fs=(.venv/bin/python -I tests/cases_gpu/fs_suite.py)
 { "${fs[@]}" prep && HIP_VISIBLE_DEVICES=-1 ROCR_VISIBLE_DEVICES=-1 "${fs[@]}" rows --no-arm tests/cases/fs-gpu2.txt tests/cases/fs-stream.txt; } > .work/fs2-cpu.log 2>&1 \
   || { grep -v '^PASS' .work/fs2-cpu.log | tail -8; echo "FAIL fs2 cpu: tests/cases_gpu/fs_suite.py"; exit 1; }
 echo "ok fs2 cpu: $(grep -c '^PASS' .work/fs2-cpu.log) rows"
+# fs-screen (R13, R20a): oracle fs_suite.py on the fs-h2 p2 fixtures (prep3); CPU arm here, tests/run_gpu.sh fs3 runs the GPU arm.
+{ "${fs[@]}" prep3 && HIP_VISIBLE_DEVICES=-1 ROCR_VISIBLE_DEVICES=-1 "${fs[@]}" rows --no-arm tests/cases/fs-screen.txt; } > .work/fs3-cpu.log 2>&1 \
+  || { grep -v '^PASS' .work/fs3-cpu.log | tail -8; echo "FAIL fs3 cpu: tests/cases_gpu/fs_suite.py"; exit 1; }
+echo "ok fs3 cpu: $(grep -c '^PASS' .work/fs3-cpu.log) rows"
 .venv/bin/python -I tools/fastpath_check.py > .work/fastpath.log || { echo "FAIL fastpath: tools/fastpath_check.py"; tail -5 .work/fastpath.log; exit 1; }
 tests/run3d.sh || { echo "FAIL 3d: tests/run3d.sh"; exit 1; }
 .venv/bin/python -I tools/malformed_check.py > .work/malformed.log || { echo "FAIL malformed: tools/malformed_check.py"; grep BAD .work/malformed.log | head -5; exit 1; }
