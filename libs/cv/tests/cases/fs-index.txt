@@ -1,0 +1,19 @@
+# embindex: flat cosine index, persisted unit rows, leader dedupe (src/mojocv/embindex.mojo; plan R8a, R8b)
+# oracle: numpy float64 brute force with the same tie rule (cosine rounded to 1e-9, then lower row), tools/oracle_cv2.py "embedding index".
+# Fixtures are 768-wide vectors from the oracle's own seed 211, not pictures: emb_tw_q holds 40 queries that are an item plus noise of
+# sigma 0.1, 0.2, 0.3, 0.5 (cosine .995 to .89, standing for crop, rescale, JPEG, colour) among 20 wrong items at cosine .9 with a
+# true item; emb_dd holds 40 same-item rows (cosine .9988) and 20 look-alike rows (cosine .96). Not built: twins from real pictures
+# (needs SigLIP runs), false pairs on the 46 accepted stock items (labels not on disk), the timed 4,202 x 768 query (boss timing run).
+# kv keys read only by the oracle are planted truths it asserts itself: hit_min (top-1 is the original, needs the truth file as third
+# input, ours ignores it), expect_tie (exact duplicates 10 and 250 rank 10 first) and expect_merged (rows that embDup merges).
+# Each topK row has two outputs: row numbers (exact) and cosines (float32, 1e-6).
+idx_topk_rand     embTopK emb_db emb_q k=10 => exact, max:0.000001
+idx_topk_k1       embTopK emb_db emb_q k=1 => exact, max:0.000001
+idx_topk_ties     embTopK emb_db_dup emb_q_dup k=5 expect_tie=1 => exact, max:0.000001
+idx_topk_pad      embTopK emb_db_small emb_q k=8 => exact, max:0.000001
+idx_topk_unit     embTopK emb_db_unit emb_q k=10 norm=0 => exact, max:0.000001
+idx_norm          embNorm emb_db => max:0.000001
+idx_twin          embTopK emb_tw_db emb_tw_q emb_tw_truth k=3 hit_min=1.0 => exact, max:0.000001
+idx_dup           embDup emb_dd thr=0.99 expect_merged=40 => exact
+idx_dup_loose     embDup emb_dd thr=0.9 => exact
+idx_dup_chain     embDup emb_chain thr=0.9 => exact
