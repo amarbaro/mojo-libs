@@ -7,6 +7,28 @@ cd "$(dirname "$0")/.."
 # gw LABEL CMD...: one gpu-wait job (shared, small VRAM; GPU_WAIT_ARGS replaces the flags), or the command itself when the caller already is a GPU job (tests/gpu_all.sh)
 gw() { local l=$1; shift; if [ -n "${CV_IN_GPU_JOB:-}" ]; then "$@"; else gpu-wait run ${GPU_WAIT_ARGS:---shared --vram 4 --mem 8 --timeout 1800} --label "$l" -- "$@"; fi; }
 [ -x .bin/mojo-cv ] || { echo "FAIL setup: .bin/mojo-cv missing"; exit 1; }
+# mutants TSV: each row (file, old, new, cases) is built from mutated source, builds, runs its case rows and must fail one; a mutant that survives fails the gate
+mutants() {
+  local n=0 mf old new cases d k
+  while IFS=$'\t' read -r mf old new cases; do
+    [ "$mf" = file ] && continue
+    n=$((n + 1)); d=.work/fs2mut/m$n; rm -rf "$d"; mkdir -p "$d"; cp -r src "$d/src"
+    python3 -I - "$d/$mf" "$old" "$new" <<'PY' || { echo "FAIL mutant $n: pattern not found exactly once in $mf"; exit 1; }
+import sys
+p, old, new = sys.argv[1:4]
+t = open(p).read()
+assert t.count(old) == 1, t.count(old)
+open(p, "w").write(t.replace(old, new))
+PY
+    .venv/bin/mojo build -O3 -I "$d/src" "$d/src/main.mojo" -o "$d/mojo-cv" 2> "$d/build.log" < /dev/null || { tail -5 "$d/build.log"; echo "FAIL mutant $n: does not build"; exit 1; }
+    if gw cv-fs2-mut env FS_H2="$FS_H2" MCV_BIN="$PWD/$d/mojo-cv" "${PYS[@]}" rows "$cases" > "$d/rows.log" 2>&1 < /dev/null; then
+      echo "FAIL mutant $n survived: every row of $cases passed with '$new' in $mf"; exit 1
+    fi
+    k=$(grep -c '^FAIL' "$d/rows.log" || true)
+    [ "$k" -ge 1 ] || { tail -5 "$d/rows.log"; echo "FAIL mutant $n: the run failed without a failed row (harness fault, not a kill)"; exit 1; }
+    echo "PASS mutant $n killed by $k row(s), first: $(grep -m1 '^FAIL' "$d/rows.log" | cut -c1-110)"
+  done < "$1"
+}
 if [ "${1:-}" = fs2 ]; then  # tests/run_gpu.sh fs2: the full-stack P1 rows (R3a absdiff, R3b resize, R4 stream), see tests/cases_gpu/fs_suite.py
   FS_H2=${FS_H2:-tests/fixtures/fs-h2}; export FS_H2
   PYS=(.venv/bin/python -I tests/cases_gpu/fs_suite.py)
@@ -28,26 +50,26 @@ if [ "${1:-}" = fs2 ]; then  # tests/run_gpu.sh fs2: the full-stack P1 rows (R3a
   gw cv-fs2-cv2 tests/run.sh tests/cases/fs-gpu2.txt > .work/fs2mut/run-sh.log 2>&1 || { tail -8 .work/fs2mut/run-sh.log; echo "FAIL fs2 run.sh rows"; exit 1; }
   tail -1 .work/fs2mut/run-sh.log | sed 's/^/PASS fs2 run.sh: /'
   # planted failures: each mutant is built from mutated source, builds, runs, and fails a row; a mutant that survives fails the gate
-  n=0
-  while IFS=$'\t' read -r mf old new cases; do
-    [ "$mf" = file ] && continue
-    n=$((n + 1)); d=.work/fs2mut/m$n; rm -rf "$d"; mkdir -p "$d"; cp -r src "$d/src"
-    python3 -I - "$d/$mf" "$old" "$new" <<'PY' || { echo "FAIL mutant $n: pattern not found exactly once in $mf"; exit 1; }
-import sys
-p, old, new = sys.argv[1:4]
-t = open(p).read()
-assert t.count(old) == 1, t.count(old)
-open(p, "w").write(t.replace(old, new))
-PY
-    .venv/bin/mojo build -O3 -I "$d/src" "$d/src/main.mojo" -o "$d/mojo-cv" 2> "$d/build.log" < /dev/null || { tail -5 "$d/build.log"; echo "FAIL mutant $n: does not build"; exit 1; }
-    if gw cv-fs2-mut env FS_H2="$FS_H2" MCV_BIN="$PWD/$d/mojo-cv" "${PYS[@]}" rows "$cases" > "$d/rows.log" 2>&1 < /dev/null; then
-      echo "FAIL mutant $n survived: every row of $cases passed with '$new' in $mf"; exit 1
-    fi
-    k=$(grep -c '^FAIL' "$d/rows.log" || true)
-    [ "$k" -ge 1 ] || { tail -5 "$d/rows.log"; echo "FAIL mutant $n: the run failed without a failed row (harness fault, not a kill)"; exit 1; }
-    echo "PASS mutant $n killed by $k row(s), first: $(grep -m1 '^FAIL' "$d/rows.log" | cut -c1-110)"
-  done < tests/cases_gpu/fs_mutants.tsv
+  mutants tests/cases_gpu/fs_mutants.tsv
   echo "PASS run_gpu fs2"
+  exit 0
+fi
+if [ "${1:-}" = fs3 ]; then  # tests/run_gpu.sh fs3: the full-stack P2 rows (R13 screen parser and stuck check, R20a, R3c EVM twin)
+  FS_H2=${FS_H2:-tests/fixtures/fs-h2}; export FS_H2
+  PYS=(.venv/bin/python -I tests/cases_gpu/fs_suite.py)
+  if [ -n "$(find src -newer .bin/mojo-cv -name '*.mojo' | head -1)" ]; then
+    .venv/bin/mojo build -O3 -I src src/main.mojo -o .bin/mojo-cv 2>.work/build.log || { tail -30 .work/build.log; echo "FAIL build: see .work/build.log"; exit 1; }
+  fi
+  mkdir -p .work/fs3mut
+  rc=0; "${PYS[@]}" prep3 || rc=$?; [ $rc = 0 ] || exit $rc
+  gw cv-fs3-rows env FS_H2="$FS_H2" "${PYS[@]}" rows tests/cases/fs-screen.txt tests/cases_gpu/fs-evm.txt > .work/fs3mut/rows.log 2>&1 || { grep -v '^PASS' .work/fs3mut/rows.log | tail -12; echo "FAIL fs3 rows"; exit 1; }
+  grep -c '^PASS .*arm=GPU' .work/fs3mut/rows.log | sed 's/^/PASS fs3 rows that ran the GPU arm: /'
+  tail -1 .work/fs3mut/rows.log | sed 's/^/PASS fs3 /'
+  # no accelerator visible: the EVM rows still pass on the CPU path and none claims a GPU line
+  HIP_VISIBLE_DEVICES=-1 ROCR_VISIBLE_DEVICES=-1 FS_H2="$FS_H2" "${PYS[@]}" rows --no-arm tests/cases_gpu/fs-evm.txt > .work/fs3mut/hidden.log 2>&1 || { grep -v '^PASS' .work/fs3mut/hidden.log | tail -8; echo "FAIL fs3 hidden GPU: rows differ without an accelerator"; exit 1; }
+  grep -c '^PASS' .work/fs3mut/hidden.log | sed 's/^/PASS fs3 EVM rows with the GPU hidden (CPU answer, no GPU line): /'
+  mutants tests/cases_gpu/fs3_mutants.tsv
+  echo "PASS run_gpu fs3"
   exit 0
 fi
 mkdir -p .work/gpurows

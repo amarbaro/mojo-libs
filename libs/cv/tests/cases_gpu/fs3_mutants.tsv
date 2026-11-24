@@ -1,0 +1,13 @@
+file	old	new	cases
+src/mojocv/screen.mojo	var progress = 1 if Float64(changed) >= minfrac * Float64(region) and changed > 0 else 0	var progress = 1 if Float64(changed) >= minfrac * Float64(region) or changed > 0 else 0	tests/cases/fs-screen.txt
+src/mojocv/screen.mojo	if found == 1 and x >= dx0 and x < dx1 and y >= dy0 and y < dy1:	if found == 1 and x >= dx0 and x < dx1:	tests/cases/fs-screen.txt
+src/mojocv/screen.mojo	if full < 3 or low < 0.5:	if full < 4 or low < 0.5:	tests/cases/fs-screen.txt
+src/mojocv/screen.mojo	elif nb > 0:	elif nb > 9:	tests/cases/fs-screen.txt
+src/mojocv/screen.mojo	> INK and _key(m, i, q) != ring and	> INK and	tests/cases/fs-screen.txt
+src/mojocv/screen.mojo	(tlines[i][0].y0 - ws[i].y0) * 4 < (ws[i].y1 - ws[i].y0)	(tlines[i][0].y0 - ws[i].y0) * 4 < 0	tests/cases/fs-screen.txt
+src/mojocv/screen.mojo	if w < 12 or h < 12 or a < 150 or a * 10 >= n * 9:	if w < 12 or h < 12 or a < 150:	tests/cases/fs-screen.txt
+src/mojocv/hyper.mojo	l2 += lo * (s - l2)	l2 += lo * (s - l1)	tests/cases_gpu/fs-evm.txt
+src/mojocv/hyper.mojo	st.data[2 * i + 1] = l2	st.data[2 * i + 1] = l1	tests/cases_gpu/fs-evm.txt
+src/mojocv/gpu.mojo	l2 += lo * (s - l2)	l2 += lo * (s - l1)	tests/cases_gpu/fs-evm.txt
+src/mojocv/gpu.mojo	var l2 = l1 if p[2] == 1 else st[unsafe_offset=2 * Int(e) + 1]	var l2 = l1	tests/cases_gpu/fs-evm.txt
+src/mojocv/gpu.mojo	print("GPU-ARM evm float32")	print("evm float32")	tests/cases_gpu/fs-evm.txt

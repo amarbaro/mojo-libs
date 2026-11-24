@@ -1,0 +1,217 @@
+6656	4	3213164545	s_clause 0x1
+6660	8	4093640832	s_load_b32 s2, s[0:1], 0x64
+6668	8	4094428160	s_load_b256 s[16:23], s[0:1], 0x20
+6676	4	3213491207	s_waitcnt lgkmcnt(0)
+6680	8	2332229378	s_and_b32 s2, s2, 0xffff
+6688	4	3213295625	s_delay_alu instid0(SALU_CYCLE_1)
+6692	8	3607002113	v_mad_u64_u32 v[1:2], null, s15, s2, v[0:1]
+6700	4	3196190846	s_mov_b32 s2, exec_lo
+6704	4	2106065424	v_cmpx_gt_i32_e32 s16, v1
+6708	4	3215261811	s_cbranch_execz 115
+6712	8	4094427392	s_load_b256 s[4:11], s[0:1], null
+6720	8	3607067651	v_mad_i64_i32 v[3:4], null, v1, s17, 0
+6728	4	872678047	v_ashrrev_i32_e32 v2, 31, v1
+6732	4	2248384273	s_ashr_i32 s3, s17, 31
+6736	4	3204874514	s_cmp_eq_u32 s18, 1
+6740	4	3196190737	s_mov_b32 s2, s17
+6744	4	3213296017	s_delay_alu instid0(VALU_DEP_1) | instskip(NEXT) | instid1(VALU_DEP_3)
+6748	8	3611033600	v_lshlrev_b64 v[0:1], 4, v[1:2]
+6756	8	3611033610	v_lshlrev_b64 v[10:11], 2, v[3:4]
+6764	4	3213491207	s_waitcnt lgkmcnt(0)
+6768	4	3213295762	s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
+6772	8	3607128580	v_add_co_u32 v4, vcc_lo, s10, v0
+6780	8	3575675909	v_add_co_ci_u32_e64 v5, null, s11, v1, vcc_lo
+6788	4	3213295763	s_delay_alu instid0(VALU_DEP_3) | instskip(NEXT) | instid1(VALU_DEP_1)
+6792	8	3607128582	v_add_co_u32 v6, vcc_lo, s6, v10
+6800	8	3575675911	v_add_co_ci_u32_e64 v7, null, s7, v11, vcc_lo
+6808	4	2550563009	s_cselect_b32 s6, -1, 0
+6812	4	3204940050	s_cmp_lg_u32 s18, 1
+6816	4	3215065098	s_cbranch_scc1 10
+6820	8	3696361472	global_load_b32 v0, v[6:7], off
+6828	4	3213427703	s_waitcnt vmcnt(0)
+6832	4	2113937664	v_cvt_f64_f32_e32 v[0:1], v0
+6836	4	3213295617	s_delay_alu instid0(VALU_DEP_1)
+6840	8	3390046465	v_dual_mov_b32 v3, v1 :: v_dual_mov_b32 v2, v0
+6848	4	2338981502	s_and_b32 vcc_lo, exec_lo, s6
+6852	4	3215130632	s_cbranch_vccz 8
+6856	4	3214934025	s_branch 9
+6860	8	3696623616	global_load_b64 v[0:1], v[4:5], off
+6868	4	3213427703	s_waitcnt vmcnt(0)
+6872	8	3390046465	v_dual_mov_b32 v3, v1 :: v_dual_mov_b32 v2, v0
+6880	4	2338981502	s_and_b32 vcc_lo, exec_lo, s6
+6884	4	3215196162	s_cbranch_vccnz 2
+6888	8	3696623624	global_load_b64 v[2:3], v[4:5], off offset:8
+6896	4	3204743441	s_cmp_lt_i32 s17, 1
+6900	4	3215065151	s_cbranch_scc1 63
+6904	4	3213164545	s_clause 0x1
+6908	8	4094165760	s_load_b128 s[12:15], s[0:1], 0x40
+6916	8	4093902848	s_load_b64 s[0:1], s[0:1], 0x50
+6924	8	3607128584	v_add_co_u32 v8, vcc_lo, s4, v10
+6932	4	3213295777	s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_1)
+6936	8	3575675913	v_add_co_ci_u32_e64 v9, null, s5, v11, vcc_lo
+6944	8	3607128586	v_add_co_u32 v10, vcc_lo, s8, v10
+6952	8	3575675915	v_add_co_ci_u32_e64 v11, null, s9, v11, vcc_lo
+6960	4	3213099009	s_set_inst_prefetch_distance 0x1
+6964	4	3212836864	s_nop 0
+6968	4	3212836864	s_nop 0
+6972	4	3212836864	s_nop 0
+6976	8	3696361472	global_load_b32 v12, v[6:7], off
+6984	8	3696361472	global_load_b32 v16, v[8:9], off
+6992	8	3607128582	v_add_co_u32 v6, vcc_lo, v6, 4
+7000	4	3213295777	s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_1) | instid1(VALU_DEP_1)
+7004	8	3575675911	v_add_co_ci_u32_e64 v7, null, 0, v7, vcc_lo
+7012	8	3607128584	v_add_co_u32 v8, vcc_lo, v8, 4
+7020	8	3575675913	v_add_co_ci_u32_e64 v9, null, 0, v9, vcc_lo
+7028	4	2147664130	s_add_u32 s2, s2, -1
+7032	4	2181284099	s_addc_u32 s3, s3, -1
+7036	4	3213295801	s_delay_alu instid0(SALU_CYCLE_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
+7040	4	3205595138	s_cmp_lg_u64 s[2:3], 0
+7044	4	3213428727	s_waitcnt vmcnt(1)
+7048	4	2115510540	v_cvt_f64_f32_e32 v[12:13], v12
+7052	8	3609657358	v_add_f64 v[14:15], v[12:13], -v[0:1]
+7060	8	3609657356	v_add_f64 v[12:13], v[12:13], -v[2:3]
+7068	4	3213491207	s_waitcnt lgkmcnt(0)
+7072	4	3213295890	s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_2)
+7076	8	3591634944	v_fma_f64 v[0:1], s[0:1], v[14:15], v[0:1]
+7084	8	3591634946	v_fma_f64 v[2:3], s[14:15], v[12:13], v[2:3]
+7092	4	3213427703	s_waitcnt vmcnt(0)
+7096	4	2115510544	v_cvt_f64_f32_e32 v[12:13], v16
+7100	4	3213295762	s_delay_alu instid0(VALU_DEP_2) | instskip(NEXT) | instid1(VALU_DEP_1)
+7104	8	3609657358	v_add_f64 v[14:15], v[0:1], -v[2:3]
+7112	8	3591634956	v_fma_f64 v[12:13], s[12:13], v[14:15], v[12:13]
+7120	4	3213295793	s_delay_alu instid0(VALU_DEP_1) | instskip(SKIP_2) | instid1(VALU_DEP_1)
+7124	4	2115510028	v_cvt_f32_f64_e32 v12, v[12:13]
+7128	8	3697934336	global_store_b32 v[10:11], v12, off
+7136	8	3607128586	v_add_co_u32 v10, vcc_lo, v10, 4
+7144	8	3575675915	v_add_co_ci_u32_e64 v11, null, 0, v11, vcc_lo
+7152	4	3215130579	s_cbranch_scc1 65491
+7156	4	3213099010	s_set_inst_prefetch_distance 0x2
+7160	4	3213427703	s_waitcnt vmcnt(0)
+7164	8	3698720768	global_store_b128 v[4:5], v[0:3], off
+7172	4	3215982592	s_endpgm
+7176	4	3214868480	s_code_end
+7180	4	3214868480	s_code_end
+7184	4	3214868480	s_code_end
+7188	4	3214868480	s_code_end
+7192	4	3214868480	s_code_end
+7196	4	3214868480	s_code_end
+7200	4	3214868480	s_code_end
+7204	4	3214868480	s_code_end
+7208	4	3214868480	s_code_end
+7212	4	3214868480	s_code_end
+7216	4	3214868480	s_code_end
+7220	4	3214868480	s_code_end
+7224	4	3214868480	s_code_end
+7228	4	3214868480	s_code_end
+7232	4	3214868480	s_code_end
+7236	4	3214868480	s_code_end
+7240	4	3214868480	s_code_end
+7244	4	3214868480	s_code_end
+7248	4	3214868480	s_code_end
+7252	4	3214868480	s_code_end
+7256	4	3214868480	s_code_end
+7260	4	3214868480	s_code_end
+7264	4	3214868480	s_code_end
+7268	4	3214868480	s_code_end
+7272	4	3214868480	s_code_end
+7276	4	3214868480	s_code_end
+7280	4	3214868480	s_code_end
+7284	4	3214868480	s_code_end
+7288	4	3214868480	s_code_end
+7292	4	3214868480	s_code_end
+7296	4	3214868480	s_code_end
+7300	4	3214868480	s_code_end
+7304	4	3214868480	s_code_end
+7308	4	3214868480	s_code_end
+7312	4	3214868480	s_code_end
+7316	4	3214868480	s_code_end
+7320	4	3214868480	s_code_end
+7324	4	3214868480	s_code_end
+7328	4	3214868480	s_code_end
+7332	4	3214868480	s_code_end
+7336	4	3214868480	s_code_end
+7340	4	3214868480	s_code_end
+7344	4	3214868480	s_code_end
+7348	4	3214868480	s_code_end
+7352	4	3214868480	s_code_end
+7356	4	3214868480	s_code_end
+7360	4	3214868480	s_code_end
+7364	4	3214868480	s_code_end
+7368	4	3214868480	s_code_end
+7372	4	3214868480	s_code_end
+7376	4	3214868480	s_code_end
+7380	4	3214868480	s_code_end
+7384	4	3214868480	s_code_end
+7388	4	3214868480	s_code_end
+7392	4	3214868480	s_code_end
+7396	4	3214868480	s_code_end
+7400	4	3214868480	s_code_end
+7404	4	3214868480	s_code_end
+7408	4	3214868480	s_code_end
+7412	4	3214868480	s_code_end
+7416	4	3214868480	s_code_end
+7420	4	3214868480	s_code_end
+7424	4	3214868480	s_code_end
+7428	4	3214868480	s_code_end
+7432	4	3214868480	s_code_end
+7436	4	3214868480	s_code_end
+7440	4	3214868480	s_code_end
+7444	4	3214868480	s_code_end
+7448	4	3214868480	s_code_end
+7452	4	3214868480	s_code_end
+7456	4	3214868480	s_code_end
+7460	4	3214868480	s_code_end
+7464	4	3214868480	s_code_end
+7468	4	3214868480	s_code_end
+7472	4	3214868480	s_code_end
+7476	4	3214868480	s_code_end
+7480	4	3214868480	s_code_end
+7484	4	3214868480	s_code_end
+7488	4	3214868480	s_code_end
+7492	4	3214868480	s_code_end
+7496	4	3214868480	s_code_end
+7500	4	3214868480	s_code_end
+7504	4	3214868480	s_code_end
+7508	4	3214868480	s_code_end
+7512	4	3214868480	s_code_end
+7516	4	3214868480	s_code_end
+7520	4	3214868480	s_code_end
+7524	4	3214868480	s_code_end
+7528	4	3214868480	s_code_end
+7532	4	3214868480	s_code_end
+7536	4	3214868480	s_code_end
+7540	4	3214868480	s_code_end
+7544	4	3214868480	s_code_end
+7548	4	3214868480	s_code_end
+7552	4	3214868480	s_code_end
+7556	4	3214868480	s_code_end
+7560	4	3214868480	s_code_end
+7564	4	3214868480	s_code_end
+7568	4	3214868480	s_code_end
+7572	4	3214868480	s_code_end
+7576	4	3214868480	s_code_end
+7580	4	3214868480	s_code_end
+7584	4	3214868480	s_code_end
+7588	4	3214868480	s_code_end
+7592	4	3214868480	s_code_end
+7596	4	3214868480	s_code_end
+7600	4	3214868480	s_code_end
+7604	4	3214868480	s_code_end
+7608	4	3214868480	s_code_end
+7612	4	3214868480	s_code_end
+7616	4	3214868480	s_code_end
+7620	4	3214868480	s_code_end
+7624	4	3214868480	s_code_end
+7628	4	3214868480	s_code_end
+7632	4	3214868480	s_code_end
+7636	4	3214868480	s_code_end
+7640	4	3214868480	s_code_end
+7644	4	3214868480	s_code_end
+7648	4	3214868480	s_code_end
+7652	4	3214868480	s_code_end
+7656	4	3214868480	s_code_end
+7660	4	3214868480	s_code_end
+7664	4	3214868480	s_code_end
+7668	4	3214868480	s_code_end
+7672	4	3214868480	s_code_end
+7676	4	3214868480	s_code_end
