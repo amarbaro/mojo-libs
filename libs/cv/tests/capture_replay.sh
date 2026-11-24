@@ -6,6 +6,12 @@
 #  2 silent: no shot with hand < 0.02 (the clean shots) raises anything; every shot at or above it raises `hand`.
 #  3 planted: a truncated file, a late time stamp, a pasted hand, a defocused copy and a cut tape raise their own flag (tape: a
 #    note), each beside a control (the same picture, unchanged, later name) that raises nothing.
+#  4 sync (R12b): `mcv-capture-qa sync` against a fake adb (MCV_ADB, no device touched): no device and offline are BLOCK (exit 3), a
+#    file that is still growing is not pulled and a later name waits for it, a hidden .pending twin is never pulled, the pulled bytes equal
+#    the file, a stable but truncated file reaches the verdict as truncated, the phone's clock offset is recorded, every shot has its
+#    four stamps in order, and a second run delivers nothing again.
+#  5 views (R12c): with MCV_QA_VIEWS=front,back every closed event carries the view fields; its view count equals the batch's per item
+#    and the items with one view are exactly the closes that list `back` as missing; the closes of items with two views list nothing.
 # Embeddings are the CPU runner (MCV_EMBED_ARGS=--cpu: no GPU job; batch and replay share the cache, so the equality is the point).
 # BLOCK (exit 3) when the list, a picture, a binary or the originals are missing; never a skip.
 set -euo pipefail
@@ -18,7 +24,7 @@ n=$(grep -c . "$list" || true); [ "$n" -gt 0 ] || block "empty list"
 while IFS= read -r f; do [ -f "$f" ] || block "shot $f missing"; done < "$list"
 first=$(head -1 "$list"); raw=${MCV_RAW:-$(dirname "$(dirname "$first")")/raw}
 [ -d "$raw" ] || block "originals $raw missing (EXIF time): set MCV_RAW"
-export MCV_RAW=$raw MCV_EMBED_ARGS=${MCV_EMBED_ARGS:---cpu}
+export MCV_RAW=$raw MCV_EMBED_ARGS=${MCV_EMBED_ARGS:---cpu} MCV_QA_VIEWS=front,back
 w=.work/capture-replay; mkdir -p "$w"; rm -rf "$w/state" "$w/planted"; export MCV_CACHE=$PWD/$w/cache
 fail=0; chk() { if eval "$2"; then echo "PASS $1"; else echo "FAIL $1: $2"; fail=1; fi; }
 st=$w/state
@@ -69,5 +75,60 @@ chk "planted defocus raises defocus" "[ \"\$(v IMG_20261124_000200.jpg '.raise |
 chk "planted cut tape notes tape_lost" "[ \"\$(v IMG_20261124_000000.jpg '.notes | index(\"tape_lost\") != null')\" = true ]"
 chk "control of the truncated, hand, defocus and late plants raises nothing" "[ \"\$(for c in 0 1 2 3; do v IMG_20261124_0010\${c}0.jpg '.raise | length'; done | tr -d '\\n')\" = 0000 ]"
 chk "control of the cut tape keeps its tape (no tape_lost)" "[ \"\$(v IMG_20261124_001000.jpg '.notes | index(\"tape_lost\") == null')\" = true ]"
+
+# 5 views (R12c): the close events of the replay above, against the batch rows
+ev=$st/replay.out
+nev=$(jq -c 'select(.event == "closed")' "$ev" | wc -l)
+chk "every closed event ($nev) carries views, view_labels, missing_view, arrival_views, merged_views and rank_changed" "[ \"\$(jq -c 'select(.event == \"closed\") | select(has(\"views\") and has(\"view_labels\") and has(\"missing_view\") and has(\"arrival_views\") and has(\"merged_views\") and has(\"rank_changed\"))' $ev | wc -l)\" = $nev ]"
+jq -s -c 'map(select(.group != null)) | group_by(.group) | map({g: .[0].group, v: (map(.view) | unique | length)})' "$st/batch/cv.jsonl" > "$w/views.batch"
+jq -s -c 'map(select(.event == "closed") | {g: (if .group == "end" then .last_group else .group end), v: .views}) | sort_by(.g)' "$ev" > "$w/views.ev"
+chk "the view count of every closed item equals the batch's ($items items)" "cmp -s $w/views.batch $w/views.ev"
+one=$(jq 'map(select(.v < 2)) | length' "$w/views.batch")
+miss=$(jq -c 'select(.event == "closed" and (.missing_view | index("back")))' "$ev" | wc -l)
+chk "the shoot has items with one view ($one), so the rule can fire" "[ $one -gt 0 ]"
+chk "closes that list back as missing ($miss) are the items with one view ($one); none of the others does" "[ $miss = $one ] && [ \"\$(jq -c 'select(.event == \"closed\" and .views >= 2 and (.missing_view | length) > 0)' $ev | wc -l)\" = 0 ]"
+chk "view labels follow the order of first appearance: front, back, then extra" "[ \"\$(jq -c 'select(.event == \"closed\") | .view_labels | select(.[0] != \"front\" or (length > 1 and .[1] != \"back\") or (length > 2 and (.[2:] | map(. != \"extra\") | any)))' $ev | wc -l)\" = 0 ]"
+echo "logged: merged views $(jq -s 'map(select(.event == "closed") | .merged_views) | add' "$ev") over $(jq -s 'map(select(.event == "closed" and .merged_views > 0)) | length' "$ev") items, rows whose rank or dup_of changed between arrival and close $(jq -s 'map(select(.event == "closed") | .rank_changed) | add' "$ev")"
+
+# 4 sync (R12b): a fake adb with three files: b1 stable, b2 growing until its 4th listing (a hidden .pending twin beside it), b3 truncated
+rm -rf "$w/sy" "$w/sy0" "$w/sy3"; F=$w/fake; rm -rf "$F"; mkdir -p "$F/files" "$F/out"; echo 0 > "$F/poll"; echo device > "$F/state"; echo 7 > "$F/skew"
+b1=$(sed -n 1p "$list"); b2=$(sed -n 2p "$list"); b3=$(sed -n 3p "$list")
+cp "$b1" "$F/files/"; cp "$b2" "$F/files/"; head -c $(( $(stat -c %s "$b3") / 4 )) "$b3" > "$F/files/${b3##*/}"; cp "$b2" "$F/files/.pending-1-${b2##*/}"; cp "$b1" "$F/files/IMG_20200101_000000.jpg"; touch -d @1000 "$F/files/IMG_20200101_000000.jpg"
+cat > "$F/adb" <<'FAKE'
+#!/usr/bin/env bash
+# a fake adb for tests/capture_replay.sh: serial fake01 only, the calls of `mcv-capture-qa sync`, no input, no write to the "phone"
+F=${FAKE:?}; [ "$1" = -s ] || exit 2; ser=$2; shift 2
+[ "$ser" = fake01 ] || { echo "error: device '$ser' not found" >&2; exit 1; }
+size() { local s; s=$(stat -c %s "$F/files/$1"); [ "$1" = "$GROW" ] && [ "$(cat "$F/poll")" -lt 4 ] && s=$(( $(cat "$F/poll") * 3000 )); echo "$s"; }
+case $1 in
+  get-state) cat "$F/state";;
+  shell) case "${*:2}" in
+    "date +%s") echo $(( $(date +%s) + $(cat "$F/skew") ));;
+    *stat*) echo $(( $(cat "$F/poll") + 1 )) > "$F/poll"; for g in "$F"/files/*; do printf '%s %s %s\r\n' "$(size "${g##*/}")" "$(( $(stat -c %Y "$g") + $(cat "$F/skew") ))" "${g##*/}"; done;;
+    *) exit 2;;
+  esac;;
+  pull) b=${2##*/}; s=$(size "$b"); head -c "$s" "$F/files/$b" > "$3"; echo "$b poll=$(cat "$F/poll") bytes=$s" >> "$F/pulls";;
+  *) exit 2;;
+esac
+FAKE
+chmod +x "$F/adb"
+sy() { MCV_ADB=$F/adb FAKE=$F GROW=${b2##*/} scripts/mcv-capture-qa sync "$@"; }
+rcs() { local r=0; "$@" > "$F/out/o" 2> "$F/out/e" || r=$?; echo "$r"; }
+chk "no such device is BLOCK (exit 3)" "[ \"\$(rcs sy nodev $w/sy0)\" = 3 ] && grep -q '^BLOCK sync: no device' $F/out/e"
+echo offline > "$F/state"
+chk "an offline device is BLOCK (exit 3)" "[ \"\$(rcs sy fake01 $w/sy0)\" = 3 ] && grep -q offline $F/out/e"
+echo device > "$F/state"; : > "$F/pulls"; echo 0 > "$F/poll"
+sy fake01 "$w/sy" --polls 8 --gap 0.1 --since 100000 > "$F/out/sync.out" 2>&1 || { tail -5 "$F/out/sync.out"; echo "FAIL sync: mcv-capture-qa sync against the fake adb"; exit 1; }
+sh=$w/sy/shots.jsonl
+chk "three shots reach the verdict, in time order" "[ \"\$(jq -r .file $sh | tr '\\n' ' ')\" = \"${b1##*/} ${b2##*/} ${b3##*/} \" ]"
+chk "the growing file is pulled once, only when its size held on two listings, and whole" "[ \"\$(grep -c \"^${b2##*/} \" $F/pulls)\" = 1 ] && [ \"\$(grep \"^${b2##*/} \" $F/pulls | sed 's/.*poll=\\([0-9]*\\) .*/\\1/')\" -ge 5 ] && cmp -s $F/files/${b2##*/} $w/sy/inbox/${b2##*/}"
+chk "the stable file is pulled at its second listing; the hidden .pending twin is never listed or pulled" "grep -q \"^${b1##*/} poll=2 \" $F/pulls && ! grep -q pending $F/pulls"
+chk "the stable but truncated file raises truncated" "[ \"\$(jq -r --arg f ${b3##*/} 'select(.file == \$f) | .raise | index(\"truncated\") != null' $sh)\" = true ]"
+chk "a picture older than --since (phone mtime 1007) is never pulled; --new alone would skip all three (phone mtimes are older than its now)" "! grep -q IMG_20200101 $F/pulls && [ \"\$(MCV_ADB=$F/adb FAKE=$F GROW=x scripts/mcv-capture-qa sync fake01 $w/sy3 --polls 3 --gap 0.1 --new | tail -1)\" = 'PASS sync: 0 delivered in all, 0 seen' ]"
+chk "the phone clock 7 s ahead is recorded: offset between 5 and 9 s" "[ \"\$(jq '.offset_s > 5 and .offset_s < 9' $w/sy/sync/clock.json)\" = true ]"
+chk "every shot has seen, stable, pulled and verdict stamps in order" "[ \"\$(jq -s 'map(select(.t_seen <= .t_stable and .t_stable <= .t_pulled and .t_pulled <= .t_verdict)) | length' $w/sy/sync/sync.jsonl)\" = 3 ]"
+np=$(wc -l < "$F/pulls")
+sy fake01 "$w/sy" --polls 2 --gap 0.1 --since 100000 > "$F/out/sync2.out" 2>&1
+chk "a second run delivers nothing again ($(wc -l < $sh) shots, $(wc -l < $F/pulls) pulls)" "[ \"\$(wc -l < $sh)\" = 3 ] && [ \"\$(wc -l < $F/pulls)\" = $np ]"
 [ "$fail" = 0 ] || { echo "FAIL capture_replay"; exit 1; }
 echo "PASS capture_replay"
