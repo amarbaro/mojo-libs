@@ -154,6 +154,7 @@ struct Tokenizer(Movable):
     # Unigram
     var scores: List[Float64]
     var maxlen: Int  # longest token in characters
+    var fb: List[Int]  # byte_fallback: byte -> id of <0xXX>; empty when off
     var cm: List[UInt8]  # Precompiled charsmap: u32 trie size, double-array trie, replacement pool
     var subs: List[FullPattern]  # Replace normalizers
     var subw: List[String]
@@ -178,6 +179,7 @@ struct Tokenizer(Movable):
         self.first = List[Bool](length=256, fill=False)
         self.cache = Dict[String, List[Int]]()
         self.unk = -1
+        self.fb = List[Int]()
         self.strip = False
         self.ranks = Dict[Int, Int]()
         self.bid = List[Int](length=256, fill=-1)
@@ -199,7 +201,8 @@ struct Tokenizer(Movable):
         var model = _at(j, 0, "model")
         for k in ["byte_fallback", "end_of_word_suffix", "continuing_subword_prefix"]:
             var i = _at(j, model, String(k))
-            if self.kind != 1 and (_n(j, i) != 0 or _s(j, i).byte_length() > 0):
+            var unigram_fb = self.kind == 2 and String(k) == "byte_fallback"
+            if self.kind != 1 and not unigram_fb and (_n(j, i) != 0 or _s(j, i).byte_length() > 0):
                 raise Error("tokenizers: ", path, ": ", k, " is not supported")
         # vocab: {token: id} (BPE, WordPiece) or [[token, score]] (Unigram)
         var v = _at(j, model, "vocab")
@@ -273,6 +276,15 @@ struct Tokenizer(Movable):
         else:
             self.unk = _n(j, _at(j, model, "unk_id"))
             self.scores.append(low - 10.0)  # the unknown-character score, last
+            if _n(j, _at(j, model, "byte_fallback")) != 0:  # tokenizers crate: an unknown piece becomes its <0xXX> bytes
+                var hx = "0123456789ABCDEF"
+                for x in range(256):
+                    var t = String("<0x") + hx[byte=x >> 4] + hx[byte=x & 15] + ">"
+                    var id = self.vocab.get(t, -1)
+                    if id < 0:
+                        self.fb = List[Int]()
+                        break
+                    self.fb.append(id)
         self._load_pipeline(j, path)
 
     def _add(mut self, id: Int, var tok: String, added: Bool):
@@ -631,7 +643,10 @@ struct Tokenizer(Movable):
         var ids = List[Int]()
         var e = n
         while e > 0:
-            if tid[e] != self.unk or len(ids) == 0 or ids[len(ids) - 1] != self.unk:  # consecutive unknowns fuse into one
+            if tid[e] == self.unk and len(self.fb) == 256:  # byte fallback, appended reversed like the rest
+                for q in range(pos[e] - 1, pos[prev[e]] - 1, -1):
+                    ids.append(self.fb[Int(b[q])])
+            elif tid[e] != self.unk or len(ids) == 0 or ids[len(ids) - 1] != self.unk:  # consecutive unknowns fuse into one
                 ids.append(tid[e])
             e = prev[e]
         ids.reverse()
