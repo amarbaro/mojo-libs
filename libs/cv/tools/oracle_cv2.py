@@ -1154,6 +1154,7 @@ def make_fixtures(d):
     fx["calf_y_shuf"] = Cr.permutation(fx["calf_y_ok"].reshape(-1)).astype(np.int32).reshape(-1, 1)
     fx["cal_Tfit_ov"] = np.array([[_cal_temp(fx["calf_z_ov"], fx["calf_y_ov"].reshape(-1))[0]]])
     fx["cal_thr_ok"] = np.array([[_cal_abstain(fx["calf_z_ok"], fx["calf_y_ok"].reshape(-1), 1.0, 0.2, None)[0]]])
+    _emb_fixtures(fx)
     for n, a in fx.items():
         mcv.save(a, os.path.join(d, n + ".mcv"))
 
@@ -1263,6 +1264,129 @@ def calAbstain(i, kv):
     if "cov_min" in kv and cov < float(kv["cov_min"]):
         raise SystemExit(f"coverage {cov} below {kv['cov_min']}")
     return np.array([[thr, cov, err]])
+
+
+# ---- embedding index (src/mojocv/embindex.mojo; rows in tests/cases/fs-index.txt; plan R8) -----------------------
+def _emb_fixtures(fx):
+    """Own seed. Vectors, not pictures: the twins are a planted noise level (cosine .995 to .89) standing for crop, rescale, JPEG
+    and colour changes; the picture-level twins (SigLIP of real crops) are not built."""
+    Er, D = np.random.default_rng(211), 768
+    unit = lambda v: np.divide(v, np.linalg.norm(v, axis=1, keepdims=True), out=np.zeros_like(v), where=np.linalg.norm(v, axis=1, keepdims=True) > 0)
+    db = Er.normal(0, 1, (400, D))
+    db[399] = 0.0  # a zero row: cosine 0 with everything
+    q = Er.normal(0, 1, (12, D))
+    q[:8] = db[Er.choice(399, 8, replace=False)] + 0.3 * q[:8]
+    q[11] = 0.0
+    fx["emb_db"], fx["emb_q"] = db.astype(np.float32), q.astype(np.float32)
+    dd = db.copy(); dd[250] = dd[10]  # exact duplicates 10 and 250: they tie and the lower row ranks first
+    fx["emb_db_dup"] = dd.astype(np.float32)
+    fx["emb_q_dup"] = np.vstack([db[10], q[1:6]]).astype(np.float32)
+    fx["emb_db_small"] = db[:5].astype(np.float32)
+    fx["emb_db_unit"] = unit(db).astype(np.float32)
+    base = Er.normal(0, 1, (300, D))
+    for j in range(20):  # wrong-item near duplicates: item 100+j has cosine 0.9 with item j
+        base[100 + j] = 0.9 * base[j] / np.linalg.norm(base[j]) * np.linalg.norm(base[100 + j]) + 0.436 * base[100 + j]
+    fx["emb_tw_db"] = base.astype(np.float32)
+    sig = np.repeat([0.1, 0.2, 0.3, 0.5], 10)  # crop, rescale, JPEG, colour stand-ins
+    fx["emb_tw_q"] = (base[:40] + sig[:, None] * Er.normal(0, 1, (40, D))).astype(np.float32)
+    fx["emb_tw_truth"] = np.arange(40, dtype=np.int32).reshape(-1, 1)
+    dd = Er.normal(0, 1, (160, D))
+    dd[100:140] = dd[:40] + 0.05 * Er.normal(0, 1, (40, D))  # same item again: cosine 0.9988
+    dd[140:160] = dd[40:60] + 0.29 * Er.normal(0, 1, (20, D))  # another item that looks alike: cosine 0.96
+    fx["emb_dd"] = dd.astype(np.float32)
+    ang = np.radians([0, 20, 40, 60])
+    ch = np.zeros((4, 8)); ch[:, 0], ch[:, 1] = np.cos(ang), np.sin(ang)
+    fx["emb_chain"] = ch.astype(np.float32)
+
+
+def _emb_unit(m, unit=False):
+    m = m.astype(np.float64)
+    n = np.linalg.norm(m, axis=1, keepdims=True)
+    return m if unit else np.divide(m, n, out=np.zeros_like(m), where=n > 0)
+
+
+@op()
+def embTopK(i, kv):
+    db, q, k = _emb_unit(i[0], kv_i(kv, "norm", 1) == 0), _emb_unit(i[1]), kv_i(kv, "k", 5)
+    idx, sc = np.full((len(q), k), -1, np.int32), np.full((len(q), k), -2.0, np.float32)
+    for r, u in enumerate(q):
+        s = (db * u).sum(1)
+        for t, j in enumerate(sorted(range(len(s)), key=lambda j: (-int(np.rint(s[j] * 1e9)), j))[:k]):
+            idx[r, t], sc[r, t] = j, s[j]
+    if len(i) > 2 and "hit_min" in kv:  # planted twins: the original item must rank first
+        hit = (idx[:, 0] == i[2].reshape(-1)).mean()
+        if hit < float(kv["hit_min"]):
+            raise SystemExit(f"planted twins: top-1 is the original in {hit} of the queries, want {kv['hit_min']}")
+    if kv_i(kv, "expect_tie", 0):  # the exact duplicates 10 and 250 rank 10 first
+        if list(idx[0, :2]) != [10, 250]:
+            raise SystemExit(f"planted tie 10/250 ranks {list(idx[0, :2])}")
+    return [idx, sc]
+
+
+@op()
+def embNorm(i, kv): return _emb_unit(i[0]).astype(np.float32)
+
+
+@op()
+def embDup(i, kv):
+    u, thr = _emb_unit(i[0]), kv_f(kv, "thr", 0.95)
+    rep = np.arange(len(u), dtype=np.int32)
+    for a in range(len(u)):
+        for b in range(a):
+            if rep[b] == b and (u[a] * u[b]).sum() >= thr:
+                rep[a] = b
+                break
+    if "expect_merged" in kv and int((rep != np.arange(len(u))).sum()) != int(kv["expect_merged"]):
+        raise SystemExit(f"planted {kv['expect_merged']} merged rows but the oracle merged {int((rep != np.arange(len(u))).sum())}")
+    return rep.reshape(-1, 1)
+
+
+# ---- grounding baseline (src/mojocv/ground.mojo; rows in tests/cases/fs-ground.txt; plan R21a) ----------------
+_G_STOP = " click tap press push select open on the a an to button icon link field tab menu please then and "
+
+
+def _g_tok(s, drop):
+    out = []
+    for t in re.findall("[A-Za-z0-9\u0080-\U0010ffff]+", s):
+        t = "".join(chr(ord(c) + 32) if "A" <= c <= "Z" else c for c in t)
+        if not (drop and f" {t} " in _G_STOP) and t not in out:
+            out.append(t)
+    return out
+
+
+@op()
+def ground(i, kv):
+    f = [l.split("\t") for l in open(kv["elems"], encoding="utf-8").read().split("\n")]
+    f = [r for r in f if len(r) >= 9 and r[0] != "idx"][: kv_i(kv, "rows", 1 << 30)]
+    lab = [_g_tok(r[2] + " " + r[3], False) for r in f]
+    clk = [r[4] == "true" for r in f]
+    bx = [[int(float(v)) for v in r[5:9]] for r in f]
+    dx, dy, w, h, n = kv_i(kv, "dx", 0), kv_i(kv, "dy", 0), kv_i(kv, "w", 0), kv_i(kv, "h", 0), len(f)
+    stale = w > 0 and h > 0 and any(b[0] + dx < 0 or b[1] + dy < 0 or b[2] + dx > w or b[3] + dy > h for b in bx)
+    area = lambda b: (b[2] - b[0]) * (b[3] - b[1])
+    inside = lambda a, b: a[0] >= b[0] and a[1] >= b[1] and a[2] <= b[2] and a[3] <= b[3]
+    res = []
+    for q in kv.get("qs", "").split("|"):
+        qt = _g_tok(q, True)
+        sc = [0.0 if not qt or not lab[e] else 2.0 * sum(t in lab[e] for t in qt) / (len(qt) + len(lab[e])) for e in range(n)]
+        best = max(sc, default=0.0)
+        cand = [e for e in range(n) if best > 0 and sc[e] == best]
+        sel = min(cand, key=lambda e: (not clk[e], area(bx[e]), e)) if cand else -1
+        second = max([sc[e] for e in range(n) if sel >= 0 and e != sel and not (inside(bx[e], bx[sel]) or inside(bx[sel], bx[e]))], default=0.0)
+        margin = best - second
+        ab = sel < 0 or best < kv_f(kv, "thr", 0.5) or margin < kv_f(kv, "margin", 0.05) or stale
+        cx = cy = -1.0
+        if not ab:
+            cx, cy = (bx[sel][0] + bx[sel][2] + 2 * dx) / 2.0, (bx[sel][1] + bx[sel][3] + 2 * dy) / 2.0
+        res.append([-1.0 if ab else float(sel), best, margin if sel >= 0 else 0.0, float(ab), cx, cy, float(stale)])
+    if "exp" in kv:  # planted truth: the intended element per query (-1 = must abstain). wrong = pointed at another element
+        ex = [int(v) for v in kv["exp"].split(",")]
+        ok = sum(int(r[0]) == e for r, e in zip(res, ex))
+        wrong = sum(int(r[0]) >= 0 and int(r[0]) != e for r, e in zip(res, ex))
+        print(f"ground: {ok} of {len(ex)} right, {wrong} wrong target, {sum(r[3] == 1 for r in res)} abstained")
+        if wrong > kv_i(kv, "wrong_max", 0) or ok < kv_i(kv, "ok_min", 0):
+            raise SystemExit(f"planted: {ok} right (want >= {kv_i(kv, 'ok_min', 0)}), {wrong} wrong (want <= {kv_i(kv, 'wrong_max', 0)})")
+    return np.array(res, np.float64)
 
 
 # ---- driver -----------------------------------------------------------------------------------------------
