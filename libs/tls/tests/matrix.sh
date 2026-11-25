@@ -146,7 +146,7 @@ PY
 firefox_cell() { # VER KIND SNI ALPN
   local ver=$1 kind=$2 sni=$3 alpn=$4 mode=both host=localhost wa=
   command -v firefox >/dev/null || { echo "SKIP firefox not installed"; return; }
-  command -v tesseract >/dev/null || { echo "SKIP tesseract missing (reads the Firefox screenshot)"; return; }
+  command -v screen-ocr >/dev/null || { echo "SKIP screen-ocr missing (reads the Firefox screenshot)"; return; }
   [[ $ver == 12 ]] && mode=12; [[ $sni == off ]] && host=127.0.0.1; [[ $alpn == on ]] && wa=http/1.1
   local port=${PORT[$kind,$mode,$alpn]} d=$W/ff-$ver-$kind-$sni-$alpn
   rm -rf "$d"; mkdir -p "$d/profile" "$d/home"
@@ -162,9 +162,9 @@ user_pref("network.proxy.type", 0);
 JS
   HOME="$d/home" MOZ_HEADLESS=1 timeout 90 firefox --headless --no-remote --profile "$d/profile" --window-size 1400,200 --screenshot "$d/shot.png" "https://$host:$port/" > "$d/ff.log" 2>&1 || true
   [[ -s $d/shot.png ]] || { echo "FAIL no screenshot: $(tail -c 200 "$d/ff.log" | tr '\n' ' ')"; return; }
-  local t want; t=$(tesseract "$d/shot.png" - 2>/dev/null | tr -s ' \n' ' ')
+  local t want; t=$(screen-ocr "$d/shot.png" 2>/dev/null | sed "s/^[^|]*| //" | tr -s ' \n' ' ')
   want="mojo-tls-ok ver=$ver sni=$([[ $sni == on ]] && echo localhost) alpn=$wa"
-  t=${t//[=-]/_}  # tesseract reads "=" as "-"
+  t=${t//[=-]/_}  # OCR may read "=" as "-"
   [[ $t == *"${want//[=-]/_}"* ]] && echo PASS || echo "FAIL page text via OCR: '${t:0:160}' want '$want'"
 }
 chrome_cell() { # BROWSER(chromium|vivaldi) VER KIND SNI ALPN

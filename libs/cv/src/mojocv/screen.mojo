@@ -1,12 +1,12 @@
 # screen: the one screen parser (R13a, R13b and R20a of the full-stack plan) and the stuck-state check (R13a).
-#   screenParse OUT IMG [lang=deu ocr=1 scale=3 q=0]   elements of a screenshot: box, role, clickable, text
+#   screenParse OUT IMG [lang=ignored ocr=1 scale=3 q=0]   elements of a screenshot: box, role, clickable, text
 #   screenStuck OUT A B [thr=16 minfrac=0.005 q=0]      did anything meaningful change between two captures?
 # Parse: flat-colour regions (4-connected pixels of one colour, `q` low bits dropped) whose bounding box edge is covered by the
 # region itself are the widgets: a frame (a one to few pixel border) or a filled rectangle, the pair of both being one box. The
 # largest flat region (at least 40 % of the picture) is the screen background and is not an element; a region of 90 % or more of
 # the picture is never one. Ink = pixels of a widget that differ from its fill by more than 40 in some channel (the frame colour
 # is not ink), outside its child widgets; ink rows form lines (a gap of up to 2 empty rows stays one line), a column gap wider
-# than the line height splits a line. Each line is read by tesseract as one process (`--psm 7`, a difference image: dark ink on
+# than the line height splits a line. Each line is read by screen-ocr as one process (a difference image: dark ink on
 # white whatever the colours, scaled by `scale`). Roles: button (a leaf widget with one line of text, 14 to 80 px tall, 1.2 to 6
 # times as wide, at most a tenth of the picture; clickable), dialog (a widget with a button among its children; its first line,
 # in the top quarter, is its title and its text), panel (any other widget), text (a line outside a button).
@@ -326,7 +326,7 @@ def text_lines(m: Mat[U8], ws: List[Widget], kids: List[Int], x0: Int, y0: Int, 
 
 
 def ocr_line(m: Mat[U8], ws: List[Widget], kids: List[Int], ln: Line, fill: Int, ring: Int, q: Int, scale: Int, lang: String, tmp: String) raises -> String:
-    """Read one line with tesseract: a difference image (dark ink on white), `scale` times larger, 8 px of white around."""
+    """Read one line with screen-ocr (RapidOCR; `lang` is unused): a difference image (dark ink on white), `scale` times larger, 8 px of white around."""
     var pad = 2
     var x0 = max(ln.x0 - pad, 0)
     var y0 = max(ln.y0 - pad, 0)
@@ -359,7 +359,7 @@ def ocr_line(m: Mat[U8], ws: List[Widget], kids: List[Int], ln: Line, fill: Int,
     pgm.extend(body^)
     with open(tmp, "w") as f:
         f.write_bytes(Span(pgm))
-    var raw = sh_run("tesseract '" + tmp + "' stdout -l " + lang + " --psm 7 2>/dev/null || true")
+    var raw = sh_run("screen-ocr '" + tmp + "' 2>/dev/null | sed 's/^[^|]*| //' | tr '\\n' ' ' | tr -s ' ' || true")
     var keep = List[UInt8]()
     for b in raw.as_bytes():
         if b != 10 and b != 12 and b != 13:
