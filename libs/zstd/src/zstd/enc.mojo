@@ -243,11 +243,19 @@ struct Enc(Movable):
             self.sml.resize(unsafe_uninit_length=cap)
         if self.nlit + ll + 64 > len(self.lits):
             self.lits.resize(unsafe_uninit_length=max(self.nlit + ll + 64, 2 * len(self.lits)))
-        unsafe_memcpy(dest=self.lits.unsafe_ptr().unsafe_offset(self.nlit), src=src.unsafe_offset(anchor), count=ll)
+        var dl = self.lits.unsafe_ptr().unsafe_offset(self.nlit)
+        var rd = (ll + 15) & -16
+        if ll <= 64 and rd <= ll + ml:
+            # 16-byte steps: they read up to the next multiple of 16, which the match that follows the run covers,
+            # and write into the 64 spare bytes after the literals
+            for i in range(0, ll, 16):
+                dl.unsafe_offset(i).unsafe_store[alignment=1](src.unsafe_offset(anchor + i).unsafe_load[width=16, alignment=1]())
+        else:
+            unsafe_memcpy(dest=dl, src=src.unsafe_offset(anchor), count=ll)
         self.nlit += ll
-        self.sll[self.nseq] = UInt32(ll)
-        self.sof[self.nseq] = UInt32(code)
-        self.sml[self.nseq] = UInt32(ml - 3)
+        self.sll.unsafe_ptr()[unsafe_offset=self.nseq] = UInt32(ll)
+        self.sof.unsafe_ptr()[unsafe_offset=self.nseq] = UInt32(code)
+        self.sml.unsafe_ptr()[unsafe_offset=self.nseq] = UInt32(ml - 3)
         self.nseq += 1
         if code > 3:
             self.r2 = self.r1
