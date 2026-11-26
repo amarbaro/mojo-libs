@@ -51,6 +51,7 @@ Requires Mojo 1.2. Nothing else: no system library, no `-dev` package.
 ## What you get
 
 - `zstd.compress(data, level=3)`, `zstd.decompress(data)`: one frame out (content size and checksum), every frame in.
+  `zstd.decompress_into(data, out)` decodes into a buffer you reuse.
 - `zstd.ZstdWriter(path, level)` and `zstd.ZstdReader(path)` / `ZstdReader(data=span)`: streaming through a 128 KiB buffer.
 - `lz4.compress(data)`, `lz4.decompress(data)`: lz4 frame format.
 - Corrupt, truncated or trailing input raises `zstd: ...` / `lz4: ...`; it never crashes.
@@ -63,14 +64,15 @@ Level 3, one thread, against `zstd -b3 --single-thread` (libzstd 1.5.7), `script
 
 | input | compress, ours / libzstd (MB/s) | decompress, ours / libzstd (MB/s) |
 |---|---|---|
-| 64 MiB random bytes | 4445 / 4978 (0.89) | 10270 / 14728 (0.70) |
-| 64 MiB of one repeated sentence | 7631 / 7953 (0.96) | 7304 / 10394 (0.70) |
-| 10 MB executable | 245 / 323 (0.76) | 1048 / 1563 (0.67) |
-| 2.9 MB C sources | 385 / 477 (0.81) | 1508 / 2219 (0.68) |
-| 12 MB JSON lines | 284 / 364 (0.78) | 1084 / 1704 (0.64) |
+| 64 MiB random bytes | 3982 / 5136 (0.78) | 9671 / 13295 (0.73) |
+| 64 MiB of one repeated sentence | 7137 / 7529 (0.95) | 7250 / 10080 (0.72) |
+| 10 MB executable | 250 / 316 (0.79) | 1143 / 1447 (0.79) |
+| 2.9 MB C sources | 369 / 481 (0.77) | 1710 / 2157 (0.79) |
+| 12 MB JSON lines | 281 / 349 (0.80) | 1235 / 1507 (0.82) |
 
-One run on a shared box (load 6 to 7), so read the ratios. `zstd -b` reuses its output buffer; `zstd.decompress`
-allocates a new one per call, and that is in our numbers. Output size is within 5% of libzstd's at every level (worst
+Best of two runs on a shared box (load 7 to 9), so read the ratios. Both sides reuse their output buffer (ours through
+`decompress_into`). `zstd -b` writes frames without a checksum, ours carry one and verify it (XXH64, 24 GB/s), which
+is most of the gap on the random and repeated rows. Output size is within 5% of libzstd's at every level (worst
 1.9% on four test inputs); lz4 output is byte for byte python-lz4's and as fast as liblz4. Streaming 128 MiB through
 `ZstdWriter` and `ZstdReader` peaks at 14.2 MB, against 13.7 MB for 1 MiB. Details, the 32 MiB text run and the
 per-level table: [docs/perf.md](docs/perf.md).

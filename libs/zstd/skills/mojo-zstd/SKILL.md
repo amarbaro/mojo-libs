@@ -10,8 +10,8 @@ metadata:
 zstd and lz4 frames for Mojo 1.2, written in Mojo: no C library, no foreign calls, no linker flag, any
 host Mojo runs on. Decoding matches libzstd and liblz4 on valid and corrupt input; lz4 encoding is byte for
 byte python-lz4's; zstd encoding is valid zstd within 5% of libzstd's size at every level (not its bytes).
-Speed at level 3, one thread: compress 0.76 to 0.96x libzstd's MB/s, decompress 0.64 to 0.70x (random, repetitive,
-binary, source and JSON input); lz4 as fast as liblz4. Table: `docs/perf.md`.
+Speed at level 3, one thread: compress 0.77 to 0.95x libzstd's MB/s, decompress 0.72 to 0.82x (random, repetitive,
+binary, source and JSON input; libzstd's bench skips the checksum we verify); lz4 as fast as liblz4. Table: `docs/perf.md`.
 
 ## When to use
 
@@ -32,6 +32,7 @@ def main() raises:
     var data = List[UInt8](length=100000, fill=65)
     var z = zstd.compress(data, 3)            # one frame, level 3
     var d = zstd.decompress(z)                # every frame, concatenated
+    zstd.decompress_into(z, d)                # same, reusing d's memory (hot loops)
     var l = lz4.decompress(lz4.compress(d))   # lz4 frame
     print(len(z), len(d), len(l))
 
@@ -52,7 +53,8 @@ def main() raises:
 - Parameters are `Span[UInt8, _]`: pass a `List[UInt8]` or `s.as_bytes()` directly.
 - `decompress` holds the whole result in memory: stream big files with `ZstdReader`. It reserves the frame's
   declared content size in one step (at most 64 MiB past what is decoded so far), so a lying header stays cheap.
-- `decompress` allocates a new output per call: in a hot loop the allocation and page faults are part of the cost.
+- `decompress` allocates a new output per call; in a loop use `decompress_into(data, out)` with one `out`. After an
+  error `out` is empty.
 - Timing: `scripts/bench31.sh` (level 3 against `zstd -b3`, 5 inputs) and `scripts/bench.sh` (32 MiB text, levels).
 
 ## Gate

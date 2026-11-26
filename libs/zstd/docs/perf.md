@@ -29,17 +29,24 @@ Higher levels cost about 2x libzstd's time (optimal parser, binary tree). Stream
 Source: `scripts/bench31.sh`. Five inputs (64 MiB random, 64 MiB of one repeated sentence, first 10 MB of an executable,
 2.9 MB of libzstd 1.5.7 C sources and headers, 12 MB of generated JSON lines); ours is `tests/bench31.mojo` (best of 5
 per direction, whole buffer in memory), libzstd is `zstd -b3 --single-thread -i1` (CLI 1.5.7). MB/s of input,
-single thread, Ryzen 7 7800X3D, load average 6.7 on 16 cores at the run, so the box was not quiet: A/B decisions in the
-commits used best of 4 to 10 alternating runs, this table is one run. `zstd -b` reuses its output buffer;
-`zstd.decompress` allocates a new one per call, and that cost is in our column.
+single thread, Ryzen 7 7800X3D, load average 7 to 9 on 16 cores, so the box was not quiet: A/B decisions in the
+commits used best of 3 to 10 alternating runs, this table is the best of two runs per column. Both sides reuse their
+output buffer (ours through `decompress_into`). `zstd -b` writes its frames without a checksum (its output is 4 bytes
+shorter than ours on random input), so its decode skips the XXH64 pass that ours does at about 24 GB/s; that pass is
+most of the remaining gap on the random and repeated rows.
 
 | input | ours c | libzstd c | c ratio | ours d | libzstd d | d ratio | ours size (B) |
 |---|---|---|---|---|---|---|---|
-| random | 4445 | 4978 | 0.89 | 10270 | 14728 | 0.70 | 67110414 |
-| repeated sentence | 7631 | 7953 | 0.96 | 7304 | 10394 | 0.70 | 6217 |
-| executable | 245 | 323 | 0.76 | 1048 | 1563 | 0.67 | 4560703 |
-| C sources | 385 | 477 | 0.81 | 1508 | 2219 | 0.68 | 517401 |
-| JSON | 284 | 364 | 0.78 | 1084 | 1704 | 0.64 | 3028389 |
+| random | 3982 | 5136 | 0.78 | 9671 | 13295 | 0.73 | 67110414 |
+| repeated sentence | 7137 | 7529 | 0.95 | 7250 | 10080 | 0.72 | 6217 |
+| executable | 250 | 316 | 0.79 | 1143 | 1447 | 0.79 | 4560703 |
+| C sources | 369 | 481 | 0.77 | 1710 | 2157 | 0.79 | 517401 |
+| JSON | 281 | 349 | 0.80 | 1235 | 1507 | 0.82 | 3028389 |
+
+Decoder round after v0.3.0 (decode only, best of 3x7, MB/s): unconditional first copy of literals and far matches,
+exe 1067 -> 1180, C sources 1544 -> 1725, JSON 1094 -> 1340. Tried and dropped for no gain: inlining the bit reader's
+end check, five Huffman symbols per reload, an AVX-512 XXH64, a prefetch of the match source (slower: the stall is
+the match load waiting on just-stored literal bytes, not a cache miss).
 
 Before the work (same harness, load about 9): compress 900, 3239, 238, 361, 249 and decompress 5330, 4759, 669, 1439, 932
 MB/s for the five inputs. Compressed sizes did not change. Levels above 3 were not timed; their size gate is unchanged.
