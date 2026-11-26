@@ -74,18 +74,13 @@ struct Encoder(Movable):
         """od_ec_enc_done: flush low, then resolve carries from the 16-bit precarry buffer into bytes."""
         var m: UInt64 = 0x3FFF
         var e = ((self.low + m) & ~m) | (m + 1)
-        var c = self.cnt
-        var s = c + 10
-        if s > 0:
-            var nmask = (UInt64(1) << UInt64(c + 16)) - 1
-            while True:
-                self.pre.append(UInt16((e >> UInt64(c + 16)) & 0xFFFF))
-                e &= nmask
-                s -= 8
-                c -= 8
-                nmask >>= 8
-                if s <= 0:
-                    break
+        var sh = self.cnt + 16  # bits of e above the flushed part
+        var s = self.cnt + 10
+        while s > 0:
+            self.pre.append(UInt16((e >> UInt64(sh)) & 0xFFFF))
+            e &= (UInt64(1) << UInt64(sh)) - 1
+            s -= 8
+            sh -= 8
         var out = List[UInt8](length=len(self.pre), fill=0)
         var carry = 0
         var i = len(self.pre) - 1
