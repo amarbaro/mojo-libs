@@ -606,3 +606,42 @@ struct Enc(Movable):
         dst[unsafe_offset=2] = UInt8((h >> 16) & 255)
         unsafe_memcpy(dest=dst.unsafe_offset(3), src=src, count=n)
         return 3 + n
+
+    @no_inline
+    def flat(self, src: ImmPointer[UInt8, _], n: Int) -> Bool:
+        """True when three 4 KiB samples (head, middle, tail) are each too flat for Huffman to pay: the bound of
+        literals(), checked on a sample as libzstd does for suspected incompressible data."""
+        if n < 3 * 4096:
+            return False
+        var c = List[Int](length=1024, fill=0)  # four interleaved histograms: no dependency between neighbours
+        var h = c.unsafe_ptr()
+        for s in range(3):
+            var q = src.unsafe_offset(0 if s == 0 else (n // 2 - 2048 if s == 1 else n - 4096))
+            for i in range(1024):
+                h[unsafe_offset=i] = 0
+            for i in range(0, 4096, 4):
+                h[unsafe_offset=Int(q[unsafe_offset=i])] += 1
+                h[unsafe_offset=256 + Int(q[unsafe_offset=i + 1])] += 1
+                h[unsafe_offset=512 + Int(q[unsafe_offset=i + 2])] += 1
+                h[unsafe_offset=768 + Int(q[unsafe_offset=i + 3])] += 1
+            for i in range(256):
+                if h[unsafe_offset=i] + h[unsafe_offset=256 + i] + h[unsafe_offset=512 + i] + h[unsafe_offset=768 + i] > (4096 >> 7) + 4:
+                    return False
+        return True
+
+    @no_inline
+    def raw_block(
+        mut self, src: ImmPointer[UInt8, _], n: Int, dst: MutPointer[UInt8, _], last: Bool, r0: Int, r1: Int, r2: Int
+    ) -> Int:
+        """A raw block of src[0:n] with its 3-byte header at dst; returns 3 + n. The repeat offsets go back to
+        r0..r2, the ones from before the block."""
+        self.first = False
+        self.r0 = r0
+        self.r1 = r1
+        self.r2 = r2
+        var h = (1 if last else 0) | (n << 3)
+        dst[unsafe_offset=0] = UInt8(h & 255)
+        dst[unsafe_offset=1] = UInt8((h >> 8) & 255)
+        dst[unsafe_offset=2] = UInt8((h >> 16) & 255)
+        unsafe_memcpy(dest=dst.unsafe_offset(3), src=src, count=n)
+        return 3 + n
