@@ -317,10 +317,12 @@ def decode_block(
         if ll > ln - litp or op + ll + ml > oend:
             raise bad("corrupt input")
         if wild and ll <= 64:
-            # 16-byte steps: up to 15 bytes past the run are read (literals have 32 spare bytes) and written
-            # (dst has 32 spare bytes past the output end), and later output overwrites them
-            for i in range(0, ll, 16):
-                dst.unsafe_offset(op + i).unsafe_store[alignment=1](lp.unsafe_offset(litp + i).unsafe_load[width=16, alignment=1]())
+            # 16-byte steps, the first one unconditional (most runs are shorter, and a fixed first copy saves a
+            # mispredicted loop exit): up to 15 bytes past the run are read (literals have 32 spare bytes) and
+            # written (dst has 32 spare bytes past the output end), and later output overwrites them
+            dst.unsafe_offset(op).unsafe_store[alignment=1](lp.unsafe_offset(litp).unsafe_load[width=32, alignment=1]())
+            if ll > 32:
+                dst.unsafe_offset(op + 32).unsafe_store[alignment=1](lp.unsafe_offset(litp + 32).unsafe_load[width=32, alignment=1]())
         else:
             unsafe_memcpy(dest=dst.unsafe_offset(op), src=lp.unsafe_offset(litp), count=ll)
         litp += ll
@@ -329,7 +331,13 @@ def decode_block(
             raise bad("corrupt input")
         var m = op - offset
         var cpy = op + ml
-        if offset < 16 and offset >= ml:
+        if offset >= 16:  # each 16-byte piece reads only bytes already written; first piece unconditional
+            dst.unsafe_offset(op).unsafe_store[alignment=1](dst.unsafe_offset(m).unsafe_load[width=16, alignment=1]())
+            if ml > 16:
+                for i in range(16, ml, 16):
+                    dst.unsafe_offset(op + i).unsafe_store[alignment=1](dst.unsafe_offset(m + i).unsafe_load[width=16, alignment=1]())
+            op = cpy
+        elif offset >= ml:
             dst.unsafe_offset(op).unsafe_store[alignment=1](dst.unsafe_offset(m).unsafe_load[width=16, alignment=1]())  # ml <= offset < 16
             op = cpy
         else:
