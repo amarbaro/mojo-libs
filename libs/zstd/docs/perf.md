@@ -24,6 +24,28 @@ decoder 1.2 to 1.4x.
 Higher levels cost about 2x libzstd's time (optimal parser, binary tree). Streaming: 128 MiB written and read back through
 `ZstdWriter` / `ZstdReader` peaks at 14.2 MB, 1 MiB at 13.5 MB.
 
+## Throughput, level 3
+
+Source: `scripts/bench31.sh`. Five inputs (64 MiB random, 64 MiB of one repeated sentence, first 10 MB of an executable,
+2.9 MB of libzstd 1.5.7 C sources and headers, 12 MB of generated JSON lines); ours is `tests/bench31.mojo` (best of 5
+per direction, whole buffer in memory), libzstd is `zstd -b3 --single-thread -i1` (CLI 1.5.7). MB/s of input,
+single thread, Ryzen 7 7800X3D, load average 5.9 on 16 cores at the run, so the box was not quiet: A/B decisions in the
+commits used best of 4 to 10 alternating runs, this table is one run.
+
+| input | ours c | libzstd c | c ratio | ours d | libzstd d | d ratio | ours size (B) |
+|---|---|---|---|---|---|---|---|
+| random | 3975 | 5056 | 0.79 | 11473 | 16815 | 0.68 | 67110414 |
+| repeated sentence | 7823 | 8493 | 0.92 | 7323 | 10384 | 0.71 | 6217 |
+| executable | 262 | 326 | 0.80 | 1066 | 1476 | 0.72 | 4560703 |
+| C sources | 386 | 482 | 0.80 | 1535 | 2254 | 0.68 | 517401 |
+| JSON | 287 | 367 | 0.78 | 1038 | 1742 | 0.60 | 3028389 |
+
+Before the work (same harness, load about 9): compress 900, 3239, 238, 361, 249 and decompress 5330, 4759, 669, 1439, 932
+MB/s for the five inputs. Compressed sizes did not change. Levels above 3 were not timed; their size gate is unchanged.
+What moved it: decode output sized from the frame content size (no growth copies), raw blocks for match-free flat input
+without entropy work plus one output reservation, unchecked split fingerprints, 16-byte literal and match copies in
+the decoder and in the sequence store, four Huffman streams decoded side by side.
+
 ## Size against libzstd, every level
 
 2 MiB of the seeded text, `zstd.compress(data, level)` against Python `zstandard` at the same level (both decode to the
