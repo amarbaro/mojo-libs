@@ -59,12 +59,21 @@ API: [docs/api.md](docs/api.md). Design: [docs/design.md](docs/design.md). Numbe
 
 ## Performance
 
-32 MiB text, `scripts/bench.sh`, level 3, on a busy box (load 12 to 13 on 16 cores): zstd compress 84 to 95 ms
-(libzstd via Python 56 to 87), decompress 48 to 73 ms (35 to 50); lz4 compress 28 to 37 ms (38 to 46),
-decompress 27 to 41 ms (34 to 38). Output size is within 5% of libzstd's at every level (worst 1.9% on four
-test inputs); lz4 output is byte for byte python-lz4's. Peak RSS 123 MB against 124 MB. Streaming 128 MiB
-through `ZstdWriter` and `ZstdReader` peaks at 14.2 MB, against 13.5 MB for 1 MiB. Details and the per-level
-table: [docs/perf.md](docs/perf.md).
+Level 3, one thread, against `zstd -b3 --single-thread` (libzstd 1.5.7), `scripts/bench31.sh`, Ryzen 7 7800X3D:
+
+| input | compress, ours / libzstd (MB/s) | decompress, ours / libzstd (MB/s) |
+|---|---|---|
+| 64 MiB random bytes | 4445 / 4978 (0.89) | 10270 / 14728 (0.70) |
+| 64 MiB of one repeated sentence | 7631 / 7953 (0.96) | 7304 / 10394 (0.70) |
+| 10 MB executable | 245 / 323 (0.76) | 1048 / 1563 (0.67) |
+| 2.9 MB C sources | 385 / 477 (0.81) | 1508 / 2219 (0.68) |
+| 12 MB JSON lines | 284 / 364 (0.78) | 1084 / 1704 (0.64) |
+
+One run on a shared box (load 6 to 7), so read the ratios. `zstd -b` reuses its output buffer; `zstd.decompress`
+allocates a new one per call, and that is in our numbers. Output size is within 5% of libzstd's at every level (worst
+1.9% on four test inputs); lz4 output is byte for byte python-lz4's and as fast as liblz4. Streaming 128 MiB through
+`ZstdWriter` and `ZstdReader` peaks at 14.2 MB, against 13.7 MB for 1 MiB. Details, the 32 MiB text run and the
+per-level table: [docs/perf.md](docs/perf.md).
 
 **Limits:** inputs under 2 GiB for `compress`. Not covered: dictionaries, multithreading, long-distance matching, the lz4 block format, lz4 levels.
 

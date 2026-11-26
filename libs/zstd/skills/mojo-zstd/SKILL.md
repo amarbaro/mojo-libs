@@ -10,6 +10,8 @@ metadata:
 zstd and lz4 frames for Mojo 1.2, written in Mojo: no C library, no foreign calls, no linker flag, any
 host Mojo runs on. Decoding matches libzstd and liblz4 on valid and corrupt input; lz4 encoding is byte for
 byte python-lz4's; zstd encoding is valid zstd within 5% of libzstd's size at every level (not its bytes).
+Speed at level 3, one thread: compress 0.76 to 0.96x libzstd's MB/s, decompress 0.64 to 0.70x (random, repetitive,
+binary, source and JSON input); lz4 as fast as liblz4. Table: `docs/perf.md`.
 
 ## When to use
 
@@ -48,9 +50,12 @@ def main() raises:
 - `ZstdReader(data=span)` reads from memory and keeps a raw pointer: keep the owner alive past the last `read`.
 - `decompress` raises `zstd: ...` / `lz4: ...` on corrupt, truncated or trailing input. Catch it for untrusted data.
 - Parameters are `Span[UInt8, _]`: pass a `List[UInt8]` or `s.as_bytes()` directly.
-- `decompress` holds the whole result in memory: stream big files with `ZstdReader`.
+- `decompress` holds the whole result in memory: stream big files with `ZstdReader`. It reserves the frame's
+  declared content size in one step (at most 64 MiB past what is decoded so far), so a lying header stays cheap.
+- `decompress` allocates a new output per call: in a hot loop the allocation and page faults are part of the cost.
+- Timing: `scripts/bench31.sh` (level 3 against `zstd -b3`, 5 inputs) and `scripts/bench.sh` (32 MiB text, levels).
 
 ## Gate
 
 `scripts/check.sh` from the repo must end with `PASS all` (oracle comparison against Python's zstd and
-lz4 bindings and libzstd's golden vectors, mutants, a bounded-memory stream, the README example). `scripts/bench.sh` for speed.
+lz4 bindings and libzstd's golden vectors, mutants, a bounded-memory stream, the README example).
