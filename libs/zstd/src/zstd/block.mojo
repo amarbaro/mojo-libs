@@ -322,14 +322,23 @@ def decode_block(
             raise bad("corrupt input")
         var m = op - offset
         var cpy = op + ml
-        if offset >= ml:
+        if offset < 16 and offset >= ml:
             unsafe_memcpy(dest=dst.unsafe_offset(op), src=dst.unsafe_offset(m).unsafe_origin_cast[MutUntrackedOrigin](), count=ml)
             op = cpy
         else:
-            while op < cpy:
+            # the match repeats with period offset, so any multiple of it is a valid distance: widen it to 16 or
+            # more and copy 16 bytes at a time (dst has 32 spare bytes past the output end)
+            var d = offset
+            while d < 16:
+                d += offset
+            for _ in range(min(d - offset, ml)):  # until op - d reaches the match start
                 dst[unsafe_offset=op] = dst[unsafe_offset=m]
                 op += 1
                 m += 1
+            while op < cpy:
+                dst.unsafe_offset(op).unsafe_store[alignment=1](dst.unsafe_offset(op - d).unsafe_load[width=16, alignment=1]())
+                op += 16
+            op = cpy
     if not bd.at_end():
         raise bad("corrupt input")
     if ln - litp > oend - op:
