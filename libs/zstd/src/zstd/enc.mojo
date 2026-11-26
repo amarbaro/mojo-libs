@@ -292,6 +292,8 @@ struct Enc(Movable):
             top = max(top, cnt[s])
         if top == n and n > 1:  # one byte value
             return self._lit_small(dst, 1, n, Int(src[unsafe_offset=0]))
+        if top <= (n >> 7) + 4:  # libzstd's HUF heuristic: too flat for Huffman to pay, skip building it
+            return self._lit_small(dst, 0, n, 0)
         var min_lit = 6 if self.phuf_ok else 8  # libzstd waits for 8 << (9 - strategy) bytes; trying is cheap and costs no ratio
         if n >= min_lit:
             var minlog = (self.strat - 1) if self.strat >= 8 else 6
