@@ -97,7 +97,16 @@ struct ZstdReader(Movable):
 
 def decompress(data: Span[UInt8, _]) raises -> List[UInt8]:
     """Every frame of data, concatenated. Raises on corrupt, truncated or trailing non-zstd data."""
+    var out = List[UInt8]()
+    decompress_into(data, out)
+    return out^
+
+
+def decompress_into(data: Span[UInt8, _], mut out: List[UInt8]) raises:
+    """decompress into out, reusing its memory: out holds the decoded bytes after the call. In a loop this saves
+    the allocation and page faults of a new buffer per call. On error out is left empty."""
     var d = Zdec(False)
+    swap(d.out, out)
     var p = data.unsafe_ptr().unsafe_mut_cast[False]()
     var ip = 0
     while True:
@@ -108,9 +117,7 @@ def decompress(data: Span[UInt8, _]) raises -> List[UInt8]:
     if ip < len(data) or not d.idle():
         raise Error("zstd: truncated input")
     d.out.resize(unsafe_uninit_length=d.op)
-    var res = List[UInt8]()
-    swap(res, d.out)
-    return res^
+    swap(d.out, out)
 
 
 def _open(path: String, mode: String) raises -> FileHandle:
