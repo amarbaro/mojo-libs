@@ -34,3 +34,6 @@
   is rewritten (git filter-repo, trees compared) before anything else.
 - I told modular "-O0..-O2 are correct" from x86-64 runs only; on arm64 -O2 miscompiled too -> a compiler-bug claim names
   the platform it was measured on, and a workaround is stated only for platforms that ran it.
+- The zstd v0.4.0 note scaffolded on `monorepo` listed every v0.3.0 commit again: they were pushed as cherry-picks, so
+  the originals are not ancestors of the tag, and after the merge-back no `git log` range or `--cherry-pick` filter
+  drops them -> `release-note new` runs on the clean branch off `origin/main` that will be pushed, never on `monorepo`.
