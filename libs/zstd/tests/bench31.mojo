@@ -22,9 +22,10 @@ def main() raises:
         var dt = Int(perf_counter_ns()) - t0
         if i == 0 or dt < best_c:
             best_c = dt
+    var out = List[UInt8]()  # reused, as zstd -b reuses its buffer
     for i in range(5):
         var t0 = Int(perf_counter_ns())
-        var out = zstd.decompress(c)
+        zstd.decompress_into(c, out)
         var dt = Int(perf_counter_ns()) - t0
         if len(out) != size:
             raise Error("bench31: decompress length differs")

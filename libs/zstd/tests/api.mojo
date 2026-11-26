@@ -37,4 +37,16 @@ def main() raises:
         raises("missing file", "zstd: ", String(e).startswith("zstd: "))
     if len(zstd.decompress(zstd.compress(List[UInt8]()))) != 0 or len(lz4.decompress(lz4.compress(List[UInt8]()))) != 0:
         raise Error("api: empty round trip")
+    var out = List[UInt8]()  # decompress_into: one buffer through a large, a small, then a corrupt frame
+    zstd.decompress_into(z, out)
+    var small = zstd.compress("xyz".as_bytes())
+    var ok = out == List(s)
+    zstd.decompress_into(small, out)
+    ok = ok and out == List("xyz".as_bytes())
+    try:
+        zstd.decompress_into(junk, out)
+    except:
+        ok = ok and len(out) == 0
+    if not ok:
+        raise Error("api: decompress_into reuse")
     print("api: ok")
