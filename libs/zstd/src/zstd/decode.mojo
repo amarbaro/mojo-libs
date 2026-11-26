@@ -66,7 +66,12 @@ struct Zdec(Movable):
         if need <= len(self.out):
             return
         if not self.sliding:
-            self.out.resize(unsafe_uninit_length=max(need, 2 * len(self.out)))
+            var want = max(need, 2 * len(self.out))
+            if self.csize >= 0:
+                # a declared size is a hint, not a promise: reserve the whole frame in one step, but never
+                # more than 64 MiB past what is needed or twice the buffer, so a lying header stays cheap
+                want = max(need, min(self.lo + self.csize + 32, max(2 * len(self.out), need + (1 << 26))))
+            self.out.resize(unsafe_uninit_length=want)
             return
         var cap = (self.hist if self.csize < 0 else min(self.hist, self.csize)) + self.omax + 32
         if len(self.out) < cap:
