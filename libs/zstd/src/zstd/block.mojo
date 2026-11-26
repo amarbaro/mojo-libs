@@ -261,6 +261,7 @@ def decode_block(
     var r2 = dc.rep2
     var oend = op0 + (omax_raw if direct else omax)
     var litp = 0
+    var wild = direct or (Int(src[unsafe_offset=0]) & 3 != 0)  # literals have 32 spare bytes after them
     for k in range(nseq):
         var lc = llt[unsafe_offset=lls]
         var mc = mlt[unsafe_offset=mls]
@@ -315,7 +316,13 @@ def decode_block(
                     lls = lls ^ 1  # one FSE state off
         if ll > ln - litp or op + ll + ml > oend:
             raise bad("corrupt input")
-        unsafe_memcpy(dest=dst.unsafe_offset(op), src=lp.unsafe_offset(litp), count=ll)
+        if wild and ll <= 64:
+            # 16-byte steps: up to 15 bytes past the run are read (literals have 32 spare bytes) and written
+            # (dst has 32 spare bytes past the output end), and later output overwrites them
+            for i in range(0, ll, 16):
+                dst.unsafe_offset(op + i).unsafe_store[alignment=1](lp.unsafe_offset(litp + i).unsafe_load[width=16, alignment=1]())
+        else:
+            unsafe_memcpy(dest=dst.unsafe_offset(op), src=lp.unsafe_offset(litp), count=ll)
         litp += ll
         op += ll
         if offset > op - lo or offset <= 0:
@@ -323,7 +330,7 @@ def decode_block(
         var m = op - offset
         var cpy = op + ml
         if offset < 16 and offset >= ml:
-            unsafe_memcpy(dest=dst.unsafe_offset(op), src=dst.unsafe_offset(m).unsafe_origin_cast[MutUntrackedOrigin](), count=ml)
+            dst.unsafe_offset(op).unsafe_store[alignment=1](dst.unsafe_offset(m).unsafe_load[width=16, alignment=1]())  # ml <= offset < 16
             op = cpy
         else:
             # the match repeats with period offset, so any multiple of it is a valid distance: widen it to 16 or
