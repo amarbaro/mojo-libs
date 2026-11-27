@@ -52,7 +52,7 @@ pixi run test      # unit tests
 pixi run gate      # unit tests, tool builds, expat differential, negative control
 ```
 
-From another project: build with `-I src`, or install the conda package (see Packaging).
+From another project: build with `-I src`, or install the conda package: `pixi workspace channel add https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-xmojo` once published (see Packaging).
 
 ## Usage
 

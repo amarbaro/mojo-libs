@@ -7,7 +7,7 @@ All names import from the package root: `from xmojo import ...`.
 | signature | notes |
 |---|---|
 | `from_xml[T](s: StringSlice, entities: Dict[String, String] = {}) raises -> T` | parse errors raise an `Error` with the `XmlError` text |
-| `to_xml[T](v: T, root: StringSlice) raises SerializationError -> String` | `root` names the outer element |
+| `to_xml[T](v: T, root: StringSlice) raises -> String` | `root` names the outer element |
 | `parse(s: StringSlice, entities: Dict[String, String] = {}) raises XmlError -> Doc` | |
 | `html_entities() raises -> Dict[String, String]` | 2120 WHATWG names; builds a new map per call |
 | `Records(text: StringSlice, local: String)`; `next(mut self) raises XmlError -> Optional[String]` | `None` at the end; borrows `text` |

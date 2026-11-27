@@ -23,6 +23,8 @@ ctx.enqueue_function[vattn_fwd](
 
 ## Install
 
+Install: `pixi workspace channel add https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-vattn` once published.
+
 Requires Mojo through the `max` 26.7.0 wheel (`uv sync`). Building needs no GPU; running does.
 
 | Way | Command |
