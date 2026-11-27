@@ -11,7 +11,92 @@ the end of data and raises as soon as one of them is consumed.
 Oracle: tests/jpeg_test.sh (ImageMagick writes the fixtures and the golden RGBA, never run time).
 """
 
+from std.bit import byte_swap
+from std.memory import bitcast
+
 comptime MAXPX = 1 << 26  # same value as assets.MAXPX (tests/jpeg_test.mojo checks it): 64 M pixels
+comptime P8 = Pointer[UInt8, MutAnyOrigin]
+comptime P16 = Pointer[UInt16, MutAnyOrigin]
+comptime PS = Pointer[Int16, MutAnyOrigin]
+comptime PI = Pointer[Int, MutAnyOrigin]
+
+
+struct Br(Copyable, Movable):
+    """Entropy-coded bit reader, left-aligned: the top `nb` bits of `acc` are unread, the lowest `vb` of them are virtual zeros past a
+    marker or the end. Refills 8 bytes at a time when none is 0xFF; a stuffed 0xFF00 or a marker takes the byte path."""
+
+    var acc: UInt64
+    var nb: Int
+    var vb: Int
+    var pos: Int
+    var n: Int
+    var a: Int  # address of the data
+    var stop: Bool
+
+    def __init__(out self, a: Int, n: Int):
+        self.acc, self.nb, self.vb, self.pos, self.n, self.a, self.stop = 0, 0, 0, 0, n, a, False
+
+    def reset(mut self):
+        self.acc, self.nb, self.vb, self.stop = 0, 0, 0, False
+
+    @always_inline
+    def refill(mut self):
+        """Top up to 57..64 bits."""
+        if self.stop:
+            var k = (64 - self.nb) >> 3
+            self.nb += 8 * k
+            self.vb += 8 * k
+        elif self.pos + 8 <= self.n:
+            var v = byte_swap(bitcast[DType.uint64, 1](P8(unsafe_from_address=self.a).unsafe_load[width=8](self.pos))[0])
+            var x = ~v
+            if ((x - 0x0101010101010101) & ~x & 0x8080808080808080) == 0:  # no 0xFF byte in the 8
+                self.acc |= v >> UInt64(self.nb)
+                var k = (64 - self.nb) >> 3
+                self.pos += k
+                self.nb += 8 * k
+            else:
+                self.slow()
+        else:
+            self.slow()
+
+    @no_inline
+    def slow(mut self):
+        var p = P8(unsafe_from_address=self.a)
+        while self.nb <= 56:
+            if self.stop:
+                self.nb += 8
+                self.vb += 8
+                continue
+            if self.pos >= self.n:
+                self.stop = True
+                continue
+            var b = p.unsafe_load(self.pos)
+            if b == 0xFF:
+                if self.pos + 1 >= self.n:
+                    self.stop = True
+                    continue
+                var c = p.unsafe_load(self.pos + 1)
+                if c == 0xFF:  # fill byte
+                    self.pos += 1
+                    continue
+                if c != 0:  # a marker ends the entropy-coded data
+                    self.stop = True
+                    continue
+                self.pos += 2
+            else:
+                self.pos += 1
+            self.acc |= UInt64(b) << UInt64(56 - self.nb)
+            self.nb += 8
+
+    @always_inline
+    def drop(mut self, n: Int):
+        self.acc <<= UInt64(n)
+        self.nb -= n
+
+    def chk(self) raises:
+        """Raise if a virtual bit was consumed."""
+        if self.nb < self.vb:
+            raise Error("jpeg: truncated entropy-coded data")
 
 
 @fieldwise_init
@@ -85,11 +170,7 @@ def clamp8(v: Int) -> Int:
 
 struct Jpeg(Movable):
     var d: List[UInt8]
-    var pos: Int
-    var acc: Int  # bit reader: the low `nb` bits of acc are unread, the lowest `vb` of them are virtual zeros past a marker
-    var nb: Int
-    var vb: Int
-    var stop: Bool
+    var br: Br  # bit reader; br.pos is also the marker-segment cursor of parse
     var eobrun: Int
     var ss: Int  # scan parameters
     var se: Int
@@ -109,7 +190,7 @@ struct Jpeg(Movable):
     var zz: List[Int]
     var qt: List[Int]  # 4 tables x 64, natural order
     var qs: List[Int]  # latched tables, 64 per component
-    var lk: List[Int]  # per Huffman table (DC 0-3, AC 4-7): 9-bit lookahead (len << 8 | symbol), 0 = longer code
+    var lk: List[UInt16]  # per Huffman table (DC 0-3, AC 4-7): 9-bit lookahead (len << 8 | symbol), 0 = longer code
     var mc: List[Int]  # largest code of each length, -1 = none
     var vo: List[Int]  # value index = code + vo[length]
     var hv: List[Int]  # symbols
@@ -122,11 +203,7 @@ struct Jpeg(Movable):
     def __init__(out self, src: Span[UInt8, _]):
         self.d = List[UInt8]()
         self.d.extend(src)
-        self.pos = 0
-        self.acc = 0
-        self.nb = 0
-        self.vb = 0
-        self.stop = False
+        self.br = Br(Int(self.d.unsafe_ptr()), len(self.d))
         self.eobrun = 0
         self.ss = 0
         self.se = 63
@@ -146,7 +223,7 @@ struct Jpeg(Movable):
         self.zz = [0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7, 14, 21, 28, 35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51, 58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63]
         self.qt = List[Int](length=256, fill=1)
         self.qs = List[Int]()
-        self.lk = List[Int](length=8 * 512, fill=0)
+        self.lk = List[UInt16](length=8 * 512, fill=0)
         self.mc = List[Int](length=8 * 18, fill=-1)
         self.vo = List[Int](length=8 * 18, fill=0)
         self.hv = List[Int](length=8 * 256, fill=0)
@@ -159,49 +236,16 @@ struct Jpeg(Movable):
     def be16(self, i: Int) -> Int:
         return Int(self.d[i]) << 8 | Int(self.d[i + 1])
 
-    # ---- bit reader ----
-
-    def fill(mut self):
-        while self.nb <= 48:
-            if self.stop:
-                self.acc <<= 8
-                self.nb += 8
-                self.vb += 8
-                continue
-            var p = self.pos
-            if p >= len(self.d):
-                self.stop = True
-                continue
-            var b = Int(self.d[p])
-            if b == 0xFF:
-                if p + 1 >= len(self.d):
-                    self.stop = True
-                    continue
-                var c = Int(self.d[p + 1])
-                if c == 0xFF:  # fill byte
-                    self.pos += 1
-                    continue
-                if c != 0:  # a marker ends the entropy-coded data
-                    self.stop = True
-                    continue
-                self.pos += 2
-            else:
-                self.pos += 1
-            self.acc = (self.acc << 8) | b
-            self.nb += 8
-
-    def take(mut self, n: Int) raises:
-        """Drop n bits; raise if that used a virtual one."""
-        self.nb -= n
-        if self.nb < self.vb:
-            raise Error("jpeg: truncated entropy-coded data")
-        self.acc &= (1 << self.nb) - 1
+    # ---- bit reader (progressive and refinement scans; the baseline loop in `base` keeps its own copy in registers) ----
 
     def get(mut self, n: Int) raises -> Int:
-        if self.nb < n:
-            self.fill()
-        var v = (self.acc >> (self.nb - n)) & ((1 << n) - 1)
-        self.take(n)
+        if n == 0:
+            return 0
+        if self.br.nb < n:
+            self.br.refill()
+        var v = Int(self.br.acc >> UInt64(64 - n))
+        self.br.drop(n)
+        self.br.chk()
         return v
 
     def ext(mut self, s: Int) raises -> Int:
@@ -211,39 +255,36 @@ struct Jpeg(Movable):
         var v = self.get(s)
         return v if v >= (1 << (s - 1)) else v - (1 << s) + 1
 
+    def slowcode(self, w: Int, t: Int) raises -> Tuple[Int, Int]:
+        """Length and symbol of a code longer than 9 bits; w = the next 16 bits."""
+        for l in range(10, 17):
+            var code = w >> (16 - l)
+            if code <= self.mc[t * 18 + l]:
+                return (l, self.hv[t * 256 + self.vo[t * 18 + l] + code])
+        raise Error("jpeg: bad Huffman code")
+
     def huff(mut self, t: Int) raises -> Int:
-        if self.nb < 16:
-            self.fill()
-        var e = self.lk[t * 512 + ((self.acc >> (self.nb - 9)) & 511)]
-        var l = e >> 8
-        var sym = e & 255
+        if self.br.nb < 16:
+            self.br.refill()
+        var e = Int(self.lk[t * 512 + Int(self.br.acc >> 55)])
+        var l, sym = e >> 8, e & 255
         if e == 0:
-            l = 10
-            while True:
-                if l > 16:
-                    raise Error("jpeg: bad Huffman code")
-                var code = (self.acc >> (self.nb - l)) & ((1 << l) - 1)
-                if code <= self.mc[t * 18 + l]:
-                    sym = self.hv[t * 256 + self.vo[t * 18 + l] + code]
-                    break
-                l += 1
-        self.take(l)
+            l, sym = self.slowcode(Int(self.br.acc >> 48), t)
+        self.br.drop(l)
+        self.br.chk()
         return sym
 
     def restart(mut self) raises:
         var n = len(self.d)
-        while self.pos + 1 < n and not (self.d[self.pos] == 0xFF and self.d[self.pos + 1] != 0 and self.d[self.pos + 1] != 0xFF):
-            self.pos += 1
-        if self.pos + 1 >= n:
+        while self.br.pos + 1 < n and not (self.d[self.br.pos] == 0xFF and self.d[self.br.pos + 1] != 0 and self.d[self.br.pos + 1] != 0xFF):
+            self.br.pos += 1
+        if self.br.pos + 1 >= n:
             raise Error("jpeg: truncated, restart marker missing")
-        var m = Int(self.d[self.pos + 1])
+        var m = Int(self.d[self.br.pos + 1])
         if m < 0xD0 or m > 0xD7:
             raise Error("jpeg: restart marker expected, found FF" + hex(m))
-        self.pos += 2
-        self.acc = 0
-        self.nb = 0
-        self.vb = 0
-        self.stop = False
+        self.br.pos += 2
+        self.br.reset()
         self.eobrun = 0
         for i in range(len(self.comps)):
             self.comps[i].pred = 0
@@ -283,7 +324,7 @@ struct Jpeg(Movable):
                     if l <= 9:
                         var sym = Int(self.d[i + 17 + k])
                         for f in range(code << (9 - l), (code + 1) << (9 - l)):
-                            self.lk[t * 512 + f] = l << 8 | sym
+                            self.lk[t * 512 + f] = UInt16(l << 8 | sym)
                     self.hv[t * 256 + k] = Int(self.d[i + 17 + k])
                     code += 1
                     k += 1
@@ -373,7 +414,8 @@ struct Jpeg(Movable):
                 raise Error("jpeg: DC Huffman table missing")
             if (not self.prog or self.ss > 0) and not self.hdef[self.comps[c].ac]:
                 raise Error("jpeg: AC Huffman table missing")
-        self.acc, self.nb, self.vb, self.stop, self.eobrun = 0, 0, 0, False, 0
+        self.br.reset()
+        self.eobrun = 0
         for c in sc:
             self.comps[c].pred = 0
         self.scan(sc)
@@ -398,30 +440,61 @@ struct Jpeg(Movable):
                         for hx in range(k.h):
                             self.block(c, k.coff + ((m // self.mcux * k.v + vy) * k.bw + m % self.mcux * k.h + hx) * 64)
 
+    def base(mut self, c: Int) raises:
+        """Baseline block: Huffman-decode into co[0..64], natural order; the bit buffer lives in locals for the whole block."""
+        var dc, ac = self.comps[c].dc, self.comps[c].ac
+        var br = self.br.copy()
+        var co = self.co.unsafe_ptr()
+        var zz = self.zz.unsafe_ptr()
+        var lk = self.lk.unsafe_ptr()
+        for i in range(8):
+            (co + 8 * i).unsafe_store(0, SIMD[DType.int16, 8](0))
+        if br.nb < 32:
+            br.refill()
+        var e = Int(lk.unsafe_load(dc * 512 + Int(br.acc >> 55)))
+        var l, s = e >> 8, e & 255
+        if e == 0:
+            l, s = self.slowcode(Int(br.acc >> 48), dc)
+        br.drop(l)
+        if s > 15:
+            raise Error("jpeg: bad DC category")
+        var df = 0
+        if s > 0:
+            df = Int(br.acc >> UInt64(64 - s))
+            br.drop(s)
+            df += ((df >> (s - 1)) - 1) & (1 - (1 << s))
+        self.comps[c].pred += df
+        co.unsafe_store(0, Int16(self.comps[c].pred))
+        var k = 1
+        while k < 64:
+            if br.nb < 32:
+                br.refill()
+            e = Int(lk.unsafe_load(ac * 512 + Int(br.acc >> 55)))
+            l, s = e >> 8, e & 255
+            if e == 0:
+                l, s = self.slowcode(Int(br.acc >> 48), ac)
+            br.drop(l)
+            var r = s >> 4
+            s &= 15
+            if s == 0:
+                if r != 15:
+                    break
+                k += 16
+                continue
+            k += r
+            if k > 63:
+                raise Error("jpeg: coefficient index past 63")
+            var v = Int(br.acc >> UInt64(64 - s))
+            br.drop(s)
+            v += ((v >> (s - 1)) - 1) & (1 - (1 << s))
+            co.unsafe_store(Int(zz.unsafe_load(k)), Int16(v))
+            k += 1
+        br.chk()
+        self.br = br^
+
     def block(mut self, c: Int, o: Int) raises:
         if not self.prog:
-            var s = self.huff(self.comps[c].dc)
-            if s > 15:
-                raise Error("jpeg: bad DC category")
-            var df = self.ext(s)
-            self.comps[c].pred += df
-            for i in range(64):
-                self.co[i] = 0
-            self.co[0] = Int16(self.comps[c].pred)
-            var k = 1
-            while k < 64:
-                var rs = self.huff(self.comps[c].ac)
-                var r, sz = rs >> 4, rs & 15
-                if sz == 0:
-                    if r != 15:
-                        break
-                    k += 16
-                    continue
-                k += r
-                if k > 63:
-                    raise Error("jpeg: coefficient index past 63")
-                self.co[self.zz[k]] = Int16(self.ext(sz))
-                k += 1
+            self.base(c)
             self.put(c, o, 0)
         elif self.ss == 0:
             if self.ah == 0:
@@ -503,27 +576,27 @@ struct Jpeg(Movable):
         var n = len(self.d)
         if n < 4 or self.d[0] != 0xFF or self.d[1] != 0xD8:
             raise Error("jpeg: not a JPEG")
-        self.pos = 2
+        self.br.pos = 2
         var scans = 0
         while True:
-            while self.pos < n and self.d[self.pos] != 0xFF:  # entropy data left over, or garbage between segments
-                self.pos += 1
-            while self.pos < n and self.d[self.pos] == 0xFF:
-                self.pos += 1
-            if self.pos >= n:
+            while self.br.pos < n and self.d[self.br.pos] != 0xFF:  # entropy data left over, or garbage between segments
+                self.br.pos += 1
+            while self.br.pos < n and self.d[self.br.pos] == 0xFF:
+                self.br.pos += 1
+            if self.br.pos >= n:
                 raise Error("jpeg: truncated, no EOI")
-            var m = Int(self.d[self.pos])
-            self.pos += 1
+            var m = Int(self.d[self.br.pos])
+            self.br.pos += 1
             if m == 0 or m == 1 or (m >= 0xD0 and m <= 0xD7):
                 continue
             if m == 0xD9:
                 break
-            if self.pos + 2 > n:
+            if self.br.pos + 2 > n:
                 raise Error("jpeg: truncated segment")
-            var s, e = self.pos + 2, self.pos + self.be16(self.pos)
+            var s, e = self.br.pos + 2, self.br.pos + self.be16(self.br.pos)
             if e < s or e > n:
                 raise Error("jpeg: truncated segment")
-            self.pos = e
+            self.br.pos = e
             if m == 0xDB:
                 self.dqt(s, e)
             elif m == 0xC4:
