@@ -16,7 +16,7 @@ The same seed gives the same cases, so a failure replays.
 
 ## Install
 
-`mojo run -I src app.mojo` from a clone, or copy `src/mproptest/`.
+`pixi add mojo-proptest` (import `mproptest`), or `mojo run -I src app.mojo` from a clone, or copy `src/mproptest/`.
 
 ## The calls
 
