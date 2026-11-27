@@ -2,8 +2,7 @@
 
 `scripts/bench.sh` runs `tests/bench.mojo` and `tools/bench_oracle.py` (the `tokenizers` 0.23.3 crate through its Python binding, single thread,
 `TOKENIZERS_PARALLELISM=false`) on about 1 MB of `tools/gen_texts.py` text (seed 2: prose, scripts, emoji, whitespace runs, numbers,
-vocabulary entries), one `encode` call per text, 3 runs. Mojo 1.2.0, CPU, 2026-11-04. The box is shared with other lanes (load average 5 to 8), so `scripts/bench.sh` alternates the Mojo and crate runs; BERT was
-re-measured against the previous binary back to back (160 ms before the Unigram rewrite, 295 ms after it, 80 ms after the ASCII fast paths).
+vocabulary entries), one `encode` call per text, 3 runs. Mojo 1.2.0, CPU. The box is shared (load average 5 to 8), so `scripts/bench.sh` alternates the Mojo and crate runs.
 
 | tokenizer | ids | Mojo encode ms | crate encode ms | Mojo load ms | crate load ms | Mojo / crate peak RSS |
 |---|---|---|---|---|---|---|
@@ -16,9 +15,5 @@ re-measured against the previous binary back to back (160 ms before the Unigram 
 
 The crate column includes the Python call and the `Encoding` object it builds per text, so the Rust core alone is faster than shown; this is the
 number a Python user gets. Ids totals are equal.
-
-**Lines of code** (`mojo-loc`: code lines without blanks, comments and docstrings; excluding `src/json`, `src/uregex` and the generated
-`bert_tables.mojo`): `tokenizer.mojo` 594. Byte-level BPE alone was 297, with WordPiece 481, with Unigram 583 before the last perf commit.
-The budget was 400: not met, see the report.
 
 Rerun: `scripts/check.sh` once (fetches fixtures), then `scripts/bench.sh`.

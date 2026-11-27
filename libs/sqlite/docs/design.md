@@ -10,7 +10,7 @@ The library is loaded at run time with `OwnedDLHandle`, so no linker flags are n
 bound-and-stepped row makes about six calls, so on the insert benchmark the lookups
 alone were 50 of 128 ms.
 
-The eleven functions used per row (bind, step, reset, column reads) are resolved once
+The thirteen functions used per row (bind, step, reset, column reads) are resolved once
 when a `Database` opens. Their addresses live in the same struct as the library handle,
 shared through an `ArcPointer` by the `Database` and its statements, so the addresses
 are valid for as long as anything can call them. A cached call costs 1 ns. Cold calls

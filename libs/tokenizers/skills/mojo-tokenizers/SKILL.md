@@ -19,7 +19,7 @@ normalizer or pre-tokenizer outside the list in `docs/api.md` raises at load; it
 
 ## Install
 
-From the monorepo: `mojo run -I src -I ../json/src -I ../uregex/src app.mojo`; `json` and `uregex` are the sibling folders.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-tokenizers`. From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/tokenizers`, then `mojo run -I src -I ../json/src -I ../uregex/src app.mojo`; `json` and `uregex` are the sibling folders.
 The runnable example is `examples/quickstart.mojo` (no arguments, no files).
 
 ## The calls

@@ -50,7 +50,7 @@ Requires Mojo 1.2.
 - `check` takes the generator first: Mojo cannot infer the property's argument type from the property alone.
 - One argument per property. Several: build a `Lists` or write a generator that makes a struct.
 
-**Limits:** No integrated shrinking, test database or stateful testing. Shrinking is greedy and stops after 10,000 candidates with the best value found. A property is a `thin` function, so it captures nothing.
+**Limits:** No integrated (generator-stream) shrinking, test database or stateful testing. Shrinking per generator is greedy and stops after 10,000 candidates with the best value found. A property is a `thin` function, so it captures nothing.
 
 ## Checked
 

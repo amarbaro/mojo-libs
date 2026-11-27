@@ -1,7 +1,6 @@
 # TLS 1.3 (lane 4): `src/tls/tls13/`
 
-Sans-IO TLS 1.3 client and server: bytes in, bytes and events out, no sockets. 1500 lines of code by `mokei`
-(`src/tls/tls13/*.mojo` without `_tmp_crypto/`). Gate: `tests/gate_tls13.sh [--mutants]`.
+Sans-IO TLS 1.3 client and server: bytes in, bytes and events out, no sockets. Gate: `tests/gate_tls13.sh [--mutants]`.
 
 ## Files
 
@@ -14,14 +13,14 @@ Sans-IO TLS 1.3 client and server: bytes in, bytes and events out, no sockets. 1
 | `conn.mojo` | `Conn`: shared by both roles. Handshake reassembly, transcript, alerts, KeyUpdate, key limit, wipe. `Out` result struct |
 | `client.mojo` | `Client13[V: Verifier]`, `default_hello`, `kex_public`, `kex_shared`, `pad_hello` |
 | `server.mojo` | `Server13[S: Signer]`, `ServerConfig` |
-| `verify.mojo` | traits `Verifier` and `Signer` (the seams to lanes 2 and 3), `NoVerify` (tests only) |
-| `_tmp_crypto/` | TEMPORARY port from Mosaad-M-tls (MIT, notice in `LICENSE-Mosaad-M-tls`). Wave 2 replaces it |
+| `verify.mojo` | traits `Verifier` and `Signer` (the seams to chain validation and signing), `NoVerify` (tests only) |
+| `ticket.mojo`, `clientauth.mojo` | session tickets and resumption; client certificate verification and signing |
 
 ## Use
 
 ```mojo
 # client: the caller supplies randomness (hello random, session id, x25519 and P-256 private keys)
-var h = default_hello(host, random32, session_id32, x25519_public_key(xpriv), [String("http/1.1")])
+var h = default_hello(host, random32, session_id32, x25519_base(xpriv), [String("http/1.1")])
 var c = Client13[MyVerifier](h, host, xpriv, ppriv, MyVerifier(...))
 send(c.start())                       # ClientHello record
 var o = c.feed(Span(bytes_from_peer)) # o.send -> peer, o.data = application data, o.events, o.error
@@ -50,15 +49,13 @@ automatic KeyUpdate in `write`.
   server checks that ClientHello 2 equals ClientHello 1 except share, cookie, padding.
 - Compatibility mode: session id echo, one CCS each way, CCS after the handshake is rejected.
 - KeyUpdate: answered under the old key, `update_requested` answered once, KeyUpdate not alone in its record rejected.
-- Session tickets: client keeps at most 8, no resumption yet. The server sends none.
+- Session tickets: the client keeps at most 8; resumption is described under Session tickets and resumption below.
 
 ## Seams to the other lanes
 
-`Verifier.verify(chain, scheme, signed, sig, host)` raises `tls: bad_certificate: ...`. Lane 3 chain validation plus lane 2
-signature check implement it. `Signer.schemes() / chain() / sign(scheme, content)` is lane 2 signing (ECDSA P-256,
-RSA-PSS) plus lane 3 key loading. Replacing `_tmp_crypto`: the call sites are `keysched.mojo` (hash, hmac, hkdf),
-`record.mojo` (`GcmKey.seal_into/open_into`, `chacha20_poly1305_seal_into/open_into`: 2 call sites each) and
-`client.mojo` (`x25519_public_key`, `x25519_shared`, `p256_public_key`, `p256_ecdh`).
+`Verifier.verify(chain, scheme, signed, sig, host)` raises `tls: bad_certificate: ...`. Chain validation (`tls.x509`) plus the
+signature check (`tls.asym`) implement it. `Signer.schemes() / chain() / sign(scheme, content)` is signing (ECDSA P-256,
+RSA-PSS) plus key loading.
 
 ## Interface changes against `docs/api.md`
 
@@ -110,7 +107,6 @@ Not done: optional client authentication (ask, accept an empty answer), certific
 
 ## Open items
 
-tlsfuzzer is not installed here (not run). 0-RTT, optional client authentication, post-handshake authentication, ML-KEM hybrid share (an incoming 1216-byte share is skipped), a
+0-RTT, optional client authentication, post-handshake authentication, ML-KEM hybrid share (an incoming 1216-byte share is skipped), a
 TLS 1.2 fallback decision (lane 5: a ServerHello without `supported_versions` gives `protocol_version`).
-Speed is in `tests/bench_tls13.mojo`; the ported ChaCha20 (2.2 GB/s against openssl 4.8) and x25519 (163 us against 33 us)
-are lane 1-2 work.
+Speed is in `tests/bench_tls13.mojo` and `docs/perf.md`.

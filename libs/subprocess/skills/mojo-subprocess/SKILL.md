@@ -5,11 +5,24 @@ description: "Run external programs from Mojo with mojo-subprocess (Python subpr
 
 # mojo-subprocess
 
+## Install
+
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-subprocess`. From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/subprocess`, then `mojo run -I src -I ../posix/src app.mojo`.
+
+## Use
+
 ```mojo
 from subprocess import run, check_output
-var r = run(["ffmpeg", "-i", src, dst], timeout=600.0)
-if r.returncode != 0: raise Error(String(from_utf8_lossy=r.stderr))
-var head = check_output(["git", "rev-parse", "HEAD"])
+
+
+def main() raises:
+    var src = "in.mkv"
+    var dst = "out.mp4"
+    var r = run(["ffmpeg", "-i", src, dst], timeout=600.0)
+    if r.returncode != 0:
+        raise Error(String(from_utf8_lossy=r.stderr))
+    var head = check_output(["git", "rev-parse", "HEAD"])
+    print(len(head), "bytes")
 ```
 
 - argv is a list: no shell, no quoting. For pipes or globbing, run `["/bin/sh", "-c", "..."]` yourself.

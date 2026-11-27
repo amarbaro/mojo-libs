@@ -4,17 +4,32 @@
 [![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--semver-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-semver)
 <!-- /badges -->
 
-Semantic Versioning 2.0.0 for Mojo, with the exact rules of Python [semver](https://pypi.org/project/semver/) 3.0: strict parse, precedence, `match`, the `bump_*` family. No regex engine and no dependencies; 212 lines of code (`mojo-loc`).
+<!-- install -->
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-semver`.
+Toolchains: Mojo 1.2.0 stable and the 1.3 nightly, in the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) matrix.
 
 ```mojo
 from semver import parse
 
-var v = parse("1.2.3-rc.1+build.5")
-print(v < parse("1.2.3"))              # True: a prerelease sorts first
-print(v.match(">=1.2.3-rc.0"))         # True
-print(v.bump_prerelease())             # 1.2.3-rc.2
-print(v.bump_minor())                  # 1.3.0
+
+def main() raises:
+    var v = parse("1.2.3-rc.1+build.5")
+    print(v < parse("1.2.3"))              # True: a prerelease sorts first
+    print(v.match(">=1.2.3-rc.0"))         # True
+    print(v.bump_prerelease())             # 1.2.3-rc.2
+    print(v.bump_minor())                  # 1.3.0
 ```
+
+| Call | Does |
+|---|---|
+| `parse(s) -> Version` | Strict `major.minor.patch[-pre][+build]`; raises on anything else. |
+| `is_valid(s) -> Bool` | `parse` without raising. |
+| `compare(a, b) -> Int` | `-1`, `0` or `1` by SemVer precedence. |
+| `v.match(expr)` | `<`, `>`, `<=`, `>=`, `==`, `!=` then a version; a bare version means `==`. |
+| `v.bump_major()`, `bump_minor()`, `bump_patch()`, `bump_prerelease(token)`, `bump_build(token)`, `finalize_version()` | The next version. |
+<!-- /install -->
+
+Semantic Versioning 2.0.0 for Mojo, with the exact rules of Python [semver](https://pypi.org/project/semver/) 3.0: strict parse, precedence, `match`, the `bump_*` family. No regex engine and no dependencies; 212 lines of code (`mojo-loc`).
 
 **Checked against Python semver 3.0.4:** 474 parse results (the SemVer spec's valid and invalid examples plus 400 generated versions), a 60 x 60 precedence matrix plus 880 more comparisons, 15 match expressions per version, every bump variant, edge cases (trailing newline, 20-digit and leading-zero bumps) and the `match` error texts, all byte-identical (`scripts/check.sh`, each scenario twice). 6 of 6 mutants caught. Builds and passes on Mojo 1.2.0 and the 1.3 nightly.
 

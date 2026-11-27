@@ -23,7 +23,7 @@ ChaCha20-Poly1305 suites (0xC02B, 0xCCA9, 0xC02C, 0xC02F, 0xCCA8, 0xC030). A cli
 (no AES hardware), otherwise server order. When the client offered TLS 1.3 the ServerHello random carries the
 `DOWNGRD\x01` sentinel (RFC 8446 4.1.3); `Client12(offer13=True)` rejects it.
 
-Matrix findings (2026-11-12, fixed): the DOWNGRD sentinel is written only when `TlsConfig.tls13` says a TLS 1.3 engine sits behind
+Matrix findings (fixed): the DOWNGRD sentinel is written only when `TlsConfig.tls13` says a TLS 1.3 engine sits behind
 the config (a 1.2-only server must stay silent or Firefox/Chrome abort with alert 47); a server with no ALPN configured ignores a
 client's ALPN offer (RFC 7301); the client ignores a warning `unrecognized_name`; both clients leave an IP literal out of server_name.
 `tests/matrix.sh` runs every cell (openssl both ways, tlsfuzzer, testssl, Firefox, Chromium, Vivaldi) against `tests/matrix/msrv.mojo`.
@@ -35,7 +35,7 @@ Sans-IO: `Server12[C](cfg).feed(bytes)`, then send `cn.take_output()` and read `
 ClientHello. `TlsServer[C](cfg, port, host).step(handler)` is one loop pass; `run(handler)` loops. `TlsStream` is
 `tls_connect[C](host, port, alpn, addr)` then `read(dst)`, `write(data)`, `close()`.
 
-## Crypto12 and the lanes (wave 2 writes `RealCrypto(Crypto12)`, about 60 lines)
+## Crypto12 and `RealCrypto` (`tls12/realcrypto.mojo`)
 
 | Method | Lane function (docs/api.md) |
 |---|---|
@@ -58,22 +58,11 @@ loopback sockets), `interop/hello_probe.sh` (real OpenSSL against our ServerHell
 `peers` mode self-tests the harness against `openssl s_server`; `ours` mode waits for `TLS_SERVER_BIN` / `TLS_CLIENT_BIN`),
 `bench_engine.mojo` (framing cost without crypto).
 
-## Real peers today (temporary crypto)
+## Real peers
 
-`tests/real/` puts lane 4's `_tmp_crypto` (Mosaad-M-tls port, MIT) behind `Crypto12` as `RealCrypto` (ECDSA P-256 only,
-no chain validation on the client). `tests/real/build.sh` builds `real_server` / `real_client`; `tests/check.sh` runs
-`tests/interop/run.sh ours` with them: openssl s_client, curl, Python ssl and headless Vivaldi (Chrome 156, TLS 1.2 only,
-AES_128_GCM) against our server, our client against `openssl s_server`, three AEAD suites each, negatives. It needs
-lane 4's tree (`LANE4=`), so it prints SKIP when that is gone. Speed with that crypto: `openssl s_time -new` against
-one `real_server` thread: about 940 full handshakes/s (the engines cost about 10 us of that, see bench_engine).
+`tests/real/build.sh` builds `real_server` / `real_client` over `RealCrypto` (P-256, P-384 and RSA keys); `tests/check.sh`
+runs `tests/interop/run.sh ours` with them: openssl s_client, curl, Python ssl and headless Vivaldi against our server,
+our client against `openssl s_server`, negatives. The full peer matrix (tlsfuzzer, testssl, Firefox, Chromium) is
+`tests/matrix.sh`.
 
-## Wave 2 checklist (printed as SKIP today, never PASS)
-
-1. `RealCrypto` over lanes 1-3 replaces `tests/real/` (delete it); add P-384 and RSA certificate cells
-   (`TLS_KINDS="p256 p384 rsa"`), the PEM/PKCS#8 loader from lane 3 in the server binary, chain validation in the client.
-2. An `examples/` https server on mojo-bento (the plan row) and a Firefox headless cell (`firefox` is installed).
-3. Bulk throughput through the engine with a real AEAD (only handshakes were timed with real crypto).
-4. `testssl.sh` is not installed: the "only the listed suites" scan is UNVERIFIED.
-5. 10k handshakes/s on 8 cores: multi-threaded accept (one listener shared by one Loop per thread) and faster crypto;
-   today 940/s per thread.
-6. Secret zeroing is a plain store loop; check the generated code keeps it.
+Secret zeroing is a plain store loop; Mojo gives no guarantee that a dead store survives optimisation (see `docs/sym.md`).

@@ -5,7 +5,8 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-sqlite` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/sqlite`, then `mojo run -I src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-sqlite`. From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/sqlite`, then `mojo run -I src app.mojo`.
+Toolchains: Mojo 1.2.0 stable, in the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) matrix.
 
 ```mojo
 from sqlite import Database

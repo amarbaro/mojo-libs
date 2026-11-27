@@ -1,6 +1,7 @@
 # Design
 
 Rules: no library to link, no state kept between calls, nothing allocated that outlives a call.
+The code is `posix.systemd` in mojo-posix (`libs/posix/src/posix/systemd/notify.mojo`); `src/systemd` only forwards.
 
 ## One datagram per call
 

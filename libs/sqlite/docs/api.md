@@ -17,6 +17,7 @@ failure.
 | `begin()`, `commit()`, `rollback()` | transactions |
 | `changes() -> Int` | rows changed by the last INSERT, UPDATE or DELETE |
 | `last_insert_rowid() -> Int64` | rowid of the last insert |
+| `error(rc) -> Error` | the `sqlite: <message> (rc N)` error for a return code; what the methods above raise |
 
 The connection closes when the `Database` is destroyed. It is safe to destroy it while a
 `Statement` from it is still alive: the close waits until that statement is gone.

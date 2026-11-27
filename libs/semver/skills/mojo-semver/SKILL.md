@@ -7,9 +7,15 @@ description: "Parse, compare, match and bump Semantic Versioning 2.0 strings in 
 
 ```mojo
 from semver import parse, is_valid
-var v = parse(tag)                 # raises on anything not strict SemVer
-if v.match(">=1.2.0") and not v.prerelease: ...
-var nxt = v.bump_patch()
+
+
+def main() raises:
+    var tag = "1.2.4"
+    var v = parse(tag)                 # raises on anything not strict SemVer
+    if v.match(">=1.2.0") and not v.prerelease:
+        print("stable, new enough")
+    var nxt = v.bump_patch()
+    print(nxt)                         # 1.2.5
 ```
 
 - `==` ignores build metadata (`1.0.0+a == 1.0.0+b`), like Python.
