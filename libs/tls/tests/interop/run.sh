@@ -107,7 +107,8 @@ matrix() {
 refused() { # args to s_client; returns 0 when TCP connected (CONNECTED) and no TLS session was established
   local o; o="$(printf 'x' | timeout 20 openssl s_client -connect "127.0.0.1:$PORT" "$@" -brief 2>&1 || true)"
   [[ "$o" == *"CONNECTION ESTABLISHED"* ]] && return 1
-  [[ "$o" == *"Connecting to"* && "$o" != *"Unknown option"* && "$o" != *"Connection refused"* ]]
+  # OpenSSL 3 prints "Connecting to"; OpenSSL 4 -brief prints only the TLS error, which proves the handshake started
+  [[ ( "$o" == *"Connecting to"* || "$o" == *"SSL routines"* ) && "$o" != *"Unknown option"* && "$o" != *"Connection refused"* ]]
 }
 negatives() {
   local who="$1"
