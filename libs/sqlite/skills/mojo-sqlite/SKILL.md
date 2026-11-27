@@ -10,7 +10,7 @@ linker flags. Its results are checked byte for byte against Python's `sqlite3`.
 
 ## Install
 
-`mojo run -I <repo>/src app.mojo`, or `mojo precompile <repo>/src/sqlite -o sqlite.mojoc`,
+`pixi add mojo-sqlite` (import `sqlite`), or `mojo run -I <repo>/src app.mojo`, or `mojo precompile <repo>/src/sqlite -o sqlite.mojoc`,
 or copy `src/sqlite/`.
 
 ## Use
