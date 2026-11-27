@@ -13,7 +13,7 @@ Not for UUID1/2, SafeUUID, or hardware MAC lookup.
 ## Install
 
 Clone with a mojo-hashlib checkout beside it. Requires Mojo >=1.2.0,<1.3.
-From the clone: `mojo run -I src -I ../mojo-hashlib/src examples/quickstart.mojo`.
+From the clone: `mojo run -I src -I ../hashlib/src examples/quickstart.mojo`.
 
 ## Main calls
 

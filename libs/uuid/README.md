@@ -11,7 +11,7 @@ A `UUID` is 16 inline bytes, hashable, comparable and printable. Parsing a canon
 Requires Linux libc `getrandom` and `clock_gettime`, Mojo 1.2, and mojo-hashlib >=0.1.2,<0.2.
 Also tested on the 1.3 nightly of 2026-11-03.
 
-From a clone, with a mojo-hashlib checkout beside it (`scripts/env.sh` clones the pinned tag otherwise):
+Install: `pixi workspace channel add https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-uuid` once published. From a clone, with the `hashlib` checkout beside it (`scripts/env.sh` clones the pinned tag otherwise):
 
 ```sh
 mojo run -I src -I ../hashlib/src examples/quickstart.mojo
