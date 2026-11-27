@@ -33,7 +33,7 @@ sr superres16 $F/src-320.y4m 16
 sr superres11 $F/src-320.y4m 11
 timeout 30 ffmpeg -v error -y -i $src -pix_fmt yuv420p $F/src-big.y4m
 sr superres_big $F/src-big.y4m 16
-has() { timeout 30 ffmpeg -v trace -i "$F/$1" -c copy -bsf:v trace_headers -f null - 2>&1 | grep -qE "$2" || { echo "FAIL fixture $1: no '$2' in trace_headers"; exit 1; }; }
+has() { timeout 30 ffmpeg -v trace -i "$F/$1" -c copy -bsf:v trace_headers -f null - 2>&1 | grep -E "$2" >/dev/null || { echo "FAIL fixture $1: no '$2' in trace_headers"; exit 1; }; }
 has tiles.avif 'tile_cols_log2 +[01]+ = 1$'
 has tiles.avif 'tile_rows_log2 +[01]+ = 1$'
 has seg.obu 'segmentation_enabled +1 = 1$'
@@ -62,7 +62,7 @@ open('$F/text.txt','w').write('\\n'.join(' '.join(random.choice(w) for _ in rang
 timeout 30 magick -size 800x640 xc:white -font DejaVu-Sans-Mono -pointsize 13 -fill black -annotate +8+16 "@$F/text.txt" -fill '#2060c0' -draw "rectangle 600,40 780,200" $F/screen.png
 timeout 120 avifenc -y 444 -q 60 -s 6 $F/screen.png -o $F/screen.avif > /dev/null
 has screen.avif 'allow_intrabc +[01]+ = 1$'
-info() { avifdec --info "$F/$1" 2>&1 | grep -qE "$2" || { echo "FAIL fixture $1: avifdec --info has no '$2'"; exit 1; }; }
+info() { avifdec --info "$F/$1" 2>&1 | grep -E "$2" >/dev/null || { echo "FAIL fixture $1: avifdec --info has no '$2'"; exit 1; }; }
 info y420.avif 'Format +: YUV420'; info y422.avif 'Format +: YUV422'; info y422_10.avif 'Bit Depth +: 10'; info y420_10.avif 'Bit Depth +: 10'; info y420_12.avif 'Bit Depth +: 12'
 info odd.avif 'Resolution +: 321x179'; info anim.avif '2 frames'
 has sb128.avif 'use_128x128_superblock +[01]+ = 1$'

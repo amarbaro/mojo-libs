@@ -5,7 +5,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 command -v magick >/dev/null || { echo "FAIL setup: magick not installed"; exit 1; }
-magick -list format | grep -q 'WEBP\*' || { echo "FAIL setup: magick has no WebP support"; exit 1; }
+magick -list format | grep 'WEBP\*' >/dev/null || { echo "FAIL setup: magick has no WebP support"; exit 1; }
 D=.work/webp
 rm -rf "$D" && mkdir -p "$D"
 BG=assets/styles/bauhaus/bg.jpg
