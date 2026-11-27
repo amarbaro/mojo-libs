@@ -1,6 +1,6 @@
 # fs-h5 captures and licence table (H5, P0)
 
-Shoot list: shoot-194.list, 194 files, sorted by timestamp in filename (IMG_ and MVIMG_ prefixes merged). Source: ebay.de/.work/stock-20261122/work/.
+Shoot list: a private 194-photo shoot, one absolute path per line sorted by the timestamp in the filename (IMG_ and MVIMG_ prefixes merged); it is not in the repo, pass your own list to tests/listing.sh.
 Phone captures: adb exec-out screencap + uiautomator dump, current screen only (no navigation, read-only).
 - 0123456789ABCDEF (A70): PNG ok; uiautomator dump 33 bytes, likely a failed dump (BLOCK for UI tree).
 - R5CTB2LHPDE (SM_F721B): PNG and XML ok.
