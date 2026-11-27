@@ -83,3 +83,39 @@ and scRGB-profile JPEGs and wants the ImageMagick numbers.
 Step 3, planned: libjpeg-turbo stops after Huffman (`jpeg_read_coefficients`, about 35 ms of the 51), the coefficients go to the GPU
 once, and dequantise, IDCT, upsample, colour and every stock op run there; only the numbers come back. VCN `jpeg_dec` stays unused
 (ring resets). Kept only if it beats this CPU path end to end on the same files with identical lines (rule 34).
+
+## stockBatch gpu=1 (2026-11-27): decode tail and full-size ops on the card
+
+`mcv-stockcheck ... gpu=1` (any `stockBatch` with `gpu=1`; the CPU path stays the default). A JPEG that libturbojpeg takes plainly
+(4:2:0, 4:2:2, 4:4:4 or grey, chroma at least 3 samples wide, both sides at least 64 px at the analysis scale) is decoded on a CPU
+thread to its planes only (`src/mojocv/jpegyuv.mojo`, tj3DecompressToYUVPlanes8: Huffman and IDCT) into one of 12 pinned 40 MB slots.
+The planes go up once; `src/mojocv/gpustock.mojo` runs libjpeg's fancy upsampling (jdsample.c h2v1, h2v2, edges replicated as
+jdmainct.c does) and the jdcolor YCbCr -> BGR tables, cv2's integer grey, the colorCast sums, the blockiness row sums, the box sums
+of both hashes and the shrink to the analysis scale; only the 1536 px grey (1.3 MB) and the sums come back, and the rest of
+`_analyse` runs on the CPU from them. Every other file takes the CPU path in the same pass. All of it is one `par_dyn`: task 0 feeds
+the card, tasks 1..n decode, tasks n+1..2n finish, so the decode of one picture overlaps the upload of the one before.
+
+Gates, `tests/stock_gpu.sh` (one gpu-wait job, priority 30):
+- parity: `jpegBgr OUT IN gpu=1` equals tj3Decompress8 byte for byte on 28 of 28 JPEGs (the 20-file corpus; planted 4:2:0, 4:2:2,
+  4:4:4, grey, 1001 x 667 and 999 x 601 crops, a progressive 1203 x 905, a 37 x 23).
+- lines: the gpu=1 output is byte-identical to the CPU path, 437 lines (406-image set + 9 plants, one of them 4:4:0, which takes the
+  CPU path), every round. The CPU output of this branch equals the binary before it (418 lines of the set).
+- time, `-j 14`, 6 interleaved rounds in one stint: CPU 11.05 10.84 10.98 10.74 11.50 10.54 s (mean 10.94), gpu=1 10.43 9.62
+  9.57 9.64 9.62 9.53 s (mean 9.73): 11 % less wall, faster in 6 of 6 rounds. 48 JPEGs in one stockBatch: 1072 against 738 ms.
+
+Measured with the PCIe link at **2.5 GT/s** (this boot; root port 00:01.1, `~/Brain/OS/gpu-pcie-link-downtraining.md`): every
+host-device copy runs at 3.6 GB/s, so the 32 MB of planes of a 21 MP picture take 8.8 ms, pinned or pageable, against 1.4 ms of
+kernels (ycc 0.51, hash cells 0.59, blockiness rows 0.21, shrink 0.11; rocprofv3 kernel trace). At the 28 GB/s of a full link the
+upload would be about 1.1 ms. Per picture on one core: planes decode 42.9 ms against 50.4 ms for the BGR decode, plus 28.9 ms of
+full-size CPU ops (grey, shrink, blockiness, cast, hashes) that the card takes over; the analysis-scale ops (32 ms, clipRegion 21)
+stay on the CPU and are now the largest CPU share of a GPU picture. Host memory: 480 MB of pinned slots per stockBatch process (by
+construction); peak RSS and VRAM not measured (UNVERIFIED).
+
+What did not pay, or broke:
+- First cut, windows of 24 files with three joins (decode, a serial GPU pass, finish): 13.27 s against 10.70 s for the CPU. The serial
+  pass idled every core for 9 to 13 ms per picture.
+- Pinned staging slots alone: no change (8.84 ms per upload before and after), the link is the limit on this boot. Kept, because the
+  pipeline decodes straight into them and a full link makes them pay.
+- 9 workers for the gpu=1 pipeline instead of 8: 760 against 738 ms on 48 JPEGs, not kept.
+- The pipeline deadlocked when its CPU files called `cvt_color` (it synchronizes on the Mojo runtime while the feeder and finishers
+  wait in loops on the other workers): rule 46. The pipeline's CPU path uses `_grey_serial`.

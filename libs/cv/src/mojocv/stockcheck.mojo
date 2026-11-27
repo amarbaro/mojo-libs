@@ -5,14 +5,25 @@
 # gradient to compare) is NaN, never a plausible number.
 from std.math import sqrt, ceil, cos, nan
 from std.bit import pop_count
+from std.time import perf_counter_ns
+from std.ffi import external_call
+from std.atomic import Atomic
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args, par_dyn
 from mojocv.imgproc import cvt_color
 from mojocv.regions import clip_region
 from mojocv.jpegio import load_jpeg
+from mojocv.jpegyuv import load_jpeg_yuv, Yuv
+from mojocv.gpustock import StockGpu, GpuRes, PIN_CAP, PIN_N
 
 comptime F64 = DType.float64
 comptime PI = 3.141592653589793
+
+
+def _nap():
+    """0.5 ms in libc usleep: a wait inside a par_dyn worker that does not go through the Mojo runtime (std.time.sleep there
+    hung a stockBatch gpu=1 run with every thread in a futex wait)."""
+    _ = external_call["usleep", Int32](UInt32(500))
 
 
 def _grey(g: Mat[DType.uint8], name: String, minside: Int) raises:
@@ -106,8 +117,6 @@ def blockiness(g: Mat[DType.uint8]) raises -> Mat[F64]:
     var R = g.rows
     var C = g.cols
     var p = g.ptr()
-    var sums = SIMD[DType.int64, 4](0)
-    var cnts = SIMD[DType.int64, 4](0)
     # horizontal: 16 lanes starting at a multiple of 16 keep lane % 8 == x % 8, so lanes 7 and 15 are block edges
     var hb: Int64 = 0
     var hn: Int64 = 0
@@ -149,6 +158,13 @@ def blockiness(g: Mat[DType.uint8]) raises -> Mat[F64]:
             vb += s
         else:
             vn += s
+    return _blk_out(hb, hn, vb, vn, R, C)
+
+
+def _blk_out(hb: Int64, hn: Int64, vb: Int64, vn: Int64, R: Int, C: Int) -> Mat[F64]:
+    """blockiness' 1 x 5 from its four sums (the GPU path brings the sums)."""
+    var sums = SIMD[DType.int64, 4](0)
+    var cnts = SIMD[DType.int64, 4](0)
     var nb = (C - 1) // 8  # horizontal positions per row with x % 8 == 7, x <= C - 2
     var mb = (R - 1) // 8
     sums[0] = hb
@@ -218,6 +234,11 @@ def color_cast(src: Mat[DType.uint8]) raises -> Mat[F64]:
         s0 += UInt64(p[i * 3])
         s1 += UInt64(p[i * 3 + 1])
         s2 += UInt64(p[i * 3 + 2])
+    return _cast_out(s0, s1, s2, n0)
+
+
+def _cast_out(s0: UInt64, s1: UInt64, s2: UInt64, n0: Int) -> Mat[F64]:
+    """color_cast's 1 x 5 from the B, G, R sums over n0 pixels."""
     var n = Float64(n0)
     var o = Mat[F64](1, 5, 1)
     o.data[0] = Float64(s0) / n
@@ -340,18 +361,27 @@ def _box_means(g: Mat[DType.uint8], gh: Int, gw: Int) raises -> List[Float64]:
     if g.rows < gh or g.cols < gw:
         raise Error("hashes: image " + String(g.cols) + "x" + String(g.rows) + " smaller than the " + String(gw) + "x" + String(gh) + " grid")
     var p = g.ptr()
+    var sums = List[Int64](length=gh * gw, fill=0)
+    for i in range(gh):
+        for j in range(gw):
+            var s: Int64 = 0
+            for y in range(i * g.rows // gh, (i + 1) * g.rows // gh):
+                for x in range(j * g.cols // gw, (j + 1) * g.cols // gw):
+                    s += Int64(p[y * g.cols + x])
+            sums[i * gw + j] = s
+    return _means(sums, 0, gh, gw, g.rows, g.cols)
+
+
+def _means(sums: List[Int64], at: Int, gh: Int, gw: Int, R: Int, C: Int) -> List[Float64]:
+    """The cell means of _box_means from the cell sums sums[at ..]."""
     var out = List[Float64](length=gh * gw, fill=0.0)
     for i in range(gh):
-        var y0 = i * g.rows // gh
-        var y1 = (i + 1) * g.rows // gh
+        var y0 = i * R // gh
+        var y1 = (i + 1) * R // gh
         for j in range(gw):
-            var x0 = j * g.cols // gw
-            var x1 = (j + 1) * g.cols // gw
-            var s: Int64 = 0
-            for y in range(y0, y1):
-                for x in range(x0, x1):
-                    s += Int64(p[y * g.cols + x])
-            out[i * gw + j] = Float64(s) / Float64((y1 - y0) * (x1 - x0))
+            var x0 = j * C // gw
+            var x1 = (j + 1) * C // gw
+            out[i * gw + j] = Float64(sums[at + i * gw + j]) / Float64((y1 - y0) * (x1 - x0))
     return out^
 
 
@@ -359,12 +389,15 @@ def hashes(g: Mat[DType.uint8]) raises -> Mat[DType.uint8]:
     """2 x 64 bits. Row 0 dHash: 8 x 9 box means, bit = right neighbour brighter. Row 1 pHash: 32 x 32 box means,
     orthonormal DCT-II, the 63 lowest AC coefficients (rounded to 1e-6) above their median, bit 63 is 0."""
     _grey(g, "hashes", 1)
+    return _hash_bits(_box_means(g, 8, 9), _box_means(g, 32, 32))
+
+
+def _hash_bits(d: List[Float64], m: List[Float64]) -> Mat[DType.uint8]:
+    """hashes' 2 x 64 bits from the 8 x 9 and 32 x 32 box means."""
     var o = Mat[DType.uint8](2, 64, 1)
-    var d = _box_means(g, 8, 9)
     for i in range(8):
         for j in range(8):
             o.data[i * 8 + j] = 1 if d[i * 9 + j + 1] > d[i * 9 + j] else 0
-    var m = _box_means(g, 32, 32)
     var t = List[Float64](length=8 * 32, fill=0.0)
     for k in range(8):
         var sc = sqrt(1.0 / 32.0) if k == 0 else sqrt(2.0 / 32.0)
@@ -427,7 +460,6 @@ def ham_pairs(bits: Mat[DType.uint8], thr: Int) raises -> Mat[DType.int32]:
 
 comptime NM = 37  # numbers per image from stock_metrics
 
-
 def scale_factor(rows: Int, cols: Int, ascale: Int) -> Int:
     """Integer shrink that brings the long edge near `ascale` px: round(long / ascale), at least 1."""
     return max(1, (max(rows, cols) + ascale // 2) // ascale)
@@ -456,11 +488,23 @@ def box_down(g: Mat[DType.uint8], f: Int) raises -> Mat[DType.uint8]:
     return o^
 
 
-def _analyse(src: Mat[DType.uint8], tile: Int, thr: Float64, lo: Int, hi: Int, bt: Int, bstd: Float64, brange: Int, ascale: Int) raises -> Tuple[Mat[F64], Mat[DType.uint8]]:
-    """(1 x 37 numbers, 2 x 64 hash bits) of a BGR image, the grey image computed once (cv2's BGR2GRAY)."""
+def _grey_serial(src: Mat[DType.uint8]) -> Mat[DType.uint8]:
+    """cvt_color(src, 0) on this thread alone: cv2's (B 3735 + G 19235 + R 9798 + 16384) >> 15. cvt_color goes through the Mojo
+    runtime and synchronizes on it, which deadlocked inside the gpu=1 pipeline, whose other workers wait in loops."""
+    var o = Mat[DType.uint8](src.rows, src.cols, 1, False)
+    var p = src.ptr()
+    var q = o.ptr()
+    for i in range(src.rows * src.cols):
+        q[i] = UInt8((Int32(p[3 * i]) * 3735 + Int32(p[3 * i + 1]) * 19235 + Int32(p[3 * i + 2]) * 9798 + 16384) >> 15)
+    return o^
+
+
+def _analyse(src: Mat[DType.uint8], tile: Int, thr: Float64, lo: Int, hi: Int, bt: Int, bstd: Float64, brange: Int, ascale: Int, serial: Bool = False) raises -> Tuple[Mat[F64], Mat[DType.uint8]]:
+    """(1 x 37 numbers, 2 x 64 hash bits) of a BGR image, the grey image computed once (cv2's BGR2GRAY); serial: grey without
+    the runtime (_grey_serial)."""
     if src.ch != 3:
         raise Error("stockMetrics needs a 3-channel BGR image, got " + String(src.ch) + " channels")
-    var g = cvt_color(src, 0)
+    var g = _grey_serial(src) if serial else cvt_color(src, 0)
     var f = scale_factor(g.rows, g.cols, ascale)
     var ga = box_down(g, f) if f > 1 else Mat[DType.uint8](copy=g)  # sharpness, noise, banding, fog at one analysis scale
     var parts = List[Mat[F64]]()
@@ -479,6 +523,43 @@ def _analyse(src: Mat[DType.uint8], tile: Int, thr: Float64, lo: Int, hi: Int, b
             o.data[k] = v
             k += 1
     return (o^, hashes(g))
+
+
+def _gpu_fits(h: Int, w: Int, ascale: Int) -> Bool:
+    """A picture the GPU path takes: every op of _analyse has room (the hash grids, blockiness' 16 px, the tiles at analysis scale)."""
+    var f = scale_factor(h, w, ascale)
+    return min(h, w) >= 64 and min(h // f, w // f) >= 64
+
+
+def _analyse_gpu(r: GpuRes, h: Int, w: Int, tile: Int, thr: Float64, lo: Int, hi: Int, bt: Int, bstd: Float64, brange: Int) raises -> Tuple[Mat[F64], Mat[DType.uint8]]:
+    """_analyse from what the card brought back: the analysis-scale grey and the sums of the full-size ops."""
+    var hb: Int64 = 0
+    var hn: Int64 = 0
+    var vb: Int64 = 0
+    var vn: Int64 = 0
+    for y in range(h):
+        hb += r.blk[3 * y]
+        hn += r.blk[3 * y + 1]
+        if y % 8 == 7:
+            vb += r.blk[3 * y + 2]
+        else:
+            vn += r.blk[3 * y + 2]
+    var parts = List[Mat[F64]]()
+    parts.append(sharpness(r.ga, tile, thr))
+    parts.append(noise_est(r.ga))
+    parts.append(_blk_out(hb, hn, vb, vn, h, w))
+    parts.append(clipping(r.ga, lo, hi))
+    parts.append(_cast_out(UInt64(r.cast[0]), UInt64(r.cast[1]), UInt64(r.cast[2]), h * w))
+    parts.append(banding(r.ga, bt, bstd, brange))
+    parts.append(haze_band(r.ga))
+    parts.append(clip_region(r.ga, lo, hi))
+    var o = Mat[F64](1, NM, 1)
+    var k = 0
+    for i in range(len(parts)):
+        for v in parts[i].data:
+            o.data[k] = v
+            k += 1
+    return (o^, _hash_bits(_means(r.cells, 0, 8, 9, h, w), _means(r.cells, 72, 32, 32, h, w)))
 
 
 def stock_metrics(src: Mat[DType.uint8], a: Args) raises -> Mat[F64]:
@@ -591,22 +672,130 @@ def batch(mut a: Args) raises -> Bool:
     var hp = hb.unsafe_ptr()
     var dp = dims.unsafe_ptr()
     var ep = ef.unsafe_ptr()
+    # gpu=1: one pipeline over the files (par_dyn). Task 0 feeds the card; tasks 1..n decode: a JPEG the card takes goes to its
+    # planes in one of PIN_N pinned slots (a ring: ticket t waits until the slot's user t - PIN_N gave it back), every other file
+    # takes the CPU path; tasks n+1..2n finish a GPU file on the CPU from what came back (gpustock.mojo).
+    var sg: Optional[StockGpu] = None
+    if a.i("gpu", 0) == 1:
+        try:
+            sg = StockGpu()
+        except e:
+            print("gpu: no device (" + String(e) + "), CPU path")
+    var usegpu = Bool(sg)
+    var m = n if usegpu else 0
+    var yv = List[Yuv]()
+    var gr = List[GpuRes]()
+    for _ in range(m):
+        yv.append(Yuv())
+        gr.append(GpuRes())
+    var st = List[Int64](length=m, fill=0)  # 0 decoding, 1 planes ready, 2 GPU done, 3 neither (CPU path or error)
+    var slot = List[Int](length=m, fill=0)
+    var gen = List[Int64](length=PIN_N, fill=0)  # times each slot was given back
+    var ctr = List[Int64](length=2, fill=0)  # tickets taken, decode tasks finished
+    var pa = sg.value().pin(PIN_N) if usegpu else List[Int]()
+    var yp = yv.unsafe_ptr()
+    var gp = gr.unsafe_ptr()
+    var slp = slot.unsafe_ptr()
+    var sp = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=Int(st.unsafe_ptr()))
+    var gnp = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=Int(gen.unsafe_ptr()))
+    var cp = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=Int(ctr.unsafe_ptr()))
 
-    def task(i: Int) {imm}:
+    def put(i: Int, r: Tuple[Mat[F64], Mat[DType.uint8]]) {imm}:
+        for j in range(NM):
+            rp[i * NM + j] = r[0].data[j]
+        for j in range(128):
+            hp[i * 128 + j] = r[1].data[j]
+
+    def cpu(i: Int) {imm}:
         try:
             var src = _load_any(paths[i])
             dp[2 * i] = src.cols
             dp[2 * i + 1] = src.rows
-            var r = _analyse(src, tile, thr, lo, hi, bt, bs, br, asc)
-            for j in range(NM):
-                rp[i * NM + j] = r[0].data[j]
-            for j in range(128):
-                hp[i * 128 + j] = r[1].data[j]
+            put(i, _analyse(src, tile, thr, lo, hi, bt, bs, br, asc, usegpu))
         except:
             ep[i] = 1
 
-    par_dyn(task, n)
-    _ = (len(res), len(hb), len(dims), len(ef))
+    def feed() {imm}:
+        var at = 0  # files before `at` are past the GPU
+        while True:
+            var busy = Atomic[Int64].load(cp + 1) < Int64(n)
+            var did = False
+            for i in range(at, n):
+                if Atomic[Int64].load(sp + i) != 1:
+                    continue
+                var s2 = Int64(2)
+                try:
+                    gp[i] = sg.value().analyse(yp[i], scale_factor(dp[2 * i + 1], dp[2 * i], asc), False)
+                except:
+                    ep[i] = 1
+                    s2 = 3
+                yp[i] = Yuv()
+                _ = Atomic[Int64].fetch_add(gnp + slp[i], 1)
+                Atomic[Int64].store(sp + i, s2)
+                did = True
+            while at < n and Atomic[Int64].load(sp + at) >= 2:
+                at += 1
+            if not busy and not did:
+                break
+            if not did:
+                _nap()
+
+    def dec(i: Int) {imm}:
+        var low = paths[i].lower()
+        if low.endswith(".jpg") or low.endswith(".jpeg"):
+            var t = Int(Atomic[Int64].fetch_add(cp, 1))
+            var s = t % PIN_N
+            while Atomic[Int64].load(gnp + s) < Int64(t // PIN_N):
+                _nap()
+            try:
+                var y = load_jpeg_yuv(paths[i], pa[s], PIN_CAP)
+                if _gpu_fits(y.h, y.w, asc):
+                    dp[2 * i] = y.w
+                    dp[2 * i + 1] = y.h
+                    yp[i] = y^
+                    slp[i] = s
+                    Atomic[Int64].store(sp + i, 1)
+                    return
+            except err:
+                if not String(err).startswith("jpeg-cpu"):
+                    ep[i] = 1
+                    _ = Atomic[Int64].fetch_add(gnp + s, 1)
+                    Atomic[Int64].store(sp + i, 3)
+                    return
+            _ = Atomic[Int64].fetch_add(gnp + s, 1)
+        cpu(i)
+        Atomic[Int64].store(sp + i, 3)
+
+    def fin(i: Int) {imm}:
+        var s = Atomic[Int64].load(sp + i)
+        while s < 2:
+            _nap()
+            s = Atomic[Int64].load(sp + i)
+        if s != 2:
+            return
+        try:
+            put(i, _analyse_gpu(gp[i], dp[2 * i + 1], dp[2 * i], tile, thr, lo, hi, bt, bs, br))
+        except:
+            ep[i] = 1
+        gp[i] = GpuRes()
+
+    def task(k: Int) {imm}:
+        if k == 0:
+            feed()
+        elif k <= n:
+            dec(k - 1)
+            _ = Atomic[Int64].fetch_add(cp + 1, 1)
+        else:
+            fin(k - n - 1)
+
+    var c0 = perf_counter_ns()
+    if usegpu:
+        par_dyn(task, 2 * n + 1, a.i("gw", 8))
+    else:
+        par_dyn(cpu, n)
+    _ = (len(res), len(hb), len(dims), len(ef), len(yv), len(gr), len(st), len(slot), len(gen), len(ctr), len(pa))
+    if a.i("prof", 0) == 1:
+        print("stockBatch prof ms:", (perf_counter_ns() - c0) // 1_000_000, "gpu files", ctr[0])
     var errs = List[String](length=n, fill=String())
     for i in range(n):  # the reason of a failed image, read again on this thread
         if ef[i] != 0:
@@ -753,12 +942,25 @@ def dups(mut a: Args) raises -> Bool:
 
 
 def run(mut a: Args) raises -> Bool:
-    if not (a.op in ["sharpness", "noiseEst", "blockiness", "clipping", "colorCast", "banding", "hazeBand", "hashes", "hamPairs", "stockMetrics", "stockBatch", "stockDups", "boxDown"]):
+    if not (a.op in ["sharpness", "noiseEst", "blockiness", "clipping", "colorCast", "banding", "hazeBand", "hashes", "hamPairs", "stockMetrics", "stockBatch", "stockDups", "boxDown", "jpegBgr"]):
         return False
     if a.op == "stockBatch":
         return batch(a)
     if a.op == "stockDups":
         return dups(a)
+    if a.op == "jpegBgr":  # jpegBgr OUT.mcv IN.jpg [gpu=1]: tj3Decompress8, or the planes finished on the card (the parity gate)
+        var o = Mat[DType.uint8](0, 0)
+        if a.i("gpu", 0) == 1:
+            var y = load_jpeg_yuv(a.ins[0])
+            var g = StockGpu()
+            while a.again():
+                o = Mat[DType.uint8](copy=g.analyse(y, 1, True).bgr)
+            print("GPU-ARM jpegBgr mode", y.mode)
+        else:
+            while a.again():
+                o = load_jpeg(a.ins[0])
+        save(o, a.out)
+        return True
     var m = load[DType.uint8](a.ins[0])
     if a.op == "hamPairs":
         var o = Mat[DType.int32](0, 0)
