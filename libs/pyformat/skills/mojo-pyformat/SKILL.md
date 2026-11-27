@@ -10,7 +10,7 @@ half to even on the exact binary value (`2.675` -> `2.67`).
 
 ## Install
 
-`mojo run -I <repo>/src app.mojo`, or `mojo precompile <repo>/src/pyformat -o pyformat.mojoc`,
+`pixi add mojo-pyformat` (import `pyformat`), or `mojo run -I <repo>/src app.mojo`, or `mojo precompile <repo>/src/pyformat -o pyformat.mojoc`,
 or copy `src/pyformat/`.
 
 ## Use
