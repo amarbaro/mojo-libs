@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-json` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/json`, then `mojo run -I src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-json`. From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/json`, then `mojo run -I src app.mojo`.
 
 ```mojo
 from json import Json, parse
