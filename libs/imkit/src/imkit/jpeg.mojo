@@ -210,6 +210,80 @@ def clamp8(v: Int) -> Int:
     return min(max(v, 0), 255)
 
 
+comptime UW = 32  # input samples per step of the 2:1 upsampler
+comptime CW = 16  # pixels per step of the colour conversion
+
+
+@always_inline
+def _s(a: P8, b: P8, i: Int, va: SIMD[DType.uint16, UW], vb: SIMD[DType.uint16, UW]) -> SIMD[DType.uint16, UW]:
+    return (a + i).unsafe_load[width=UW]().cast[DType.uint16]() * va + (b + i).unsafe_load[width=UW]().cast[DType.uint16]() * vb
+
+
+def h2(a: P8, b: P8, o: P8, dw: Int, wa: Int, wb: Int, be: Int, bo: Int):
+    """libjpeg's fancy 2:1 triangle filter (h2v1, h2v2) of the column sums s = wa * a + wb * b, dw samples into o[0 .. 2 * dw):
+    o[2i] = (3 s[i] + s[i-1] + be) >> 4, o[2i+1] = (3 s[i] + s[i+1] + bo) >> 4, the edge sample counts twice."""
+    var i = 0
+    var va, vb = SIMD[DType.uint16, UW](wa), SIMD[DType.uint16, UW](wb)
+    var ve, vo = SIMD[DType.uint16, UW](be), SIMD[DType.uint16, UW](bo)
+    while i < dw:
+        if i > 0 and i + UW + 1 <= dw:  # whole steps: every load is inside the row
+            var sc = _s(a, b, i, va, vb)
+            var ev = (sc * 3 + _s(a, b, i - 1, va, vb) + ve) >> 4
+            var od = (sc * 3 + _s(a, b, i + 1, va, vb) + vo) >> 4
+            (o + 2 * i).unsafe_store(0, ev.cast[DType.uint8]().interleave(od.cast[DType.uint8]()))
+            i += UW
+            continue
+        var sc = wa * Int(a.unsafe_load(i)) + wb * Int(b.unsafe_load(i))
+        var sp = sc if i == 0 else wa * Int(a.unsafe_load(i - 1)) + wb * Int(b.unsafe_load(i - 1))
+        var sn = sc if i == dw - 1 else wa * Int(a.unsafe_load(i + 1)) + wb * Int(b.unsafe_load(i + 1))
+        o.unsafe_store(2 * i, UInt8((3 * sc + sp + be) >> 4))
+        o.unsafe_store(2 * i + 1, UInt8((3 * sc + sn + bo) >> 4))
+        i += 1
+
+
+def _imask() -> IndexList[4 * CW]:
+    """Planar r, g, b (the 4th vector is padding) to packed rgb in the first 3 * CW lanes."""
+    var m = IndexList[4 * CW]()
+    for i in range(4 * CW):
+        m[i] = (i % 3) * CW + i // 3 if i < 3 * CW else 0
+    return m
+
+
+def pack[mode: Int](a: P8, b: P8, c: P8, o: P8, w: Int):
+    """w pixels of one row to packed RGB at o. mode 0: a, b, c = Y, Cb, Cr (libjpeg fixed point); 1: R, G, B planes; 2: grey in a.
+    The vector store writes CW padding bytes past its 3 * CW, so the last two steps of the row are left to the scalar loop."""
+    var x = 0
+    while x + 2 * CW <= w:
+        var r = (a + x).unsafe_load[width=CW]()
+        var g = r
+        var bl = r
+        comptime if mode == 1:
+            g = (b + x).unsafe_load[width=CW]()
+            bl = (c + x).unsafe_load[width=CW]()
+        elif mode == 0:
+            var l = r.cast[DType.int32]()
+            var cb = (b + x).unsafe_load[width=CW]().cast[DType.int32]() - 128
+            var cr = (c + x).unsafe_load[width=CW]().cast[DType.int32]() - 128
+            r = (l + ((cr * 91881 + 32768) >> 16)).clamp(0, 255).cast[DType.uint8]()
+            g = (l + ((cb * -22554 + cr * -46802 + 32768) >> 16)).clamp(0, 255).cast[DType.uint8]()
+            bl = (l + ((cb * 116130 + 32768) >> 16)).clamp(0, 255).cast[DType.uint8]()
+        (o + 3 * x).unsafe_store(0, r.join(g).join(bl.join(bl)).shuffle[_imask()]())
+        x += CW
+    for t in range(x, w):
+        var l = Int(a.unsafe_load(t))
+        var r, g, bl = l, l, l
+        comptime if mode == 1:
+            g, bl = Int(b.unsafe_load(t)), Int(c.unsafe_load(t))
+        elif mode == 0:
+            var cb, cr = Int(b.unsafe_load(t)) - 128, Int(c.unsafe_load(t)) - 128
+            r = clamp8(l + ((91881 * cr + 32768) >> 16))
+            g = clamp8(l + ((-22554 * cb - 46802 * cr + 32768) >> 16))
+            bl = clamp8(l + ((116130 * cb + 32768) >> 16))
+        o.unsafe_store(3 * t, UInt8(r))
+        o.unsafe_store(3 * t + 1, UInt8(g))
+        o.unsafe_store(3 * t + 2, UInt8(bl))
+
+
 struct Jpeg(Movable):
     var d: List[UInt8]
     var br: Br  # bit reader; br.pos is also the marker-segment cursor of parse
@@ -684,90 +758,75 @@ struct Jpeg(Movable):
                     self.flush(c, br, br)
         self.co = List[Int16]()
 
-    def up(self, c: Int, y: Int, mut o: List[UInt8]):
-        """Row y of component c upsampled to full width into o (w + 2 long), libjpeg's fancy upsampling where it has one."""
+    def row(self, c: Int, y: Int, o: P8) -> P8:
+        """Row y of component c at full width: a pointer into the plane when no resampling is needed, else `o` filled with libjpeg's
+        fancy upsampling where it has one (h2v1, h2v2) and a simple filter or replication otherwise."""
         var k = self.comps[c].copy()
-        var pw = k.pw
-        var r0 = k.poff + (y * k.v // self.vm) * pw
+        var pl = P8(unsafe_from_address=Int(self.pl.unsafe_ptr()))
+        var r0 = k.poff + (y * k.v // self.vm) * k.pw
         if k.h == self.hm and k.v == self.vm:
-            for x in range(self.w):
-                o[x] = self.pl[r0 + x]
-            return
+            return pl + r0
         var tall = k.v * 2 == self.vm
         var sy = y >> 1 if tall else y
         var oy = max(sy - 1, 0) if y % 2 == 0 else min(sy + 1, k.dh - 1)  # the nearer other row, used by the 2-high cases
-        r0 = k.poff + sy * pw
-        var r1 = k.poff + oy * pw
+        r0 = k.poff + sy * k.pw
+        var r1 = k.poff + oy * k.pw
         if k.h * 2 == self.hm and k.dw > 2 and (k.v == self.vm or tall):  # h2v1 and h2v2
-            var wa, wb, be, bo = (3, 1, 8, 7) if tall else (4, 0, 4, 8)
-            var prev = wa * Int(self.pl[r0]) + wb * Int(self.pl[r1])
-            var cur = prev
-            for i in range(k.dw):
-                var hi = cur if i == k.dw - 1 else wa * Int(self.pl[r0 + i + 1]) + wb * Int(self.pl[r1 + i + 1])
-                o[2 * i] = UInt8((3 * cur + prev + be) >> 4)
-                o[2 * i + 1] = UInt8((3 * cur + hi + bo) >> 4)
-                prev = cur
-                cur = hi
+            if tall:
+                h2(pl + r0, pl + r1, o, k.dw, 3, 1, 8, 7)
+            else:
+                h2(pl + r0, pl + r0, o, k.dw, 4, 0, 4, 8)
         elif k.h == self.hm and tall:  # h1v2
             for x in range(self.w):
-                o[x] = UInt8((3 * Int(self.pl[r0 + x]) + Int(self.pl[r1 + x]) + (1 if y % 2 == 0 else 2)) >> 2)
+                o.unsafe_store(x, UInt8((3 * Int(pl.unsafe_load(r0 + x)) + Int(pl.unsafe_load(r1 + x)) + (1 if y % 2 == 0 else 2)) >> 2))
         else:  # replicate
-            r0 = k.poff + (y * k.v // self.vm) * pw
+            r0 = k.poff + (y * k.v // self.vm) * k.pw
             for x in range(self.w):
-                o[x] = self.pl[r0 + x * k.h // self.hm]
+                o.unsafe_store(x, pl.unsafe_load(r0 + x * k.h // self.hm))
+        return o
 
     def rgb(self) -> List[UInt8]:
-        """Same values as pixels(), packed R, G, B; the colour-model branch is hoisted out of the pixel loop."""
+        """Packed R, G, B bytes, w * h * 3; the colour-model branch is hoisted out of the pixel loop."""
         var px = List[UInt8](unsafe_uninit_length=self.w * self.h * 3)
-        var a = List[UInt8](length=self.w + 2, fill=0)
-        var b = List[UInt8](length=self.w + 2, fill=0)
-        var c = List[UInt8](length=self.w + 2, fill=0)
+        var pp = P8(unsafe_from_address=Int(px.unsafe_ptr()))
+        var n = 2 * self.comps[0].pw + 128
+        var buf = List[UInt8](length=3 * n, fill=0)
+        var bp = P8(unsafe_from_address=Int(buf.unsafe_ptr()))
         var grey = len(self.comps) == 1
         var rgb = not grey and (self.adobe == 0 or (self.adobe < 0 and not self.jfif and self.comps[0].id == 0x52 and self.comps[1].id == 0x47 and self.comps[2].id == 0x42))
         for y in range(self.h):
-            var q = y * self.w * 3
-            self.up(0, y, a)
+            var a = self.row(0, y, bp)
             if grey:
-                for x in range(self.w):
-                    px[q + 3 * x] = a[x]
-                    px[q + 3 * x + 1] = a[x]
-                    px[q + 3 * x + 2] = a[x]
+                pack[2](a, a, a, pp + y * self.w * 3, self.w)
                 continue
-            self.up(1, y, b)
-            self.up(2, y, c)
+            var b = self.row(1, y, bp + n)
+            var c = self.row(2, y, bp + 2 * n)
             if rgb:
-                for x in range(self.w):
-                    px[q + 3 * x] = a[x]
-                    px[q + 3 * x + 1] = b[x]
-                    px[q + 3 * x + 2] = c[x]
-                continue
-            for x in range(self.w):
-                var l = Int32(a[x])
-                var cb = Int32(b[x]) - 128
-                var cr = Int32(c[x]) - 128
-                px[q + 3 * x] = UInt8(clamp8(Int(l + ((91881 * cr + 32768) >> 16))))
-                px[q + 3 * x + 1] = UInt8(clamp8(Int(l + ((-22554 * cb - 46802 * cr + 32768) >> 16))))
-                px[q + 3 * x + 2] = UInt8(clamp8(Int(l + ((116130 * cb + 32768) >> 16))))
+                pack[1](a, b, c, pp + y * self.w * 3, self.w)
+            else:
+                pack[0](a, b, c, pp + y * self.w * 3, self.w)
         return px^
 
     def pixels(self) -> List[UInt32]:
         var px = List[UInt32](length=self.w * self.h, fill=0)
-        var a = List[UInt8](length=self.w + 2, fill=0)
-        var b = List[UInt8](length=self.w + 2, fill=0)
-        var c = List[UInt8](length=self.w + 2, fill=0)
+        var n = 2 * self.comps[0].pw + 128
+        var buf = List[UInt8](length=3 * n, fill=0)
+        var bp = P8(unsafe_from_address=Int(buf.unsafe_ptr()))
         var grey = len(self.comps) == 1
         var rgb = not grey and (self.adobe == 0 or (self.adobe < 0 and not self.jfif and self.comps[0].id == 0x52 and self.comps[1].id == 0x47 and self.comps[2].id == 0x42))
         for y in range(self.h):
-            self.up(0, y, a)
+            var a = self.row(0, y, bp)
+            var b = a
+            var c = a
             if not grey:
-                self.up(1, y, b)
-                self.up(2, y, c)
+                b = self.row(1, y, bp + n)
+                c = self.row(2, y, bp + 2 * n)
             for x in range(self.w):
-                var r, g, bl = Int(a[x]), Int(a[x]), Int(a[x])
+                var r, g, bl = Int(a.unsafe_load(x)), Int(a.unsafe_load(x)), Int(a.unsafe_load(x))
                 if rgb:
-                    g, bl = Int(b[x]), Int(c[x])
+                    g, bl = Int(b.unsafe_load(x)), Int(c.unsafe_load(x))
                 elif not grey:
-                    var cb, cr = Int(b[x]) - 128, Int(c[x]) - 128
+                    var cb, cr = Int(b.unsafe_load(x)) - 128, Int(c.unsafe_load(x)) - 128
                     r += (91881 * cr + 32768) >> 16
                     g += (-22554 * cb - 46802 * cr + 32768) >> 16
                     bl += (116130 * cb + 32768) >> 16
