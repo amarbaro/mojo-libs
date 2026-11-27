@@ -2,6 +2,8 @@
 
 `from subprocess import run, check_output, CompletedProcess`
 
+`subprocess` forwards these names from `posix.subprocess` in mojo-posix; the implementation is `libs/posix/src/posix/subprocess/run.mojo`.
+
 | Call | Does |
 |---|---|
 | `run(argv, input=Span(), capture_output=True, timeout=-1.0, cwd="", env=[], check=False, close_stdin=False, capture_stderr=True) -> CompletedProcess` | Runs `argv[0]` (searched on PATH). `input` goes to stdin (otherwise stdin is inherited). `timeout` in seconds kills the child (SIGKILL) and raises `... timed out after S seconds`. `env` as `NAME=value` replaces the environment; empty inherits. `check=True` raises `... returned non-zero exit status N.` Raises when the program cannot start, and on an empty `argv`. `close_stdin=True` gives the child an empty stdin (EOF) when there is no input, like Python's `input=b""`. `capture_stderr=False` captures stdout only. |
