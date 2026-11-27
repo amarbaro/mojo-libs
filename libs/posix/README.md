@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-posix` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/posix`, then `mojo run -I src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-posix`. From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/posix`, then `mojo run -I src app.mojo`.
 
 ```mojo
 from posix import block_signals, signal_fd, spawn, reap, PollSet, SIGCHLD
@@ -28,7 +28,7 @@ def main() raises:
 
 Processes, signals, `poll` and unix sockets for Mojo, straight to libc. Spawn a child with
 its own cwd, environment, log files and process group; reap it without blocking; wait on
-signals and sockets in one `poll`. Nine scenarios are checked against Python's `os`,
+signals and sockets in one `poll`. Eleven scenarios are checked against Python's `os`,
 `socket` and `select`, and it keeps pace with them at about one megabyte less memory.
 
 Requires Mojo 1.2 on Linux. The calls go straight to libc, so no linker flags.
