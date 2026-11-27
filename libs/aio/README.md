@@ -39,7 +39,7 @@ Requires Mojo 1.2 on Linux.
 | Call | Does |
 |---|---|
 | `Loop(max_events=1024)` | epoll set; closed when the Loop is destroyed |
-| `add/modify/remove(fd, events, token)` | register; events `IN OUT ERR HUP RDHUP ET ONESHOT` |
+| `add/modify(fd, events, token)`, `remove(fd)` | register, change, unregister; events `IN OUT ERR HUP RDHUP ET ONESHOT` |
 | `after(ms, token)` | one `TIMER` event, never early |
 | `wait(evs, timeout_ms=-1)` | block; replace `evs` with what fired (descriptors and due timers) |
 | `ready(evs, buf, timeout_ms)` | descriptors only; safe from many threads, each with its own `buf` |
