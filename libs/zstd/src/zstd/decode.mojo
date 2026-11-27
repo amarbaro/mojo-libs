@@ -181,7 +181,8 @@ struct Zdec(Movable):
                 # libzstd decodes a frame of known small size in one pass, which rejects an empty compressed
                 # block (no literals section); its streaming path, taken otherwise, lets it through
                 raise bad("corrupt input")
-            if n - ip - 3 < take:
+            # the last block waits for its checksum too, so a chunked caller never sees the block without it
+            if n - ip - 3 < take + (4 if last == 1 and self.cksum else 0):
                 return ip
             if take > 0:
                 var made: Int
