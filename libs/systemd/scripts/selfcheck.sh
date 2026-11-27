@@ -5,17 +5,18 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT=$PWD
+# paths are relative to a copy of libs/: the sd_notify code lives in posix.systemd, this library forwards to it
 mutants=(
-  "src/systemd/notify.mojo|        a[2] = 0|        pass|abstract socket sent as a path"
-  "src/systemd/notify.mojo|Int(pid) != Int|Int(pid) == Int|WATCHDOG_PID check inverted"
-  "src/systemd/notify.mojo|state.byte_length(), Int32(0x4000)|state.byte_length() - 1, Int32(0x4000)|last byte dropped"
-  "examples/service.mojo|        _ = watchdog()|        pass|service never pings"
+  "posix/src/posix/systemd/notify.mojo|        a[2] = 0|        pass|abstract socket sent as a path"
+  "posix/src/posix/systemd/notify.mojo|Int(pid) != Int|Int(pid) == Int|WATCHDOG_PID check inverted"
+  "posix/src/posix/systemd/notify.mojo|state.byte_length(), Int32(0x4000)|state.byte_length() - 1, Int32(0x4000)|last byte dropped"
+  "systemd/examples/service.mojo|        _ = watchdog()|        pass|service never pings"
 )
 for m in "${mutants[@]}"; do
   IFS='|' read -r file from to why <<< "$m"
-  d=$ROOT/.work/mutant; rm -rf "$d"; mkdir -p "$d"
-  cp -r src tests tools scripts examples "$d"; ln -s "$ROOT/.venv" "$d/.venv"
-  python3 -I -c 'import sys; p,a,b=sys.argv[1:]; s=open(p).read(); assert a in s, "mutant does not apply: "+a; open(p,"w").write(s.replace(a,b,1))' "$d/$file" "$from" "$to" \
+  w=$ROOT/.work/mutant; d=$w/systemd; rm -rf "$w"; mkdir -p "$d" "$w/posix"
+  cp -r src tests tools scripts examples "$d"; cp -r ../posix/src "$w/posix/"; ln -s "$ROOT/.venv" "$d/.venv"
+  python3 -I -c 'import sys; p,a,b=sys.argv[1:]; s=open(p).read(); assert a in s, "mutant does not apply: "+a; open(p,"w").write(s.replace(a,b,1))' "$w/$file" "$from" "$to" \
     || { echo "FAIL selfcheck: mutant does not apply ($why)"; exit 1; }
   if "$d/scripts/check.sh" > "$d.log" 2>&1; then echo "FAIL selfcheck: gate passed a mutant ($why)"; exit 1; fi
   echo "selfcheck: rejected ($why): $(grep -m1 FAIL "$d.log")"
