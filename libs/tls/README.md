@@ -6,11 +6,11 @@
 
 <!-- install -->
 Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-tls` (import `tls`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/tls`, then `mojo run -I src -I ../aio/src app.mojo` (the one dependency, [mojo-aio](https://github.com/amarbaro/mojo-libs/tree/main/libs/aio), is the sibling folder).
-Toolchain: Mojo 1.2 stable.
+Toolchains: Mojo 1.2.0 stable, in the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) matrix.
 <!-- /install -->
 
 TLS 1.3 and TLS 1.2, client and server, with X.509 certificate validation, in pure Mojo: no OpenSSL, no C library, no
-foreign calls except a few libc functions (`memcpy`, `getrandom`, `explicit_bzero`, `time`, and the socket calls in `tls.net`). 16.7k lines of Mojo under `src/tls/`. It speaks to openssl,
+foreign calls except a few libc functions (`memcpy`, `getrandom`, `explicit_bzero`, `time`, and the socket calls in `tls.net`). 16.8k lines of Mojo under `src/tls/`. It speaks to openssl,
 Firefox, Chromium and Vivaldi in both directions (see Checks).
 
 **Status: 0.1.2, internally audited (14 findings, see the [release note](docs/releases/v0.1.1.md)), not independently audited.** Read [Security](#security) before you put it on the open internet.
@@ -26,9 +26,22 @@ Firefox, Chromium and Vivaldi in both directions (see Checks).
 | Certificates | ECDSA P-256 / P-384, RSA 2048+ (PKCS#1 v1.5 and PSS); chain building to the system roots or a PEM file, name and IP matching, Public Suffix List, name constraints |
 | TLS 1.3 features | session resumption (`psk_dhe_ke`, one ticket per connection), client certificates, HelloRetryRequest, KeyUpdate, ALPN, SNI, `record_size_limit` |
 | Server | `TlsServer` on [mojo-aio](https://github.com/amarbaro/mojo-libs/tree/main/libs/aio): TLS 1.3 and 1.2 on one port, certificates by SNI (exact, `*.x`, default), `require_client_cert` |
-| Engines | `Client13`, `Server13`, `Client12`, `Server12` are sans-IO: bytes in, bytes and events out. Bring your own socket |
+| Engines | `Client13`, `Server13`, `Client12`, `Server12` are sans-IO: bytes in, bytes out (`feed` returns them for TLS 1.3; the TLS 1.2 engines queue them for `cn.take_output()`). Bring your own socket |
 
-## What it is not
+| Call | Does |
+|---|---|
+| `TlsServer[RealCrypto](cfg, port, host, tls13).run(handler)` | serves TLS 1.3 and 1.2 on one port (`tls.net.server`) |
+| `Client13[V](hello, host, secret, random, verifier)` | TLS 1.3 client engine: `start()`, `feed(bytes) -> Out`, `write(data)`, `close()` (`tls.tls13.client`) |
+| `Server13[S](cfg, signer)` | TLS 1.3 server engine, same shape (`tls.tls13.server`) |
+| `Client12[C](host, alpn)`, `Server12[C](cfg)` | TLS 1.2 engines: `feed(bytes)`, then `cn.take_output()`, `cn.take_app()`, `cn.write_app(data)` (`tls.tls12`) |
+| `tls_connect[C](host, port, alpn, addr)` | blocking client stream with `read`, `write`, `close` (`tls.net.stream`) |
+| `verify_chain(chain, host, now, roots)`, `load_system_roots()` | certificate chain validation (`tls.x509.chain`) |
+| `load_private_key(pem)`, `Certificate.parse(der)`, `pem_blocks(text)` | keys, certificates, PEM (`tls.x509.key`, `.cert`, `.pem`) |
+| `sha256`, `hmac`, `hkdf_*`, `AesGcm`, `ChaCha20Poly1305`, `x25519`, `P256Key`, `RsaPublic`, `random_bytes` | primitives (`tls.sym`, `tls.asym`) |
+
+The full list with signatures is [docs/api.md](docs/api.md).
+
+## Limits
 
 Refused by policy, with a fatal alert, tested. These are the 11 SKIP cells of the matrix: tlsfuzzer's TLS 1.2 scripts
 and testssl's TLS 1.2 probes start from handshakes our server refuses.

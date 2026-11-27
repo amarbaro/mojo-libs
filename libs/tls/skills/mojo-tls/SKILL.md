@@ -8,7 +8,7 @@ metadata:
 # mojo-tls
 
 TLS 1.3 and 1.2, client and server, with X.509 validation, written in Mojo 1.2: no OpenSSL, no C library. Tested against openssl,
-tlsfuzzer, testssl, Firefox, Chromium and Vivaldi. 0.1.1, internally audited, not independently audited.
+tlsfuzzer, testssl, Firefox, Chromium and Vivaldi. 0.1.2, internally audited, not independently audited.
 
 ## When to use
 
@@ -17,28 +17,33 @@ Not for DTLS, QUIC, OCSP, revocation, TLS 1.2 CBC or RSA key exchange, 0-RTT (al
 
 ## Install
 
-`pixi add mojo-tls` (channels in the README), or from a clone: `scripts/deps.sh`, then `mojo run -I src -I .work/deps/mojo-aio/src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-tls`. From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/tls`, then `mojo run -I src -I ../aio/src app.mojo`.
 
 ## The calls (full programs: `examples/server.mojo`, `examples/client.mojo`)
 
+A sketch: `chain`, `key_der`, `kind`, `port`, `handler`, `hello`, `host`, `secret`, `random32`, `received`, `request_bytes`, `send` and `Check` are yours; the two programs above are the complete versions.
+
 ```mojo
-# server: one port serves TLS 1.3 and 1.2
 from tls.net.config import TlsConfig, CertEntry
 from tls.net.server import TlsServer, TlsHandler, ConnInfo
 from tls.tls12.realcrypto import RealCrypto
-var cfg = TlsConfig()
-cfg.alpn.append("http/1.1")
-cfg.certs.append(CertEntry([String("localhost")], chain, key_der, kind))  # chain: List[List[UInt8]] DER, leaf first
-var srv = TlsServer[RealCrypto](cfg^, port, "127.0.0.1", True)
-srv.run(handler)                                   # handler: struct implementing TlsHandler.handle(fd, info, data, mut reply) -> Bool
-
-# client engine (sans-IO): you move the bytes
 from tls.tls13.client import Client13, default_hello
-var cli = Client13[Check](hello, host, secret, random32, Check())   # Check: struct implementing Verifier (see client.mojo)
-send(cli.start())                                  # ClientHello
-var o = cli.feed(Span(received))                   # o.send: bytes to write; o.data: plaintext; o.events: EV_DONE, EV_CLOSE, ...
-send(cli.write(request_bytes))                     # after EV_DONE
-send(cli.close())                                  # close_notify
+
+
+def main() raises:
+    # server: one port serves TLS 1.3 and 1.2
+    var cfg = TlsConfig()
+    cfg.alpn.append("http/1.1")
+    cfg.certs.append(CertEntry([String("localhost")], chain, key_der, kind))  # chain: List[List[UInt8]] DER, leaf first
+    var srv = TlsServer[RealCrypto](cfg^, port, "127.0.0.1", True)
+    srv.run(handler)  # handler: struct implementing TlsHandler.handle(fd, info, data, mut reply) -> Bool
+
+    # client engine (sans-IO): you move the bytes
+    var cli = Client13[Check](hello, host, secret, random32, Check())  # Check: struct implementing Verifier (see client.mojo)
+    send(cli.start())  # ClientHello
+    var o = cli.feed(Span(received))  # o.send: bytes to write; o.data: plaintext; o.events: EV_DONE, EV_CLOSE, ...
+    send(cli.write(request_bytes))  # after EV_DONE
+    send(cli.close())  # close_notify
 ```
 
 Other pieces: `tls.net.stream.tls_connect` (blocking client), `Server13`/`Client12`/`Server12` (same shape), `tls.x509.cert.Certificate.parse`,
