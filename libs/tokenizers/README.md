@@ -7,8 +7,10 @@
 Hugging Face `tokenizer.json` runtime for Mojo: byte-level BPE (GPT-2, Llama 3, Qwen), WordPiece (BERT) and Unigram (T5, XLM-R). Ids are identical to the Python
 `tokenizers` crate's on 6 real tokenizer files x 2000 generated texts, and encoding runs 2 to 4 times faster than the crate through Python.
 
-Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-tokenizers` (import `tokenizers`). From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/tokenizers`, then `mojo run -I src app.mojo`.
-Toolchains: Mojo 1.2 stable, and the nightly 1.3.0.dev2026110805 in the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) matrix (36 libraries on stable, 35 on nightly).
+<!-- install -->
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-tokenizers`. From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/tokenizers`, then `mojo run -I src -I ../json/src -I ../uregex/src app.mojo`.
+Toolchains: Mojo 1.2.0 stable, in the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) matrix.
+<!-- /install -->
 
 ```mojo
 from std.os import remove
@@ -27,7 +29,14 @@ def main() raises:
     print(t.decode(ids))
 ```
 
-Install: `git clone` this repo, then `mojo run -I src app.mojo` (Mojo 1.2). The example is `examples/quickstart.mojo`: it needs no arguments and no files, and the gate runs it.
+The example is `examples/quickstart.mojo`: it needs no arguments and no files, and the gate runs it. `import tokenizers` is the package name.
+
+| Call | Result |
+|---|---|
+| `Tokenizer(path)` | loads a `tokenizer.json`; raises on a part it does not support |
+| `t.encode(text)` | `List[Int]` ids, as the crate's `encode(add_special_tokens=False)` |
+| `t.decode(ids)` | `String`, special tokens kept |
+| `t.kind`, `t.tokens` | 0 byte-level BPE, 1 WordPiece, 2 Unigram; id to token text |
 
 | tokenizer (encode 1 MB, ms) | Mojo | `tokenizers` crate |
 |---|---|---|
