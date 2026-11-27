@@ -6,6 +6,8 @@
 
 xxHash for Mojo in pure Mojo: XXH32, XXH64, XXH3-64 and XXH3-128, seeded, one-shot and streaming, identical to the reference implementation (0.8.x). 405 lines of code (`mojo-loc`), no C library.
 
+Install: `pixi workspace channel add https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-xxhash` once published.
+
 ```mojo
 from xxhash import xxh3_64, xxh3_128, xxh64, XXH3
 
