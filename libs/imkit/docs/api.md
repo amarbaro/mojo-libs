@@ -10,7 +10,6 @@
 | `win.key_down(scancode)`, `push(...)` | key held now; synthetic mouse, key and text (`EV_TEXT`, `text=`) events for scripted checks |
 | `win.text_input(on)`; `Input.text` | SDL text events on or off; the text typed this frame (UTF-8), joined by `Input.merge` |
 | `Font(path, sizes, fallback="")` | glyph atlas from a TrueType font: ASCII 32-126 at start, any other codepoint (UTF-8 text) rasterized on first use, from `fallback` when `path` lacks it, else drawn as `?`; AW x AH atlas (`-DUI_ATLAS_H=`, default 1024), skyline-packed, no eviction (`font.full` counts glyphs that did not fit); `Layer` uploads only the rows rasterized since the last frame |
-| `Ui(font)`; `begin(input)`, `finish()` | one frame; `finish` bins commands into 16 x 16 tiles |
 | `Ui(font)`; `begin(input, dt=0)`, `finish()` | one frame, `dt` seconds long (0: springs hold still); `finish` bins commands into 16 x 16 tiles |
 | `style(c1, mode, gx, gy, sx, sy, sr, sc) -> id`; `srect(x0, y0, x1, y1, r, c, id, border, bcol)` | per-frame style (256 max): fill gradient from `c` to `c1` (mode 1 linear along (gx, gy), 2 radial) and a shadow moved by (sx, sy), blurred sr, color sc; srect draws a rounded rect with it |
 | `clip(x0, y0, x1, y1)`, `unclip()` | everything drawn between is cut to the rect (hard edge at pixel centers, one level: a new clip replaces the old; binned only into the rect's tiles) |
