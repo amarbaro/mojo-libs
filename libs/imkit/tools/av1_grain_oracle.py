@@ -1,8 +1,8 @@
 """Independent transcription of spec 7.18.3 (film grain synthesis) for tests/av1grain_test: prints the plane checksums the Mojo
-test pins. Gaussian_Sequence is read from the spec text (AV1SPEC dir, default the boss worktree's .work/av1spec), so the generated
-av1tab table is cross-checked too. Usage: python3 -I tools/av1_grain_oracle.py"""
-import os, re
-SPEC = os.environ.get("AV1SPEC", os.path.expanduser("~/Projects/mojo/mojo-imkit-lanes/avif/.work/av1spec"))
+test pins. Gaussian_Sequence is read from the spec text (AV1SPEC: a directory holding the AV1 spec as markdown), so the generated
+av1tab table is cross-checked too. Usage: AV1SPEC=DIR python3 -I tools/av1_grain_oracle.py"""
+import os, re, sys
+SPEC = os.environ.get("AV1SPEC") or sys.exit("FAIL setup: set AV1SPEC to the directory of the AV1 spec markdown")
 txt = open(SPEC + "/10.additional.tables.md").read()
 body = txt[txt.index("Gaussian_Sequence[ 2048 ] = {"):]
 GAUSS = [int(v) for v in re.findall(r"-?\d+", body[body.index("{") + 1:body.index("}")])]
