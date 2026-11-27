@@ -4,6 +4,8 @@
 [![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml) [![license](https://img.shields.io/github/license/amarbaro/mojo-libs)](https://github.com/amarbaro/mojo-libs/blob/main/LICENSE) [![conda](https://img.shields.io/badge/conda-mojo--mmap-9DAE51)](https://prefix.dev/channels/@amarbaro/amarbaro/packages/mojo-mmap)
 <!-- /badges -->
 
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-mmap`. From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/mmap`, then `mojo run -I src app.mojo`.
+
 Memory-mapped files for Mojo. A file becomes one zero-copy `Span[UInt8]`, read-only or shared and writable, with `madvise` and `msync`. 71 lines of code (`mojo-loc`), Linux, no dependencies beyond libc.
 
 ```mojo
