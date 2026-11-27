@@ -4,7 +4,7 @@ Claim: facts edited into `ffn_down` (MEMIT, closed form, exact rank N), shipped 
 `lora2gguf`, merged with `llama-export-lora` and quantized with `llama-quantize`, are recalled by stock
 llama.cpp from the Q4_K_M file. The rest of the model stays intact.
 
-Instrument: `tests/memit-gate.sh`. Model: Qwen2.5-0.5B-Instruct (HF dir `~/Models/qwen2.5-0.5b-instruct-hf`).
+Instrument: `tests/memit-gate.sh`. Model: Qwen2.5-0.5B-Instruct (a local Hugging Face checkout; the machine path is not recorded here).
 Facts: `tools/memit_facts.py --n 200 --seed 0`, invented subjects with real-word targets. Scoring: llama.cpp
 greedy decoding, raw completion (no chat template). A prompt counts when the generated text, stripped, starts with
 the target word.
