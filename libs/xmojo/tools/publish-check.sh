@@ -6,10 +6,10 @@ cd "$(dirname "$0")/.."
 fail=0
 say() { echo "FAIL: $*"; fail=1; }
 [ -z "$(git status --short)" ] || say "working tree not clean"
-git log --format=%B | grep -qiE '^co-authored-by|generated with \[claude' && say "attribution trailer in history"
-git ls-files | grep -qE '^(\.work|\.pixi|\.venv)/|\.env$|\.mojopkg$|\.mojoc$' && say "ignored artefact tracked"
+git log --format=%B | grep -iE '^co-authored-by|generated with \[claude' >/dev/null && say "attribution trailer in history"
+git ls-files | grep -E '^(\.work|\.pixi|\.venv)/|\.env$|\.mojopkg$|\.mojoc$' >/dev/null && say "ignored artefact tracked"
 git ls-files -z | xargs -0 grep -lE '/home/[a-z]+/|api[_-]?key *=|token *= *["'"'"']|BEGIN (RSA|OPENSSH) PRIVATE' 2>/dev/null | grep -v '^tools/publish-check.sh$' | grep . && say "personal path or secret in tracked files"
-for f in $(git ls-files 'src/*.mojo' 'tools/*.mojo' 'tools/*.py' 'tools/*.sh' 'tests/*.mojo'); do head -3 "$f" | grep -q "Copyright" || say "no copyright header: $f"; done
+for f in $(git ls-files 'src/*.mojo' 'tools/*.mojo' 'tools/*.py' 'tools/*.sh' 'tests/*.mojo'); do head -3 "$f" | grep "Copyright" >/dev/null || say "no copyright header: $f"; done
 for f in LICENSE NOTICE README.md CONTRIBUTING.md CODE_OF_CONDUCT.md SECURITY.md CHANGELOG.md tests/fixtures/SOURCES.md; do [ -f "$f" ] || say "missing $f"; done
 v=$(grep -m1 '^version' pixi.toml | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
 grep -q "\[v$v\]" CHANGELOG.md || say "CHANGELOG has no entry for pixi version $v"
