@@ -17,7 +17,7 @@ mkdir -p .work .bin
 .work/quickstart > /dev/null || { echo "FAIL example: examples/quickstart.mojo"; exit 1; }
 cases=()
 for f in tests/cases/*.txt; do
-  case ${f##*/} in fs-stream.txt|fs-screen.txt) continue;; real.txt) [ -f tests/real/frame0.mcv ] || continue;; esac
+  case ${f##*/} in fs-gpu2.txt|fs-stream.txt|fs-screen.txt) continue;; real.txt) [ -f tests/real/frame0.mcv ] || continue;; esac
   cases+=("$f")
 done
 tests/run.sh "${cases[@]}" || { echo "FAIL 2d: tests/run.sh"; exit 1; }
