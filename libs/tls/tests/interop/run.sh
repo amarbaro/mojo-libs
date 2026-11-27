@@ -116,8 +116,8 @@ negatives() {
   if refused -tls1_2 -cipher 'AES128-SHA:ECDHE-ECDSA-AES128-SHA' -CAfile "$C/ca.pem"; then ok "$who/neg/cbc"; else no "$who/neg/cbc" "handshake with a CBC suite succeeded, or the client did not run"; fi
   # TLS 1.1 (needs seclevel 0 to even send it)
   local o; o="$(printf 'x' | timeout 20 openssl s_client -connect "127.0.0.1:$PORT" -tls1_1 -cipher 'ALL@SECLEVEL=0' -brief 2>&1 || true)"
-  if echo "$o" | grep -q -i 'no protocols available'; then sk "$who/neg/tls11: client build cannot send TLS 1.1"
-  elif echo "$o" | grep -q 'Protocol version: TLSv1.1'; then no "$who/neg/tls11" "TLS 1.1 handshake succeeded"; else ok "$who/neg/tls11"; fi
+  if echo "$o" | grep -i 'no protocols available' >/dev/null; then sk "$who/neg/tls11: client build cannot send TLS 1.1"
+  elif echo "$o" | grep 'Protocol version: TLSv1.1' >/dev/null; then no "$who/neg/tls11" "TLS 1.1 handshake succeeded"; else ok "$who/neg/tls11"; fi
   # a client that offers no extended_master_secret: our policy refuses (s_server accepts, so peers mode skips)
   if [[ "$who" == peers ]]; then sk "peers/neg/no-ems: s_server accepts it, policy of our server only"
   elif refused -tls1_2 -no_ems -CAfile "$C/ca.pem"; then ok "$who/neg/no-ems"; else no "$who/neg/no-ems" "handshake without EMS succeeded, or the client did not run"; fi

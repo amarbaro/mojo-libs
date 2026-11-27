@@ -30,12 +30,12 @@ stage_parse() {
     nb=$(date -u -d "$(openssl x509 -in $f -noout -startdate | cut -d= -f2)" +%s)
     na=$(date -u -d "$(openssl x509 -in $f -noout -enddate | cut -d= -f2)" +%s)
     ser=$(openssl x509 -in $f -noout -serial | cut -d= -f2 | tr A-Z a-z)
-    if openssl x509 -in $f -noout -modulus 2>/dev/null | grep -qE '^Modulus=[0-9A-F]+$'; then
+    if openssl x509 -in $f -noout -modulus 2>/dev/null | grep -E '^Modulus=[0-9A-F]+$' >/dev/null; then
       key=$(openssl x509 -in $f -noout -modulus | cut -d= -f2 | tr A-Z a-z)
     else
       local txt
       txt=$(openssl x509 -in $f -noout -pubkey | openssl pkey -pubin -noout -text 2>/dev/null)
-      if echo "$txt" | grep -qE 'ASN1 OID: (prime256v1|secp384r1)'; then
+      if echo "$txt" | grep -E 'ASN1 OID: (prime256v1|secp384r1)' >/dev/null; then
         key=$(echo "$txt" | sed -n '/^pub:/,/^ASN1 OID/p' | grep -v -e '^pub:' -e '^ASN1' | tr -d ' :\n')
       else
         key=-

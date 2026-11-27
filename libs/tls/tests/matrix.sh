@@ -70,7 +70,7 @@ sclient() { # VER KIND SNI ALPN HOST WANT_CN [extra s_client args]  (env WANT_SU
   grep -q "^Protocol version: TLSv1.$((ver == 13 ? 3 : 2))" <<< "$o" || { echo "FAIL protocol: $(head -c 250 <<< "$o" | tr '\n' ' ')"; return; }
   grep -q '^Verification: OK' <<< "$o" || { echo "FAIL certificate verification: $(grep -m1 -i 'verif' <<< "$o")"; return; }
   grep -qx "Peer certificate: CN=$cn" <<< "$o" || { echo "FAIL wrong certificate: $(grep -m1 'Peer certificate' <<< "$o") want CN=$cn"; return; }
-  [[ -z ${WANT_SUITE:-} ]] || grep -qx "Ciphersuite: $WANT_SUITE" <<< "$o" || { echo "FAIL suite: $(grep -m1 Ciphersuite <<< "$o") want $WANT_SUITE"; return; }
+  [[ -z ${WANT_SUITE:-} ]] || grep -x "Ciphersuite: $WANT_SUITE" >/dev/null <<< "$o" || { echo "FAIL suite: $(grep -m1 Ciphersuite <<< "$o") want $WANT_SUITE"; return; }
   grep -qxF "mojo-tls-ok ver=$ver sni=$ws alpn=$wa" <<< "$o" || { echo "FAIL reply: $(grep -m1 'mojo-tls-ok' <<< "$o" || echo none) want ver=$ver sni=$ws alpn=$wa"; return; }
   echo PASS
 }
