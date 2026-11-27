@@ -5,16 +5,25 @@
 # gradient to compare) is NaN, never a plausible number.
 from std.math import sqrt, ceil, cos, nan
 from std.bit import pop_count
+from std.time import perf_counter_ns
+from std.ffi import external_call
+from std.atomic import Atomic
 from mojocv.mat import Mat, load, save
 from mojocv.core import Args, par_dyn
 from mojocv.imgproc import cvt_color
 from mojocv.regions import clip_region
 from mojocv.jpegio import load_jpeg
 from mojocv.jpegyuv import load_jpeg_yuv, Yuv
-from mojocv.gpustock import StockGpu, GpuRes
+from mojocv.gpustock import StockGpu, GpuRes, PIN_CAP, PIN_N
 
 comptime F64 = DType.float64
 comptime PI = 3.141592653589793
+
+
+def _nap():
+    """0.5 ms in libc usleep: a wait inside a par_dyn worker that does not go through the Mojo runtime (std.time.sleep there
+    hung a stockBatch gpu=1 run with every thread in a futex wait)."""
+    _ = external_call["usleep", Int32](UInt32(500))
 
 
 def _grey(g: Mat[DType.uint8], name: String, minside: Int) raises:
@@ -450,8 +459,6 @@ def ham_pairs(bits: Mat[DType.uint8], thr: Int) raises -> Mat[DType.int32]:
 
 
 comptime NM = 37  # numbers per image from stock_metrics
-comptime GPU_WIN = 24  # files per decode window of stockBatch gpu=1 (a 21 MP 4:2:0 JPEG holds 32 MB of planes)
-
 
 def scale_factor(rows: Int, cols: Int, ascale: Int) -> Int:
     """Integer shrink that brings the long edge near `ascale` px: round(long / ascale), at least 1."""
@@ -481,11 +488,23 @@ def box_down(g: Mat[DType.uint8], f: Int) raises -> Mat[DType.uint8]:
     return o^
 
 
-def _analyse(src: Mat[DType.uint8], tile: Int, thr: Float64, lo: Int, hi: Int, bt: Int, bstd: Float64, brange: Int, ascale: Int) raises -> Tuple[Mat[F64], Mat[DType.uint8]]:
-    """(1 x 37 numbers, 2 x 64 hash bits) of a BGR image, the grey image computed once (cv2's BGR2GRAY)."""
+def _grey_serial(src: Mat[DType.uint8]) -> Mat[DType.uint8]:
+    """cvt_color(src, 0) on this thread alone: cv2's (B 3735 + G 19235 + R 9798 + 16384) >> 15. cvt_color goes through the Mojo
+    runtime and synchronizes on it, which deadlocked inside the gpu=1 pipeline, whose other workers wait in loops."""
+    var o = Mat[DType.uint8](src.rows, src.cols, 1, False)
+    var p = src.ptr()
+    var q = o.ptr()
+    for i in range(src.rows * src.cols):
+        q[i] = UInt8((Int32(p[3 * i]) * 3735 + Int32(p[3 * i + 1]) * 19235 + Int32(p[3 * i + 2]) * 9798 + 16384) >> 15)
+    return o^
+
+
+def _analyse(src: Mat[DType.uint8], tile: Int, thr: Float64, lo: Int, hi: Int, bt: Int, bstd: Float64, brange: Int, ascale: Int, serial: Bool = False) raises -> Tuple[Mat[F64], Mat[DType.uint8]]:
+    """(1 x 37 numbers, 2 x 64 hash bits) of a BGR image, the grey image computed once (cv2's BGR2GRAY); serial: grey without
+    the runtime (_grey_serial)."""
     if src.ch != 3:
         raise Error("stockMetrics needs a 3-channel BGR image, got " + String(src.ch) + " channels")
-    var g = cvt_color(src, 0)
+    var g = _grey_serial(src) if serial else cvt_color(src, 0)
     var f = scale_factor(g.rows, g.cols, ascale)
     var ga = box_down(g, f) if f > 1 else Mat[DType.uint8](copy=g)  # sharpness, noise, banding, fog at one analysis scale
     var parts = List[Mat[F64]]()
@@ -653,24 +672,33 @@ def batch(mut a: Args) raises -> Bool:
     var hp = hb.unsafe_ptr()
     var dp = dims.unsafe_ptr()
     var ep = ef.unsafe_ptr()
-    # gpu=1: a JPEG the card takes is decoded to its planes here, finished on the GPU (gpustock.mojo), measured from what came
-    # back; every other file takes the CPU path below in the same pass. Windows of GPU_WIN files bound the planes held in RAM.
+    # gpu=1: one pipeline over the files (par_dyn). Task 0 feeds the card; tasks 1..n decode: a JPEG the card takes goes to its
+    # planes in one of PIN_N pinned slots (a ring: ticket t waits until the slot's user t - PIN_N gave it back), every other file
+    # takes the CPU path; tasks n+1..2n finish a GPU file on the CPU from what came back (gpustock.mojo).
     var sg: Optional[StockGpu] = None
     if a.i("gpu", 0) == 1:
         try:
             sg = StockGpu()
         except e:
             print("gpu: no device (" + String(e) + "), CPU path")
+    var usegpu = Bool(sg)
+    var m = n if usegpu else 0
     var yv = List[Yuv]()
     var gr = List[GpuRes]()
-    for _ in range(n if sg else 0):
+    for _ in range(m):
         yv.append(Yuv())
         gr.append(GpuRes())
-    var kind = List[Int](length=n, fill=0)  # 1: planes waiting for the GPU, 2: GPU results waiting for the CPU
+    var st = List[Int64](length=m, fill=0)  # 0 decoding, 1 planes ready, 2 GPU done, 3 neither (CPU path or error)
+    var slot = List[Int](length=m, fill=0)
+    var gen = List[Int64](length=PIN_N, fill=0)  # times each slot was given back
+    var ctr = List[Int64](length=2, fill=0)  # tickets taken, decode tasks finished
+    var pa = sg.value().pin(PIN_N) if usegpu else List[Int]()
     var yp = yv.unsafe_ptr()
     var gp = gr.unsafe_ptr()
-    var kp = kind.unsafe_ptr()
-    var usegpu = Bool(sg)
+    var slp = slot.unsafe_ptr()
+    var sp = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=Int(st.unsafe_ptr()))
+    var gnp = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=Int(gen.unsafe_ptr()))
+    var cp = MutPointer[Int64, MutAnyOrigin](unsafe_from_address=Int(ctr.unsafe_ptr()))
 
     def put(i: Int, r: Tuple[Mat[F64], Mat[DType.uint8]]) {imm}:
         for j in range(NM):
@@ -678,61 +706,96 @@ def batch(mut a: Args) raises -> Bool:
         for j in range(128):
             hp[i * 128 + j] = r[1].data[j]
 
-    var win = GPU_WIN if usegpu else max(n, 1)
-    var s = 0
-    while s < n:
-        var e = min(n, s + win)
-        var base = s
+    def cpu(i: Int) {imm}:
+        try:
+            var src = _load_any(paths[i])
+            dp[2 * i] = src.cols
+            dp[2 * i + 1] = src.rows
+            put(i, _analyse(src, tile, thr, lo, hi, bt, bs, br, asc, usegpu))
+        except:
+            ep[i] = 1
 
-        def task(k: Int) {imm}:
-            var i = base + k
-            try:
-                if usegpu:
-                    var low = paths[i].lower()
-                    if low.endswith(".jpg") or low.endswith(".jpeg"):
-                        try:
-                            var y = load_jpeg_yuv(paths[i])
-                            if _gpu_fits(y.h, y.w, asc):
-                                dp[2 * i] = y.w
-                                dp[2 * i + 1] = y.h
-                                yp[i] = y^
-                                kp[i] = 1
-                                return
-                        except err:
-                            if not String(err).startswith("jpeg-cpu"):
-                                ep[i] = 1
-                                return
-                var src = _load_any(paths[i])
-                dp[2 * i] = src.cols
-                dp[2 * i + 1] = src.rows
-                put(i, _analyse(src, tile, thr, lo, hi, bt, bs, br, asc))
-            except:
-                ep[i] = 1
-
-        par_dyn(task, e - s)
-        for i in range(s, e):
-            if kind[i] == 1:
+    def feed() {imm}:
+        var at = 0  # files before `at` are past the GPU
+        while True:
+            var busy = Atomic[Int64].load(cp + 1) < Int64(n)
+            var did = False
+            for i in range(at, n):
+                if Atomic[Int64].load(sp + i) != 1:
+                    continue
+                var s2 = Int64(2)
                 try:
-                    gr[i] = sg.value().analyse(yv[i], scale_factor(dims[2 * i + 1], dims[2 * i], asc), False)
-                    kind[i] = 2
+                    gp[i] = sg.value().analyse(yp[i], scale_factor(dp[2 * i + 1], dp[2 * i], asc), False)
                 except:
-                    ef[i] = 1
-                yv[i] = Yuv()
+                    ep[i] = 1
+                    s2 = 3
+                yp[i] = Yuv()
+                _ = Atomic[Int64].fetch_add(gnp + slp[i], 1)
+                Atomic[Int64].store(sp + i, s2)
+                did = True
+            while at < n and Atomic[Int64].load(sp + at) >= 2:
+                at += 1
+            if not busy and not did:
+                break
+            if not did:
+                _nap()
 
-        def fin(k: Int) {imm}:
-            var i = base + k
-            if kp[i] != 2:
-                return
+    def dec(i: Int) {imm}:
+        var low = paths[i].lower()
+        if low.endswith(".jpg") or low.endswith(".jpeg"):
+            var t = Int(Atomic[Int64].fetch_add(cp, 1))
+            var s = t % PIN_N
+            while Atomic[Int64].load(gnp + s) < Int64(t // PIN_N):
+                _nap()
             try:
-                put(i, _analyse_gpu(gp[i], dp[2 * i + 1], dp[2 * i], tile, thr, lo, hi, bt, bs, br))
-            except:
-                ep[i] = 1
-            gp[i] = GpuRes()
+                var y = load_jpeg_yuv(paths[i], pa[s], PIN_CAP)
+                if _gpu_fits(y.h, y.w, asc):
+                    dp[2 * i] = y.w
+                    dp[2 * i + 1] = y.h
+                    yp[i] = y^
+                    slp[i] = s
+                    Atomic[Int64].store(sp + i, 1)
+                    return
+            except err:
+                if not String(err).startswith("jpeg-cpu"):
+                    ep[i] = 1
+                    _ = Atomic[Int64].fetch_add(gnp + s, 1)
+                    Atomic[Int64].store(sp + i, 3)
+                    return
+            _ = Atomic[Int64].fetch_add(gnp + s, 1)
+        cpu(i)
+        Atomic[Int64].store(sp + i, 3)
 
-        if usegpu:
-            par_dyn(fin, e - s)
-        s = e
-    _ = (len(res), len(hb), len(dims), len(ef), len(yv), len(gr), len(kind))
+    def fin(i: Int) {imm}:
+        var s = Atomic[Int64].load(sp + i)
+        while s < 2:
+            _nap()
+            s = Atomic[Int64].load(sp + i)
+        if s != 2:
+            return
+        try:
+            put(i, _analyse_gpu(gp[i], dp[2 * i + 1], dp[2 * i], tile, thr, lo, hi, bt, bs, br))
+        except:
+            ep[i] = 1
+        gp[i] = GpuRes()
+
+    def task(k: Int) {imm}:
+        if k == 0:
+            feed()
+        elif k <= n:
+            dec(k - 1)
+            _ = Atomic[Int64].fetch_add(cp + 1, 1)
+        else:
+            fin(k - n - 1)
+
+    var c0 = perf_counter_ns()
+    if usegpu:
+        par_dyn(task, 2 * n + 1, a.i("gw", 8))
+    else:
+        par_dyn(cpu, n)
+    _ = (len(res), len(hb), len(dims), len(ef), len(yv), len(gr), len(st), len(slot), len(gen), len(ctr), len(pa))
+    if a.i("prof", 0) == 1:
+        print("stockBatch prof ms:", (perf_counter_ns() - c0) // 1_000_000, "gpu files", ctr[0])
     var errs = List[String](length=n, fill=String())
     for i in range(n):  # the reason of a failed image, read again on this thread
         if ef[i] != 0:

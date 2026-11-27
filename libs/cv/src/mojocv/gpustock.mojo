@@ -10,13 +10,15 @@ from max.gpu import block_idx, thread_idx, lane_id, WARP_SIZE
 from max.gpu.sync import barrier
 from max.gpu.primitives import warp
 from max.gpu.memory import AddressSpace
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceContext, HostBuffer
 from mojocv.mat import Mat
 from mojocv.gpu import U, L, P, THREADS, boxdown_k, _u
 from mojocv.jpegyuv import Yuv
 
 comptime RG = 16  # picture rows per thread in ycc_k
 comptime NCELL = 72 + 1024  # dHash 8 x 9 cells, then pHash 32 x 32
+comptime PIN_CAP = 40 << 20  # bytes per pinned slot: the planes of a 4:2:0 picture up to 27 MP
+comptime PIN_N = 12  # pinned slots: planes decoded ahead of the card
 comptime SH = MutPointer[Int64, MutUntrackedOrigin, address_space=AddressSpace.SHARED]
 
 
@@ -176,17 +178,28 @@ struct GpuRes(Movable):
 
 struct StockGpu:
     var ctx: DeviceContext
+    var pins: List[HostBuffer[DType.uint8]]  # pinned staging slots the CPU threads decode planes into (PIN_CAP bytes each)
 
     def __init__(out self) raises:
         self.ctx = DeviceContext()  # raises when there is no accelerator
+        self.pins = List[HostBuffer[DType.uint8]]()
+
+    def pin(mut self, k: Int) raises -> List[Int]:
+        """k pinned slots of PIN_CAP bytes; their addresses."""
+        var o = List[Int]()
+        for _ in range(k):
+            self.pins.append(self.ctx.enqueue_create_host_buffer[DType.uint8](PIN_CAP))
+            o.append(Int(self.pins[len(self.pins) - 1].unsafe_ptr()))
+        self.ctx.synchronize()
+        return o^
 
     def analyse(self, y: Yuv, f: Int, want: Bool) raises -> GpuRes:
         """Upload the planes, run the tail and the full-size ops, download the results (one synchronize)."""
         var w = y.w
         var h = y.h
         var n = w * h
-        var dy = self.ctx.enqueue_create_buffer[DType.uint8](len(y.data))
-        self.ctx.enqueue_copy(dst_buf=dy, src_ptr=y.data.unsafe_ptr())
+        var dy = self.ctx.enqueue_create_buffer[DType.uint8](y.n)
+        self.ctx.enqueue_copy(dst_buf=dy, src_ptr=UnsafePointer[UInt8, MutAnyOrigin](unsafe_from_address=y.addr()))
         var dg = self.ctx.enqueue_create_buffer[DType.uint8](n)
         var db = self.ctx.enqueue_create_buffer[DType.uint8](n * 3 if want else 1)
         var nb = ceildiv(w, THREADS) * ceildiv(h, RG)
