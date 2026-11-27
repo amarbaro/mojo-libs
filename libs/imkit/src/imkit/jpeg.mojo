@@ -14,6 +14,7 @@ Oracle: tests/jpeg_test.sh (ImageMagick writes the fixtures and the golden RGBA,
 from std.bit import byte_swap
 from std.memory import bitcast
 from std.utils import IndexList
+from max.algorithm import parallelize
 
 comptime MAXPX = 1 << 26  # same value as assets.MAXPX (tests/jpeg_test.mojo checks it): 64 M pixels
 comptime P8 = Pointer[UInt8, MutAnyOrigin]
@@ -785,26 +786,35 @@ struct Jpeg(Movable):
                 o.unsafe_store(x, pl.unsafe_load(r0 + x * k.h // self.hm))
         return o
 
-    def rgb(self) -> List[UInt8]:
-        """Packed R, G, B bytes, w * h * 3; the colour-model branch is hoisted out of the pixel loop."""
+    def rgb[par: Int = 1](self) -> List[UInt8]:
+        """Packed R, G, B bytes, w * h * 3; the colour-model branch is hoisted out of the pixel loop. `par` > 1 splits the rows into
+        that many bands on as many threads (default 1: serial)."""
         var px = List[UInt8](unsafe_uninit_length=self.w * self.h * 3)
         var pp = P8(unsafe_from_address=Int(px.unsafe_ptr()))
         var n = 2 * self.comps[0].pw + 128
-        var buf = List[UInt8](length=3 * n, fill=0)
+        var buf = List[UInt8](length=3 * n * par, fill=0)
         var bp = P8(unsafe_from_address=Int(buf.unsafe_ptr()))
         var grey = len(self.comps) == 1
         var rgb = not grey and (self.adobe == 0 or (self.adobe < 0 and not self.jfif and self.comps[0].id == 0x52 and self.comps[1].id == 0x47 and self.comps[2].id == 0x42))
-        for y in range(self.h):
-            var a = self.row(0, y, bp)
-            if grey:
-                pack[2](a, a, a, pp + y * self.w * 3, self.w)
-                continue
-            var b = self.row(1, y, bp + n)
-            var c = self.row(2, y, bp + 2 * n)
-            if rgb:
-                pack[1](a, b, c, pp + y * self.w * 3, self.w)
-            else:
-                pack[0](a, b, c, pp + y * self.w * 3, self.w)
+
+        def band(i: Int) {imm}:
+            var t = bp + 3 * n * i
+            for y in range(self.h * i // par, self.h * (i + 1) // par):
+                var a = self.row(0, y, t)
+                if grey:
+                    pack[2](a, a, a, pp + y * self.w * 3, self.w)
+                    continue
+                var b = self.row(1, y, t + n)
+                var c = self.row(2, y, t + 2 * n)
+                if rgb:
+                    pack[1](a, b, c, pp + y * self.w * 3, self.w)
+                else:
+                    pack[0](a, b, c, pp + y * self.w * 3, self.w)
+
+        comptime if par == 1:
+            band(0)
+        else:
+            parallelize(band, par, par)
         return px^
 
     def pixels(self) -> List[UInt32]:
