@@ -4,7 +4,12 @@ picture-size guard of `png_decode` (r | g << 8 | b << 16 | a << 24, a = 255).
 Baseline, extended-sequential and progressive Huffman, 8-bit, 1 or 3 components, any 1 to 4 sampling factors (4:4:4, 4:2:2, 4:4:0,
 4:2:0 get libjpeg's "fancy" triangle upsampling, others replicate), restart markers, APPn / COM segments skipped, Adobe transform
 flag read. The IDCT is libjpeg's accurate integer one (jidctint) and the YCbCr conversion uses its fixed-point constants, so the
-output sits within 1 to 2 levels of libjpeg-turbo. Arithmetic coding, lossless, 12-bit and 4-component (CMYK) files raise.
+output sits within 1 to 2 levels of libjpeg-turbo (equal on every file of tests/jpeg_speed.sh and every fixture of
+tests/jpeg_test.sh). Arithmetic coding, lossless, 12-bit and 4-component (CMYK) files raise.
+
+Speed (tests/jpeg_speed.sh, one core, 21 MP 4:2:0 baseline): the bit reader refills 8 bytes at a time, a baseline file keeps one
+MCU row of coefficients (8 blocks interleaved per SIMD group), the IDCT runs 8 blocks per vector, and upsampling and colour
+conversion run on whole rows; `rgb[par]()` can split the rows over threads.
 
 Every length is checked before it is used and a truncated entropy stream raises: the bit reader feeds zero bits after a marker or
 the end of data and raises as soon as one of them is consumed.
@@ -18,9 +23,7 @@ from max.algorithm import parallelize
 
 comptime MAXPX = 1 << 26  # same value as assets.MAXPX (tests/jpeg_test.mojo checks it): 64 M pixels
 comptime P8 = Pointer[UInt8, MutAnyOrigin]
-comptime P16 = Pointer[UInt16, MutAnyOrigin]
 comptime PS = Pointer[Int16, MutAnyOrigin]
-comptime PI = Pointer[Int, MutAnyOrigin]
 comptime GW = 8  # blocks per group: the coefficients of GW consecutive blocks of a row are stored interleaved, k * GW + lane
 
 
