@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-toml` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/toml`, then `mojo run -I src app.mojo`.
+Install: `pixi workspace channel add https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-toml` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/toml`, then `mojo run -I src app.mojo`.
 
 ```mojo
 from toml import parse
