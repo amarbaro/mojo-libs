@@ -31,3 +31,14 @@ two hashes come back. Step 4: the CPU path (`jpegio.mojo`, commit 4e99c700) stay
 ## Files
 `src/mojocv/jpegcoef.mojo` (coefficients), `src/mojocv/gpu.mojo` (+ decode kernels), `src/mojocv/stockcheck.mojo` (gpu=1 batch),
 `tests/cases_gpu/`, `tests/stock_planted.sh` (gpu arm), `docs/gpu.md` (receipt), `docs/rules.md` (any mistake).
+
+## Measured before building (same day, one core, 8 x 21 MP, bench_ops)
+decode (tj3, full) 55 ms; full-size ops: grey 8, boxDown 6, blockiness 1, colorCast 7, hashes 12 (34); analysis-scale ops:
+clipRegion 21, banding + haze 5, sharpness 4, noise 2, clipping 0 (32). Total about 121 ms.
+- Movable in the first GPU cut: decode tail (upsample + colour, about 15 of the 55; Huffman + IDCT stay on the CPU through
+  `tj3DecompressToYUV8`) plus the 34 ms of full-size ops: ceiling about 1.7x per core. With every analysis op ported as well
+  (clipRegion = connected components, the hard one): about 3x.
+- First cut therefore: `tj3DecompressToYUV8` -> upload planes -> h2v2 fancy upsample + jdcolor YCC->BGR (bit-exact) -> grey ->
+  boxDown + colorCast sums + hash box means on the GPU; download only the analysis image (1.3 MB) and the sums; blockiness on the
+  native grey stays CPU unless measured worth it.
+- Cheaper win on the CPU first: clipRegion is 21 ms on the 1536 px image alone (17 % of a picture).
