@@ -13,12 +13,14 @@ Oracle: tests/jpeg_test.sh (ImageMagick writes the fixtures and the golden RGBA,
 
 from std.bit import byte_swap
 from std.memory import bitcast
+from std.utils import IndexList
 
 comptime MAXPX = 1 << 26  # same value as assets.MAXPX (tests/jpeg_test.mojo checks it): 64 M pixels
 comptime P8 = Pointer[UInt8, MutAnyOrigin]
 comptime P16 = Pointer[UInt16, MutAnyOrigin]
 comptime PS = Pointer[Int16, MutAnyOrigin]
 comptime PI = Pointer[Int, MutAnyOrigin]
+comptime GW = 8  # blocks per group: the coefficients of GW consecutive blocks of a row are stored interleaved, k * GW + lane
 
 
 struct Br(Copyable, Movable):
@@ -116,52 +118,92 @@ struct Comp(Copyable, Movable):
     var dc: Int  # Huffman table ids of the current scan
     var ac: Int
     var pred: Int  # DC predictor
-    var q: Int  # offset of the latched quantization table in `qs`, -1 until the first scan
+    var q: Int  # offset of the latched quantization table in `qv`, -1 until the first scan
+    var bwp: Int  # bw padded to whole groups of GW blocks
+    var pw: Int  # plane row stride, bwp * 8
 
 
-def tr(mut w: List[Int], b: Int, st: Int, sh: Int):
-    """libjpeg jidctint 1-D inverse DCT over w[b + k * st], k = 0..7, in place, descaled by `sh` bits."""
-    var z2 = w[b + 2 * st]
-    var z3 = w[b + 6 * st]
-    var z1 = (z2 + z3) * 4433
-    var t2 = z1 - z3 * 15137
-    var t3 = z1 + z2 * 6270
-    var t0 = (w[b] + w[b + 4 * st]) << 13
-    var t1 = (w[b] - w[b + 4 * st]) << 13
+comptime V = SIMD[DType.int32, GW]
+
+
+@always_inline
+def tr8[sh: Int](mut w0: V, mut w1: V, mut w2: V, mut w3: V, mut w4: V, mut w5: V, mut w6: V, mut w7: V):
+    """libjpeg jidctint 1-D inverse DCT of 8 vectors, one lane per block, in place, descaled by `sh` bits."""
+    var z1 = (w2 + w6) * 4433
+    var t2 = z1 - w6 * 15137
+    var t3 = z1 + w2 * 6270
+    comptime s = V(sh)
+    comptime r = V(1 << (sh - 1))  # rounding, folded into t0 and t1
+    var t0 = ((w0 + w4) << 13) + r
+    var t1 = ((w0 - w4) << 13) + r
     var t10 = t0 + t3
     var t13 = t0 - t3
     var t11 = t1 + t2
     var t12 = t1 - t2
-    var a0 = w[b + 7 * st]
-    var a1 = w[b + 5 * st]
-    var a2 = w[b + 3 * st]
-    var a3 = w[b + st]
-    z1 = a0 + a3
-    z2 = a1 + a2
-    z3 = a0 + a2
-    var z4 = a1 + a3
+    z1 = w7 + w1
+    var z2 = w5 + w3
+    var z3 = w7 + w3
+    var z4 = w5 + w1
     var z5 = (z3 + z4) * 9633
-    a0 *= 2446
-    a1 *= 16819
-    a2 *= 25172
-    a3 *= 12299
-    z1 *= -7373
-    z2 *= -20995
-    z3 = z3 * -16069 + z5
-    z4 = z4 * -3196 + z5
-    a0 += z1 + z3
-    a1 += z2 + z4
-    a2 += z2 + z3
-    a3 += z1 + z4
-    var r = 1 << (sh - 1)
-    w[b] = (t10 + a3 + r) >> sh
-    w[b + 7 * st] = (t10 - a3 + r) >> sh
-    w[b + st] = (t11 + a2 + r) >> sh
-    w[b + 6 * st] = (t11 - a2 + r) >> sh
-    w[b + 2 * st] = (t12 + a1 + r) >> sh
-    w[b + 5 * st] = (t12 - a1 + r) >> sh
-    w[b + 3 * st] = (t13 + a0 + r) >> sh
-    w[b + 4 * st] = (t13 - a0 + r) >> sh
+    var a0 = w7 * 2446 + z1 * -7373 + z3 * -16069 + z5
+    var a1 = w5 * 16819 + z2 * -20995 + z4 * -3196 + z5
+    var a2 = w3 * 25172 + z2 * -20995 + z3 * -16069 + z5
+    var a3 = w1 * 12299 + z1 * -7373 + z4 * -3196 + z5
+    w0 = (t10 + a3) >> s
+    w7 = (t10 - a3) >> s
+    w1 = (t11 + a2) >> s
+    w6 = (t11 - a2) >> s
+    w2 = (t12 + a1) >> s
+    w5 = (t12 - a1) >> s
+    w3 = (t13 + a0) >> s
+    w4 = (t13 - a0) >> s
+
+
+@always_inline
+def ld(co: PS, q: Pointer[Int32, MutAnyOrigin], k: Int) -> V:
+    """Dequantized coefficient k of the group (one lane per block); the coefficients read are zeroed for the next row."""
+    var v = (co + k * GW).unsafe_load[width=GW]().cast[DType.int32]() * (q + k * GW).unsafe_load[width=GW]()
+    (co + k * GW).unsafe_store(0, SIMD[DType.int16, GW](0))
+    return v
+
+
+def _tmask() -> IndexList[8 * GW]:
+    """Lane-major (sample j of block b at j * GW + b) to block-major (b * 8 + j)."""
+    var m = IndexList[8 * GW]()
+    for b in range(GW):
+        for j in range(8):
+            m[b * 8 + j] = j * GW + b
+    return m
+
+
+def idct_g(co: PS, q: Pointer[Int32, MutAnyOrigin], ws: Pointer[Int32, MutAnyOrigin], px: P8, pw: Int):
+    """Dequantize and inverse-transform the GW blocks of the group at co into 8 rows of GW * 8 samples at px (row stride pw)."""
+    comptime for j in range(8):
+        var w0, w1, w2, w3 = ld(co, q, j), ld(co, q, 8 + j), ld(co, q, 16 + j), ld(co, q, 24 + j)
+        var w4, w5, w6, w7 = ld(co, q, 32 + j), ld(co, q, 40 + j), ld(co, q, 48 + j), ld(co, q, 56 + j)
+        tr8[11](w0, w1, w2, w3, w4, w5, w6, w7)
+        ws.unsafe_store(j * GW, w0)
+        ws.unsafe_store((8 + j) * GW, w1)
+        ws.unsafe_store((16 + j) * GW, w2)
+        ws.unsafe_store((24 + j) * GW, w3)
+        ws.unsafe_store((32 + j) * GW, w4)
+        ws.unsafe_store((40 + j) * GW, w5)
+        ws.unsafe_store((48 + j) * GW, w6)
+        ws.unsafe_store((56 + j) * GW, w7)
+    comptime for i in range(8):
+        var w0, w1, w2, w3 = ws.unsafe_load[width=GW](i * 8 * GW), ws.unsafe_load[width=GW]((i * 8 + 1) * GW), ws.unsafe_load[width=GW]((i * 8 + 2) * GW), ws.unsafe_load[width=GW]((i * 8 + 3) * GW)
+        var w4, w5, w6, w7 = ws.unsafe_load[width=GW]((i * 8 + 4) * GW), ws.unsafe_load[width=GW]((i * 8 + 5) * GW), ws.unsafe_load[width=GW]((i * 8 + 6) * GW), ws.unsafe_load[width=GW]((i * 8 + 7) * GW)
+        tr8[18](w0, w1, w2, w3, w4, w5, w6, w7)
+        var o0 = (w0 + 128).clamp(0, 255).cast[DType.uint8]()
+        var o1 = (w1 + 128).clamp(0, 255).cast[DType.uint8]()
+        var o2 = (w2 + 128).clamp(0, 255).cast[DType.uint8]()
+        var o3 = (w3 + 128).clamp(0, 255).cast[DType.uint8]()
+        var o4 = (w4 + 128).clamp(0, 255).cast[DType.uint8]()
+        var o5 = (w5 + 128).clamp(0, 255).cast[DType.uint8]()
+        var o6 = (w6 + 128).clamp(0, 255).cast[DType.uint8]()
+        var o7 = (w7 + 128).clamp(0, 255).cast[DType.uint8]()
+        var x = o0.join(o1).join(o2.join(o3)).join(o4.join(o5).join(o6.join(o7)))
+        (px + i * pw).unsafe_store(0, x.shuffle[_tmask()]())
 
 
 def clamp8(v: Int) -> Int:
@@ -189,7 +231,7 @@ struct Jpeg(Movable):
     var mcuy: Int
     var zz: List[Int]
     var qt: List[Int]  # 4 tables x 64, natural order
-    var qs: List[Int]  # latched tables, 64 per component
+    var qv: List[Int32]  # latched tables, 64 per component, each entry repeated GW times (one per lane)
     var lk: List[UInt16]  # per Huffman table (DC 0-3, AC 4-7): 9-bit lookahead (len << 8 | symbol), 0 = longer code
     var mc: List[Int]  # largest code of each length, -1 = none
     var vo: List[Int]  # value index = code + vo[length]
@@ -197,7 +239,7 @@ struct Jpeg(Movable):
     var hdef: List[Bool]
     var comps: List[Comp]
     var co: List[Int16]  # coefficients, natural order, 64 per block; a baseline file keeps one block here and transforms it at once
-    var ws: List[Int]  # IDCT workspace
+    var ws: List[Int32]  # IDCT workspace: 64 vectors of GW lanes
     var pl: List[UInt8]  # decoded planes
 
     def __init__(out self, src: Span[UInt8, _]):
@@ -222,7 +264,7 @@ struct Jpeg(Movable):
         self.mcuy = 0
         self.zz = [0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7, 14, 21, 28, 35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51, 58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63]
         self.qt = List[Int](length=256, fill=1)
-        self.qs = List[Int]()
+        self.qv = List[Int32]()
         self.lk = List[UInt16](length=8 * 512, fill=0)
         self.mc = List[Int](length=8 * 18, fill=-1)
         self.vo = List[Int](length=8 * 18, fill=0)
@@ -230,7 +272,7 @@ struct Jpeg(Movable):
         self.hdef = List[Bool](length=8, fill=False)
         self.comps = List[Comp]()
         self.co = List[Int16]()
-        self.ws = List[Int](length=64, fill=0)
+        self.ws = List[Int32](length=64 * GW, fill=0)
         self.pl = List[UInt8]()
 
     def be16(self, i: Int) -> Int:
@@ -361,7 +403,7 @@ struct Jpeg(Movable):
             if hh < 1 or hh > 4 or vv < 1 or vv > 4 or tq > 3:
                 raise Error("jpeg: bad component " + String(i))
             self.hm, self.vm = max(self.hm, hh), max(self.vm, vv)
-            self.comps.append(Comp(Int(self.d[p]), hh, vv, tq, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1))
+            self.comps.append(Comp(Int(self.d[p]), hh, vv, tq, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, 0, 0))
         self.mcux = (self.w + 8 * self.hm - 1) // (8 * self.hm)
         self.mcuy = (self.h + 8 * self.vm - 1) // (8 * self.vm)
         var nco, npl = 0, 0
@@ -370,13 +412,15 @@ struct Jpeg(Movable):
             c.bw, c.bh = self.mcux * c.h, self.mcuy * c.v
             c.dw, c.dh = (self.w * c.h + self.hm - 1) // self.hm, (self.h * c.v + self.vm - 1) // self.vm
             c.nbx, c.nby = (c.dw + 7) // 8, (c.dh + 7) // 8
+            c.bwp = (c.bw + GW - 1) // GW * GW
+            c.pw = c.bwp * 8
             c.coff, c.poff = nco, npl
-            nco += c.bw * c.bh * 64
-            npl += c.bw * c.bh * 64
+            nco += c.bwp * (c.bh if prog else c.v) * 64  # a baseline file holds one MCU row of blocks at a time
+            npl += c.bwp * c.bh * 64
             self.comps[i] = c^
-        self.co = List[Int16](length=nco if prog else 64, fill=0)
+        self.co = List[Int16](length=nco, fill=0)
         self.pl = List[UInt8](length=npl, fill=0)
-        self.qs = List[Int](length=64 * nf, fill=1)
+        self.qv = List[Int32](length=64 * GW * nf, fill=1)
 
     def sos(mut self, s: Int, e: Int) raises:
         var nf = len(self.comps)
@@ -409,7 +453,8 @@ struct Jpeg(Movable):
             if self.comps[c].q < 0:  # a component keeps the table it first scanned with
                 self.comps[c].q = 64 * c
                 for k in range(64):
-                    self.qs[64 * c + k] = self.qt[self.comps[c].tq * 64 + k]
+                    for l in range(GW):
+                        self.qv[(64 * c + k) * GW + l] = Int32(self.qt[self.comps[c].tq * 64 + k])
             if (not self.prog or (self.ss == 0 and self.ah == 0)) and not self.hdef[self.comps[c].dc]:
                 raise Error("jpeg: DC Huffman table missing")
             if (not self.prog or self.ss > 0) and not self.hdef[self.comps[c].ac]:
@@ -424,31 +469,34 @@ struct Jpeg(Movable):
 
     def scan(mut self, sc: List[Int]) raises:
         var one = len(sc) == 1
-        var total = self.mcux * self.mcuy
+        var nx, ny = self.mcux, self.mcuy
         if one:
-            total = self.comps[sc[0]].nbx * self.comps[sc[0]].nby
-        for m in range(total):
+            nx, ny = self.comps[sc[0]].nbx, self.comps[sc[0]].nby
+        for m in range(nx * ny):
             if self.ri > 0 and m > 0 and m % self.ri == 0:
                 self.restart()
-            if one:
-                var k = self.comps[sc[0]].copy()
-                self.block(sc[0], k.coff + ((m // k.nbx) * k.bw + m % k.nbx) * 64)
-            else:
+            var mx, my = m % nx, m // nx
+            for c in sc:
+                var h, v = (1, 1) if one else (self.comps[c].h, self.comps[c].v)
+                for vy in range(v):
+                    for hx in range(h):
+                        self.block(c, self.boff(c, vy if not self.prog else my * v + vy, mx * h + hx))
+            if not self.prog and mx == nx - 1:  # a baseline row of blocks is complete: transform it
                 for c in sc:
-                    var k = self.comps[c].copy()
-                    for vy in range(k.v):
-                        for hx in range(k.h):
-                            self.block(c, k.coff + ((m // self.mcux * k.v + vy) * k.bw + m % self.mcux * k.h + hx) * 64)
+                    for vy in range(1 if one else self.comps[c].v):
+                        self.flush(c, my if one else my * self.comps[c].v + vy, vy)
 
-    def base(mut self, c: Int) raises:
-        """Baseline block: Huffman-decode into co[0..64], natural order; the bit buffer lives in locals for the whole block."""
+    def boff(self, c: Int, row: Int, bx: Int) -> Int:
+        """Offset in `co` of the first coefficient of block column bx in buffer row `row` of component c."""
+        return self.comps[c].coff + ((row * (self.comps[c].bwp // GW) + bx // GW) * 64 * GW + bx % GW)
+
+    def base(mut self, c: Int, o: Int) raises:
+        """Baseline block: Huffman-decode into the group slot at co[o], coefficient k at o + k * GW; the bit buffer lives in locals."""
         var dc, ac = self.comps[c].dc, self.comps[c].ac
         var br = self.br.copy()
         var co = self.co.unsafe_ptr()
         var zz = self.zz.unsafe_ptr()
         var lk = self.lk.unsafe_ptr()
-        for i in range(8):
-            (co + 8 * i).unsafe_store(0, SIMD[DType.int16, 8](0))
         if br.nb < 32:
             br.refill()
         var e = Int(lk.unsafe_load(dc * 512 + Int(br.acc >> 55)))
@@ -464,7 +512,7 @@ struct Jpeg(Movable):
             br.drop(s)
             df += ((df >> (s - 1)) - 1) & (1 - (1 << s))
         self.comps[c].pred += df
-        co.unsafe_store(0, Int16(self.comps[c].pred))
+        co.unsafe_store(o, Int16(self.comps[c].pred))
         var k = 1
         while k < 64:
             if br.nb < 32:
@@ -487,15 +535,14 @@ struct Jpeg(Movable):
             var v = Int(br.acc >> UInt64(64 - s))
             br.drop(s)
             v += ((v >> (s - 1)) - 1) & (1 - (1 << s))
-            co.unsafe_store(Int(zz.unsafe_load(k)), Int16(v))
+            co.unsafe_store(o + Int(zz.unsafe_load(k)) * GW, Int16(v))
             k += 1
         br.chk()
         self.br = br^
 
     def block(mut self, c: Int, o: Int) raises:
         if not self.prog:
-            self.base(c)
-            self.put(c, o, 0)
+            self.base(c, o)
         elif self.ss == 0:
             if self.ah == 0:
                 var s = self.huff(self.comps[c].dc)
@@ -518,7 +565,7 @@ struct Jpeg(Movable):
                     k += r
                     if k > self.se:
                         raise Error("jpeg: coefficient index past the band")
-                    self.co[o + self.zz[k]] = Int16(self.ext(sz) * (1 << self.al))
+                    self.co[o + self.zz[k] * GW] = Int16(self.ext(sz) * (1 << self.al))
                 elif r == 15:
                     k += 15
                 else:
@@ -546,7 +593,7 @@ struct Jpeg(Movable):
                         self.eobrun += self.get(r)
                     break
                 while k <= self.se:  # step over the nonzero coefficients (refining them) and r zero ones
-                    var i = o + self.zz[k]
+                    var i = o + self.zz[k] * GW
                     var cf = Int(self.co[i])
                     if cf != 0:
                         if self.get(1) == 1 and (cf & p1) == 0:
@@ -559,11 +606,11 @@ struct Jpeg(Movable):
                 if s != 0:
                     if k > self.se:
                         raise Error("jpeg: refinement past the band")
-                    self.co[o + self.zz[k]] = Int16(s)
+                    self.co[o + self.zz[k] * GW] = Int16(s)
                 k += 1
         if self.eobrun > 0:
             while k <= self.se:
-                var i = o + self.zz[k]
+                var i = o + self.zz[k] * GW
                 var cf = Int(self.co[i])
                 if cf != 0 and self.get(1) == 1 and (cf & p1) == 0:
                     self.co[i] = Int16(cf + (p1 if cf >= 0 else m1))
@@ -619,46 +666,28 @@ struct Jpeg(Movable):
         if scans == 0:
             raise Error("jpeg: no image data")
 
-    def put(mut self, c: Int, o: Int, so: Int):
-        """Dequantize and inverse-transform the block whose coefficients are at co[so] into the plane slot of block offset o."""
+    def flush(mut self, c: Int, br: Int, row: Int):
+        """Transform block row br of component c, whose coefficients sit in buffer row `row`, into the plane."""
         var k = self.comps[c].copy()
-        var pw = k.bw * 8
-        var bi = (o - k.coff) // 64
-        var dst = k.poff + (bi // k.bw) * 8 * pw + (bi % k.bw) * 8
-        var qo = k.q if k.q >= 0 else 64 * c
-        var flat = True
-        for i in range(1, 64):
-            if self.co[so + i] != 0:
-                flat = False
-                break
-        if flat:  # DC only: the whole block is one value
-            var v = UInt8(clamp8(((Int(self.co[so]) * self.qs[qo] + 4) >> 3) + 128))
-            for y in range(8):
-                for x in range(8):
-                    self.pl[dst + y * pw + x] = v
-            return
-        for i in range(64):
-            self.ws[i] = Int(self.co[so + i]) * self.qs[qo + i]
-        for i in range(8):
-            tr(self.ws, i, 8, 11)
-        for y in range(8):
-            tr(self.ws, y * 8, 1, 18)
-            for x in range(8):
-                self.pl[dst + y * pw + x] = UInt8(clamp8(self.ws[y * 8 + x] + 128))
+        var co = PS(unsafe_from_address=Int(self.co.unsafe_ptr())) + k.coff + row * k.bwp * 64
+        var q = Pointer[Int32, MutAnyOrigin](unsafe_from_address=Int(self.qv.unsafe_ptr())) + 64 * GW * c
+        var px = P8(unsafe_from_address=Int(self.pl.unsafe_ptr())) + k.poff + br * 8 * k.pw
+        var ws = Pointer[Int32, MutAnyOrigin](unsafe_from_address=Int(self.ws.unsafe_ptr()))
+        for g in range(k.bwp // GW):
+            idct_g(co + g * 64 * GW, q, ws, px + g * GW * 8, k.pw)
 
     def idct(mut self):
         """Progressive files: transform every block once all scans are in, then drop the coefficients."""
         if self.prog:
             for c in range(len(self.comps)):
-                var k = self.comps[c].copy()
-                for bi in range(k.bw * k.bh):
-                    self.put(c, k.coff + bi * 64, k.coff + bi * 64)
+                for br in range(self.comps[c].bh):
+                    self.flush(c, br, br)
         self.co = List[Int16]()
 
     def up(self, c: Int, y: Int, mut o: List[UInt8]):
         """Row y of component c upsampled to full width into o (w + 2 long), libjpeg's fancy upsampling where it has one."""
         var k = self.comps[c].copy()
-        var pw = k.bw * 8
+        var pw = k.pw
         var r0 = k.poff + (y * k.v // self.vm) * pw
         if k.h == self.hm and k.v == self.vm:
             for x in range(self.w):
