@@ -58,10 +58,10 @@ at 50 MP) without changing anything else, so it was reverted.
   ... Page not present` (reproduced on a plain `mojo-cv sharpness ... gpu=1`, with or without a pinned staging buffer, and under
   `triwait`), so there is no allocation-site diff for the GPU path. UNVERIFIED: "no new leak site on the GPU side".
 - **corewait**: the CPU window of the same triwait run read `cpu_s 8`, RSS 1207 to 1615 MB over the window.
-- **wavewait (GPU stalls) and `wavewait budget`: BLOCKED.** The ATT capture (`~/Projects/mojo/wavewait/tools/att-capture.sh`) was
+- **wavewait (GPU stalls) and `wavewait budget`: BLOCKED.** The ATT capture (`$WAVEWAIT/tools/att-capture.sh`; WAVEWAIT is a checkout of the wavewait repo) was
   refused twice by this session's permission classifier ("Destructive or Unwanted Actions": a profiler that attaches to the GPU and kills
   its process group), so no stall table exists and no win is locked by a budget. To do it by hand:
-  `gpu-wait run --shared --vram 4 -- ~/Projects/mojo/wavewait/tools/att-capture.sh $PWD/.work/att/sharp -- $PWD/.bin/mojo-cv sharpness
+  `gpu-wait run --shared --vram 4 -- $WAVEWAIT/tools/att-capture.sh $PWD/.work/att/sharp -- $PWD/.bin/mojo-cv sharpness
   $PWD/.work/att/o.mcv <50 MP grey .mcv> gpu=1 reps=5`, then `tools/from-att.sh`, `wavewait app`, `wavewait budget`.
 - VRAM peak: the sampler (`rocm-smi --showmeminfo vram`, parsed with awk) returned 0 on both runs, a parsing miss: UNVERIFIED. The runtime's
   own reservation is about 0.5 GB per process (mojo-faces `docs/gpu.md`).
@@ -103,7 +103,7 @@ Gates, `tests/stock_gpu.sh` (one gpu-wait job, priority 30):
 - time, `-j 14`, 6 interleaved rounds in one stint: CPU 11.05 10.84 10.98 10.74 11.50 10.54 s (mean 10.94), gpu=1 10.43 9.62
   9.57 9.64 9.62 9.53 s (mean 9.73): 11 % less wall, faster in 6 of 6 rounds. 48 JPEGs in one stockBatch: 1072 against 738 ms.
 
-Measured with the PCIe link at **2.5 GT/s** (this boot; root port 00:01.1, `~/Brain/OS/gpu-pcie-link-downtraining.md`): every
+Measured with the PCIe link at **2.5 GT/s** (this boot; root port 00:01.1, the link-downtraining note in the author's OS notes): every
 host-device copy runs at 3.6 GB/s, so the 32 MB of planes of a 21 MP picture take 8.8 ms, pinned or pageable, against 1.4 ms of
 kernels (ycc 0.51, hash cells 0.59, blockiness rows 0.21, shrink 0.11; rocprofv3 kernel trace). At the 28 GB/s of a full link the
 upload would be about 1.1 ms. Per picture on one core: planes decode 42.9 ms against 50.4 ms for the BGR decode, plus 28.9 ms of

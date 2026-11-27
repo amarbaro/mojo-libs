@@ -14,6 +14,8 @@
 #    and the items with one view are exactly the closes that list `back` as missing; the closes of items with two views list nothing.
 # Embeddings are the CPU runner (MCV_EMBED_ARGS=--cpu: no GPU job; batch and replay share the cache, so the equality is the point).
 # BLOCK (exit 3) when the list, a picture, a binary or the originals are missing; never a skip.
+# Env: MCV_RAW (originals dir; default: the list's grandparent + raw), MCV_EMBED_ARGS (default --cpu),
+#      MCV_STORED_CV (optional stored cv.jsonl to compare against; the comparison is left out when unset).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 list=${1:?usage: tests/capture_replay.sh LIST}
@@ -43,7 +45,7 @@ norm "$st/arrival.jsonl" > "$w/arrival.norm"
 chk "control: the rows as they stood at arrival differ from the batch (the equality can fail)" "! cmp -s $w/arrival.norm $w/batch.norm"
 chg=$(jq -s --slurpfile a "$st/arrival.jsonl" 'map({(.file): .}) | add as $F | [$a[] | select((.view != $F[.file].view) or (.view_rank != $F[.file].view_rank) or (.dup_of != $F[.file].dup_of) or (.group != $F[.file].group))] | length' "$st/final.jsonl")
 echo "logged: $chg of $n rows changed (group, view, view_rank, dup_of) between arrival and item close"
-S=/home/mario/Projects/ebay.de/.work/stock-20261122/cv.jsonl
+S=${MCV_STORED_CV:-}  # optional: a stored cv.jsonl to compare; the line below is skipped when unset
 [ -f "$S" ] && echo "logged: stored ebay.de cv.jsonl equals the batch rows for $(comm -12 <(norm "$S") "$w/batch.norm" | wc -l) of $n shots (other binary or embedding arm: not a gate)"
 # 2 silent
 clean=$(jq -s -r '.[] | select(.hand < 0.02 and (.empty | not)) | .file' "$st/batch/cv.jsonl")

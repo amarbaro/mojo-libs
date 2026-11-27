@@ -71,4 +71,4 @@ vham`).
 
 `tests/stock_group.sh`: a planted disc on cloth with tape (IoU 0.91), the same with a hand at the edge (0.91), an empty cloth (no
 box, empty), a planted shoot of 4 items with a repeated shot and an empty frame, and the nine labelled photos when
-`~/Projects/ebay.de/.work/stock-20261122/work` exists.
+the shoot's `work/` folder (ebay.de repo, not in this tree) exists.

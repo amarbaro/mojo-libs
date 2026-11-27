@@ -16,10 +16,10 @@ Manifest: `tests/fixtures/fs-h2/SHA256SUMS` (`sha256sum -c` clean, 41 files).
 
 - **Stream pairs, JPEG sweep:** complete. Generated, not captured from a camera.
 - **Dialogs:** complete, synthetic. Boxes are the exact draw coordinates, so they are ground truth by construction. Real imkit output is not covered.
-- **Annotated screens:** PARTIAL. Ten real captures were read from `~/Projects/ebay.de/.work/shots/` (existing captures; no new spectacle or CDP capture was taken). Annotations are an auto draft: tesseract `--psm 11` word boxes grouped into lines, role `button` and `clickable` from a label-word list, everything else `text`. Not human-verified. Element counts range 19 to 104 per screen; 0 clickable in 8 of 10. Treat boxes as OCR output, not truth.
+- **Annotated screens:** PARTIAL. Ten real captures were read from the ebay.de repo's `.work/shots/` (existing captures; no new spectacle or CDP capture was taken). Annotations are an auto draft: tesseract `--psm 11` word boxes grouped into lines, role `button` and `clickable` from a label-word list, everything else `text`. Not human-verified. Element counts range 19 to 104 per screen; 0 clickable in 8 of 10. Treat boxes as OCR output, not truth.
   - Privacy: the captures come from the seller account. Only redacted JSON (`<redacted:N>` text, boxes, roles) is committed. Private copies with text stay in `.work/fs-h2/screens/` (gitignored). Also `text_redacted: true` in each JSON.
   - Languages: not recorded per screen. The set covers whatever languages the captures contain; no per-UI-language balance was checked.
-- **Mattes:** SYNTHETIC ONLY. `~/Projects/ebay.de/.work/stock-20261122/work/` holds photos (`IMG_*.jpg`) and no mask labels, so no real labelled matte exists there. The real-matte row remains BLOCK until a labelled set is supplied. Each synthetic matte has a thin class-2 strap and a 2 px boundary band. Empty cloth is covered by two cases.
+- **Mattes:** SYNTHETIC ONLY. the ebay.de repo's `.work/stock-20261122/work/` holds photos (`IMG_*.jpg`) and no mask labels, so no real labelled matte exists there. The real-matte row remains BLOCK until a labelled set is supplied. Each synthetic matte has a thin class-2 strap and a 2 px boundary band. Empty cloth is covered by two cases.
 - **Hashes:** every file in the set is in `SHA256SUMS`.
 
 ## Not covered
@@ -31,7 +31,7 @@ Manifest: `tests/fixtures/fs-h2/SHA256SUMS` (`sha256sum -c` clean, 41 files).
 ## Regenerate
 
 ```
-cd ~/Projects/mojo/mojo-libs/libs/cv && bash tools/fs-h2/gen.sh
+cd libs/cv && bash tools/fs-h2/gen.sh
 ```
 
 The screens step is a one-off OCR pass over private captures. It is not part of `gen.sh`, because `gen.sh` must not read private data.
@@ -75,7 +75,7 @@ Generator: `tools/fs-h2/gen_p2.sh` (run after P0 `gen.sh` and `gen_refs.sh`; ref
 
 ## Not done (BLOCK, not PASS)
 
-- **Nine labelled hand photos (R7):** NOT present. No labelled hand mask set exists in `~/Projects/ebay.de/.work/stock-20261122/` (only unlabelled `IMG_*.jpg` and `box-on-hand.png`). Not fabricated. Gate `H2-p2-hands` writes BLOCK until `.work/fs/labels/hands/` holds the nine labelled photos from Mario.
+- **Nine labelled hand photos (R7):** NOT present. No labelled hand mask set exists in the ebay.de repo's `.work/stock-20261122/` (only unlabelled `IMG_*.jpg` and `box-on-hand.png`). Not fabricated. Gate `H2-p2-hands` writes BLOCK until `.work/fs/labels/hands/` holds the nine labelled photos from Mario.
 - **Annotated screens per UI language (R20a):** not extended. The P0 set is still PARTIAL (auto OCR draft, unverified, no per-language balance recorded). No new captures were taken.
 - **Real labelled mattes:** still synthetic only (P0 status unchanged).
 - Mojo consumption of any P2 fixture: nothing run against `mojocv`. This doc is a fixture spec, not a pass.

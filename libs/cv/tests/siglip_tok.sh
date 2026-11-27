@@ -5,11 +5,11 @@
 # mojo-tokenizers' Unigram on the same tokenizer.json cut down to what it supports: Precompiled charsmap + the double-space Replace
 # (lower case, punctuation and blank folding are `canon` in src/siglabel.mojo; byte_fallback off, so text outside ASCII is out of scope).
 # Planted: texts with one letter changed must differ from the reference ids.
-# Usage: tests/siglip_tok.sh   (SIGLIP_TOK=dir with spiece.model + tokenizer.json, default ~/Models/siglip-base-patch16-224-tok)
+# Usage: SIGLIP_TOK=<dir with spiece.model + tokenizer.json> tests/siglip_tok.sh   (SIGLIP_TOK is required, no default)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 W=.work/siglip; mkdir -p $W .bin
-TOK=${SIGLIP_TOK:-$HOME/Models/siglip-base-patch16-224-tok}; P=${MOJO_PROJECTS:-$HOME/Projects/mojo}
+TOK=${SIGLIP_TOK:?set SIGLIP_TOK to the SigLIP tokenizer dir (spiece.model + tokenizer.json)};P=${MOJO_PROJECTS:-$HOME/Projects/mojo}
 for f in spiece.model tokenizer.json; do [ -f "$TOK/$f" ] || { echo "FAIL input: $TOK/$f missing"; exit 1; }; done
 jq -c '.normalizer.normalizers = [.normalizer.normalizers[4], .normalizer.normalizers[5]] | .model.byte_fallback = false' "$TOK/tokenizer.json" > $W/tokenizer_pre.json
 scripts/build-labels.sh || exit 1

@@ -47,5 +47,5 @@ Methods are the published definitions, implemented from their descriptions; nump
   AI-image detection returned only unrelated mathematics papers (the vault holds no image-quality literature; queries and
   answers in `.work/paperbrain.txt`). BRISQUE and NIQE were not built: both need a pretrained natural-scene model that
   is not in the repo, and the measured pixel numbers already show that technical quality does not separate Adobe's refusals.
-- Calibration data: `~/Projects/gpu-media/doar-bio-stock` (128 uploaded files) with the per-file Adobe refusals in
-  `~/Brain/gpu-media/doar-bio-stock/2026-11-13-adobe-review.md`; rejection reasons from `~/Projects/AssetsHQ/docs/mistakes-extracted.md`.
+- Calibration data: the doar-bio-stock set (128 uploaded files, not in this repo) with the per-file Adobe refusals in
+  the 2026-11-13 Adobe review note (author's private notes); rejection reasons from the AssetsHQ repo's `docs/mistakes-extracted.md`.

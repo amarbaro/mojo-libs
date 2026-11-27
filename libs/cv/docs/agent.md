@@ -12,7 +12,7 @@ against real ground truth: the Android UI tree (`uiautomator dump`) and later th
 Recorder `tools/agent/rec.sh SERIAL OUT N`: for each step a screenshot, the UI tree, one tap on a random clickable node
 (blocked packages: dialer, messages, Play Store, payment; foreground outside the allowlist → back to Settings), then the
 frame after. Output `.work/cv-agent/<phone>/step_NNNN.{png,xml,act}`. Test phone: A70
-(`~/Brain/hardware/Android/2026-11-26-a70-mt6580-profile.md`).
+(the a70 mt6580 profile, 2026-11-26, in the author's private notes).
 
 ## Gates
 

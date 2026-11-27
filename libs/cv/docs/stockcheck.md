@@ -8,7 +8,7 @@ accepted pictures except db067's white-out, and that one only at a cost of false
 `scripts/mcv-stockcheck [-j N] [-c CHUNK] [--sidecar] OUT.jsonl IMAGE|@LIST... [k=v...]` decodes images (ImageMagick,
 EXIF orientation and ICC applied, `scripts/img2mcv.sh`), measures them with the ops below in one parallel Mojo run and
 writes one JSON line per image. `--sidecar` also writes `IMAGE.stockcheck.json` beside each image, for the pass/deny app
-(`~/Projects/mojo/stock-review`) and bulk tagging (`~/Projects/tools/bulk-stock-tag`). An image that cannot be decoded or
+(the stock-review app) and bulk tagging (the bulk-stock-tag tool). An image that cannot be decoded or
 measured gets a line with `"error"` and no numbers; the wrapper fails if result lines differ from the image count.
 
 ## Output line
@@ -47,7 +47,7 @@ oracle has NaN), with planted failures (`tests/stock_planted.sh`) and malformed 
 ## Flags and thresholds
 
 Placed just outside the range of the 46 pictures Adobe accepted from `doar-bio-stock` (128 files, 21 MP, labels from
-`~/Brain/gpu-media/doar-bio-stock/2026-11-13-adobe-review.md`); override with `k=v`.
+the 2026-11-13 Adobe review note in the author's private notes); override with `k=v`.
 
 | flag | rule (default) | accepted flagged | planted caught |
 |---|---|---|---|
@@ -73,7 +73,7 @@ that at 1 of 46 false positives, but 15 of the 82 other files trip it too (dark 
 refusals) are about Adobe's collection, not pixels. Hands, text and face artefacts need a detector (phases 2 and 3).
 Sources: `docs/sources.md`.
 
-## Speed (4202 images, 6.6 GB, 16.2 MP in total; `~/Projects/imports/ComfyUI-v0.43.0/output`, 8 decode and 8 analysis workers)
+## Speed (4202 images, 6.6 GB, 16.2 MP in total; the ComfyUI v0.43.0 output folder, 8 decode and 8 analysis workers)
 
 | step | before | after | what changed |
 |---|---|---|---|
@@ -86,7 +86,7 @@ Decode of the next chunk overlaps the analysis of the current one (`MCV_OVERLAP=
 
 ## Faces (`--faces`, phase 2)
 
-`scripts/mcv-stockcheck --faces ...` runs `.bin/mcv-faces` (`src/stockfaces.mojo`) over the original files: SCRFD from `~/Projects/mojo/mojo-faces`
+`scripts/mcv-stockcheck --faces ...` runs `.bin/mcv-faces` (`src/stockfaces.mojo`) over the original files: SCRFD from the mojo-faces repo
 (imported with `-I`, not copied; `mojo-faces` itself imports `mojocv`, so the stage is a separate binary, not part of the `mojocv` package) through its GPU
 runner under `gpu-wait`. Build: `mojo build -O3 -I src -I ../mojo-faces/src -I ../mojo-imkit/src -I ../mojo-mmap/src src/stockfaces.mojo -o .bin/mcv-faces`
 (`tests/stock_faces.sh` does it). Model: `MCV_FACES_MODEL`, default buffalo_l `det_10g.onnx`.

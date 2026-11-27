@@ -425,7 +425,7 @@ CUSTOM = {"screenParse": c_screenParse, "screenStuck": c_screenStuck, "evmChain"
 def r7():
     """R7 b (frozen-feature matte): the falsifier comes first, on the planted disc and the nine labelled hand photos, before any upsampler
     (plan 8, unknowns). No dense-feature code exists until it can run, so this is the whole gate: BLOCK with every missing precondition."""
-    hands = os.environ.get("FS_HANDS", "/home/mario/Projects/mojo/mojo-libs/.work/fs/labels/hands")
+    hands = os.environ.get("FS_HANDS") or os.path.join(ROOT, "..", "..", ".work", "fs", "labels", "hands")
     why = []
     n = len([f for f in os.listdir(hands) if not f.startswith(".")]) if os.path.isdir(hands) else 0
     if n < 18:  # nine photos and nine masks
