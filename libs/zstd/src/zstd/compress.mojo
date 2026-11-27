@@ -245,6 +245,10 @@ def compress_all(data: Span[UInt8, _], level: Int) raises -> List[UInt8]:
     var d = Int(h.digest() & 0xFFFFFFFF)
     for k in range(4):
         out.append(UInt8((d >> (8 * k)) & 255))
+    if out.capacity() > len(out) + len(out) // 4 + 4096:  # the worst-case reserve is not the caller's to hold
+        var fit = List[UInt8](capacity=len(out))
+        fit.extend(Span(out))
+        return fit^
     return out^
 
 

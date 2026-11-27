@@ -49,4 +49,29 @@ def main() raises:
         ok = ok and len(out) == 0
     if not ok:
         raise Error("api: decompress_into reuse")
+    # a frame's capacity stays near its size, not the worst-case reserve of the input size
+    var rep = List[UInt8](("one repeated sentence. " * 200000).as_bytes())
+    var frame = zstd.compress(rep, 3)
+    if frame.capacity() > len(frame) + len(frame) // 4 + 4096:
+        raise Error("api: compress capacity ", frame.capacity(), " for a ", len(frame), " byte frame")
+    # ZstdReader: the 4 checksum bytes may sit past the end of its 256 KiB input buffer
+    var rnd = List[UInt8](length=262140, fill=0)
+    var x: UInt64 = 88172645463325252
+    for i in range(len(rnd)):
+        x ^= x << 13; x ^= x >> 7; x ^= x << 17
+        rnd[i] = UInt8(x & 255)
+    for cut in range(262120, 262136):
+        var c = zstd.compress(Span(rnd)[:cut], 3)
+        with open(".work/api-split.zst", "w") as f:
+            f.write_bytes(c)
+        var r = zstd.ZstdReader(".work/api-split.zst")
+        var buf = List[UInt8](length=1 << 16, fill=0)
+        var got = 0
+        while True:
+            var k = r.read(buf)
+            if k == 0:
+                break
+            got += k
+        if got != cut:
+            raise Error("api: ZstdReader got ", got, " of ", cut, " bytes (frame ", len(c), ")")
     print("api: ok")
