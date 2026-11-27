@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-safetensors` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/safetensors`, then `mojo run -I src app.mojo`. It also needs mojo-json: put its `src` on another `-I`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-safetensors`. From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/safetensors`, then `mojo run -I src app.mojo`. It also needs mojo-json: put its `src` on another `-I`.
 
 ```mojo
 from std.os import remove
@@ -29,10 +29,10 @@ implementation (`huggingface/safetensors` 0.6.2):
 - reading: 42 files, each accepted or rejected as the reference does
 - writing: rewrites match the reference's bytes
 - checkpoints: three real ones list identically
-321 lines.
 
-Requires Mojo 1.2 on Linux and [mojo-json](https://github.com/amarbaro/mojo-libs/tree/main/libs/json) v0.1.0.
-Builds on Mojo 1.2 nightly too.
+Toolchains: Mojo 1.2 stable on Linux, and the 1.2 nightly, in the weekly [mojo-libs](https://github.com/amarbaro/mojo-libs) matrix. Requires [mojo-json](https://github.com/amarbaro/mojo-libs/tree/main/libs/json) v0.1.0.
+
+**Limits:** the reference cannot write F6, so a written F6 file is checked by read-back only, not against the reference's bytes. Files with two or more metadata keys match the reference in content, not in bytes.
 
 ## What you get
 
