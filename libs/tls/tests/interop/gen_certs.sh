@@ -11,12 +11,13 @@ if [[ -f rsa.crt.pem && -f p384.crt.pem && -f p256.crt.pem && -f ca.pem ]]; then
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -keyout ca.key -out ca.pem \
   -subj "/CN=mojo-tls test CA" -days 30 -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
   -addext "keyUsage=critical,keyCertSign,cRLSign" 2>/dev/null
-printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth\n' > ext.cnf
+# a named section: OpenSSL 4 ignores an -extfile without -extensions, and the leaves then carry no extensions at all
+printf '[leaf]\nsubjectAltName=DNS:localhost,IP:127.0.0.1\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature\nextendedKeyUsage=serverAuth\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n' > ext.cnf
 leaf() { # name, genpkey args...
   local n="$1"; shift
   openssl genpkey "$@" -out "$n.key.pem" 2>/dev/null
   openssl req -new -key "$n.key.pem" -subj "/CN=localhost" -out "$n.csr" 2>/dev/null
-  openssl x509 -req -in "$n.csr" -CA ca.pem -CAkey ca.key -CAcreateserial -days 30 -extfile ext.cnf -out "$n.crt.pem" 2>/dev/null
+  openssl x509 -req -in "$n.csr" -CA ca.pem -CAkey ca.key -CAcreateserial -days 30 -extfile ext.cnf -extensions leaf -out "$n.crt.pem" 2>/dev/null
 }
 leaf p256 -algorithm EC -pkeyopt ec_paramgen_curve:P-256
 leaf p384 -algorithm EC -pkeyopt ec_paramgen_curve:P-384
