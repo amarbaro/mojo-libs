@@ -13,8 +13,9 @@ openssl ecparam -name prime256v1 -genkey -noout -out "$W/ca.key" 2>/dev/null
 openssl req -x509 -new -key "$W/ca.key" -subj /CN=example-ca -days 2 -addext basicConstraints=critical,CA:TRUE -addext keyUsage=critical,keyCertSign -out "$W/ca.pem" 2>/dev/null
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$W/leaf.key" 2>/dev/null
 openssl req -new -key "$W/leaf.key" -subj /CN=localhost -out "$W/leaf.csr" 2>/dev/null
-printf 'subjectAltName=DNS:localhost\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature\nbasicConstraints=CA:FALSE\n' > "$W/ext"
-openssl x509 -req -in "$W/leaf.csr" -CA "$W/ca.pem" -CAkey "$W/ca.key" -CAcreateserial -days 2 -extfile "$W/ext" -out "$W/leaf.pem" 2>/dev/null
+# named section + -extensions: OpenSSL 4 drops an -extfile without one (see tests/interop/gen_certs.sh)
+printf '[leaf]\nsubjectAltName=DNS:localhost\nextendedKeyUsage=serverAuth\nkeyUsage=digitalSignature\nbasicConstraints=CA:FALSE\nsubjectKeyIdentifier=hash\nauthorityKeyIdentifier=keyid\n' > "$W/ext"
+openssl x509 -req -in "$W/leaf.csr" -CA "$W/ca.pem" -CAkey "$W/ca.key" -CAcreateserial -days 2 -extfile "$W/ext" -extensions leaf -out "$W/leaf.pem" 2>/dev/null
 "$W/server" "$W/leaf.pem" "$W/leaf.key" 0 > "$W/server.log" 2>&1 &
 pid=$!; trap 'kill $pid 2>/dev/null || true' EXIT
 for _ in $(seq 50); do grep -q LISTENING "$W/server.log" && break; sleep 0.1; done
