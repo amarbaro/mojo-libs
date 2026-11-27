@@ -37,3 +37,7 @@
 - The zstd v0.4.0 note scaffolded on `monorepo` listed every v0.3.0 commit again: they were pushed as cherry-picks, so
   the originals are not ancestors of the tag, and after the merge-back no `git log` range or `--cherry-pick` filter
   drops them -> `release-note new` runs on the clean branch off `origin/main` that will be pushed, never on `monorepo`.
+- Claude stayed in the Contributors sidebar of seven per-library repos after their histories were rewritten: each kept
+  `refs/pull/1/head`, a merged PR's head commit with the old trailer, and no push can delete a pull ref; the repos were
+  deleted -> a history check runs on a `git clone --mirror` (every ref, `refs/pull/*` included), and a commit that
+  could carry a trailer never goes through a pull request before the history check passes.
