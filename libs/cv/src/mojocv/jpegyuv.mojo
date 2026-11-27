@@ -1,9 +1,50 @@
 # jpegyuv: a plain JPEG decoded only to its planes (Huffman and IDCT in libturbojpeg, tj3DecompressToYUVPlanes8), for the GPU
 # tail of `stockBatch gpu=1` (gpustock.mojo: upsampling, colour, grey and the stock sums on the card). The checks and the
 # "jpeg-fallback" reasons are jpegio.load_jpeg's (same EXIF, ICC and CMYK rules), so a file falls back the same way on both paths.
-# jpegio.mojo belongs to the jpeg-decoder lane; this file only imports from it.
+# jpegio.load_jpeg is pure Mojo now (_jpeg_baseline); the tj3 constants and the EXIF reader live here until this path
+# takes its planes from _jpeg_baseline too.
 from std.ffi import OwnedDLHandle, RTLD
-from mojocv.jpegio import _exif_orientation, _DEEPBIND, _INIT_DECOMPRESS, _P_WIDTH, _P_HEIGHT, _P_COLORSPACE, _CS_CMYK, _CS_YCCK
+
+comptime _DEEPBIND = 0x8
+comptime _INIT_DECOMPRESS = 1
+comptime _P_WIDTH = 5
+comptime _P_HEIGHT = 6
+comptime _P_COLORSPACE = 8
+comptime _CS_CMYK = 3
+comptime _CS_YCCK = 4
+
+
+def _exif_orientation(d: List[UInt8]) -> Int:
+    """EXIF orientation of IFD0 (tag 0x0112), 1 when absent or unreadable."""
+    var p = 2
+    while p + 4 <= len(d) and d[p] == 0xFF:
+        var m = Int(d[p + 1])
+        var ln = Int(d[p + 2]) << 8 | Int(d[p + 3])
+        if m == 0xDA or m == 0xD9:
+            break
+        if m == 0xE1 and ln >= 16 and p + 2 + ln <= len(d) and d[p + 4] == 0x45 and d[p + 5] == 0x78 and d[p + 6] == 0x69 and d[p + 7] == 0x66:
+            var t = p + 10  # TIFF header
+            var le = d[t] == 0x49
+
+            def rd(at: Int, n: Int) capturing -> Int:
+                var v = 0
+                for k in range(n):
+                    v |= Int(d[at + (k if le else n - 1 - k)]) << (8 * k)
+                return v
+
+            var end = p + 2 + ln
+            var ifd = t + rd(t + 4, 4)
+            if ifd + 2 > end:
+                return 1
+            for e in range(rd(ifd, 2)):
+                var q = ifd + 2 + 12 * e
+                if q + 12 > end:
+                    return 1
+                if rd(q, 2) == 0x0112:
+                    return rd(q + 8, 2)
+            return 1
+        p += 2 + ln
+    return 1
 
 comptime _P_SUBSAMP = 4
 comptime _SAMP_444 = 0
