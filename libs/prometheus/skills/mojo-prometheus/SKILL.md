@@ -7,11 +7,15 @@ description: "Expose Prometheus metrics (counters, gauges, histograms, summaries
 
 ```mojo
 from prometheus import Registry
-var r = Registry()
-var lat = r.histogram("infer_seconds", "Inference latency", ["model"])
-var c = r.child(lat, "qwen3")      # keep this id; child() hashes, the hot path should not
-r.observe(lat, c, dt)
-var text = r.exposition()          # HTTP 200, Content-Type: text/plain; version=0.0.4
+
+
+def main() raises:
+    var r = Registry()
+    var lat = r.histogram("infer_seconds", "Inference latency", ["model"])
+    var c = r.child(lat, "qwen3")      # keep this id; child() hashes, the hot path should not
+    var dt = 0.042
+    r.observe(lat, c, dt)
+    var text = r.exposition()          # HTTP 200, Content-Type: text/plain; version=0.0.4
 ```
 
 - Counters: name without `_total` (it is added). Negative `inc` raises.
