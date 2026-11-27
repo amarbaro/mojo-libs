@@ -6,6 +6,8 @@
 
 Shell-style wildcards for Mojo: `fnmatch` and `glob` with the exact behaviour of Python's `fnmatch` and `glob` modules (3.14) on POSIX: `*`, `?`, `[seq]`, `[!seq]` over Unicode codepoints, hidden names skipped, recursive `**`, `root_dir`. Pure Mojo, 365 lines of code (`mojo-loc`).
 
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-glob` (import `glob`). From a clone, compile with `-I src`.
+
 ```mojo
 from glob import glob, fnmatch, Pattern
 

@@ -30,6 +30,8 @@ mojo build -I src -I lib src/quantize.mojo -o quantize
 
 ## Install
 
+`pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-gguf` (import `ggufx`) once published.
+
 Requires Mojo 1.2 (`uv sync` installs it) and Linux x86-64, no linker flags. The tokenizer converter imports
 [mojo-uregex](https://github.com/amarbaro/mojo-libs/tree/main/libs/uregex): `scripts/deps.sh` fetches it into `lib/`, pinned to a commit.
 

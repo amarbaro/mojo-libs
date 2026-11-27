@@ -8,7 +8,7 @@ Base16, Base32, Base32hex and Base64 byte codecs for Mojo. Allocating calls
 return List[Byte]; `_into` calls append to caller-owned buffers. Oracle tests
 compare bytes and full error messages with CPython 3.14.8/3.14.9.
 
-Install with `uv sync`; from a clone compile with `-I src`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-base64` (import `base64`). From a clone, `uv sync`, then compile with `-I src`.
 
 ```mojo
 from base64 import b64encode, b64decode

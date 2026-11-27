@@ -13,7 +13,7 @@ On 50 MB of mixed records (CPU 7, receipts in [docs/benchmarks](docs/benchmarks)
 reader streams at 227.50 MB/s against CPython 85.79 MB/s and `write_all` runs at
 468.2 MB/s against 97.1 MB/s.
 
-Install Mojo 1.2.0, then use `-I src` from this clone:
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-csv` (import `csv`). From a clone, install Mojo 1.2.0 and use `-I src`:
 
 ```sh
 scripts/cap.sh mojo run -I src examples/quickstart.mojo

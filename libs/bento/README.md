@@ -39,7 +39,7 @@ Requires Mojo 1.2 (`uv sync` installs it) and Linux x86-64. bento imports six li
 | Way | Command |
 |---|---|
 | Source path | `scripts/deps.sh` (fetches the six into `lib/`, pinned to a commit), then `mojo build -I path/to/mojo-bento/src -I path/to/mojo-bento/lib app.mojo -o app` |
-| conda | `pixi add mojo-bento` once published; it pulls the six libraries |
+| conda | `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-bento` (import `bento`) once published; it pulls the six libraries |
 
 `examples/quickstart.mojo` answers a request without a socket; `scripts/bento build SERVICE.toml OUT` packages a
 service into one directory ([docs/build.md](docs/build.md)).
