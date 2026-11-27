@@ -2,7 +2,7 @@
 name: mojo-base64
 description: Base16/32/64 byte codecs with CPython 3.14.8/3.14.9 oracle checks.
 metadata:
-  version: 0.1.1
+  version: 0.1.2
 ---
 
 # mojo-base64
