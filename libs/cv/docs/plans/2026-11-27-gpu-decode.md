@@ -42,3 +42,12 @@ clipRegion 21, banding + haze 5, sharpness 4, noise 2, clipping 0 (32). Total ab
   boxDown + colorCast sums + hash box means on the GPU; download only the analysis image (1.3 MB) and the sums; blockiness on the
   native grey stays CPU unless measured worth it.
 - Cheaper win on the CPU first: clipRegion is 21 ms on the 1536 px image alone (17 % of a picture).
+
+## Result of the first GPU cut (2026-11-27, branch cv/gpu-stock)
+Built as planned above (planes from `tj3DecompressToYUVPlanes8`, not coefficients: step 1 was skipped, the IDCT stays in libjpeg).
+Gates in `tests/stock_gpu.sh`: BGR bit-exact to tj3Decompress8 on 28 of 28 JPEGs; `mcv-stockcheck gpu=1` lines byte-identical to the
+CPU path (437 lines); end to end on the 406-image set, `-j 14`, 6 interleaved rounds: CPU mean 10.94 s, gpu=1 mean 9.73 s (-11 %,
+6 of 6 rounds). Measured on a PCIe link trained at 2.5 GT/s (3.6 GB/s copies: 8.8 ms per 21 MP picture of planes, kernels 1.4 ms).
+Detail and what did not pay: `docs/gpu.md`, "stockBatch gpu=1". The CPU path stays the default until the 4,601-image library run
+(step 5) is done. Next lever by the numbers: the analysis-scale ops (32 ms of the 75 ms CPU left per GPU picture, clipRegion 21),
+then a re-measure on a full-speed link.

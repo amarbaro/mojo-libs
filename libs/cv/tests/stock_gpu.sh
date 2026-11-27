@@ -46,7 +46,7 @@ for r in $(seq 1 "$rounds"); do
     t0=$(date +%s.%N)
     scripts/mcv-stockcheck -j 14 "$w/$arm.$r.jsonl" @"$w/set.txt" "${opt[@]}" > "$w/$arm.$r.log" 2>&1 || { cat "$w/$arm.$r.log"; echo "FAIL run: $arm round $r"; exit 1; }
     t1=$(date +%s.%N)
-    echo "TIME round $r $arm $(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.2f", b-a}') s"
+    echo "TIME round $r $arm $(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.2f", b-a}') s load $(cut -d" " -f1 /proc/loadavg)"
   done
   if ! cmp -s "$w/cpu.$r.jsonl" "$w/gpu.$r.jsonl"; then
     diff <(jq -c . "$w/cpu.$r.jsonl") <(jq -c . "$w/gpu.$r.jsonl") | head -6
