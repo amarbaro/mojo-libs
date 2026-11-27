@@ -5,7 +5,7 @@
 <!-- /badges -->
 
 <!-- install -->
-Install: `pixi add mojo-gzip` once published. For now: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/gzip`, then `mojo run -I src app.mojo`.
+Install: `pixi workspace channel add https://conda.modular.com/max https://prefix.dev/amarbaro/amarbaro`, then `pixi add mojo-gzip`. From source: `git clone https://github.com/amarbaro/mojo-libs.git && cd mojo-libs/libs/gzip`, then `mojo run -I src app.mojo`.
 
 ```mojo
 from std.os import remove
