@@ -13,7 +13,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.host import DeviceContext
 from mojocv.mat import Mat
 from mojocv.gpu import U, L, P, THREADS, boxdown_k, _u
-from mojocv.jpegio import Yuv
+from mojocv.jpegyuv import Yuv
 
 comptime RG = 16  # picture rows per thread in ycc_k
 comptime NCELL = 72 + 1024  # dHash 8 x 9 cells, then pHash 32 x 32

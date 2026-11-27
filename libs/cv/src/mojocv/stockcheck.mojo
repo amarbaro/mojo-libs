@@ -9,7 +9,8 @@ from mojocv.mat import Mat, load, save
 from mojocv.core import Args, par_dyn
 from mojocv.imgproc import cvt_color
 from mojocv.regions import clip_region
-from mojocv.jpegio import load_jpeg, load_jpeg_yuv, Yuv
+from mojocv.jpegio import load_jpeg
+from mojocv.jpegyuv import load_jpeg_yuv, Yuv
 from mojocv.gpustock import StockGpu, GpuRes
 
 comptime F64 = DType.float64
