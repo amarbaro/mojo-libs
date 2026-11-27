@@ -11,7 +11,7 @@ read -r w h <<< "$wh"
 # embedded non-sRGB profile (iPhone Display P3): convert to sRGB so values mean the same across cameras
 SRGB=${SRGB_ICC:-/usr/share/ghostscript/iccprofiles/srgb.icc}; icc=()
 desc=$(magick "$in" -format '%[icc:description]' info: 2>/dev/null || true)
-if [ -n "$desc" ] && ! printf '%s' "$desc" | grep -qi 'srgb'; then [ -f "$SRGB" ] || { echo "FAIL icc: $SRGB missing for $desc" >&2; exit 1; }; icc=(-profile "$SRGB"); fi
+if [ -n "$desc" ] && ! printf '%s' "$desc" | grep -i 'srgb' >/dev/null; then [ -f "$SRGB" ] || { echo "FAIL icc: $SRGB missing for $desc" >&2; exit 1; }; icc=(-profile "$SRGB"); fi
  [ -n "${h:-}" ] || { echo "FAIL decode: $in" >&2; exit 1; }
 le32() { printf "\\x$(printf %02x $(($1 & 255)))\\x$(printf %02x $(($1 >> 8 & 255)))\\x$(printf %02x $(($1 >> 16 & 255)))\\x$(printf %02x $(($1 >> 24 & 255)))"; }
 { printf 'MCV1'; le32 "$h"; le32 "$w"; printf "\\x$(printf %02x $ch)\\x00\\x00\\x00"
