@@ -33,5 +33,14 @@ MCV_DECODER=magick scripts/mcv-stockcheck .work/stock_planted_magick.jsonl "${fo
 scripts/mcv-stockcheck .work/stock_planted_vips.jsonl "${four[@]}" > /dev/null
 nums() { jq -c 'select(.file) | del(.dupOf, .flags)' "$1" | sort; }
 if [ "$(nums .work/stock_planted_magick.jsonl)" = "$(nums .work/stock_planted_vips.jsonl)" ]; then echo "PASS decoders: vips and magick numbers identical on 4 images"; else echo "FAIL decoders: vips and magick numbers differ"; fail=1; fi
+# JPEGs decode in-process (jpegio.mojo); a rotated, CMYK or non-sRGB-profile JPEG must take the old path, same numbers
+j=.work/stock_planted_jpeg; rm -rf "$j"; mkdir -p "$j"
+magick tests/fixtures/stock/hd.png -profile /usr/share/ghostscript/iccprofiles/srgb.icc "$j/plain.jpg"
+cp "$j/plain.jpg" "$j/rot6.jpg"; exiftool -q -overwrite_original -Orientation=6 -n "$j/rot6.jpg"
+magick "$j/plain.jpg" -colorspace CMYK "$j/cmyk.jpg"
+magick "$j/plain.jpg" -profile /usr/share/ghostscript/iccprofiles/scrgb.icc "$j/scrgb.jpg"
+MCV_DECODER=magick scripts/mcv-stockcheck "$j/magick.jsonl" "$j"/*.jpg > /dev/null
+scripts/mcv-stockcheck "$j/fast.jsonl" "$j"/*.jpg > /dev/null
+if [ "$(nums "$j/magick.jsonl")" = "$(nums "$j/fast.jsonl")" ] && ! grep -q '"error"' "$j/fast.jsonl"; then echo "PASS jpeg: in-process decode equals magick on plain, rot6, cmyk, scrgb"; else echo "FAIL jpeg: in-process decode differs from magick"; fail=1; fi
 [ "$fail" = 0 ] || exit 1
 echo "PASS stock_planted"

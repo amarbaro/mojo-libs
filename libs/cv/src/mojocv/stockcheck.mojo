@@ -9,6 +9,7 @@ from mojocv.mat import Mat, load, save
 from mojocv.core import Args, par_dyn
 from mojocv.imgproc import cvt_color
 from mojocv.regions import clip_region
+from mojocv.jpegio import load_jpeg
 
 comptime F64 = DType.float64
 comptime PI = 3.141592653589793
@@ -552,6 +553,9 @@ def _load_ppm(path: String) raises -> Mat[DType.uint8]:
 
 
 def _load_any(path: String) raises -> Mat[DType.uint8]:
+    var low = path.lower()
+    if low.endswith(".jpg") or low.endswith(".jpeg"):
+        return load_jpeg(path)
     return _load_ppm(path) if path.endswith(".ppm") else load[DType.uint8](path)
 
 

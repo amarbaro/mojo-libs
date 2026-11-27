@@ -65,3 +65,21 @@ at 50 MP) without changing anything else, so it was reverted.
   $PWD/.work/att/o.mcv <50 MP grey .mcv> gpu=1 reps=5`, then `tools/from-att.sh`, `wavewait app`, `wavewait budget`.
 - VRAM peak: the sampler (`rocm-smi --showmeminfo vram`, parsed with awk) returned 0 on both runs, a parsing miss: UNVERIFIED. The runtime's
   own reservation is about 0.5 GB per process (mojo-faces `docs/gpu.md`).
+
+## Decode first (2026-11-27): where a stock picture's time goes
+
+One core, 21 MP stock JPEGs (6144 x 3456, 4:2:0), mean per picture: `vips autorot` to a PPM file 234 ms, ImageMagick 357 ms,
+`djpeg -dct int` to a file 124 ms, to /dev/null 51 ms, at 1/4 scale 42 ms; the analysis (`stockBatch`, PPM read included) 158 ms.
+So about half of the old decode was writing and reading a 61 MB temp file, and decode was about 60 % of the per-picture work.
+imkit's pure-Mojo decoder measured 328 ms Huffman and 265 ms upsample and colour (12 times libjpeg-turbo): not a base yet.
+
+Step 2, done: `src/mojocv/jpegio.mojo` decodes JPEGs inside `stockBatch` through libturbojpeg (tj3, loaded at run time, BGR out,
+same ISLOW DCT and fancy upsampling as libvips). A non-sRGB profile, CMYK/YCCK, an EXIF orientation other than 1 or a decode error
+raises `jpeg-fallback`, and `scripts/mcv-stockcheck` decodes that file the old way and measures it again.
+Decode and analysis together: 147 ms per picture on one core (about 390 before). `mcv-stockcheck -j 14` on 406 mixed library images
+(170 JPEG, 236 PNG): 27.5 s before, 10.9 s after, result lines byte-identical; `tests/stock_planted.sh` plants plain, rotated, CMYK
+and scRGB-profile JPEGs and wants the ImageMagick numbers.
+
+Step 3, planned: libjpeg-turbo stops after Huffman (`jpeg_read_coefficients`, about 35 ms of the 51), the coefficients go to the GPU
+once, and dequantise, IDCT, upsample, colour and every stock op run there; only the numbers come back. VCN `jpeg_dec` stays unused
+(ring resets). Kept only if it beats this CPU path end to end on the same files with identical lines (rule 34).

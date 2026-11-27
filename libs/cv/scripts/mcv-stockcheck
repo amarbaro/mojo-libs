@@ -38,7 +38,12 @@ split -l "$chunk" -d -a 5 "$work/list" "$work/c."
 decode_chunk() {  # decode the images of chunk file $1 N at a time; a failed decode leaves no file, which the analysis reports as an error line
   local c=$1 id=${1##*.}
   awk -v w="$work" -v id="$id" '{ printf "%s\t%s/%s.%d\n", $0, w, id, NR }' "$c" > "$work/d.$id"
-  xargs -P "$jobs" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r src dst <<< "$1"; "$dec" "$src" "$dst" 2>&1 | head -2 || true' _ {} < "$work/d.$id" || true
+  # JPEGs decode inside stockBatch (src/mojocv/jpegio.mojo, no temp file); MCV_DECODER=magick sends every file the old way
+  local re='[.][jJ][pP][eE]?[gG]\t'; [ "${MCV_DECODER:-}" = magick ] && re='^$'
+  awk -v re="$re" '$0 !~ re' "$work/d.$id" | xargs -P "$jobs" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r src dst <<< "$1"; "$dec" "$src" "$dst" 2>&1 | head -2 || true' _ {} || true
+}
+map_rows() {  # src<TAB>dst on stdin -> stockBatch rows: the decoded file when one exists, else the JPEG itself
+  while IFS=$'\t' read -r src dst; do p=$dst.mcv; [ -f "$dst.ppm" ] && p=$dst.ppm; [ -f "$p" ] || p=$src; printf '%s\t%s\t%s\n' "$p" "$src" "$(stat -c %s "$src")"; done
 }
 chunks=("$work"/c.?????)
 decode_chunk "${chunks[0]}"
@@ -46,8 +51,17 @@ for i in "${!chunks[@]}"; do
   id=${chunks[$i]##*.}
   next=""; [ $((i + 1)) -lt ${#chunks[@]} ] && next=${chunks[$((i + 1))]}
   dpid=""; [ -n "$next" ] && [ "${MCV_OVERLAP:-1}" = 1 ] && { decode_chunk "$next" & dpid=$!; }  # the next chunk decodes while this one is analysed
-  while IFS=$'\t' read -r src dst; do p=$dst.mcv; [ -f "$dst.ppm" ] && p=$dst.ppm; printf '%s\t%s\t%s\n' "$p" "$src" "$(stat -c %s "$src")"; done < "$work/d.$id" > "$work/m.$id"
+  map_rows < "$work/d.$id" > "$work/m.$id"
   "$bin" stockBatch "$work/p.$id.jsonl" "$work/m.$id" "${opts[@]}" || { echo "FAIL analysis: chunk $id" >&2; exit 1; }
+  # a JPEG the in-process decoder declines (non-sRGB profile, CMYK, EXIF rotation) is decoded the old way and measured again
+  jq -r 'select((.error // "") | startswith("jpeg-fallback")) | .file' "$work/p.$id.jsonl" > "$work/f.$id"
+  if [ -s "$work/f.$id" ]; then
+    awk -F'\t' 'NR == FNR { f[$1] = 1; next } $1 in f' "$work/f.$id" "$work/d.$id" > "$work/fd.$id"
+    xargs -P "$jobs" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r src dst <<< "$1"; "$dec" "$src" "$dst" 2>&1 | head -2 || true' _ {} < "$work/fd.$id" || true
+    map_rows < "$work/fd.$id" > "$work/fm.$id"
+    "$bin" stockBatch "$work/fp.$id.jsonl" "$work/fm.$id" "${opts[@]}" || { echo "FAIL analysis: fallback of chunk $id" >&2; exit 1; }
+    jq -c --slurpfile r "$work/fp.$id.jsonl" '($r | map({(.file): .}) | add) as $m | $m[.file] // .' "$work/p.$id.jsonl" > "$work/p2.$id" && mv "$work/p2.$id" "$work/p.$id.jsonl"
+  fi
   cat "$work/p.$id.jsonl" >> "$work/all.jsonl"
   rm -f "$work/$id".*.ppm "$work/$id".*.mcv
   if [ -n "$dpid" ]; then wait "$dpid"; elif [ -n "$next" ]; then decode_chunk "$next"; fi
