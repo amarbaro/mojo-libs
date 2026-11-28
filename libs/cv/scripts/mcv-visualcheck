@@ -4,6 +4,7 @@
 # object fill and a flat-shaded-primitive score (src/mojocv/visualcheck.mojo, docs/visualcheck.md). LIST.tsv rows are
 # `path<TAB>kind` (kind: view|image|texture|frame, copied to the output). Images decode N at a time (default 8) with
 # scripts/decode-stock.sh, CHUNK images (default 96) per analysis run, then the decoded copies are deleted.
+# MCV_OP=viewSig runs the duplicate signature (src/mojocv/dupsig.mojo) over the same batches: one TSV row per picture, not JSON.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 bin=${MCV_BIN:-$root/.bin/mojo-cv}
@@ -28,7 +29,7 @@ for c in "$work"/c.?????; do
     p=$dst.mcv; [ -f "$dst.ppm" ] && p=$dst.ppm; [ -f "$p" ] || p=$src
     printf '%s\t%s\t%s\n' "$p" "$src" "$kind"
   done < "$work/d.$id" > "$work/m.$id"
-  "$bin" visualCheck "$work/p.$id" "$work/m.$id" "$@" || { echo "FAIL analysis: chunk $id" >&2; exit 1; }
+  "$bin" "${MCV_OP:-visualCheck}" "$work/p.$id" "$work/m.$id" "$@" || { echo "FAIL analysis: chunk $id" >&2; exit 1; }
   cat "$work/p.$id" >> "$out.tmp"
   rm -f "$work/$id".*.ppm "$work/$id".*.mcv
 done

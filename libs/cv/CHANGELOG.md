@@ -2,6 +2,7 @@
 
 Full notes in `docs/releases/`. Newest first. Format: the release-note template.
 
+- Unreleased: `viewSig` and `sigPairs`: duplicate signatures of 3D assets from the fitted ortho view (silhouette and shading grids, colour apart) and the geometry numbers; rules `view`, `geo`, `look`, [docs/dupsig.md](docs/dupsig.md)
 - Unreleased: `visualCheck` and `scripts/mcv-visualcheck`: colour spread, inner detail, silhouette complexity, fill and a flat-shaded-primitive score per picture, with a verdict for 3D listing pictures (test half: bad precision 0.96, recall 0.88 on store previews), [docs/visualcheck.md](docs/visualcheck.md)
 - Unreleased: `screenParse` reads each text line with `screen-ocr` (RapidOCR) instead of tesseract; `lang=` is accepted and ignored. fs-screen 22/22.
 - Unreleased: `hyper` ops from 2023-2026 face and micro-expression papers (facial flow decomposition, optical strain, onset flow, EPE, Sobel-masked flow loss, downscale protocol, landmark homography, equirectangular remap, LPQ, Eulerian magnification), [docs/hyper.md](docs/hyper.md)
