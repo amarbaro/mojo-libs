@@ -30,6 +30,12 @@ struct BitC(Movable):
         self.pos += nb
 
     @always_inline
+    def add_code(mut self, v: Int, nb: Int):
+        """add() for a value known to fit nb bits."""
+        self.cont |= UInt64(v) << UInt64(self.pos)
+        self.pos += nb
+
+    @always_inline
     def flush(mut self):
         var n = self.pos >> 3
         put64(self.dst, self.op, self.cont)
@@ -67,6 +73,11 @@ def normalize(count: List[Int], total: Int, nsym: Int, log: Int, low_prob: Bool,
         left -= p
         if count[s] > count[best] or norm[best] <= 0:
             best = s
+    if left == 0:
+        return True
+    var share = List[Int](length=nsym, fill=0)  # ideal probability, 10 fractional bits
+    for s in range(nsym):
+        share[s] = count[s] * size * 1024 // total
     while left != 0:
         # give or take one unit where it costs least: the symbol whose share is furthest from its probability
         var pick = -1
@@ -74,8 +85,7 @@ def normalize(count: List[Int], total: Int, nsym: Int, log: Int, low_prob: Bool,
         for s in range(nsym):
             if norm[s] <= 0:
                 continue
-            var share = count[s] * size * 1024 // total  # ideal probability, 10 fractional bits
-            var diff = share - norm[s] * 1024
+            var diff = share[s] - norm[s] * 1024
             if left > 0:
                 if pick < 0 or diff > score:
                     pick = s
@@ -308,21 +318,32 @@ struct HufC(Copyable, Movable):
 
     def build(mut self, count: List[Int], max_bits: Int) -> Bool:
         """Lengths from counts by Huffman's algorithm, limited to max_bits; False with fewer than two symbols."""
-        var syms = List[Int]()
+        var syms = List[Int](capacity=256)
+        var top = 0
         for s in range(256):
             if count[s] > 0:
                 syms.append(s)
+                top = max(top, count[s])
         var n = len(syms)
         if n < 2:
             return False
-        # insertion sort by (count, symbol): n <= 256
-        for i in range(1, n):
-            var x = syms[i]
-            var j = i - 1
-            while j >= 0 and count[syms[j]] > count[x]:
-                syms[j + 1] = syms[j]
-                j -= 1
-            syms[j + 1] = x
+        # by (count, symbol): a stable radix sort on the count, a byte per pass, of symbols already in order
+        var tmp = List[Int](length=n, fill=0)
+        var bk = List[Int](length=257, fill=0)
+        var shift = 0
+        while (top >> shift) > 0:
+            for d in range(257):
+                bk[d] = 0
+            for i in range(n):
+                bk[((count[syms[i]] >> shift) & 255) + 1] += 1
+            for d in range(256):
+                bk[d + 1] += bk[d]
+            for i in range(n):
+                var d = (count[syms[i]] >> shift) & 255
+                tmp[bk[d]] = syms[i]
+                bk[d] += 1
+            swap(syms, tmp)
+            shift += 8
         var w = List[Int](length=2 * n, fill=0)
         var parent = List[Int](length=2 * n, fill=0)
         for i in range(n):
@@ -331,17 +352,18 @@ struct HufC(Copyable, Movable):
         var qj = n
         var made = n
         for _ in range(n - 1):
-            var picks = List[Int](length=2, fill=0)
-            for k in range(2):
+            var sum = 0
+            for _ in range(2):
+                var pick: Int
                 if qi < n and (qj >= made or w[qi] <= w[qj]):
-                    picks[k] = qi
+                    pick = qi
                     qi += 1
                 else:
-                    picks[k] = qj
+                    pick = qj
                     qj += 1
-            w[made] = w[picks[0]] + w[picks[1]]
-            parent[picks[0]] = made
-            parent[picks[1]] = made
+                sum += w[pick]
+                parent[pick] = made
+            w[made] = sum
             made += 1
         var depth = List[Int](length=2 * n, fill=0)
         for i in range(made - 2, -1, -1):
@@ -450,15 +472,21 @@ struct HufC(Copyable, Movable):
     def encode(self, src: ImmPointer[UInt8, _], n: Int, dst: MutPointer[UInt8, _]) -> Int:
         """One backwards-written stream of the n symbols; returns its size."""
         var b = BitC(dst)
+        var val = self.val.unsafe_ptr()
+        var nb = self.nb.unsafe_ptr()
         var i = n - 1
-        while i >= 0:
-            var k = 0
-            while k < 4 and i >= 0:
-                var s = Int(src[unsafe_offset=i])
-                b.add(self.val[s], self.nb[s])
-                i -= 1
-                k += 1
+        # five codes of 11 bits at most and the 7 bits a flush may leave fit the 64-bit container
+        while i >= 4:
+            comptime for k in range(5):
+                var s = Int(src[unsafe_offset=i - k])
+                b.add_code(val[unsafe_offset=s], nb[unsafe_offset=s])
             b.flush()
+            i -= 5
+        while i >= 0:
+            var s = Int(src[unsafe_offset=i])
+            b.add_code(val[unsafe_offset=s], nb[unsafe_offset=s])
+            i -= 1
+        b.flush()
         return b.close()
 
     def encode4(self, src: ImmPointer[UInt8, _], n: Int, dst: MutPointer[UInt8, _]) -> Int:

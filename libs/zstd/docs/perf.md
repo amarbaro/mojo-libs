@@ -91,6 +91,49 @@ slower per output byte than the old one in our decoder (1523 -> 1400 MB/s, best 
 Left at level 9: 10 to 14% on real data, spread over the candidate loads of the row search (cache misses on match
 positions, the same in libzstd) and the code around it; no single cause stood out in `perf annotate`.
 
+## Throughput on arm64, levels 1, 3 and 9
+
+Source: the five inputs above; ours is a best-of-12 loop over `zstd.compress` (best of 4 at level 9), libzstd 1.5.7 is
+`ZSTD_compress2` through the library with `ZSTD_c_checksumFlag` on, so both sides write the same frame (`zstd -b` leaves
+the checksum out, which costs our side about 10% on real data and more on the random and repeated rows). MB/s of input,
+one thread, Apple M4, Mojo 1.3.0.dev2026112605, best of three alternating rounds. "before" is v0.4.1.
+
+| input | level | before | after | libzstd | before / libzstd | after / libzstd |
+|---|---|---|---|---|---|---|
+| random | 1 | 7878 | 8398 | 7442 | 1.05 | 1.12 |
+| random | 3 | 6507 | 6956 | 7825 | 0.83 | 0.88 |
+| random | 9 | 5888 | 5827 | 4816 | 1.22 | 1.20 |
+| repeated sentence | 1 | 11691 | 12340 | 13135 | 0.89 | 0.93 |
+| repeated sentence | 3 | 8742 | 8971 | 9512 | 0.91 | 0.94 |
+| repeated sentence | 9 | 1596 | 1787 | 2075 | 0.76 | 0.86 |
+| executable | 1 | 544 | 749 | 870 | 0.62 | 0.86 |
+| executable | 3 | 383 | 478 | 554 | 0.69 | 0.86 |
+| executable | 9 | 128 | 136 | 138 | 0.92 | 0.98 |
+| C sources | 1 | 437 | 559 | 611 | 0.71 | 0.91 |
+| C sources | 3 | 368 | 416 | 452 | 0.81 | 0.92 |
+| C sources | 9 | 106 | 109 | 109 | 0.97 | 1.00 |
+| JSON | 1 | 893 | 1031 | 1163 | 0.76 | 0.88 |
+| JSON | 3 | 870 | 949 | 1024 | 0.84 | 0.92 |
+| JSON | 9 | 159 | 162 | 164 | 0.96 | 0.98 |
+
+The same build on x86-64 (16-thread desktop, Mojo 1.2.0, same harness): executable 0.48 -> 0.75 at level 1 and
+0.62 -> 0.80 at level 3, C sources 0.59 -> 0.80 and 0.71 -> 0.89, JSON 0.62 -> 0.85 and 0.69 -> 0.91; level 9 and
+the random and repeated rows within 5% of before (repeated sentence at level 3: 3448 -> 3294 MB/s, 1.13x libzstd).
+
+What moved it: the double-fast loop is libzstd 1.5.7's (the long hash of the next position taken early, a long match
+looked for at the next position after a short one, step growth every 256 bytes), and it and the fast loop are compiled
+once per hash width; the Huffman builder sorts its symbols by radix instead of by insertion (it was 5% of level 3 on
+the executable); Huffman streams take five codes per flush from raw tables; the sequence coder moves its FSE tables
+instead of copying them three times per block, and `normalize` computes each symbol's share once; `store` is inlined
+into the finders. Frames are byte for byte those of v0.4.1 except at levels 3 and 4 (the new double-fast loop), where
+they are 0.2 to 2.6% smaller: executable 3439694 -> 3434202, C sources 747156 -> 739387, JSON 1629642 -> 1587221 at
+level 3 (libzstd: 3441016, 739585, 1594838).
+
+Tried and dropped for no gain: libzstd's select of a safe address in place of the index test before a candidate is
+read (plain branches were 0 to 2% faster on the M4), a `store` variant for repeat offsets, one interleaved sequence
+array instead of three. What remains in the double-fast loop sits at its three exits, the branch taken when a match
+is found.
+
 ## Size against libzstd, every level
 
 2 MiB of the seeded text, `zstd.compress(data, level)` against Python `zstandard` at the same level (both decode to the
