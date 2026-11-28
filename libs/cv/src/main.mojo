@@ -9,6 +9,7 @@ from mojocv.granulo import run as run_granulo
 from mojocv.stockcheck import run as run_stockcheck
 from mojocv.stockphoto import run as run_stockphoto
 from mojocv.stockgroup import run as run_stockgroup
+from mojocv.visualcheck import run as run_visualcheck
 from mojocv.gpu import run as run_gpu
 from mojocv.regions import run as run_regions
 from mojocv.ruler import run as run_ruler
@@ -20,7 +21,7 @@ from mojocv.ground import run as run_ground
 
 def main() raises:
     var a = Args()
-    var ok = run_gpu(a) or run_core(a) or run_imgproc(a) or run_features(a) or run_video(a) or run_calib3d(a) or run_granulo(a) or run_stockcheck(a) or run_stockphoto(a) or run_stockgroup(a) or run_regions(a) or run_ruler(a) or run_hyper(a) or run_calib(a) or run_embindex(a) or run_ground(a)
+    var ok = run_gpu(a) or run_core(a) or run_imgproc(a) or run_features(a) or run_video(a) or run_calib3d(a) or run_granulo(a) or run_stockcheck(a) or run_stockphoto(a) or run_stockgroup(a) or run_visualcheck(a) or run_regions(a) or run_ruler(a) or run_hyper(a) or run_calib(a) or run_embindex(a) or run_ground(a)
     if not ok:
         var v = List[String]()
         var av = argv()

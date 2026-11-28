@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# mcv-visualcheck [-j N] [-c CHUNK] OUT.jsonl LIST.tsv [k=v...]
+# "Just a shape" check: one JSON line per picture with colour spread, detail inside the object mask, silhouette complexity,
+# object fill and a flat-shaded-primitive score (src/mojocv/visualcheck.mojo, docs/visualcheck.md). LIST.tsv rows are
+# `path<TAB>kind` (kind: view|image|texture|frame, copied to the output). Images decode N at a time (default 8) with
+# scripts/decode-stock.sh, CHUNK images (default 96) per analysis run, then the decoded copies are deleted.
+set -euo pipefail
+root=$(cd "$(dirname "$0")/.." && pwd)
+bin=${MCV_BIN:-$root/.bin/mojo-cv}
+dec=$root/scripts/decode-stock.sh
+jobs=8 chunk=96
+while [ $# -gt 0 ]; do
+  case $1 in -j) jobs=$2; shift 2;; -c) chunk=$2; shift 2;; *) break;; esac
+done
+[ $# -ge 2 ] || { echo "FAIL usage: mcv-visualcheck [-j N] [-c CHUNK] OUT.jsonl LIST.tsv [k=v...]" >&2; exit 2; }
+[ -x "$bin" ] || { echo "FAIL setup: $bin missing, build with: mojo build -O3 -I src src/main.mojo -o .bin/mojo-cv" >&2; exit 1; }
+out=$(realpath -m -- "$1"); list=$(realpath -- "$2"); shift 2
+work=$root/.work/visualcheck.$$; mkdir -p "$work"
+trap 'rm -rf "$work"' EXIT
+export dec MAGICK_THREAD_LIMIT=1
+split -l "$chunk" -d -a 5 "$list" "$work/c."
+: > "$out.tmp"
+for c in "$work"/c.?????; do
+  id=${c##*.}
+  awk -F'\t' -v w="$work" -v id="$id" '{ printf "%s\t%s/%s.%d\t%s\n", $1, w, id, NR, $2 }' "$c" > "$work/d.$id"
+  cut -f1,2 "$work/d.$id" | xargs -P "$jobs" -d '\n' -I{} bash -c 'IFS=$'"'"'\t'"'"' read -r src dst <<< "$1"; "$dec" "$src" "$dst" 2>&1 | head -2 >&2 || true' _ {} || true
+  while IFS=$'\t' read -r src dst kind; do   # a failed decode leaves no file: the row keeps the source path and the analysis reports the error
+    p=$dst.mcv; [ -f "$dst.ppm" ] && p=$dst.ppm; [ -f "$p" ] || p=$src
+    printf '%s\t%s\t%s\n' "$p" "$src" "$kind"
+  done < "$work/d.$id" > "$work/m.$id"
+  "$bin" visualCheck "$work/p.$id" "$work/m.$id" "$@" || { echo "FAIL analysis: chunk $id" >&2; exit 1; }
+  cat "$work/p.$id" >> "$out.tmp"
+  rm -f "$work/$id".*.ppm "$work/$id".*.mcv
+done
+[ "$(wc -l < "$out.tmp")" -eq "$(wc -l < "$list")" ] || { echo "FAIL rows: $(wc -l < "$out.tmp") result lines for $(wc -l < "$list") pictures" >&2; exit 1; }
+mv "$out.tmp" "$out"
