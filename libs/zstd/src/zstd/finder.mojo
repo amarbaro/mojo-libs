@@ -230,6 +230,8 @@ def hc_insert(mut e: Enc, p: ImmPointer[UInt8, _], upto: Int):
         ct[unsafe_offset=(i + boff) & cmask] = ht[unsafe_offset=h]
         ht[unsafe_offset=h] = UInt32(i + boff)
         i += 1
+        if e.skip:
+            break
     e.upd = max(e.upd, upto)
 
 

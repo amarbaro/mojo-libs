@@ -545,6 +545,7 @@ def lazy[bt: Bool](mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int, de
     var maxd = 1 << e.wlog
     if start + e.boff == 0:
         ip += 1
+    e.skip = False
     while ip < ilimit:
         var ml = 0
         var off = 0  # distance of the best match; 0 stands for the first repeat offset
@@ -556,6 +557,7 @@ def lazy[bt: Bool](mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int, de
                 e.store(p, anchor, st - anchor, r1, ml)
                 ip = st + ml
                 anchor = ip
+                e.skip = False
                 while ip <= ilimit and ip - e.r1 >= max(0, ip - maxd) and r32(p, ip) == r32(p, ip - e.r1):
                     var r2 = e.r1
                     var ml2 = count(p, ip + 4, ip + 4 - r2, end) + 4
@@ -570,7 +572,11 @@ def lazy[bt: Bool](mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int, de
             st = ip
             off = o2
         if ml < 4:
-            ip += ((ip - anchor) >> 8) + 1
+            # libzstd's lazy skipping: past 2 KiB without a match the step exceeds 8 and only searched
+            # positions are inserted, until the next match
+            var step = ((ip - anchor) >> 8) + 1
+            ip += step
+            e.skip = step > 8
             continue
         if depth >= 1:
             while ip < ilimit:
@@ -622,6 +628,7 @@ def lazy[bt: Bool](mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int, de
         e.store(p, anchor, st - anchor, dist, ml)
         ip = st + ml
         anchor = ip
+        e.skip = False
         while ip <= ilimit and ip - e.r1 >= max(0, ip - maxd) and r32(p, ip) == r32(p, ip - e.r1):
             var r2 = e.r1
             var ml3 = count(p, ip + 4, ip + 4 - r2, end) + 4

@@ -97,6 +97,7 @@ struct Enc(Movable):
     var ct: List[UInt32]
     var boff: Int  # table index of buffer position 0
     var upd: Int  # chain tables are filled up to this position
+    var skip: Bool  # lazy skipping: only the searched positions enter the hash chain
     var r0: Int
     var r1: Int
     var r2: Int
@@ -139,6 +140,7 @@ struct Enc(Movable):
         self.ct = List[UInt32]()
         self.boff = 0
         self.upd = 0
+        self.skip = False
         self.r0 = 1
         self.r1 = 4
         self.r2 = 8
