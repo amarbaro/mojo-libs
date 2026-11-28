@@ -98,6 +98,11 @@ struct Enc(Movable):
     var boff: Int  # table index of buffer position 0
     var upd: Int  # chain tables are filled up to this position
     var skip: Bool  # lazy skipping: only the searched positions enter the hash chain
+    var rlog: Int  # row finder: log2 of the entries per row of ht (4..6); 0 = hash chain
+    var tt: List[UInt8]  # row finder: per row its head (byte 0) and one tag byte per entry
+    var ha: Int  # row finder: first entry of ht and first byte of tt that start a cache line
+    var ta: Int
+    var hcache: List[UInt32]  # row finder: hashes of the 8 positions from upd on, by position mod 8
     var r0: Int
     var r1: Int
     var r2: Int
@@ -141,6 +146,11 @@ struct Enc(Movable):
         self.boff = 0
         self.upd = 0
         self.skip = False
+        self.rlog = 0
+        self.tt = List[UInt8]()
+        self.ha = 0
+        self.ta = 0
+        self.hcache = List[UInt32](length=8, fill=0)
         self.r0 = 1
         self.r1 = 4
         self.r2 = 8
