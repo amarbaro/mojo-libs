@@ -539,6 +539,12 @@ def _find[fm: Int](mut e: Enc, p: ImmPointer[UInt8, _], ip: Int, end: Int, mut o
 
 
 @always_inline
+def _ob(off: Int) -> Int:
+    """libzstd's ZSTD_highbit32(offBase), the offset cost in its lazy gains: 0 for the repeat offset (off 0)."""
+    return hb(off + 3) if off > 0 else 0
+
+
+@always_inline
 def _unskip[fm: Int](mut e: Enc, p: ImmPointer[UInt8, _], lim: Int):
     """A match ends libzstd's lazy skipping; the row finder's hash cache restarts at the next position to enter."""
     comptime if fm >= 4:
@@ -594,18 +600,17 @@ def lazy[fm: Int](mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int, dep
         if depth >= 1:
             while ip < ilimit:
                 ip += 1
-                if off > 0 and ip - r1 >= max(0, ip - maxd) and r32(p, ip) == r32(p, ip - r1):
+                if ip - r1 >= max(0, ip - maxd) and r32(p, ip) == r32(p, ip - r1):
                     var mr = count(p, ip + 4, ip + 4 - r1, end) + 4
                     var g2 = mr * 3
-                    var gain1 = ml * 3 - hb(off + 3) + 1
+                    var gain1 = ml * 3 - _ob(off) + 1
                     if mr >= 4 and g2 > gain1:
                         ml = mr
                         off = 0
                         st = ip
                 var o3 = 0
                 var m3 = _find[fm](e, p, ip, end, o3)
-                var cur = off if off > 0 else r1
-                var g1 = ml * 4 - hb(cur + 3) + 4
+                var g1 = ml * 4 - _ob(off) + 4
                 var g3 = m3 * 4 - hb(o3 + 3)
                 if m3 >= 4 and g3 > g1:
                     ml = m3
@@ -614,19 +619,18 @@ def lazy[fm: Int](mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int, dep
                     continue
                 if depth == 2 and ip < ilimit:
                     ip += 1
-                    if off > 0 and ip - r1 >= max(0, ip - maxd) and r32(p, ip) == r32(p, ip - r1):
+                    if ip - r1 >= max(0, ip - maxd) and r32(p, ip) == r32(p, ip - r1):
                         var mr = count(p, ip + 4, ip + 4 - r1, end) + 4
                         var g2 = mr * 4
-                        var gg1 = ml * 4 - hb(off + 3) + 1
+                        var gg1 = ml * 4 - _ob(off) + 1
                         if mr >= 4 and g2 > gg1:
                             ml = mr
                             off = 0
                             st = ip
                     var o4 = 0
                     var m4 = _find[fm](e, p, ip, end, o4)
-                    var cur2 = off if off > 0 else r1
                     var g4 = m4 * 4 - hb(o4 + 3)
-                    var g1b = ml * 4 - hb(cur2 + 3) + 7
+                    var g1b = ml * 4 - _ob(off) + 7
                     if m4 >= 4 and g4 > g1b:
                         ml = m4
                         off = o4
