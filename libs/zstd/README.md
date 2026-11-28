@@ -70,6 +70,9 @@ Level 3, one thread, against `zstd -b3 --single-thread` (libzstd 1.5.7), `script
 | 2.9 MB C sources | 369 / 481 (0.77) | 1710 / 2157 (0.79) |
 | 12 MB JSON lines | 281 / 349 (0.80) | 1235 / 1507 (0.82) |
 
+Level 9 against `zstd -b9 --single-thread`, same inputs: compress 3615 / 3671 (0.98), 1878 / 1773 (1.06), 83 / 96
+(0.86), 115 / 127 (0.90), 80 / 88 (0.90) MB/s, output within 0.1% of libzstd's size.
+
 Best of two runs on a shared box (load 7 to 9), so read the ratios. Both sides reuse their output buffer (ours through
 `decompress_into`). `zstd -b` writes frames without a checksum, ours carry one and verify it (XXH64, 24 GB/s), which
 is most of the gap on the random and repeated rows. Output size is within 5% of libzstd's at every level (worst

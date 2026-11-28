@@ -55,7 +55,10 @@ def main() raises:
   declared content size in one step (at most 64 MiB past what is decoded so far), so a lying header stays cheap.
 - `decompress` allocates a new output per call; in a loop use `decompress_into(data, out)` with one `out`. After an
   error `out` is empty.
-- Timing: `scripts/bench31.sh` (level 3 against `zstd -b3`, 5 inputs) and `scripts/bench.sh` (32 MiB text, levels).
+- Timing: `scripts/bench31.sh` (5 inputs against `zstd -b<level>`; `LEVELS="3 9"` picks the levels, `ZSTD=` the CLI,
+  level 3 and the system `zstd` by default) and `scripts/bench.sh` (32 MiB text, levels).
+- Level 9 compresses at 0.86 to 1.06x of libzstd's speed on inputs over 16 KiB (row match finder, levels 5 to 12);
+  13 and up cost about 2x its time.
 
 ## Gate
 

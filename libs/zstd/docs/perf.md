@@ -54,6 +54,43 @@ What moved it: decode output sized from the frame content size (no growth copies
 without entropy work plus one output reservation, unchecked split fingerprints, 16-byte literal and match copies in
 the decoder and in the sequence store, four Huffman streams decoded side by side.
 
+## Throughput, level 9 (issue #34)
+
+Source: `LEVELS="3 9" ZSTD=<1.5.7 CLI> scripts/bench31.sh`, same five inputs and harness as above, libzstd 1.5.7 built
+from source (`zstd -b9 --single-thread -i1`; the system CLI is 1.6.0 by now). MB/s, best of two alternating rounds
+per cell (each round is best of 5 on our side), load average 4 to 8 on 16 cores, so read the ratios. "Before" is
+the tree at v0.4.0 plus the level argument of the harness.
+
+| input | before c | after c | libzstd c | c ratio before | c ratio after | after d / libzstd d | size before (B) | size after (B) | libzstd (B) |
+|---|---|---|---|---|---|---|---|---|---|
+| random | 646 | 3615 | 3671 | 0.17 | 0.98 | 11609 / 20056 (0.58) | 67110414 | 67110414 | 67110414 |
+| repeated sentence | 951 | 1878 | 1773 | 0.52 | 1.06 | 7340 / 10560 (0.70) | 6217 | 6217 | 6232 |
+| executable | 41 | 83 | 96 | 0.43 | 0.86 | 1345 / 1747 (0.77) | 4452668 | 4358161 | 4363739 |
+| C sources | 81 | 115 | 127 | 0.63 | 0.90 | 1821 / 2519 (0.72) | 426589 | 424991 | 425598 |
+| JSON | 41 | 80 | 88 | 0.49 | 0.90 | 1560 / 1950 (0.80) | 2796051 | 2692423 | 2692964 |
+
+What moved it, one commit each:
+
+- Lazy skipping (`fc9fe45f`): after 2 KiB without a match the parser's step passes 8 and only the searched positions
+  enter the match finder's tables, as in libzstd. Random input went from 646 to about 3700 MB/s; before, every skipped
+  byte was hashed and inserted.
+- The row match finder (`36046751`): libzstd uses it, not the hash chain, for greedy, lazy and lazy2 (levels 5 to 12)
+  on windows over 16 KiB. Rows of 16 to 64 entries with a tag byte each, one SIMD compare per search, hashes computed
+  8 positions ahead with the rows prefetched, rows on cache lines, long matches entered only at both ends. Executable
+  42 -> 78, C sources 81 -> 119, JSON 40 -> 77, repeated sentence 861 -> 2214 MB/s; JSON at level 10 19 -> 56 and at
+  level 12 9 -> 35. Peak RSS of the bench at level 9 on the executable: 65.0 -> 59.9 MB (no chain table, a 2 MiB tag
+  table instead).
+- The gain of a held repeat-offset match (`2ded0965`): the lazy parsers charged it a full offset's cost, libzstd
+  charges 0. Level-9 output was 2.0% (executable) and 3.8% (JSON) larger than libzstd's; it is now within 0.1%.
+
+Level 3 is unchanged by these commits (it uses the double-fast finder): in the same runs its compress ratios to
+libzstd were 0.73 to 0.98 before and 0.71 to 0.95 after, sizes identical. The decoder was not touched. The smaller level-9 frame of the executable decodes about 8%
+slower per output byte than the old one in our decoder (1523 -> 1400 MB/s, best of 3x7) and 13% slower in libzstd's
+(1723 -> 1503): the denser parse has more sequences. libzstd's own level-9 frame of that file decodes at 1383 in ours.
+
+Left at level 9: 10 to 14% on real data, spread over the candidate loads of the row search (cache misses on match
+positions, the same in libzstd) and the code around it; no single cause stood out in `perf annotate`.
+
 ## Size against libzstd, every level
 
 2 MiB of the seeded text, `zstd.compress(data, level)` against Python `zstandard` at the same level (both decode to the
@@ -88,4 +125,8 @@ view. Worst gap over all 24 levels per input: text +0.9% (level 4), 870 KB of C 
 | 21 | 153161 | 153180 | -0.0% |
 | 22 | 153161 | 153180 | -0.0% |
 
-`src/` is 4025 lines: `wc -l src/*/*.mojo` (was 230 with the bindings).
+Rows 5 to 12 predate the row finder and the repeat-offset gain fix (issue #34). On 2 MiB of the current seeded text
+they now sit within 0.1% of libzstd on either side (level 9: 229420 B against 229403; before: 228448, 0.4% under),
+and 2 to 4% closer on binary and JSON input, where they were larger.
+
+`src/` is 4346 lines: `wc -l src/*/*.mojo` (was 230 with the bindings).
