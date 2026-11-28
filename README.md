@@ -1,6 +1,8 @@
 # mojo-libs
 
 [![ci](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/amarbaro/mojo-libs/actions/workflows/ci.yml)
+[![Used by](https://mojourney.dev/badge/amarbaro/mojo-libs/used-by.svg)](https://mojourney.dev/repos/amarbaro/mojo-libs#used-by)
+[![Mojo version](https://mojourney.dev/badge/amarbaro/mojo-libs/mojo.svg)](https://mojourney.dev/repos/amarbaro/mojo-libs)
 
 The amarbaro Mojo libraries in one repository, one folder per library under `libs/<name>/`. Each keeps its own package,
 import name, version, `recipe.yaml`, tests against an oracle, `docs/api.md`, `docs/design.md` and an agent skill in `skills/`.
