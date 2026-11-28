@@ -2,6 +2,7 @@
 
 Full notes in `docs/releases/`. Newest first. Format: the release-note template.
 
+- Unreleased: `visualCheck` adds `blank`, `seam` and `stretch` (texdefect): the share of near-uniform light grey or white on the object, straight textured/blank boundaries inside it, and one-direction stretch of the fine texture; [docs/visualcheck.md](docs/visualcheck.md)
 - Unreleased: `viewSig` and `sigPairs`: duplicate signatures of 3D assets from the fitted ortho view (silhouette and shading grids, colour apart) and the geometry numbers; rules `view`, `geo`, `look`, [docs/dupsig.md](docs/dupsig.md)
 - Unreleased: `visualCheck` and `scripts/mcv-visualcheck`: colour spread, inner detail, silhouette complexity, fill and a flat-shaded-primitive score per picture, with a verdict for 3D listing pictures (test half: bad precision 0.96, recall 0.88 on store previews), [docs/visualcheck.md](docs/visualcheck.md)
 - Unreleased: `screenParse` reads each text line with `screen-ocr` (RapidOCR) instead of tesseract; `lang=` is accepted and ignored. fs-screen 22/22.

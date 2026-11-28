@@ -13,9 +13,10 @@ from mojocv.imgproc import find_contours, morph
 from mojocv.calib3d import approx_poly
 from mojocv.stockcheck import scale_factor, _load_any, _esc, _jn
 from mojocv.stockphoto import _shrink3
+from mojocv.texdefect import defects
 
 comptime U8 = DType.uint8
-comptime NV = 25
+comptime NV = 28
 comptime PI = 3.141592653589793
 
 # signal slots, in the order the JSON keys are written (the list in `batch`)
@@ -44,6 +45,9 @@ comptime K_SAT = 21  # mean saturation (spread / max) on the object
 comptime K_ENT = 22  # entropy (bits, 64 bins) of the lifted luma on the object: shading ramps and patterns spread it
 comptime K_EDGE = 23  # share of inner pixels with |dx| + |dy| >= 12 (central differences): panel lines, grain, decals
 comptime K_LAPQ = 24  # share of inner pixels with |4c - n - s - e - w| >= 24: strong local detail
+comptime K_BLANK = 25  # share of the object (mask eroded 4 px) that is near-uniform light grey or white, shading divided out (texdefect)
+comptime K_SEAM = 26  # straight textured/blank boundary length inside the object, in units of sqrt(object area) (texdefect)
+comptime K_STRETCH = 27  # 0..1 coherence of the fine texture along one direction (texdefect)
 
 
 def _bgr(src: Mat[U8]) raises -> Mat[U8]:
@@ -340,6 +344,10 @@ def _analyse(src: Mat[U8], L: Int, thr: Int) raises -> List[Float64]:
     var tc = _clamp01(1.0 - o[K_HFSHARE] / 0.25)
     var td = 0.5 * _clamp01((2.5 - o[K_COMPLEX]) / 1.5) + 0.5 * _clamp01((o[K_SOLID] - 0.8) / 0.2)
     o[K_PRIM] = sqrt(sqrt(ta * tb * tc * td))
+    var dfx = defects(s, lum, mask, inner)
+    o[K_BLANK] = dfx[0]
+    o[K_SEAM] = dfx[1]
+    o[K_STRETCH] = dfx[2]
     return o^
 
 
@@ -389,7 +397,7 @@ def batch(mut a: Args) raises -> Bool:
     """visualCheck OUT.jsonl BATCH.tsv [scale=384 thr=14 badcut=40|45 okcut=60]: BATCH.tsv rows are `decoded path <TAB> original path <TAB> kind`
     (kind view|preview|image|texture|frame). One JSON line per picture: {file,kind,w,h,fill,...,score,verdict,reason}. A line with
     "error" holds no numbers."""
-    var keys: List[String] = ["w", "h", "fill", "bgbad", "chroma", "chp90", "chstd", "palette", "huen", "lstd", "hf", "hfshare", "flat", "lf", "complex", "solid", "corners", "prim", "inner", "empty", "comps", "sat", "ent", "edge", "lapq"]
+    var keys: List[String] = ["w", "h", "fill", "bgbad", "chroma", "chp90", "chstd", "palette", "huen", "lstd", "hf", "hfshare", "flat", "lf", "complex", "solid", "corners", "prim", "inner", "empty", "comps", "sat", "ent", "edge", "lapq", "blank", "seam", "stretch"]
     var paths = List[String]()
     var origs = List[String]()
     var kinds = List[String]()
