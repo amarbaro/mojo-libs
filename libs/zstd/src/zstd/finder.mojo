@@ -4,6 +4,7 @@ into the buffer p; table entries are pos + e.boff, 0 meaning empty."""
 from std.bit import count_trailing_zeros
 from std.memory import pack_bits
 from std.sys import PrefetchOptions, prefetch
+from std.sys.info import CompilationTarget
 from zstd.enc import Enc
 from zstd.fse import hb
 
@@ -48,12 +49,11 @@ def hashm(p: ImmPointer[UInt8, _], i: Int, bits: Int, mls: Int) -> Int:
     return Int((r64(p, i) * 0xCF1BBCDCB7A56463) >> UInt64(64 - bits))
 
 
-def fast(mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int) -> Int:
+def fast[mls: Int](mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int) -> Int:
     """ZSTD_compressBlock_fast_noDict_generic over p[start:end]: positions are searched in a software pipeline
     of four, the step grows every 128 bytes without a match. Returns where the unmatched tail begins."""
     var ht = e.ht.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
     var hl = e.hlog
-    var mls = min(max(e.mml, 4), 7)
     var step_size = e.tlen + (1 if e.tlen == 0 else 0) + 1
     var maxd = 1 << e.wlog
     var boff = e.boff
@@ -148,72 +148,111 @@ def fast(mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int) -> Int:
     return anchor
 
 
-def dfast(mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int) -> Int:
-    """ZSTD_compressBlock_doubleFast: a long (8-byte) and a short (mml-byte) hash table."""
+def dfast[mls: Int](mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int) -> Int:
+    """ZSTD_compressBlock_doubleFast_noDict_generic of libzstd 1.5.7: a long (8-byte) and a short (mls-byte) hash
+    table. The long hash of the next position is taken while the current one is searched, and a table entry
+    below the window is swapped for the position itself before its bytes are read, so the only branch on an
+    entry is the rarely taken one of a match."""
     var hl = e.ht.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
     var hs = e.ct.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
     var lbits = e.hlog
     var sbits = e.clog
-    var mls = min(max(e.mml, 4), 7)
-    var maxd = 1 << e.wlog
     var boff = e.boff
+    var low = max(0, end - (1 << e.wlog))
     var ilimit = end - 8
     var ip = start
     var anchor = start
     if start + boff == 0:
         ip += 1
-    while ip < ilimit:
-        var h2 = hashm(p, ip, lbits, 8)
-        var h = hashm(p, ip, sbits, mls)
-        var mlong = Int(hl[unsafe_offset=h2]) - boff
-        var mshort = Int(hs[unsafe_offset=h]) - boff
-        var curr = ip
-        hl[unsafe_offset=h2] = UInt32(curr + boff)
-        hs[unsafe_offset=h] = UInt32(curr + boff)
-        var low = max(0, curr - maxd)
-        var ml: Int
-        var r1 = e.r0
-        if ip + 1 - r1 >= low and r32(p, ip + 1) == r32(p, ip + 1 - r1):
-            ml = count(p, ip + 5, ip + 5 - r1, end) + 4
-            ip += 1
-            e.store(p, anchor, ip - anchor, r1, ml)
-        else:
-            var m: Int
-            if mlong >= low and r64(p, mlong) == r64(p, ip):
-                ml = count(p, ip + 8, mlong + 8, end) + 8
-                m = mlong
-            elif mshort >= low and r32(p, mshort) == r32(p, ip):
-                var h3 = hashm(p, ip + 1, lbits, 8)
-                var m3 = Int(hl[unsafe_offset=h3]) - boff
-                hl[unsafe_offset=h3] = UInt32(curr + 1 + boff)
-                if m3 >= low and r64(p, m3) == r64(p, ip + 1):
-                    ml = count(p, ip + 9, m3 + 8, end) + 8
-                    ip += 1
-                    m = m3
-                else:
-                    ml = count(p, ip + 4, mshort + 4, end) + 4
-                    m = mshort
-            else:
-                ip += ((ip - anchor) >> 8) + 1
-                continue
+    while True:
+        var step = 1
+        var next_step = ip + 256
+        var ip1 = ip + 1
+        if ip1 > ilimit:
+            break
+        var h0 = hashm(p, ip, lbits, 8)
+        var m0 = Int(hl[unsafe_offset=h0]) - boff  # long candidate of ip
+        var h1 = 0
+        var m1 = 0  # long candidate of ip1
+        var ms: Int  # short candidate of ip
+        var curr: Int
+        var ml = 0
+        var m = 0
+        var found = 0  # 1: repeat offset (stored), 2: long match, 3: short match, 0: end of block
+        while True:
+            var hs0 = hashm(p, ip, sbits, mls)
+            ms = Int(hs[unsafe_offset=hs0]) - boff
+            curr = ip
+            hl[unsafe_offset=h0] = UInt32(curr + boff)
+            hs[unsafe_offset=hs0] = UInt32(curr + boff)
+            var r0 = e.r0
+            if ip + 1 - r0 >= low and r32(p, ip + 1) == r32(p, ip + 1 - r0):
+                ml = count(p, ip + 5, ip + 5 - r0, end) + 4
+                ip += 1
+                e.store(p, anchor, ip - anchor, r0, ml)
+                found = 1
+                break
+            h1 = hashm(p, ip1, lbits, 8)
+            var ok0 = m0 >= low
+            if ok0 and r64(p, m0) == r64(p, ip):
+                ml = count(p, ip + 8, m0 + 8, end) + 8
+                m = m0
+                found = 2
+                break
+            m1 = Int(hl[unsafe_offset=h1]) - boff
+            var oks = ms >= low
+            if oks and r32(p, ms) == r32(p, ip):
+                found = 3
+                break
+            if ip1 >= next_step:
+                prefetch[PrefetchOptions().for_read().high_locality().to_data_cache()](p.unsafe_offset(ip1 + 64))
+                prefetch[PrefetchOptions().for_read().high_locality().to_data_cache()](p.unsafe_offset(ip1 + 128))
+                step += 1
+                next_step += 256
+            ip = ip1
+            ip1 += step
+            h0 = h1
+            m0 = m1
+            comptime if CompilationTarget.is_arm():
+                prefetch[PrefetchOptions().for_read().high_locality().to_data_cache()](p.unsafe_offset(ip + 256))
+            if ip1 > ilimit:
+                break
+        if found == 0:
+            break
+        if found >= 2:
+            if found == 3:
+                # a short match: the long table may hold a longer one for the next position
+                ml = count(p, ip + 4, ms + 4, end) + 4
+                m = ms
+                if m1 >= low and r64(p, m1) == r64(p, ip1):
+                    var l1 = count(p, ip1 + 8, m1 + 8, end) + 8
+                    if l1 > ml:
+                        ip = ip1
+                        ml = l1
+                        m = m1
             while ip > anchor and m > low and p[unsafe_offset=ip - 1] == p[unsafe_offset=m - 1]:
                 ip -= 1
                 m -= 1
                 ml += 1
+            if step < 4:
+                # ip1 is below the end of the match (4 bytes at least), so its long hash may enter the table
+                hl[unsafe_offset=h1] = UInt32(ip1 + boff)
             e.store(p, anchor, ip - anchor, ip - m, ml)
         ip += ml
         anchor = ip
         if ip <= ilimit:
             hl[unsafe_offset=hashm(p, curr + 2, lbits, 8)] = UInt32(curr + 2 + boff)
-            hs[unsafe_offset=hashm(p, curr + 2, sbits, mls)] = UInt32(curr + 2 + boff)
             hl[unsafe_offset=hashm(p, ip - 2, lbits, 8)] = UInt32(ip - 2 + boff)
-            hs[unsafe_offset=hashm(p, ip - 2, sbits, mls)] = UInt32(ip - 2 + boff)
-            while ip <= ilimit and ip - e.r1 >= max(0, ip - maxd) and r32(p, ip) == r32(p, ip - e.r1):
-                var r2 = e.r1
-                var ml2 = count(p, ip + 4, ip + 4 - r2, end) + 4
-                hl[unsafe_offset=hashm(p, ip, lbits, 8)] = UInt32(ip + boff)
+            hs[unsafe_offset=hashm(p, curr + 2, sbits, mls)] = UInt32(curr + 2 + boff)
+            hs[unsafe_offset=hashm(p, ip - 1, sbits, mls)] = UInt32(ip - 1 + boff)
+            while ip <= ilimit:
+                var r1 = e.r1
+                if ip - r1 < low or r32(p, ip) != r32(p, ip - r1):
+                    break
+                var ml2 = count(p, ip + 4, ip + 4 - r1, end) + 4
                 hs[unsafe_offset=hashm(p, ip, sbits, mls)] = UInt32(ip + boff)
-                e.store(p, ip, 0, r2, ml2)
+                hl[unsafe_offset=hashm(p, ip, lbits, 8)] = UInt32(ip + boff)
+                e.store(p, ip, 0, r1, ml2)
                 ip += ml2
                 anchor = ip
     return anchor
@@ -330,6 +369,10 @@ def row_insert[rl: Int](mut e: Enc, p: ImmPointer[UInt8, _], upto: Int):
         stop = upto
         e.upd = i
         row_fill[rl](e, p, upto + 1)
+        # row_fill borrows e mutably: take the table pointers again (Mojo 1.3 rejects reusing the old ones)
+        ht = e.ht.unsafe_ptr().unsafe_offset(e.ha)
+        tt = e.tt.unsafe_ptr().unsafe_offset(e.ta)
+        hc = e.hcache.unsafe_ptr()
     e.upd = max(e.upd, upto)
 
 

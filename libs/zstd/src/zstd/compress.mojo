@@ -105,10 +105,23 @@ def set_params(mut e: Enc, level: Int, size: Int):
 
 
 def parse(mut e: Enc, p: ImmPointer[UInt8, _], start: Int, end: Int) -> Int:
+    # one copy of the fast and double-fast loops per hash width, as libzstd has: the width is then a constant in them
     if e.strat == 1:
-        return fast(e, p, start, end)
+        if e.mml <= 4:
+            return fast[4](e, p, start, end)
+        if e.mml == 5:
+            return fast[5](e, p, start, end)
+        if e.mml == 6:
+            return fast[6](e, p, start, end)
+        return fast[7](e, p, start, end)
     if e.strat == 2:
-        return dfast(e, p, start, end)
+        if e.mml <= 4:
+            return dfast[4](e, p, start, end)
+        if e.mml == 5:
+            return dfast[5](e, p, start, end)
+        if e.mml == 6:
+            return dfast[6](e, p, start, end)
+        return dfast[7](e, p, start, end)
     if e.strat <= 5:
         if e.rlog == 4:
             return lazy[4](e, p, start, end, e.strat - 3)

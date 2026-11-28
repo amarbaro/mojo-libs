@@ -121,6 +121,7 @@ struct Enc(Movable):
     var dfse: List[FseC]  # predefined tables
     var pend_fse: List[FseC]  # tables of the block being built, valid after commit()
     var pend_ok: List[Bool]
+    var pend_rep: List[Bool]  # the block repeats the previous table: pfse stays as it is
     var llcode: List[UInt8]
     var mlcode: List[UInt8]
     var llbase: List[Int]
@@ -167,6 +168,7 @@ struct Enc(Movable):
         self.dfse = [FseC(), FseC(), FseC()]
         self.pend_fse = [FseC(), FseC(), FseC()]
         self.pend_ok = [False, False, False]
+        self.pend_rep = [False, False, False]
         self.dfse[0].build(ll_norm(), 36, 6)
         self.dfse[1].build(of_norm(), 29, 5)
         self.dfse[2].build(ml_norm(), 53, 6)
@@ -245,6 +247,7 @@ struct Enc(Movable):
                 return 3
         return offset + 3
 
+    @always_inline
     def store(mut self, src: ImmPointer[UInt8, _], anchor: Int, ll: Int, offset: Int, ml: Int):
         """Appends the sequence: ll literals from src[anchor:], a match of ml bytes at distance offset."""
         var code = self.rep_code(offset, ll)
@@ -436,24 +439,33 @@ struct Enc(Movable):
             op = 3
         if n == 0:
             return op
-        var llc = List[Int](length=n, fill=0)
-        var ofc = List[Int](length=n, fill=0)
-        var mlc = List[Int](length=n, fill=0)
+        var llc = List[UInt8](unsafe_uninit_length=n)
+        var ofc = List[UInt8](unsafe_uninit_length=n)
+        var mlc = List[UInt8](unsafe_uninit_length=n)
         var cnts = [List[Int](length=36, fill=0), List[Int](length=32, fill=0), List[Int](length=53, fill=0)]
         var llt = self.llcode.unsafe_ptr()
         var mlt = self.mlcode.unsafe_ptr()
+        var sllp = self.sll.unsafe_ptr()
+        var smlp = self.sml.unsafe_ptr()
+        var sofp = self.sof.unsafe_ptr()
+        var llcp = llc.unsafe_ptr()
+        var ofcp = ofc.unsafe_ptr()
+        var mlcp = mlc.unsafe_ptr()
+        var cl = cnts[0].unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        var co = cnts[1].unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        var cm = cnts[2].unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
         for i in range(n):
-            var l = Int(self.sll[i])
-            var m = Int(self.sml[i])
+            var l = Int(sllp[unsafe_offset=i])
+            var m = Int(smlp[unsafe_offset=i])
             var a = Int(llt[unsafe_offset=l]) if l < 128 else hb(l) + 19
             var c = Int(mlt[unsafe_offset=m]) if m < 128 else self.ml_code(m)
-            var o = hb(Int(self.sof[i]))
-            llc[i] = a
-            ofc[i] = o
-            mlc[i] = c
-            cnts[0][a] += 1
-            cnts[1][o] += 1
-            cnts[2][c] += 1
+            var o = hb(Int(sofp[unsafe_offset=i]))
+            llcp[unsafe_offset=i] = UInt8(a)
+            ofcp[unsafe_offset=i] = UInt8(o)
+            mlcp[unsafe_offset=i] = UInt8(c)
+            cl[unsafe_offset=a] += 1
+            co[unsafe_offset=o] += 1
+            cm[unsafe_offset=c] += 1
         var modes_at = op
         op += 1
         var modes = 0
@@ -490,36 +502,29 @@ struct Enc(Movable):
             elif mode == 2:
                 unsafe_memcpy(dest=dst.unsafe_offset(op), src=hdr.unsafe_ptr().unsafe_mut_cast[False](), count=hlen)
                 op += hlen
-                tabs[kind] = cand.copy()
-                self.pend_fse[kind] = cand.copy()
+                tabs[kind] = cand^
                 self.pend_ok[kind] = True
             elif mode == 3:
-                tabs[kind] = self.pfse[kind].copy()
-                self.pend_fse[kind] = self.pfse[kind].copy()
+                swap(tabs[kind], self.pfse[kind])
                 self.pend_ok[kind] = True
             else:
-                tabs[kind] = self.dfse[kind].copy()
+                swap(tabs[kind], self.dfse[kind])
                 self.pend_ok[kind] = False
+            self.pend_rep[kind] = mode == 3
             modes |= kinds[kind] << (6 - 2 * kind)
         dst[unsafe_offset=modes_at] = UInt8(modes)
         # bitstream: the sequences backwards, the three states initialised from the last one
         var b = BitC(dst.unsafe_offset(op))
         var last = n - 1
-        var sm = tabs[2].init_state(mlc[last])
-        var so = tabs[1].init_state(ofc[last])
-        var sl = tabs[0].init_state(llc[last])
+        var sm = tabs[2].init_state(Int(mlc[last]))
+        var so = tabs[1].init_state(Int(ofc[last]))
+        var sl = tabs[0].init_state(Int(llc[last]))
         comptime if MUTANT == 2:
             so = so ^ 1
-        b.add(Int(self.sll[last]), self.llbits(llc[last]))
-        b.add(Int(self.sml[last]), self.mlbits(mlc[last]))
-        b.add(Int(self.sof[last]), ofc[last])
+        b.add(Int(self.sll[last]), self.llbits(Int(llc[last])))
+        b.add(Int(self.sml[last]), self.mlbits(Int(mlc[last])))
+        b.add(Int(self.sof[last]), Int(ofc[last]))
         b.flush()
-        var sllp = self.sll.unsafe_ptr()
-        var smlp = self.sml.unsafe_ptr()
-        var sofp = self.sof.unsafe_ptr()
-        var llcp = llc.unsafe_ptr()
-        var ofcp = ofc.unsafe_ptr()
-        var mlcp = mlc.unsafe_ptr()
         var llbp = self.llb.unsafe_ptr()
         var mlbp = self.mlb.unsafe_ptr()
         var lst = tabs[0].st.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
@@ -555,6 +560,14 @@ struct Enc(Movable):
         b.flush()
         b.add(sl, tabs[0].log)
         b.flush()
+        # the tables go back where they are kept: a new one waits in pend_fse for commit()
+        for kind in range(3):
+            if kinds[kind] == 2:
+                swap(tabs[kind], self.pend_fse[kind])
+            elif kinds[kind] == 3:
+                swap(tabs[kind], self.pfse[kind])
+            elif kinds[kind] == 0:
+                swap(tabs[kind], self.dfse[kind])
         return op + b.close()
 
     def llbits(self, code: Int) -> Int:
@@ -572,8 +585,8 @@ struct Enc(Movable):
             self.phuf_ok = True
         if seqs:
             for k in range(3):
-                if self.pend_ok[k]:
-                    self.pfse[k] = self.pend_fse[k].copy()
+                if self.pend_ok[k] and not self.pend_rep[k]:
+                    swap(self.pfse[k], self.pend_fse[k])
                 self.pfse_ok[k] = self.pend_ok[k]
 
     def block(
