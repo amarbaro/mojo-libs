@@ -16,7 +16,7 @@ from mojocv.stockphoto import _shrink3
 from mojocv.texdefect import defects
 
 comptime U8 = DType.uint8
-comptime NV = 28
+comptime NV = 29
 comptime PI = 3.141592653589793
 
 # signal slots, in the order the JSON keys are written (the list in `batch`)
@@ -48,6 +48,7 @@ comptime K_LAPQ = 24  # share of inner pixels with |4c - n - s - e - w| >= 24: s
 comptime K_BLANK = 25  # share of the object (mask eroded 4 px) that is near-uniform light grey or white, shading divided out (texdefect)
 comptime K_SEAM = 26  # straight textured/blank boundary length inside the object, in units of sqrt(object area) (texdefect)
 comptime K_STRETCH = 27  # 0..1 coherence of the fine texture along one direction (texdefect)
+comptime K_PLAIN = 28  # share of the object that is flat once shading is divided out, any colour (texdefect)
 
 
 def _bgr(src: Mat[U8]) raises -> Mat[U8]:
@@ -348,6 +349,7 @@ def _analyse(src: Mat[U8], L: Int, thr: Int) raises -> List[Float64]:
     o[K_BLANK] = dfx[0]
     o[K_SEAM] = dfx[1]
     o[K_STRETCH] = dfx[2]
+    o[K_PLAIN] = dfx[3]
     return o^
 
 
@@ -397,7 +399,7 @@ def batch(mut a: Args) raises -> Bool:
     """visualCheck OUT.jsonl BATCH.tsv [scale=384 thr=14 badcut=40|45 okcut=60]: BATCH.tsv rows are `decoded path <TAB> original path <TAB> kind`
     (kind view|preview|image|texture|frame). One JSON line per picture: {file,kind,w,h,fill,...,score,verdict,reason}. A line with
     "error" holds no numbers."""
-    var keys: List[String] = ["w", "h", "fill", "bgbad", "chroma", "chp90", "chstd", "palette", "huen", "lstd", "hf", "hfshare", "flat", "lf", "complex", "solid", "corners", "prim", "inner", "empty", "comps", "sat", "ent", "edge", "lapq", "blank", "seam", "stretch"]
+    var keys: List[String] = ["w", "h", "fill", "bgbad", "chroma", "chp90", "chstd", "palette", "huen", "lstd", "hf", "hfshare", "flat", "lf", "complex", "solid", "corners", "prim", "inner", "empty", "comps", "sat", "ent", "edge", "lapq", "blank", "seam", "stretch", "plain"]
     var paths = List[String]()
     var origs = List[String]()
     var kinds = List[String]()

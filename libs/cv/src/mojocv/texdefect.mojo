@@ -1,7 +1,8 @@
 # texdefect: three signals for "textured only in part" on a rendered object picture (the ortho view sheet of a 3D asset):
 #   blank   share of the object that is near-uniform light grey or white once shading is divided out,
 #   seam    length of straight, high-contrast boundaries between a textured and a blank region inside the object,
-#   stretch how strongly the fine texture is stretched along one axis (structure-tensor anisotropy, one direction).
+#   stretch how strongly the fine texture is stretched along one axis (structure-tensor anisotropy, one direction),
+#   plain   like blank but of any colour: a flat untextured surface in its material colour (a brown barrel with no texture).
 # They run on the picture visualcheck already shrunk (long edge near 384) with its object mask, so a flat primitive and a
 # half-textured model with the same silhouette differ only here. All three are measured on `core`: the mask eroded by 4 px, so
 # the silhouette edge never counts as a seam or as texture. The shading is divided out as a relative number: local std over
@@ -48,8 +49,8 @@ def _sq(a: List[Float64]) -> List[Float64]:
 
 
 def defects(bgr: Mat[U8], lum: List[Int16], mask: Mat[U8], inner: Mat[U8]) raises -> List[Float64]:
-    """[blank, seam, stretch]. `lum` is the gamma-lifted luma (x^0.45, 0..255) of `bgr`, `inner` the mask eroded by 2 px."""
-    var out = List[Float64](length=3, fill=0.0)
+    """[blank, seam, stretch, plain]. `lum` is the gamma-lifted luma (x^0.45, 0..255) of `bgr`, `inner` the mask eroded by 2 px."""
+    var out = List[Float64](length=4, fill=0.0)
     var R = bgr.rows
     var C = bgr.cols
     var N = R * C
@@ -85,6 +86,7 @@ def defects(bgr: Mat[U8], lum: List[Int16], mask: Mat[U8], inner: Mat[U8]) raise
     var m5 = _box(lin, R, C, 5)
     var q5 = _box(_sq(lin), R, C, 5)
     var nb = 0
+    var npl = 0
     for i in range(N):
         if cp[i] == 0:
             continue
@@ -92,9 +94,12 @@ def defects(bgr: Mat[U8], lum: List[Int16], mask: Mat[U8], inner: Mat[U8]) raise
         var mx = max(Int(p[i * 3]), max(Int(p[i * 3 + 1]), Int(p[i * 3 + 2])))
         var mn = min(Int(p[i * 3]), min(Int(p[i * 3 + 1]), Int(p[i * 3 + 2])))
         var sat = Float64(mx - mn) / Float64(max(mx, 1))
-        if s5 / m5[i] < 0.05 and sat < 0.12 and m5[i] / p95 > 0.3:
-            nb += 1
+        if s5 / m5[i] < 0.05:
+            npl += 1
+            if sat < 0.12 and m5[i] / p95 > 0.3:
+                nb += 1
     out[0] = Float64(nb) / fnn
+    out[3] = Float64(npl) / fnn
     # seam: edge pixels with texture on one side and blank on the other, then straight lines by a Hough vote on the gradient angle
     var l5 = _box(lift, R, C, 5)
     var d5 = _box(_sq(lift), R, C, 5)
