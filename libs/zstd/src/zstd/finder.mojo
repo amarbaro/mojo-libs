@@ -330,6 +330,10 @@ def row_insert[rl: Int](mut e: Enc, p: ImmPointer[UInt8, _], upto: Int):
         stop = upto
         e.upd = i
         row_fill[rl](e, p, upto + 1)
+        # row_fill borrows e mutably: take the table pointers again (Mojo 1.3 rejects reusing the old ones)
+        ht = e.ht.unsafe_ptr().unsafe_offset(e.ha)
+        tt = e.tt.unsafe_ptr().unsafe_offset(e.ta)
+        hc = e.hcache.unsafe_ptr()
     e.upd = max(e.upd, upto)
 
 
