@@ -1,5 +1,5 @@
-# Throughput of zstd level 3 on one file: best of 5 compress and best of 5 decompress, one round-trip check
-# first. Prints 'c_mbps=<best> d_mbps=<best> size=<input bytes> csize=<compressed bytes>' (MB = 1e6 bytes). Modelled on tests/bench.mojo.
+# Throughput of zstd on one file (argument 2 is the level, 3 when absent): best of 5 compress and best of 5
+# decompress, one round-trip check first. Prints 'c_mbps=<best> d_mbps=<best> size=<input bytes> csize=<compressed bytes>' (MB = 1e6 bytes). Modelled on tests/bench.mojo.
 from std.sys import argv
 from std.time import perf_counter_ns
 import zstd
@@ -10,7 +10,8 @@ def main() raises:
     with open(String(argv()[1]), "r") as f:
         raw = f.read_bytes()
     var size = len(raw)
-    var c = zstd.compress(raw, 3)
+    var level = Int(argv()[2]) if len(argv()) > 2 else 3
+    var c = zstd.compress(raw, level)
     var d = zstd.decompress(c)
     if d != raw:
         raise Error("bench31: zstd round trip differs")
@@ -18,7 +19,7 @@ def main() raises:
     var best_d = 0
     for i in range(5):
         var t0 = Int(perf_counter_ns())
-        _ = zstd.compress(raw, 3)
+        _ = zstd.compress(raw, level)
         var dt = Int(perf_counter_ns()) - t0
         if i == 0 or dt < best_c:
             best_c = dt

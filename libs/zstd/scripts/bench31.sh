@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
-# Throughput table for the 5 issue inputs: our zstd (tests/bench31.mojo, level 3) against libzstd via
-# `zstd -b3 --single-thread -i1`. Writes .work/i31/bench31.tsv; ratio columns are ours / libzstd speed.
+# Throughput table for the 5 issue inputs: our zstd (tests/bench31.mojo) against libzstd via
+# `zstd -b<level> --single-thread -i1`, one row per input and level. Writes .work/i31/bench31.tsv (or $OUT);
+# ratio columns are ours / libzstd speed. Env: LEVELS (default "3"), ZSTD (the CLI, default zstd),
+# BIN (a prebuilt bench31 binary; skips the build), OUT.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 MOJO=${MOJO:-.venv/bin/mojo}
+LEVELS=${LEVELS:-3}
+ZSTD=${ZSTD:-zstd}
 W=.work/i31
 C=$W/corpus
 mkdir -p "$C"
@@ -45,23 +49,27 @@ if [[ ! -s $C/json ]]; then
 fi
 
 # build
-rm -f "$W/bench31"
-$MOJO build -I src tests/bench31.mojo -o "$W/bench31" > "$W/bench31.build.log" 2>&1 \
-  || { echo "FAIL build: tests/bench31.mojo (see $W/bench31.build.log)"; tail -n 20 "$W/bench31.build.log"; exit 1; }
-[[ -x $W/bench31 ]] || { echo "FAIL build: no binary"; exit 1; }
+BIN=${BIN:-}
+if [[ -z $BIN ]]; then
+  BIN=$W/bench31
+  rm -f "$BIN"
+  $MOJO build -I src tests/bench31.mojo -o "$BIN" > "$W/bench31.build.log" 2>&1 \
+    || { echo "FAIL build: tests/bench31.mojo (see $W/bench31.build.log)"; tail -n 20 "$W/bench31.build.log"; exit 1; }
+fi
+[[ -x $BIN ]] || { echo "FAIL build: no binary"; exit 1; }
 
 # libzstd parse: last \r-separated segment, then the two MB/s numbers (compress, decompress)
 zstd_row() {
   local seg nums
-  seg=$(timeout 300 zstd -b3 --single-thread -i1 "$1" 2>&1 | tr '\r' '\n' | grep -E 'MB/s.*MB/s' | tail -n 1) || true
+  seg=$(timeout 300 "$ZSTD" "-b$2" --single-thread -i1 "$1" 2>&1 | tr '\r' '\n' | grep -E 'MB/s.*MB/s' | tail -n 1) || true
   nums=$(grep -oE '[0-9]+(\.[0-9]+)? MB/s' <<< "$seg" | grep -oE '[0-9]+(\.[0-9]+)?' || true)
-  [[ $(wc -l <<< "$nums") -ge 2 ]] || { echo "FAIL run: zstd -b3 parse on $1" >&2; return 1; }
+  [[ $(wc -l <<< "$nums") -ge 2 ]] || { echo "FAIL run: zstd -b$2 parse on $1" >&2; return 1; }
   echo "$(head -n 1 <<< "$nums") $(sed -n 2p <<< "$nums")"
 }
 
 ours_row() {
   local line c d s
-  line=$(timeout 300 "$W/bench31" "$1") || { echo "FAIL run: bench31 on $1" >&2; return 1; }
+  line=$(timeout 300 "$BIN" "$1" "$2") || { echo "FAIL run: bench31 on $1 level $2" >&2; return 1; }
   c=$(sed -nE 's/.*c_mbps=([0-9.]+).*/\1/p' <<< "$line")
   d=$(sed -nE 's/.*d_mbps=([0-9.]+).*/\1/p' <<< "$line")
   [[ -n $c && -n $d ]] || { echo "FAIL run: unparsed bench31 line: $line" >&2; return 1; }
@@ -70,15 +78,17 @@ ours_row() {
   echo "$c $d $s"
 }
 
-OUT=$W/bench31.tsv
+OUT=${OUT:-$W/bench31.tsv}
 {
-  printf 'input\tours_c_mbps\tours_d_mbps\tlibzstd_c_mbps\tlibzstd_d_mbps\tc_ratio\td_ratio\tours_bytes\n'
+  printf 'input\tlevel\tours_c_mbps\tours_d_mbps\tlibzstd_c_mbps\tlibzstd_d_mbps\tc_ratio\td_ratio\tours_bytes\n'
   for name in rand rep exe src json; do
-    f=$C/$name
-    read -r oc od os < <(ours_row "$f") || { echo "FAIL run: ours $name" >&2; exit 1; }
-    read -r lc ld < <(zstd_row "$f") || { echo "FAIL run: libzstd $name" >&2; exit 1; }
-    awk -v n="$name" -v oc="$oc" -v od="$od" -v lc="$lc" -v ld="$ld" -v os="$os" \
-      'BEGIN { printf "%s\t%s\t%s\t%s\t%s\t%.3f\t%.3f\t%s\n", n, oc, od, lc, ld, oc / lc, od / ld, os }'
+    for lv in $LEVELS; do
+      f=$C/$name
+      read -r oc od os < <(ours_row "$f" "$lv") || { echo "FAIL run: ours $name level $lv" >&2; exit 1; }
+      read -r lc ld < <(zstd_row "$f" "$lv") || { echo "FAIL run: libzstd $name level $lv" >&2; exit 1; }
+      awk -v n="$name" -v lv="$lv" -v oc="$oc" -v od="$od" -v lc="$lc" -v ld="$ld" -v os="$os" \
+        'BEGIN { printf "%s\t%s\t%.0f\t%.0f\t%s\t%s\t%.3f\t%.3f\t%s\n", n, lv, oc, od, lc, ld, oc / lc, od / ld, os }'
+    done
   done
 } | tee "$OUT" || { echo "FAIL run: table"; exit 1; }
 echo "wrote $OUT"
