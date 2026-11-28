@@ -1,0 +1,4 @@
+name = "mojo-zstd"
+version = "0.4.1"
+description = "zstd and lz4 frame compression for Mojo, pure Mojo with no C library, one-shot and streaming"
+tags = ["mojo", "compression", "zstd", "lz4"]
